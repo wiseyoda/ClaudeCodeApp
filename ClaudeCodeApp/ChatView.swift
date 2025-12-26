@@ -849,19 +849,13 @@ struct CLIInputView: View {
                     .foregroundColor(CLITheme.green)
                     .font(settings.scaledFont(.body))
 
-                TextField("", text: $text, axis: .vertical)
+                TextField("Type a message...", text: $text)
                     .font(settings.scaledFont(.body))
                     .foregroundColor(CLITheme.primaryText)
-                    .lineLimit(1...5)
                     .focused($isFocused)
                     .disabled(isProcessing)
                     .submitLabel(.send)
                     .onSubmit { onSend() }
-                    .placeholder(when: text.isEmpty) {
-                        Text("Type a message...")
-                            .foregroundColor(CLITheme.mutedText)
-                            .font(settings.scaledFont(.body))
-                    }
 
                 // Image picker button
                 if !isProcessing {
