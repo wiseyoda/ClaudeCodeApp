@@ -386,6 +386,51 @@ class SSHManager: ObservableObject {
     func clearOutput() {
         output = ""
     }
+
+    // MARK: - SFTP File Upload
+
+    /// Upload image data via SFTP and return the remote file path
+    /// - Parameters:
+    ///   - imageData: The image data to upload
+    ///   - filename: Optional filename (defaults to timestamped name)
+    /// - Returns: The remote file path where the image was saved
+    func uploadImage(_ imageData: Data, filename: String? = nil) async throws -> String {
+        guard let client = client, isConnected else {
+            throw SSHError.notConnected
+        }
+
+        // Generate filename if not provided
+        let timestamp = Int(Date().timeIntervalSince1970 * 1000)
+        let actualFilename = filename ?? "image_\(timestamp).jpg"
+
+        // Remote directory for uploaded images
+        let remoteDir = "/tmp/claude-images"
+        let remotePath = "\(remoteDir)/\(actualFilename)"
+
+        // Ensure the directory exists
+        _ = try? await client.executeCommand("mkdir -p \(remoteDir)")
+
+        // Get SFTP client
+        let sftp = try await client.openSFTP()
+
+        // Open file for writing (create if doesn't exist, truncate if exists)
+        let file = try await sftp.openFile(
+            filePath: remotePath,
+            flags: [.create, .write, .truncate]
+        )
+
+        // Write the image data
+        var buffer = ByteBufferAllocator().buffer(capacity: imageData.count)
+        buffer.writeBytes(imageData)
+        try await file.write(buffer)
+
+        // Close file and SFTP session
+        try await file.close()
+        try await sftp.close()
+
+        print("[SSH] Uploaded image to: \(remotePath)")
+        return remotePath
+    }
 }
 
 // Special keys for terminal

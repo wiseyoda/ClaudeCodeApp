@@ -7,6 +7,7 @@ struct ChatView: View {
     let apiClient: APIClient
     @EnvironmentObject var settings: AppSettings
     @StateObject private var wsManager: WebSocketManager
+    @StateObject private var sshManager = SSHManager()  // For image uploads
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var messages: [ChatMessage] = []
@@ -14,6 +15,7 @@ struct ChatView: View {
     @State private var selectedImage: Data?
     @State private var processingStartTime: Date?
     @State private var selectedSession: ProjectSession?
+    @State private var isUploadingImage = false
     @FocusState private var isInputFocused: Bool
 
     init(project: Project, apiClient: APIClient) {
@@ -86,6 +88,7 @@ struct ChatView: View {
             // Status bar
             CLIStatusBar(
                 isProcessing: wsManager.isProcessing,
+                isUploadingImage: isUploadingImage,
                 startTime: processingStartTime,
                 tokenUsage: wsManager.tokenUsage
             )
@@ -281,14 +284,88 @@ struct ChatView: View {
         selectedImage = nil
         processingStartTime = Date()
 
-        // Send via WebSocket with current mode and optional image
-        wsManager.sendMessage(
-            text,
-            projectPath: project.path,
-            resumeSessionId: selectedSession?.id,
-            permissionMode: settings.claudeMode.serverValue,
-            imageData: imageToSend
-        )
+        // If we have an image, upload it via SFTP first
+        if let imageData = imageToSend {
+            isUploadingImage = true
+            Task {
+                do {
+                    let remotePath = try await uploadImageViaSSH(imageData)
+                    // Include the file path in the message for Claude to read
+                    let messageWithPath = text.isEmpty
+                        ? "Please look at this image: \(remotePath)"
+                        : "\(text)\n\n[Image uploaded to: \(remotePath)]"
+
+                    await MainActor.run {
+                        isUploadingImage = false
+                        wsManager.sendMessage(
+                            messageWithPath,
+                            projectPath: project.path,
+                            resumeSessionId: selectedSession?.id,
+                            permissionMode: settings.claudeMode.serverValue
+                        )
+                    }
+                } catch {
+                    await MainActor.run {
+                        isUploadingImage = false
+                        // Show error but still send the text-only message
+                        let errorMsg = ChatMessage(
+                            role: .error,
+                            content: "Image upload failed: \(error.localizedDescription). Sending text only."
+                        )
+                        messages.append(errorMsg)
+
+                        if !text.isEmpty {
+                            wsManager.sendMessage(
+                                text,
+                                projectPath: project.path,
+                                resumeSessionId: selectedSession?.id,
+                                permissionMode: settings.claudeMode.serverValue
+                            )
+                        }
+                    }
+                }
+            }
+        } else {
+            // No image, send text directly
+            wsManager.sendMessage(
+                text,
+                projectPath: project.path,
+                resumeSessionId: selectedSession?.id,
+                permissionMode: settings.claudeMode.serverValue
+            )
+        }
+    }
+
+    /// Upload image via SSH/SFTP and return the remote file path
+    private func uploadImageViaSSH(_ imageData: Data) async throws -> String {
+        // Connect to SSH if not already connected
+        if !sshManager.isConnected {
+            // Try SSH config hosts first, then fall back to settings
+            if let configHost = sshManager.availableHosts.first(where: {
+                $0.hostName == settings.effectiveSSHHost || $0.host.contains("claude")
+            }) {
+                try await sshManager.connectWithConfigHost(configHost.host)
+            } else if settings.sshAuthType == .publicKey {
+                // Use key auth with default key
+                try await sshManager.connectWithKey(
+                    host: settings.effectiveSSHHost,
+                    port: settings.sshPort,
+                    username: settings.sshUsername.isEmpty ? NSUserName() : settings.sshUsername,
+                    privateKeyPath: NSHomeDirectory() + "/.ssh/id_ed25519"
+                )
+            } else {
+                // Use password auth
+                try await sshManager.connect(
+                    host: settings.effectiveSSHHost,
+                    port: settings.sshPort,
+                    username: settings.sshUsername,
+                    password: settings.sshPassword
+                )
+            }
+        }
+
+        // Upload the image
+        return try await sshManager.uploadImage(imageData)
     }
 }
 
@@ -619,6 +696,7 @@ struct CLIProcessingView: View {
 
 struct CLIStatusBar: View {
     let isProcessing: Bool
+    let isUploadingImage: Bool
     let startTime: Date?
     let tokenUsage: WebSocketManager.TokenUsage?
     @EnvironmentObject var settings: AppSettings
@@ -628,7 +706,15 @@ struct CLIStatusBar: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            if isProcessing {
+            if isUploadingImage {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(CLITheme.cyan)
+                        .frame(width: 6, height: 6)
+                    Text("uploading image")
+                        .foregroundColor(CLITheme.cyan)
+                }
+            } else if isProcessing {
                 HStack(spacing: 4) {
                     Circle()
                         .fill(CLITheme.yellow)
