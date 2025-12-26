@@ -265,12 +265,15 @@ struct ChatView: View {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty || selectedImage != nil else { return }
 
+        // Capture image before clearing
+        let imageToSend = selectedImage
+
         // Add user message with optional image
         let userMessage = ChatMessage(
             role: .user,
             content: text.isEmpty ? "[Image attached]" : text,
             timestamp: Date(),
-            imageData: selectedImage
+            imageData: imageToSend
         )
         messages.append(userMessage)
 
@@ -278,12 +281,13 @@ struct ChatView: View {
         selectedImage = nil
         processingStartTime = Date()
 
-        // Send via WebSocket with current mode
+        // Send via WebSocket with current mode and optional image
         wsManager.sendMessage(
             text,
             projectPath: project.path,
             resumeSessionId: selectedSession?.id,
-            permissionMode: settings.claudeMode.serverValue
+            permissionMode: settings.claudeMode.serverValue,
+            imageData: imageToSend
         )
     }
 }

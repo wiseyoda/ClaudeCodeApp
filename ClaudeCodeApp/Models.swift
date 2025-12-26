@@ -166,6 +166,19 @@ struct WSClaudeCommand: Encodable {
     let type: String = "claude-command"
     let command: String
     let options: WSCommandOptions
+    let images: [WSImage]?
+}
+
+struct WSImage: Encodable {
+    let type: String = "base64"
+    let mediaType: String
+    let data: String  // base64-encoded image data
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case mediaType = "media_type"
+        case data
+    }
 }
 
 struct WSCommandOptions: Encodable {

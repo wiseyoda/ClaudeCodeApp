@@ -146,14 +146,14 @@ class WebSocketManager: ObservableObject {
         }
     }
 
-    func sendMessage(_ message: String, projectPath: String, resumeSessionId: String? = nil, permissionMode: String? = nil) {
+    func sendMessage(_ message: String, projectPath: String, resumeSessionId: String? = nil, permissionMode: String? = nil, imageData: Data? = nil) {
         guard isConnected else {
             connect()
             // Queue message after connection establishes
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 guard let self = self else { return }
                 if self.isConnected {
-                    self.sendMessage(message, projectPath: projectPath, resumeSessionId: resumeSessionId, permissionMode: permissionMode)
+                    self.sendMessage(message, projectPath: projectPath, resumeSessionId: resumeSessionId, permissionMode: permissionMode, imageData: imageData)
                 } else {
                     self.lastError = "Failed to connect to server"
                 }
@@ -165,6 +165,16 @@ class WebSocketManager: ObservableObject {
         isProcessing = true
         lastError = nil
 
+        // Convert image data to base64 WSImage if present
+        var images: [WSImage]? = nil
+        if let imageData = imageData {
+            let base64String = imageData.base64EncodedString()
+            // Detect image type from data header
+            let mediaType = detectMediaType(from: imageData)
+            images = [WSImage(mediaType: mediaType, data: base64String)]
+            print("[WS] Attaching image: \(mediaType), \(base64String.count) chars base64")
+        }
+
         let command = WSClaudeCommand(
             command: message,
             options: WSCommandOptions(
@@ -172,7 +182,8 @@ class WebSocketManager: ObservableObject {
                 sessionId: resumeSessionId ?? sessionId,
                 model: nil,
                 permissionMode: permissionMode
-            )
+            ),
+            images: images
         )
 
         do {
@@ -408,6 +419,33 @@ class WebSocketManager: ObservableObject {
         default:
             print("[WS] Unknown SDK message type: \(type)")
         }
+    }
+
+    /// Detect image media type from data header (magic bytes)
+    private func detectMediaType(from data: Data) -> String {
+        guard data.count >= 4 else { return "image/jpeg" }
+
+        let bytes = [UInt8](data.prefix(4))
+
+        // PNG: 89 50 4E 47
+        if bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47 {
+            return "image/png"
+        }
+        // GIF: 47 49 46 38
+        if bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x38 {
+            return "image/gif"
+        }
+        // WebP: 52 49 46 46 ... 57 45 42 50
+        if bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46 {
+            if data.count >= 12 {
+                let webpBytes = [UInt8](data[8..<12])
+                if webpBytes[0] == 0x57 && webpBytes[1] == 0x45 && webpBytes[2] == 0x42 && webpBytes[3] == 0x50 {
+                    return "image/webp"
+                }
+            }
+        }
+        // Default to JPEG
+        return "image/jpeg"
     }
 
     /// Process content from a message (handles both array and string content)
