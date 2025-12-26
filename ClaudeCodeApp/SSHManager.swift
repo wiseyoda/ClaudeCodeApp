@@ -387,9 +387,10 @@ class SSHManager: ObservableObject {
         output = ""
     }
 
-    // MARK: - SFTP File Upload
+    // MARK: - Image Upload via Base64
 
-    /// Upload image data via SFTP and return the remote file path
+    /// Upload image data via SSH command and return the remote file path
+    /// Uses base64 encoding to transfer the image reliably
     /// - Parameters:
     ///   - imageData: The image data to upload
     ///   - filename: Optional filename (defaults to timestamped name)
@@ -399,36 +400,57 @@ class SSHManager: ObservableObject {
             throw SSHError.notConnected
         }
 
-        // Generate filename if not provided
-        let timestamp = Int(Date().timeIntervalSince1970 * 1000)
-        let actualFilename = filename ?? "image_\(timestamp).jpg"
+        // Generate filename with UUID for uniqueness
+        let uuid = UUID().uuidString.prefix(8)
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let actualFilename = filename ?? "img_\(timestamp)_\(uuid).jpg"
 
         // Remote directory for uploaded images
         let remoteDir = "/tmp/claude-images"
         let remotePath = "\(remoteDir)/\(actualFilename)"
 
+        print("[SSH] Starting upload of \(imageData.count) bytes to \(remotePath)")
+
         // Ensure the directory exists
         _ = try? await client.executeCommand("mkdir -p \(remoteDir)")
 
-        // Get SFTP client
-        let sftp = try await client.openSFTP()
+        // Convert image to base64 (no line wrapping)
+        let base64String = imageData.base64EncodedString()
+        print("[SSH] Base64 length: \(base64String.count) chars")
 
-        // Open file for writing (create if doesn't exist, truncate if exists)
-        let file = try await sftp.openFile(
-            filePath: remotePath,
-            flags: [.create, .write, .truncate]
-        )
+        // Use printf with chunks to avoid command line limits
+        // printf '%s' doesn't add newlines and handles base64 chars safely
+        let chunkSize = 30000  // Conservative chunk size
+        var offset = 0
+        var isFirst = true
 
-        // Write the image data
-        var buffer = ByteBufferAllocator().buffer(capacity: imageData.count)
-        buffer.writeBytes(imageData)
-        try await file.write(buffer)
+        while offset < base64String.count {
+            let startIndex = base64String.index(base64String.startIndex, offsetBy: offset)
+            let endOffset = min(offset + chunkSize, base64String.count)
+            let endIndex = base64String.index(base64String.startIndex, offsetBy: endOffset)
+            let chunk = String(base64String[startIndex..<endIndex])
 
-        // Close file and SFTP session
-        try await file.close()
-        try await sftp.close()
+            // Use printf '%s' to avoid newline issues
+            // Redirect: > for first chunk, >> for subsequent
+            let redirect = isFirst ? ">" : ">>"
+            let cmd = "printf '%s' '\(chunk)' \(redirect) \(remotePath).b64"
 
-        print("[SSH] Uploaded image to: \(remotePath)")
+            _ = try await client.executeCommand(cmd)
+            offset = endOffset
+            isFirst = false
+        }
+
+        // Decode the base64 file to the actual image
+        // Use -d for standard base64 decode
+        let decodeCmd = "base64 -d \(remotePath).b64 > \(remotePath) && rm \(remotePath).b64"
+        _ = try await client.executeCommand(decodeCmd)
+
+        // Verify the file was created and has content
+        let verifyCmd = "stat -c '%s' \(remotePath) 2>/dev/null || stat -f '%z' \(remotePath) 2>/dev/null"
+        let verifyResult = try await client.executeCommand(verifyCmd)
+        let fileSize = String(buffer: verifyResult).trimmingCharacters(in: .whitespacesAndNewlines)
+        print("[SSH] Uploaded image to: \(remotePath) (\(fileSize) bytes)")
+
         return remotePath
     }
 }
