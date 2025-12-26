@@ -912,6 +912,7 @@ struct MarkdownText: View {
         case bulletList([String])
         case numberedList([String])
         case table([[String]]) // rows of cells
+        case horizontalRule
     }
 
     private func parseBlocks() -> [Block] {
@@ -932,6 +933,14 @@ struct MarkdownText: View {
                     i += 1
                 }
                 blocks.append(.codeBlock(codeLines.joined(separator: "\n"), language.isEmpty ? nil : language))
+                i += 1
+                continue
+            }
+
+            // Horizontal rule (---, ***, ___)
+            let trimmedLine = line.trimmingCharacters(in: .whitespaces)
+            if trimmedLine == "---" || trimmedLine == "***" || trimmedLine == "___" {
+                blocks.append(.horizontalRule)
                 i += 1
                 continue
             }
@@ -1041,22 +1050,141 @@ struct MarkdownText: View {
             }
         case .table(let rows):
             tableView(rows: rows)
+        case .horizontalRule:
+            Rectangle()
+                .fill(CLITheme.mutedText.opacity(0.4))
+                .frame(height: 1)
+                .padding(.vertical, 8)
         }
     }
 
     @ViewBuilder
     private func headerView(text: String, level: Int) -> some View {
-        HStack(spacing: 6) {
-            Text(String(repeating: "#", count: level))
-                .font(settings.scaledFont(.small))
-                .foregroundColor(CLITheme.mutedText)
-            Text(text)
-                .font(level == 1 ? settings.scaledFont(.large) : settings.scaledFont(.body))
-                .foregroundColor(level <= 2 ? CLITheme.cyan : CLITheme.primaryText)
-                .fontWeight(level <= 2 ? .semibold : .medium)
+        VStack(alignment: .leading, spacing: 2) {
+            renderStyledText(text, style: headerStyle(for: level))
+
+            // Underline for H1 and H2
+            if level <= 2 {
+                Rectangle()
+                    .fill(level == 1 ? CLITheme.cyan : CLITheme.cyan.opacity(0.5))
+                    .frame(height: level == 1 ? 2 : 1)
+            }
         }
-        .padding(.top, level <= 2 ? 8 : 4)
-        .padding(.bottom, 2)
+        .padding(.top, headerTopPadding(for: level))
+        .padding(.bottom, 4)
+    }
+
+    private func headerStyle(for level: Int) -> TextStyle {
+        switch level {
+        case 1: return TextStyle(font: .title2, color: CLITheme.cyan, weight: .bold)
+        case 2: return TextStyle(font: .title3, color: CLITheme.cyan, weight: .semibold)
+        case 3: return TextStyle(font: .headline, color: CLITheme.primaryText, weight: .semibold)
+        default: return TextStyle(font: .subheadline, color: CLITheme.primaryText, weight: .medium)
+        }
+    }
+
+    private func headerTopPadding(for level: Int) -> CGFloat {
+        switch level {
+        case 1: return 16
+        case 2: return 12
+        case 3: return 8
+        default: return 4
+        }
+    }
+
+    private struct TextStyle {
+        let font: Font.TextStyle
+        let color: Color
+        let weight: Font.Weight
+    }
+
+    @ViewBuilder
+    private func renderStyledText(_ text: String, style: TextStyle) -> some View {
+        // Parse bold and inline code within the text
+        let attributed = parseInlineFormatting(text)
+        Text(attributed)
+            .font(.system(style.font, design: .default, weight: style.weight))
+            .foregroundColor(style.color)
+    }
+
+    /// Parse inline markdown (bold, italic, code) into AttributedString
+    private func parseInlineFormatting(_ text: String) -> AttributedString {
+        var result = AttributedString()
+        var remaining = text[...]
+        let fontSize = UIFont.preferredFont(forTextStyle: .body).pointSize
+
+        while !remaining.isEmpty {
+            // Find the earliest formatting marker
+            var earliestRange: Range<Substring.Index>?
+            var markerType: String?
+
+            // Check for bold **
+            if let boldRange = remaining.range(of: "**") {
+                if earliestRange == nil || boldRange.lowerBound < earliestRange!.lowerBound {
+                    earliestRange = boldRange
+                    markerType = "bold"
+                }
+            }
+
+            // Check for inline code `
+            if let codeRange = remaining.range(of: "`") {
+                if earliestRange == nil || codeRange.lowerBound < earliestRange!.lowerBound {
+                    earliestRange = codeRange
+                    markerType = "code"
+                }
+            }
+
+            guard let range = earliestRange, let type = markerType else {
+                // No more formatting, add the rest
+                result.append(AttributedString(String(remaining)))
+                break
+            }
+
+            // Add text before the marker
+            let beforeMarker = String(remaining[..<range.lowerBound])
+            if !beforeMarker.isEmpty {
+                result.append(AttributedString(beforeMarker))
+            }
+
+            // Process the formatted text
+            let afterMarker = remaining[range.upperBound...]
+
+            switch type {
+            case "bold":
+                // Find closing **
+                if let closeRange = afterMarker.range(of: "**") {
+                    let boldText = String(afterMarker[..<closeRange.lowerBound])
+                    var boldAttr = AttributedString(boldText)
+                    boldAttr.font = .boldSystemFont(ofSize: fontSize)
+                    result.append(boldAttr)
+                    remaining = afterMarker[closeRange.upperBound...]
+                } else {
+                    // No closing marker, treat as literal
+                    result.append(AttributedString("**"))
+                    remaining = afterMarker
+                }
+
+            case "code":
+                // Find closing `
+                if let closeRange = afterMarker.range(of: "`") {
+                    let codeText = String(afterMarker[..<closeRange.lowerBound])
+                    var codeAttr = AttributedString(codeText)
+                    codeAttr.font = .monospacedSystemFont(ofSize: fontSize - 1, weight: .regular)
+                    codeAttr.foregroundColor = CLITheme.cyan
+                    result.append(codeAttr)
+                    remaining = afterMarker[closeRange.upperBound...]
+                } else {
+                    // No closing marker, treat as literal
+                    result.append(AttributedString("`"))
+                    remaining = afterMarker
+                }
+
+            default:
+                remaining = afterMarker
+            }
+        }
+
+        return result
     }
 
     @ViewBuilder
@@ -1092,17 +1220,10 @@ struct MarkdownText: View {
 
     @ViewBuilder
     private func renderInlineMarkdown(_ text: String) -> some View {
-        // Use AttributedString for inline markdown (bold, italic, code)
-        if let attributed = try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
-            Text(attributed)
-                .font(settings.scaledFont(.body))
-                .foregroundColor(CLITheme.primaryText)
-                .tint(CLITheme.cyan)
-        } else {
-            Text(text)
-                .font(settings.scaledFont(.body))
-                .foregroundColor(CLITheme.primaryText)
-        }
+        let attributed = parseInlineFormatting(text)
+        Text(attributed)
+            .font(settings.scaledFont(.body))
+            .foregroundColor(CLITheme.primaryText)
     }
 }
 
