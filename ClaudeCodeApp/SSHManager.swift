@@ -45,6 +45,7 @@ class SSHManager: ObservableObject {
     var host: String = ""
     var port: Int = 22
     var username: String = ""
+    var currentDirectory: String = "~"  // Track working directory
 
     init() {
         loadSSHConfig()
@@ -215,6 +216,7 @@ class SSHManager: ObservableObject {
             self.client = client
             isConnected = true
             isConnecting = false
+            currentDirectory = "~"  // Reset to home on new connection
             output += "Connected! Type commands below.\n\n"
 
         } catch let error as SSHError {
@@ -255,6 +257,7 @@ class SSHManager: ObservableObject {
             self.client = client
             isConnected = true
             isConnecting = false
+            currentDirectory = "~"  // Reset to home on new connection
             output += "Connected! Type commands below.\n\n"
 
         } catch {
@@ -280,10 +283,48 @@ class SSHManager: ObservableObject {
 
         output += "$ \(command)\n"
 
+        let trimmedCommand = command.trimmingCharacters(in: .whitespaces)
+        var actualCommand: String
+
+        // Handle cd commands specially
+        if trimmedCommand == "cd" {
+            // cd with no args goes home
+            currentDirectory = "~"
+            actualCommand = "cd ~ && pwd"
+        } else if trimmedCommand.hasPrefix("cd ") {
+            let newDir = String(trimmedCommand.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+            // Build the full cd command from current directory
+            actualCommand = "cd \(currentDirectory) && cd \(newDir) && pwd"
+            // Update our tracked directory after successful cd
+            if newDir.hasPrefix("/") {
+                currentDirectory = newDir
+            } else if newDir == "~" || newDir.hasPrefix("~/") {
+                currentDirectory = newDir
+            } else if newDir == ".." {
+                if currentDirectory != "~" && currentDirectory != "/" {
+                    currentDirectory = (currentDirectory as NSString).deletingLastPathComponent
+                    if currentDirectory.isEmpty { currentDirectory = "/" }
+                }
+            } else if newDir == "-" {
+                // cd - is complex, just let it run
+                currentDirectory = "~"  // Reset, not perfect but safe
+            } else {
+                // Relative path
+                if currentDirectory == "~" {
+                    currentDirectory = "~/\(newDir)"
+                } else {
+                    currentDirectory = "\(currentDirectory)/\(newDir)"
+                }
+            }
+        } else {
+            // Regular command - run from current directory
+            actualCommand = "cd \(currentDirectory) && \(command)"
+        }
+
         Task {
             do {
                 // Execute command and get streaming output
-                let stream = try await client.executeCommandStream(command)
+                let stream = try await client.executeCommandStream(actualCommand)
 
                 // Process the stream - ExecCommandOutput has stdout/stderr ByteBuffers
                 for try await output in stream {

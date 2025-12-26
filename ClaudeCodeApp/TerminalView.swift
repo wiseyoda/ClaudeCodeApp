@@ -131,6 +131,8 @@ struct TerminalView: View {
         guard !inputText.isEmpty else { return }
         sshManager.send(inputText)
         inputText = ""
+        // Keep focus on input field
+        isInputFocused = true
     }
 }
 

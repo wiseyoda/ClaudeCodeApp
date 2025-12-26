@@ -1,41 +1,49 @@
 import Foundation
 
-// MARK: - Project Models
+// MARK: - Project Models (new claudecodeui API)
 
 struct Project: Codable, Identifiable {
+    let name: String
     let path: String
-    let encodedName: String
+    let displayName: String?
+    let fullPath: String?
+    let sessions: [ProjectSession]?
 
     var id: String { path }
-    var name: String {
-        path.components(separatedBy: "/").last ?? path
+
+    // For display, prefer displayName, then name cleaned up
+    var title: String {
+        if let display = displayName, !display.isEmpty {
+            return display
+        }
+        return name.replacingOccurrences(of: "-home-dev-workspace-", with: "")
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case name, path, displayName, fullPath, sessions
     }
 }
 
-struct ProjectsResponse: Codable {
-    let projects: [Project]
-}
-
-// MARK: - Chat Models
-
-struct ChatRequest: Codable {
-    let message: String
-    let sessionId: String?
-    let requestId: String
-    let workingDirectory: String
-    let allowedTools: [String]?
+struct ProjectSession: Codable, Identifiable {
+    let id: String
+    let summary: String?
+    let messageCount: Int?
+    let lastActivity: String?
+    let lastUserMessage: String?
+    let lastAssistantMessage: String?
 }
 
 // MARK: - Message for UI
 
-struct ChatMessage: Identifiable, Equatable {
-    let id = UUID()
+struct ChatMessage: Identifiable, Equatable, Codable {
+    let id: UUID
     let role: Role
     let content: String
     let timestamp: Date
     var isStreaming: Bool = false
+    var imageData: Data?  // Optional image attachment
 
-    enum Role: String {
+    enum Role: String, Codable {
         case user
         case assistant
         case system
@@ -43,6 +51,16 @@ struct ChatMessage: Identifiable, Equatable {
         case toolUse
         case toolResult
         case resultSuccess
+        case thinking  // For reasoning/thinking blocks
+    }
+
+    init(role: Role, content: String, timestamp: Date = Date(), isStreaming: Bool = false, imageData: Data? = nil) {
+        self.id = UUID()
+        self.role = role
+        self.content = content
+        self.timestamp = timestamp
+        self.isStreaming = isStreaming
+        self.imageData = imageData
     }
 
     static func == (lhs: ChatMessage, rhs: ChatMessage) -> Bool {
@@ -50,49 +68,127 @@ struct ChatMessage: Identifiable, Equatable {
     }
 }
 
-// MARK: - Claude Streaming JSON Types
+// MARK: - Message Persistence
 
-// Outer wrapper from claude-code-webui
-struct StreamLine: Decodable {
-    let type: String  // "claude_json" or "done"
-    let data: ClaudeStreamEvent?
+class MessageStore {
+    private static let maxMessages = 50
+    private static let keyPrefix = "chat_messages_"
+
+    /// Get the storage key for a project
+    private static func key(for projectPath: String) -> String {
+        // Create a safe key from project path
+        let safeKey = projectPath
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+        return keyPrefix + safeKey
+    }
+
+    /// Load messages for a project
+    static func loadMessages(for projectPath: String) -> [ChatMessage] {
+        let key = key(for: projectPath)
+        guard let data = UserDefaults.standard.data(forKey: key) else {
+            return []
+        }
+
+        do {
+            let messages = try JSONDecoder().decode([ChatMessage].self, from: data)
+            print("[MessageStore] Loaded \(messages.count) messages for \(projectPath)")
+            return messages
+        } catch {
+            print("[MessageStore] Failed to decode messages: \(error)")
+            return []
+        }
+    }
+
+    /// Save messages for a project (keeps last 50)
+    static func saveMessages(_ messages: [ChatMessage], for projectPath: String) {
+        let key = key(for: projectPath)
+
+        // Keep only the last maxMessages, excluding streaming messages
+        let persistableMessages = messages
+            .filter { !$0.isStreaming }
+            .suffix(maxMessages)
+
+        do {
+            let data = try JSONEncoder().encode(Array(persistableMessages))
+            UserDefaults.standard.set(data, forKey: key)
+            print("[MessageStore] Saved \(persistableMessages.count) messages for \(projectPath)")
+        } catch {
+            print("[MessageStore] Failed to encode messages: \(error)")
+        }
+    }
+
+    /// Clear messages for a project
+    static func clearMessages(for projectPath: String) {
+        let key = key(for: projectPath)
+        UserDefaults.standard.removeObject(forKey: key)
+        print("[MessageStore] Cleared messages for \(projectPath)")
+    }
+
+    // MARK: - Draft Persistence
+
+    private static let draftPrefix = "draft_input_"
+
+    private static func draftKey(for projectPath: String) -> String {
+        let safeKey = projectPath
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+        return draftPrefix + safeKey
+    }
+
+    /// Load draft input for a project
+    static func loadDraft(for projectPath: String) -> String {
+        let key = draftKey(for: projectPath)
+        return UserDefaults.standard.string(forKey: key) ?? ""
+    }
+
+    /// Save draft input for a project
+    static func saveDraft(_ text: String, for projectPath: String) {
+        let key = draftKey(for: projectPath)
+        if text.isEmpty {
+            UserDefaults.standard.removeObject(forKey: key)
+        } else {
+            UserDefaults.standard.set(text, forKey: key)
+        }
+    }
+
+    /// Clear draft for a project
+    static func clearDraft(for projectPath: String) {
+        let key = draftKey(for: projectPath)
+        UserDefaults.standard.removeObject(forKey: key)
+    }
 }
 
-struct ClaudeStreamEvent: Decodable {
-    let type: String
-    let message: ClaudeMessage?
-    let session_id: String?
-    let subtype: String?
-    let tool_name: String?
-    let tool_input: [String: AnyCodable]?
-    let content: String?
-    let result: String?  // For result type events
-    // System init fields
-    let cwd: String?
-    let tools: [String]?
+// MARK: - WebSocket Message Types (claudecodeui)
+
+// Messages sent TO server
+struct WSClaudeCommand: Encodable {
+    let type: String = "claude-command"
+    let command: String
+    let options: WSCommandOptions
+}
+
+struct WSCommandOptions: Encodable {
+    let cwd: String  // Working directory - server expects 'cwd', not 'projectPath'
+    let sessionId: String?
     let model: String?
-    let permissionMode: String?
-    // Result fields
-    let duration_ms: Int?
-    let duration_api_ms: Int?
-    let num_turns: Int?
-    let is_error: Bool?
-    let cost: Double?
-    let input_tokens: Int?
-    let output_tokens: Int?
+    let permissionMode: String?  // "default", "plan", or "bypassPermissions"
 }
 
-struct ClaudeMessage: Decodable {
-    let content: [ClaudeContent]?
-    let role: String?
-    let model: String?
+struct WSAbortSession: Encodable {
+    let type: String = "abort-session"
+    let sessionId: String
+    let provider: String = "claude"
 }
 
-struct ClaudeContent: Decodable {
+// Messages received FROM server
+struct WSMessage: Decodable {
     let type: String
-    let text: String?
-    let name: String?
-    let input: [String: AnyCodable]?
+    let sessionId: String?
+    let data: AnyCodable?
+    let error: String?
+    let exitCode: Int?
+    let isNewSession: Bool?
 }
 
 // Helper for dynamic JSON
@@ -131,5 +227,9 @@ struct AnyCodable: Decodable {
             }
         }
         return String(describing: value)
+    }
+
+    var dictValue: [String: Any]? {
+        return value as? [String: Any]
     }
 }

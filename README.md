@@ -4,11 +4,31 @@ A native iOS client for [Claude Code WebUI](https://github.com/sugyan/claude-cod
 
 ## Features
 
-- **Project Browser** - View and select from your Claude Code projects
-- **Real-time Chat** - Stream responses from Claude with live updates
-- **Tool Visibility** - See tool usage and results inline
-- **Session Persistence** - Continue conversations across app launches
-- **Tailscale Integration** - Secure access via private network
+### Chat
+- **Real-time Streaming** - Live response updates via WebSocket
+- **Tool Visibility** - Collapsible tool use/results with expand/collapse
+- **Thinking Blocks** - View Claude's reasoning process (collapsible)
+- **Diff Viewer** - Color-coded visualization for Edit tool changes
+- **Code Blocks** - Syntax highlighting with copy-to-clipboard
+- **Markdown Rendering** - Tables, headers, lists, inline code
+
+### Input
+- **Voice Input** - Dictate messages using iOS Speech Recognition
+- **Image Upload** - Attach images from photo library with preview
+- **Draft Saving** - Auto-saves unsent messages per project
+
+### Persistence
+- **Message History** - Last 50 messages saved per project
+- **Session Continuity** - Resume conversations across app launches
+- **Reconnection** - Exponential backoff with jitter on disconnect
+
+### SSH Terminal
+- **Native SSH Client** - Built with Citadel (pure Swift)
+- **Special Keys Bar** - Ctrl+C, Tab, arrows, Esc
+- **Saved Credentials** - Auto-connect with stored settings
+
+### Notifications
+- **Background Alerts** - Local notifications when tasks complete
 
 ## Requirements
 
@@ -33,29 +53,42 @@ The app connects to a claude-code-webui backend. See [requirements/BACKEND.md](r
 
 On first launch, the app defaults to `http://10.0.3.2:8080`. To change:
 
-1. Tap the gear icon (⚙️) in the top right
+1. Tap the gear icon in the top right
 2. Enter your backend server URL
-3. Tap Done
+3. Configure SSH credentials (optional)
+4. Adjust font size and mode preferences
+5. Tap Done
 
 ## Architecture
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │   iOS App       │────▶│  WebUI Backend  │────▶│   Claude CLI    │
-│   (SwiftUI)     │ API │  (Node.js)      │     │                 │
+│   (SwiftUI)     │ WS  │  (Node.js)      │     │                 │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
         │                       │
         └───── Tailscale ───────┘
               (secure network)
 ```
 
-## API Endpoints Used
+## WebSocket Protocol
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/projects` | GET | List available projects |
-| `/api/chat` | POST | Send message, receive streaming response |
-| `/api/abort/:requestId` | POST | Cancel ongoing request |
+The app uses WebSocket for real-time streaming:
+
+| Message Type | Direction | Description |
+|--------------|-----------|-------------|
+| `claude-command` | → Server | Send user message |
+| `claude-response` | ← Server | Streaming content |
+| `claude-complete` | ← Server | Task finished |
+| `token-budget` | ← Server | Usage stats |
+| `abort-session` | → Server | Cancel request |
+
+## Permissions
+
+The app requests these permissions:
+- **Microphone** - Voice-to-text input
+- **Speech Recognition** - Transcription
+- **Photo Library** - Image attachments
 
 ## License
 

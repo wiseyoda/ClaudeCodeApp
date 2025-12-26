@@ -18,6 +18,7 @@
 		A1000009 /* TerminalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000009 /* TerminalView.swift */; };
 		A1000010 /* SSHManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000010 /* SSHManager.swift */; };
 		A1000011 /* Citadel in Frameworks */ = {isa = PBXBuildFile; productRef = A1100001 /* Citadel */; };
+		A1000012 /* WebSocketManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000011 /* WebSocketManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -31,6 +32,7 @@
 		A2000008 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		A2000009 /* TerminalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalView.swift; sourceTree = "<group>"; };
 		A2000010 /* SSHManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHManager.swift; sourceTree = "<group>"; };
+		A2000011 /* WebSocketManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocketManager.swift; sourceTree = "<group>"; };
 		A3000001 /* ClaudeCodeApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClaudeCodeApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -66,6 +68,7 @@
 				A2000008 /* Theme.swift */,
 				A2000009 /* TerminalView.swift */,
 				A2000010 /* SSHManager.swift */,
+				A2000011 /* WebSocketManager.swift */,
 				A2000007 /* Assets.xcassets */,
 			);
 			path = ClaudeCodeApp;
@@ -163,6 +166,7 @@
 				A1000008 /* Theme.swift in Sources */,
 				A1000009 /* TerminalView.swift in Sources */,
 				A1000010 /* SSHManager.swift in Sources */,
+				A1000012 /* WebSocketManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

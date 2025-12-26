@@ -1,22 +1,43 @@
 import SwiftUI
+import UIKit
+import PhotosUI
 
 struct ChatView: View {
     let project: Project
     let apiClient: APIClient
     @EnvironmentObject var settings: AppSettings
+    @StateObject private var wsManager: WebSocketManager
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var messages: [ChatMessage] = []
     @State private var inputText = ""
-    @State private var sessionId: String?
-    @State private var isProcessing = false
-    @State private var currentStreamingText = ""
-    @State private var hasShownSystemInit = false
+    @State private var selectedImage: Data?
     @State private var processingStartTime: Date?
-    @State private var tokenCount: Int = 0
+    @State private var selectedSession: ProjectSession?
     @FocusState private var isInputFocused: Bool
+
+    init(project: Project, apiClient: APIClient) {
+        self.project = project
+        self.apiClient = apiClient
+        // Initialize WebSocketManager with settings from apiClient
+        let settings = AppSettings()
+        _wsManager = StateObject(wrappedValue: WebSocketManager(settings: settings))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
+            // Session picker if project has sessions
+            if let sessions = project.sessions, !sessions.isEmpty {
+                SessionPicker(sessions: sessions, selected: $selectedSession) { session in
+                    // Load session
+                    wsManager.sessionId = session.id
+                    messages = []
+                    if let lastMsg = session.lastAssistantMessage {
+                        messages.append(ChatMessage(role: .assistant, content: lastMsg, timestamp: Date()))
+                    }
+                }
+            }
+
             // Messages
             ScrollViewReader { proxy in
                 ScrollView {
@@ -27,14 +48,14 @@ struct ChatView: View {
                         }
 
                         // Streaming indicator
-                        if isProcessing {
-                            if currentStreamingText.isEmpty {
+                        if wsManager.isProcessing {
+                            if wsManager.currentText.isEmpty {
                                 CLIProcessingView()
                                     .id("streaming")
                             } else {
                                 CLIMessageView(message: ChatMessage(
                                     role: .assistant,
-                                    content: currentStreamingText,
+                                    content: wsManager.currentText,
                                     timestamp: Date(),
                                     isStreaming: true
                                 ))
@@ -55,7 +76,7 @@ struct ChatView: View {
                         }
                     }
                 }
-                .onChange(of: currentStreamingText) { _, _ in
+                .onChange(of: wsManager.currentText) { _, _ in
                     withAnimation {
                         proxy.scrollTo("streaming", anchor: .bottom)
                     }
@@ -64,24 +85,26 @@ struct ChatView: View {
 
             // Status bar
             CLIStatusBar(
-                isProcessing: isProcessing,
+                isProcessing: wsManager.isProcessing,
                 startTime: processingStartTime,
-                tokenCount: tokenCount
+                tokenUsage: wsManager.tokenUsage
             )
 
-            // Terminal input
+            // Terminal input - use id to maintain focus stability during re-renders
             CLIInputView(
                 text: $inputText,
-                isProcessing: isProcessing,
+                selectedImage: $selectedImage,
+                isProcessing: wsManager.isProcessing,
                 isFocused: _isInputFocused,
-                onSend: { Task { await sendMessage() } }
+                onSend: sendMessage
             )
+            .id("input-view")
 
             // Mode selector
             CLIModeSelector()
         }
         .background(CLITheme.background)
-        .navigationTitle(project.name)
+        .navigationTitle(project.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(CLITheme.secondaryBackground, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
@@ -90,10 +113,19 @@ struct ChatView: View {
                 Menu {
                     Button {
                         messages = []
-                        sessionId = nil
-                        hasShownSystemInit = false
+                        wsManager.sessionId = nil
+                        selectedSession = nil
+                        MessageStore.clearMessages(for: project.path)
                     } label: {
                         Label("New Chat", systemImage: "plus")
+                    }
+
+                    if wsManager.isProcessing {
+                        Button(role: .destructive) {
+                            wsManager.abortSession()
+                        } label: {
+                            Label("Abort", systemImage: "stop.circle")
+                        }
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -101,118 +133,204 @@ struct ChatView: View {
                 }
             }
         }
-    }
+        .onAppear {
+            // Update WebSocketManager with actual EnvironmentObject settings
+            wsManager.updateSettings(settings)
+            setupWebSocketCallbacks()
+            wsManager.connect()
 
-    private func sendMessage() async {
-        let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
-
-        // Add user message
-        let userMessage = ChatMessage(role: .user, content: text, timestamp: Date())
-        messages.append(userMessage)
-
-        inputText = ""
-        isProcessing = true
-        processingStartTime = Date()
-        currentStreamingText = ""
-
-        do {
-            let newSessionId = try await apiClient.sendMessage(
-                text,
-                project: project,
-                sessionId: sessionId
-            ) { event in
-                DispatchQueue.main.async {
-                    switch event {
-                    case .text(let fullText):
-                        currentStreamingText = fullText
-                    case .toolUse(let name, let input):
-                        let toolMsg = ChatMessage(
-                            role: .toolUse,
-                            content: "\(name)(\(input))",
-                            timestamp: Date()
-                        )
-                        messages.append(toolMsg)
-                    case .toolResult(let result):
-                        let resultMsg = ChatMessage(
-                            role: .toolResult,
-                            content: result.prefix(500) + (result.count > 500 ? "..." : ""),
-                            timestamp: Date()
-                        )
-                        messages.append(resultMsg)
-                    case .complete:
-                        break
-                    case .debug(let raw):
-                        let debugMsg = ChatMessage(
-                            role: .system,
-                            content: raw,
-                            timestamp: Date()
-                        )
-                        messages.append(debugMsg)
-                    case .systemInit(let model, let session, let tools, let cwd):
-                        if !hasShownSystemInit {
-                            hasShownSystemInit = true
-                            var lines: [String] = []
-                            if let model = model { lines.append("Model: \(model)") }
-                            if let session = session { lines.append("Session: \(session)") }
-                            lines.append("Tools: \(tools) available")
-                            if let cwd = cwd { lines.append("CWD: \(cwd)") }
-                            let systemMsg = ChatMessage(
-                                role: .system,
-                                content: lines.joined(separator: "\n"),
-                                timestamp: Date()
-                            )
-                            messages.append(systemMsg)
-                        }
-                    case .resultInfo(let success, let durationMs, let cost, let inputTokens, let outputTokens):
-                        var lines: [String] = []
-                        if let ms = durationMs { lines.append("Duration: \(ms)ms") }
-                        if let c = cost { lines.append("Cost: $\(String(format: "%.4f", c))") }
-                        if let inTok = inputTokens, let outTok = outputTokens {
-                            lines.append("Tokens: \(inTok) in, \(outTok) out")
-                            tokenCount += inTok + outTok
-                        }
-                        let resultMsg = ChatMessage(
-                            role: .resultSuccess,
-                            content: lines.isEmpty ? (success ? "Done" : "Failed") : lines.joined(separator: " | "),
-                            timestamp: Date()
-                        )
-                        messages.append(resultMsg)
-                    }
-                }
+            // Load persisted messages
+            let savedMessages = MessageStore.loadMessages(for: project.path)
+            if !savedMessages.isEmpty {
+                messages = savedMessages
             }
 
+            // Load draft input
+            let savedDraft = MessageStore.loadDraft(for: project.path)
+            if !savedDraft.isEmpty {
+                inputText = savedDraft
+            }
+        }
+        .onDisappear {
+            wsManager.disconnect()
+            // Save messages when leaving
+            MessageStore.saveMessages(messages, for: project.path)
+        }
+        .onChange(of: messages) { _, newMessages in
+            // Save messages whenever they change (debounced by iOS)
+            MessageStore.saveMessages(newMessages, for: project.path)
+        }
+        .onChange(of: inputText) { _, newText in
+            // Auto-save draft input
+            MessageStore.saveDraft(newText, for: project.path)
+        }
+        .onChange(of: wsManager.isProcessing) { _, isProcessing in
+            // Refocus input when processing completes
+            if !isProcessing {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    isInputFocused = true
+                }
+            }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            switch newPhase {
+            case .active:
+                // App came to foreground
+                wsManager.isAppInForeground = true
+                // Reconnect if disconnected
+                if !wsManager.isConnected {
+                    print("[ChatView] App active - reconnecting WebSocket")
+                    wsManager.connect()
+                }
+            case .inactive:
+                // App is inactive (transitioning)
+                break
+            case .background:
+                // App went to background
+                wsManager.isAppInForeground = false
+                print("[ChatView] App backgrounded")
+            @unknown default:
+                break
+            }
+        }
+    }
+
+    private func setupWebSocketCallbacks() {
+        wsManager.onText = { text in
+            // Text is accumulated in wsManager.currentText
+        }
+
+        wsManager.onToolUse = { name, input in
+            let toolMsg = ChatMessage(
+                role: .toolUse,
+                content: "\(name)(\(input))",
+                timestamp: Date()
+            )
+            messages.append(toolMsg)
+        }
+
+        wsManager.onToolResult = { result in
+            let resultMsg = ChatMessage(
+                role: .toolResult,
+                content: String(result.prefix(500)) + (result.count > 500 ? "..." : ""),
+                timestamp: Date()
+            )
+            messages.append(resultMsg)
+        }
+
+        wsManager.onThinking = { thinking in
+            let thinkingMsg = ChatMessage(
+                role: .thinking,
+                content: thinking,
+                timestamp: Date()
+            )
+            messages.append(thinkingMsg)
+        }
+
+        wsManager.onComplete = { _ in
             // Add final assistant message
-            if !currentStreamingText.isEmpty {
+            if !wsManager.currentText.isEmpty {
                 let assistantMessage = ChatMessage(
                     role: .assistant,
-                    content: currentStreamingText,
+                    content: wsManager.currentText,
                     timestamp: Date()
                 )
                 messages.append(assistantMessage)
-            } else {
-                let noResponseMessage = ChatMessage(
-                    role: .error,
-                    content: "No response received",
-                    timestamp: Date()
-                )
-                messages.append(noResponseMessage)
             }
+            processingStartTime = nil
+        }
 
-            sessionId = newSessionId
-            currentStreamingText = ""
-
-        } catch {
+        wsManager.onError = { error in
             let errorMessage = ChatMessage(
                 role: .error,
-                content: "Error: \(error.localizedDescription)",
+                content: "Error: \(error)",
                 timestamp: Date()
             )
             messages.append(errorMessage)
+            processingStartTime = nil
         }
 
-        isProcessing = false
-        processingStartTime = nil
+        wsManager.onSessionCreated = { sessionId in
+            // Session created notification
+            let systemMsg = ChatMessage(
+                role: .system,
+                content: "Session: \(sessionId.prefix(8))...",
+                timestamp: Date()
+            )
+            messages.append(systemMsg)
+        }
+    }
+
+    private func sendMessage() {
+        let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty || selectedImage != nil else { return }
+
+        // Add user message with optional image
+        let userMessage = ChatMessage(
+            role: .user,
+            content: text.isEmpty ? "[Image attached]" : text,
+            timestamp: Date(),
+            imageData: selectedImage
+        )
+        messages.append(userMessage)
+
+        inputText = ""
+        selectedImage = nil
+        processingStartTime = Date()
+
+        // Send via WebSocket with current mode
+        wsManager.sendMessage(
+            text,
+            projectPath: project.path,
+            resumeSessionId: selectedSession?.id,
+            permissionMode: settings.claudeMode.serverValue
+        )
+    }
+}
+
+// MARK: - Session Picker
+
+struct SessionPicker: View {
+    let sessions: [ProjectSession]
+    @Binding var selected: ProjectSession?
+    let onSelect: (ProjectSession) -> Void
+    @EnvironmentObject var settings: AppSettings
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                Button {
+                    selected = nil
+                } label: {
+                    Text("New")
+                        .font(settings.scaledFont(.small))
+                        .foregroundColor(selected == nil ? CLITheme.background : CLITheme.cyan)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(selected == nil ? CLITheme.cyan : CLITheme.secondaryBackground)
+                        .cornerRadius(4)
+                }
+
+                ForEach(sessions.prefix(5)) { session in
+                    Button {
+                        selected = session
+                        onSelect(session)
+                    } label: {
+                        Text(session.summary ?? "Session")
+                            .font(settings.scaledFont(.small))
+                            .foregroundColor(selected?.id == session.id ? CLITheme.background : CLITheme.primaryText)
+                            .lineLimit(1)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(selected?.id == session.id ? CLITheme.cyan : CLITheme.secondaryBackground)
+                            .cornerRadius(4)
+                    }
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+        }
+        .background(CLITheme.background)
     }
 }
 
@@ -225,7 +343,12 @@ struct CLIMessageView: View {
 
     init(message: ChatMessage) {
         self.message = message
-        self._isExpanded = State(initialValue: message.role != .resultSuccess && message.role != .toolResult)
+        // Collapse result messages, Grep/Glob tool uses, and thinking blocks by default
+        let shouldStartCollapsed = message.role == .resultSuccess ||
+            message.role == .toolResult ||
+            message.role == .thinking ||
+            (message.role == .toolUse && (message.content.hasPrefix("Grep") || message.content.hasPrefix("Glob")))
+        self._isExpanded = State(initialValue: !shouldStartCollapsed)
     }
 
     var body: some View {
@@ -275,6 +398,7 @@ struct CLIMessageView: View {
         case .toolUse: return "*"
         case .toolResult: return "└"
         case .resultSuccess: return "*"
+        case .thinking: return "💭"
         }
     }
 
@@ -287,6 +411,7 @@ struct CLIMessageView: View {
         case .toolUse: return CLITheme.green
         case .toolResult: return CLITheme.mutedText
         case .resultSuccess: return CLITheme.green
+        case .thinking: return CLITheme.purple
         }
     }
 
@@ -296,9 +421,15 @@ struct CLIMessageView: View {
         case .assistant: return ""
         case .system: return "System (init)"
         case .error: return "Error"
-        case .toolUse: return message.content
+        case .toolUse:
+            // Show just tool name in header (e.g., "Grep" from "Grep(pattern: ...)")
+            if let parenIndex = message.content.firstIndex(of: "(") {
+                return String(message.content[..<parenIndex])
+            }
+            return message.content
         case .toolResult: return "Result"
         case .resultSuccess: return "Done"
+        case .thinking: return "Thinking"
         }
     }
 
@@ -311,12 +442,13 @@ struct CLIMessageView: View {
         case .toolUse: return CLITheme.yellow
         case .toolResult: return CLITheme.mutedText
         case .resultSuccess: return CLITheme.green
+        case .thinking: return CLITheme.purple
         }
     }
 
     private var isCollapsible: Bool {
         switch message.role {
-        case .system, .toolResult, .resultSuccess: return true
+        case .system, .toolUse, .toolResult, .resultSuccess, .thinking: return true
         default: return false
         }
     }
@@ -325,7 +457,14 @@ struct CLIMessageView: View {
     private var contentView: some View {
         switch message.role {
         case .user:
-            EmptyView() // User message shown in header
+            // Show image if attached
+            if let imageData = message.imageData, let uiImage = UIImage(data: imageData) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: 200, maxHeight: 150)
+                    .cornerRadius(8)
+            }
         case .assistant:
             MarkdownText(message.content)
                 .textSelection(.enabled)
@@ -340,14 +479,113 @@ struct CLIMessageView: View {
                 .foregroundColor(CLITheme.red)
                 .textSelection(.enabled)
         case .toolUse:
-            EmptyView() // Tool use shown in header
+            // Show diff view for Edit tool, otherwise show raw content
+            if message.content.hasPrefix("Edit"),
+               let parsed = DiffView.parseEditContent(message.content) {
+                DiffView(oldString: parsed.old, newString: parsed.new)
+            } else {
+                Text(message.content)
+                    .font(settings.scaledFont(.small))
+                    .foregroundColor(CLITheme.secondaryText)
+                    .textSelection(.enabled)
+            }
         case .toolResult:
             Text(message.content)
                 .font(settings.scaledFont(.small))
                 .foregroundColor(CLITheme.secondaryText)
                 .lineLimit(isExpanded ? nil : 3)
                 .textSelection(.enabled)
+        case .thinking:
+            Text(message.content)
+                .font(settings.scaledFont(.small))
+                .foregroundColor(CLITheme.purple.opacity(0.8))
+                .italic()
+                .textSelection(.enabled)
         }
+    }
+}
+
+// MARK: - Diff View for Edit Tool
+
+struct DiffView: View {
+    let oldString: String
+    let newString: String
+    @EnvironmentObject var settings: AppSettings
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            // Removed section
+            if !oldString.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("- Removed:")
+                        .font(settings.scaledFont(.small))
+                        .foregroundColor(CLITheme.red)
+                    Text(oldString)
+                        .font(settings.scaledFont(.small))
+                        .foregroundColor(CLITheme.diffRemovedText)
+                        .padding(6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(CLITheme.diffRemoved)
+                        .cornerRadius(4)
+                }
+            }
+
+            // Added section
+            if !newString.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("+ Added:")
+                        .font(settings.scaledFont(.small))
+                        .foregroundColor(CLITheme.green)
+                    Text(newString)
+                        .font(settings.scaledFont(.small))
+                        .foregroundColor(CLITheme.diffAddedText)
+                        .padding(6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(CLITheme.diffAdded)
+                        .cornerRadius(4)
+                }
+            }
+        }
+    }
+
+    /// Parse old_string and new_string from Edit tool content
+    static func parseEditContent(_ content: String) -> (old: String, new: String)? {
+        // Content format: "Edit(file_path: /path, old_string: ..., new_string: ...)"
+        // We need to extract old_string and new_string
+
+        // Simple parsing - look for old_string: and new_string:
+        guard content.hasPrefix("Edit") else { return nil }
+
+        var oldString = ""
+        var newString = ""
+
+        // Extract old_string value
+        if let oldRange = content.range(of: "old_string: ") {
+            let afterOld = content[oldRange.upperBound...]
+            // Find the end - either ", new_string:" or end of content
+            if let endRange = afterOld.range(of: ", new_string: ") {
+                oldString = String(afterOld[..<endRange.lowerBound])
+            }
+        }
+
+        // Extract new_string value
+        if let newRange = content.range(of: "new_string: ") {
+            let afterNew = content[newRange.upperBound...]
+            // Find the end - either ")" or ", replace_all:"
+            if let endRange = afterNew.range(of: ", replace_all:") {
+                newString = String(afterNew[..<endRange.lowerBound])
+            } else if let endRange = afterNew.range(of: ")") {
+                newString = String(afterNew[..<endRange.lowerBound])
+            } else {
+                newString = String(afterNew)
+            }
+        }
+
+        if oldString.isEmpty && newString.isEmpty {
+            return nil
+        }
+
+        return (oldString, newString)
     }
 }
 
@@ -378,7 +616,7 @@ struct CLIProcessingView: View {
 struct CLIStatusBar: View {
     let isProcessing: Bool
     let startTime: Date?
-    let tokenCount: Int
+    let tokenUsage: WebSocketManager.TokenUsage?
     @EnvironmentObject var settings: AppSettings
 
     @State private var elapsedTime: String = "0s"
@@ -406,9 +644,12 @@ struct CLIStatusBar: View {
 
             Spacer()
 
-            if tokenCount > 0 {
-                Text("\(formatTokens(tokenCount)) tokens")
-                    .foregroundColor(CLITheme.mutedText)
+            // Context usage from WebSocket (only show if actually received from server)
+            if let usage = tokenUsage {
+                let percentage = Double(usage.used) / Double(usage.total) * 100
+                let color = percentage > 80 ? CLITheme.red : (percentage > 60 ? CLITheme.yellow : CLITheme.mutedText)
+                Text("\(formatTokens(usage.used))/\(formatTokens(usage.total))")
+                    .foregroundColor(color)
             }
 
             if isProcessing {
@@ -444,40 +685,128 @@ struct CLIStatusBar: View {
 
 struct CLIInputView: View {
     @Binding var text: String
+    @Binding var selectedImage: Data?
     let isProcessing: Bool
     @FocusState var isFocused: Bool
     let onSend: () -> Void
     @EnvironmentObject var settings: AppSettings
+    @StateObject private var speechManager = SpeechManager()
+    @State private var showImagePicker = false
+    @State private var selectedItem: PhotosPickerItem?
 
     var body: some View {
-        HStack(spacing: 8) {
-            Text(">")
-                .foregroundColor(CLITheme.green)
-                .font(settings.scaledFont(.body))
+        VStack(spacing: 0) {
+            // Recording indicator
+            if speechManager.isRecording {
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(CLITheme.red)
+                        .frame(width: 8, height: 8)
+                    Text("Recording...")
+                        .font(settings.scaledFont(.small))
+                        .foregroundColor(CLITheme.red)
+                    if !speechManager.transcribedText.isEmpty {
+                        Text(speechManager.transcribedText)
+                            .font(settings.scaledFont(.small))
+                            .foregroundColor(CLITheme.secondaryText)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(CLITheme.secondaryBackground)
+            }
 
-            TextField("", text: $text, axis: .vertical)
-                .font(settings.scaledFont(.body))
-                .foregroundColor(CLITheme.primaryText)
-                .lineLimit(1...5)
-                .focused($isFocused)
-                .disabled(isProcessing)
-                .onSubmit { onSend() }
-                .placeholder(when: text.isEmpty) {
-                    Text("Type a message...")
-                        .foregroundColor(CLITheme.mutedText)
-                        .font(settings.scaledFont(.body))
+            // Image preview
+            if let imageData = selectedImage, let uiImage = UIImage(data: imageData) {
+                HStack {
+                    Image(uiImage: uiImage)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxHeight: 100)
+                        .cornerRadius(8)
+
+                    Button {
+                        selectedImage = nil
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(CLITheme.red)
+                    }
+
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(CLITheme.secondaryBackground)
+            }
+
+            HStack(spacing: 8) {
+                Text(">")
+                    .foregroundColor(CLITheme.green)
+                    .font(settings.scaledFont(.body))
+
+                TextField("", text: $text, axis: .vertical)
+                    .font(settings.scaledFont(.body))
+                    .foregroundColor(CLITheme.primaryText)
+                    .lineLimit(1...5)
+                    .focused($isFocused)
+                    .disabled(isProcessing)
+                    .onSubmit { onSend() }
+                    .placeholder(when: text.isEmpty) {
+                        Text("Type a message...")
+                            .foregroundColor(CLITheme.mutedText)
+                            .font(settings.scaledFont(.body))
+                    }
+
+                // Image picker button
+                if !isProcessing {
+                    PhotosPicker(selection: $selectedItem, matching: .images) {
+                        Image(systemName: "photo")
+                            .foregroundColor(selectedImage != nil ? CLITheme.blue : CLITheme.mutedText)
+                    }
+                    .onChange(of: selectedItem) { _, newItem in
+                        Task {
+                            if let data = try? await newItem?.loadTransferable(type: Data.self) {
+                                selectedImage = data
+                            }
+                        }
+                    }
                 }
 
-            if !text.isEmpty && !isProcessing {
-                Button(action: onSend) {
-                    Image(systemName: "return")
-                        .foregroundColor(CLITheme.green)
+                // Microphone button
+                if !isProcessing {
+                    Button {
+                        if speechManager.isRecording {
+                            speechManager.stopRecording()
+                            // Append transcribed text to input
+                            if !speechManager.transcribedText.isEmpty {
+                                if text.isEmpty {
+                                    text = speechManager.transcribedText
+                                } else {
+                                    text += " " + speechManager.transcribedText
+                                }
+                            }
+                        } else {
+                            speechManager.startRecording()
+                        }
+                    } label: {
+                        Image(systemName: speechManager.isRecording ? "stop.circle.fill" : "mic.fill")
+                            .foregroundColor(speechManager.isRecording ? CLITheme.red : CLITheme.mutedText)
+                    }
+                }
+
+                if (!text.isEmpty || selectedImage != nil) && !isProcessing {
+                    Button(action: onSend) {
+                        Image(systemName: "return")
+                            .foregroundColor(CLITheme.green)
+                    }
                 }
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(CLITheme.background)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(CLITheme.background)
     }
 }
 
@@ -507,6 +836,54 @@ struct CLIModeSelector: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(CLITheme.secondaryBackground)
+    }
+}
+
+// MARK: - Code Block with Copy Button
+
+struct CodeBlockView: View {
+    let code: String
+    let language: String?
+    let settings: AppSettings
+
+    @State private var showCopied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            // Header with language and copy button
+            HStack {
+                if let lang = language, !lang.isEmpty {
+                    Text(lang)
+                        .font(settings.scaledFont(.small))
+                        .foregroundColor(CLITheme.mutedText)
+                }
+                Spacer()
+                Button {
+                    UIPasteboard.general.string = code
+                    showCopied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        showCopied = false
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                        Text(showCopied ? "Copied!" : "Copy")
+                    }
+                    .font(settings.scaledFont(.small))
+                    .foregroundColor(showCopied ? CLITheme.green : CLITheme.mutedText)
+                }
+                .buttonStyle(.plain)
+            }
+
+            // Code content
+            Text(code)
+                .font(settings.scaledFont(.small))
+                .foregroundColor(CLITheme.cyan)
+                .padding(8)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(CLITheme.secondaryBackground)
+                .cornerRadius(6)
+        }
     }
 }
 
@@ -638,20 +1015,7 @@ struct MarkdownText: View {
         case .header(let text, let level):
             headerView(text: text, level: level)
         case .codeBlock(let code, let language):
-            VStack(alignment: .leading, spacing: 4) {
-                if let lang = language, !lang.isEmpty {
-                    Text(lang)
-                        .font(settings.scaledFont(.small))
-                        .foregroundColor(CLITheme.mutedText)
-                }
-                Text(code)
-                    .font(settings.scaledFont(.small))
-                    .foregroundColor(CLITheme.cyan)
-                    .padding(8)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(CLITheme.secondaryBackground)
-                    .cornerRadius(6)
-            }
+            CodeBlockView(code: code, language: language, settings: settings)
         case .bulletList(let items):
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
@@ -761,7 +1125,13 @@ extension View {
     let settings = AppSettings()
     return NavigationStack {
         ChatView(
-            project: Project(path: "/test/project", encodedName: "test"),
+            project: Project(
+                name: "test-project",
+                path: "/test/project",
+                displayName: "Test Project",
+                fullPath: "/test/project",
+                sessions: nil
+            ),
             apiClient: APIClient(settings: settings)
         )
     }

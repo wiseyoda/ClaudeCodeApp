@@ -1,17 +1,26 @@
 import Foundation
 import SwiftUI
 
-// Claude Code modes
+// Claude Code modes - values must match server expectations
 enum ClaudeMode: String, CaseIterable {
-    case normal = "normal"
+    case normal = "default"
     case plan = "plan"
-    case bypassPermissions = "bypass-permissions"
+    case bypassPermissions = "bypassPermissions"
 
     var displayName: String {
         switch self {
         case .normal: return "normal mode"
         case .plan: return "plan mode"
         case .bypassPermissions: return "bypass permissions"
+        }
+    }
+
+    /// The value to send to the server (nil for default mode)
+    var serverValue: String? {
+        switch self {
+        case .normal: return nil  // Server treats nil/default as normal
+        case .plan: return "plan"
+        case .bypassPermissions: return "bypassPermissions"
         }
     }
 
@@ -63,6 +72,11 @@ class AppSettings: ObservableObject {
     @AppStorage("fontSize") var fontSize: Int = 14
     @AppStorage("claudeMode") private var claudeModeRaw: String = ClaudeMode.normal.rawValue
 
+    // Auth Settings (for claudecodeui backend)
+    @AppStorage("authUsername") var authUsername: String = "admin"
+    @AppStorage("authPassword") var authPassword: String = "claude123"
+    @AppStorage("authToken") var authToken: String = ""
+
     // SSH Settings
     @AppStorage("sshHost") var sshHost: String = "10.0.3.2"
     @AppStorage("sshPort") var sshPort: Int = 22
@@ -84,6 +98,18 @@ class AppSettings: ObservableObject {
 
     var baseURL: URL? {
         URL(string: serverURL)
+    }
+
+    var webSocketURL: URL? {
+        guard let base = baseURL else { return nil }
+        let wsScheme = base.scheme == "https" ? "wss" : "ws"
+        var components = URLComponents(url: base, resolvingAgainstBaseURL: false)
+        components?.scheme = wsScheme
+        components?.path = "/ws"
+        if !authToken.isEmpty {
+            components?.queryItems = [URLQueryItem(name: "token", value: authToken)]
+        }
+        return components?.url
     }
 
     // Derive SSH host from server URL if not set

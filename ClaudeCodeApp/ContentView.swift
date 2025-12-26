@@ -182,14 +182,22 @@ struct ProjectRow: View {
                 .foregroundColor(CLITheme.green)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(project.name)
+                Text(project.title)
                     .font(CLITheme.monoFont)
                     .foregroundColor(CLITheme.primaryText)
 
-                Text(project.path)
-                    .font(CLITheme.monoSmall)
-                    .foregroundColor(CLITheme.mutedText)
-                    .lineLimit(1)
+                HStack(spacing: 8) {
+                    Text(project.path)
+                        .font(CLITheme.monoSmall)
+                        .foregroundColor(CLITheme.mutedText)
+                        .lineLimit(1)
+
+                    if let sessions = project.sessions, !sessions.isEmpty {
+                        Text("[\(sessions.count) sessions]")
+                            .font(CLITheme.monoSmall)
+                            .foregroundColor(CLITheme.cyan)
+                    }
+                }
             }
 
             Spacer()
