@@ -22,6 +22,10 @@ class WebSocketManager: ObservableObject {
     private var reconnectTask: Task<Void, Never>?
     private let maxReconnectAttempt = 4  // 1s, 2s, 4s, 8s max
 
+    // Processing timeout - reset if no response for 30 seconds
+    private var processingTimeoutTask: Task<Void, Never>?
+    private var lastResponseTime: Date?
+
     struct TokenUsage {
         let used: Int
         let total: Int
@@ -43,6 +47,44 @@ class WebSocketManager: ObservableObject {
     /// Update settings reference (call from onAppear with actual EnvironmentObject)
     func updateSettings(_ newSettings: AppSettings) {
         self.settings = newSettings
+    }
+
+    /// Start or reset the processing timeout
+    private func startProcessingTimeout() {
+        processingTimeoutTask?.cancel()
+        lastResponseTime = Date()
+
+        processingTimeoutTask = Task { [weak self] in
+            // Wait 30 seconds
+            try? await Task.sleep(nanoseconds: 30_000_000_000)
+
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                guard let self = self else { return }
+                // Check if we're still processing and haven't received any response
+                if self.isProcessing {
+                    if let lastResponse = self.lastResponseTime,
+                       Date().timeIntervalSince(lastResponse) >= 30 {
+                        print("[WS] Processing timeout - no response for 30s, resetting state")
+                        self.isProcessing = false
+                        self.lastError = "Request timed out - no response from server"
+                        self.onError?("Request timed out")
+                    }
+                }
+            }
+        }
+    }
+
+    /// Called when any response is received to reset the timeout
+    private func resetProcessingTimeout() {
+        lastResponseTime = Date()
+    }
+
+    /// Cancel the processing timeout
+    private func cancelProcessingTimeout() {
+        processingTimeoutTask?.cancel()
+        processingTimeoutTask = nil
     }
 
     /// Send a local notification (only when app is backgrounded)
@@ -105,6 +147,7 @@ class WebSocketManager: ObservableObject {
         reconnectTask = nil
         isReconnecting = false
         reconnectAttempt = 0
+        cancelProcessingTimeout()
 
         webSocket?.cancel(with: .goingAway, reason: nil)
         webSocket = nil
@@ -164,6 +207,7 @@ class WebSocketManager: ObservableObject {
         currentText = ""
         isProcessing = true
         lastError = nil
+        startProcessingTimeout()
 
         // Convert image data to base64 WSImage if present
         var images: [WSImage]? = nil
@@ -236,6 +280,8 @@ class WebSocketManager: ObservableObject {
                 case .failure(let error):
                     print("[WS] Receive error: \(error)")
                     self?.isConnected = false
+                    self?.isProcessing = false  // Reset processing state on disconnect
+                    self?.cancelProcessingTimeout()
                     self?.lastError = error.localizedDescription
 
                     // Clear stale state on disconnect
@@ -263,6 +309,9 @@ class WebSocketManager: ObservableObject {
 
     private func parseMessage(_ text: String) {
         print("[WS] Received: \(text.prefix(300))")
+
+        // Reset timeout on any received message
+        resetProcessingTimeout()
 
         guard let data = text.data(using: .utf8) else { return }
 
@@ -305,6 +354,7 @@ class WebSocketManager: ObservableObject {
 
             case "claude-complete":
                 isProcessing = false
+                cancelProcessingTimeout()
                 if let sid = msg.sessionId {
                     sessionId = sid
                 }
@@ -318,12 +368,14 @@ class WebSocketManager: ObservableObject {
 
             case "claude-error":
                 isProcessing = false
+                cancelProcessingTimeout()
                 let errorMsg = msg.error ?? "Unknown error"
                 lastError = errorMsg
                 onError?(errorMsg)
 
             case "session-aborted":
                 isProcessing = false
+                cancelProcessingTimeout()
 
             case "projects_updated":
                 // Project list changed, could notify UI to refresh

@@ -164,33 +164,38 @@ Feature roadmap and improvements based on comparison with claudecodeui web front
 
 ## Low Priority (Polish)
 
-### L1. Token Usage Pie/Progress Chart
-- **Status**: Text-only display
-- **Web App**: Visual `TokenUsagePie` component
+### L1. Token Usage Pie/Progress Chart ✅ FIXED
+- **Status**: Implemented
 - **Implementation**:
-  - Add circular progress or bar indicator
-- **Effort**: 2 hours
+  - Added `TokenUsageView` component with circular progress indicator
+  - Color changes based on usage (green < 60%, yellow 60-80%, red > 80%)
+  - Shows formatted token count (e.g., "12.5k/200k")
+- **Location**: `ChatView.swift` (TokenUsageView)
 
-### L2. LaTeX Math Rendering
-- **Status**: Not implemented
-- **Web App**: Uses remark-math + rehype-katex
+### L2. LaTeX Math Rendering ✅ FIXED
+- **Status**: Implemented
 - **Implementation**:
-  - Render math blocks (may need server-side PNG)
-- **Effort**: 1 day
+  - Display math blocks ($$...$$) with `MathBlockView` component
+  - Inline math ($...$) with purple italic styling
+  - Copy button for math content
+  - Distinctive purple styling with border
+- **Location**: `ChatView.swift` (MathBlockView, parseInlineFormatting)
 
-### L3. Keyboard Shortcuts (iPad)
-- **Status**: Not implemented
+### L3. Keyboard Shortcuts (iPad) ✅ FIXED
+- **Status**: Implemented
 - **Implementation**:
-  - Cmd+Return to send
-  - Escape to abort
-- **Effort**: 2 hours
+  - Cmd+Return to send message
+  - Escape to abort processing
+  - Added invisible keyboard shortcut buttons in CLIInputView
+- **Location**: `ChatView.swift` (CLIInputView)
 
-### L4. Escape Sequence Protection
-- **Status**: Not implemented
-- **Web App**: `unescapeWithMathProtection()` for safe processing
+### L4. Escape Sequence Protection ✅ FIXED
+- **Status**: Implemented
 - **Implementation**:
-  - Apply similar logic when parsing message content
-- **Effort**: 2 hours
+  - HTML entity decoding (&lt;, &gt;, &amp;, etc.)
+  - Math escape sequence protection for LaTeX
+  - Applied during MarkdownText initialization
+- **Location**: `ChatView.swift` (String extension)
 
 ---
 
@@ -202,8 +207,8 @@ Feature roadmap and improvements based on comparison with claudecodeui web front
 4. ~~[H2] Draft message saving - 2 hours~~ ✅
 5. ~~[H6] Copy button for code - 3 hours~~ ✅
 6. [M1] Extended status messages - 2 hours
-7. [M3] HTML entity decoding - 1 hour
-8. [L3] Keyboard shortcuts - 2 hours
+7. ~~[M3] HTML entity decoding - 1 hour~~ ✅ (part of L4)
+8. ~~[L3] Keyboard shortcuts - 2 hours~~ ✅
 
 ---
 
@@ -230,8 +235,10 @@ Feature roadmap and improvements based on comparison with claudecodeui web front
 ### Phase 4: Polish
 - [ ] M1. Extended status messages
 - [ ] M2. Usage limit formatting
-- [ ] L1. Token usage visualization
-- [ ] L3. Keyboard shortcuts
+- [x] L1. Token usage visualization
+- [x] L2. LaTeX math rendering
+- [x] L3. Keyboard shortcuts
+- [x] L4. Escape sequence protection
 
 ---
 

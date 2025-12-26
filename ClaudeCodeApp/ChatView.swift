@@ -112,7 +112,8 @@ struct ChatView: View {
                 selectedImage: $selectedImage,
                 isProcessing: wsManager.isProcessing,
                 isFocused: _isInputFocused,
-                onSend: sendMessage
+                onSend: sendMessage,
+                onAbort: { wsManager.abortSession() }
             )
             .id("input-view")
 
@@ -749,10 +750,7 @@ struct CLIStatusBar: View {
 
             // Context usage from WebSocket (only show if actually received from server)
             if let usage = tokenUsage {
-                let percentage = Double(usage.used) / Double(usage.total) * 100
-                let color = percentage > 80 ? CLITheme.red : (percentage > 60 ? CLITheme.yellow : CLITheme.mutedText)
-                Text("\(formatTokens(usage.used))/\(formatTokens(usage.total))")
-                    .foregroundColor(color)
+                TokenUsageView(used: usage.used, total: usage.total)
             }
 
             if isProcessing {
@@ -776,6 +774,56 @@ struct CLIStatusBar: View {
         }
     }
 
+}
+
+// MARK: - Token Usage View
+
+struct TokenUsageView: View {
+    let used: Int
+    let total: Int
+    @EnvironmentObject var settings: AppSettings
+
+    private var percentage: Double {
+        Double(used) / Double(total)
+    }
+
+    private var displayPercentage: Double {
+        min(percentage, 1.0)
+    }
+
+    private var color: Color {
+        if percentage > 0.8 {
+            return CLITheme.red
+        } else if percentage > 0.6 {
+            return CLITheme.yellow
+        } else {
+            return CLITheme.green
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            // Circular progress indicator
+            ZStack {
+                // Background circle
+                Circle()
+                    .stroke(CLITheme.mutedText.opacity(0.3), lineWidth: 2)
+
+                // Progress arc
+                Circle()
+                    .trim(from: 0, to: displayPercentage)
+                    .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            .frame(width: 14, height: 14)
+
+            // Text display
+            Text("\(formatTokens(used))/\(formatTokens(total))")
+                .font(settings.scaledFont(.small))
+                .foregroundColor(color)
+        }
+    }
+
     private func formatTokens(_ count: Int) -> String {
         if count >= 1000 {
             return String(format: "%.1fk", Double(count) / 1000.0)
@@ -792,6 +840,7 @@ struct CLIInputView: View {
     let isProcessing: Bool
     @FocusState var isFocused: Bool
     let onSend: () -> Void
+    let onAbort: () -> Void
     @EnvironmentObject var settings: AppSettings
     @StateObject private var speechManager = SpeechManager()
     @State private var showImagePicker = false
@@ -905,6 +954,28 @@ struct CLIInputView: View {
             .padding(.vertical, 10)
             .background(CLITheme.background)
         }
+        // iPad keyboard shortcuts
+        .background(
+            Group {
+                // Cmd+Return to send (when not processing and has content)
+                Button("") {
+                    if !isProcessing && (!text.isEmpty || selectedImage != nil) {
+                        onSend()
+                    }
+                }
+                .keyboardShortcut(.return, modifiers: .command)
+                .opacity(0)
+
+                // Escape to abort (when processing)
+                Button("") {
+                    if isProcessing {
+                        onAbort()
+                    }
+                }
+                .keyboardShortcut(.escape, modifiers: [])
+                .opacity(0)
+            }
+        )
     }
 }
 
@@ -985,6 +1056,64 @@ struct CodeBlockView: View {
     }
 }
 
+// MARK: - Math Block View
+
+struct MathBlockView: View {
+    let content: String
+    let settings: AppSettings
+
+    @State private var showCopied = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            // Header with LaTeX label and copy button
+            HStack {
+                HStack(spacing: 4) {
+                    Image(systemName: "function")
+                        .font(.caption)
+                    Text("LaTeX")
+                }
+                .font(settings.scaledFont(.small))
+                .foregroundColor(CLITheme.purple)
+
+                Spacer()
+
+                Button {
+                    UIPasteboard.general.string = content
+                    showCopied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                        showCopied = false
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                        Text(showCopied ? "Copied!" : "Copy")
+                    }
+                    .font(settings.scaledFont(.small))
+                    .foregroundColor(showCopied ? CLITheme.green : CLITheme.mutedText)
+                }
+                .buttonStyle(.plain)
+            }
+
+            // Math content with distinctive styling
+            Text(content)
+                .font(.system(size: CGFloat(settings.fontSize), design: .monospaced))
+                .italic()
+                .foregroundColor(CLITheme.purple)
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(CLITheme.purple.opacity(0.1))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .stroke(CLITheme.purple.opacity(0.3), lineWidth: 1)
+                        )
+                )
+        }
+    }
+}
+
 // MARK: - Markdown Text View
 
 struct MarkdownText: View {
@@ -992,7 +1121,8 @@ struct MarkdownText: View {
     @EnvironmentObject var settings: AppSettings
 
     init(_ content: String) {
-        self.content = content
+        // Apply HTML entity decoding on initialization
+        self.content = content.processedForDisplay
     }
 
     var body: some View {
@@ -1007,6 +1137,7 @@ struct MarkdownText: View {
         case paragraph(String)
         case header(String, Int) // content, level (1-6)
         case codeBlock(String, String?) // content, language
+        case mathBlock(String) // LaTeX display math ($$...$$)
         case bulletList([String])
         case numberedList([String])
         case table([[String]]) // rows of cells
@@ -1032,6 +1163,37 @@ struct MarkdownText: View {
                 }
                 blocks.append(.codeBlock(codeLines.joined(separator: "\n"), language.isEmpty ? nil : language))
                 i += 1
+                continue
+            }
+
+            // Display math block ($$...$$)
+            if line.hasPrefix("$$") {
+                var mathLines: [String] = []
+                let firstLine = String(line.dropFirst(2))
+                if firstLine.hasSuffix("$$") {
+                    // Single-line math: $$...$$ on same line
+                    let mathContent = String(firstLine.dropLast(2))
+                    blocks.append(.mathBlock(mathContent))
+                    i += 1
+                } else {
+                    // Multi-line math block
+                    if !firstLine.isEmpty {
+                        mathLines.append(firstLine)
+                    }
+                    i += 1
+                    while i < lines.count && !lines[i].hasSuffix("$$") && !lines[i].hasPrefix("$$") {
+                        mathLines.append(lines[i])
+                        i += 1
+                    }
+                    if i < lines.count {
+                        let lastLine = lines[i].replacingOccurrences(of: "$$", with: "")
+                        if !lastLine.isEmpty {
+                            mathLines.append(lastLine)
+                        }
+                        i += 1
+                    }
+                    blocks.append(.mathBlock(mathLines.joined(separator: "\n")))
+                }
                 continue
             }
 
@@ -1123,6 +1285,8 @@ struct MarkdownText: View {
             headerView(text: text, level: level)
         case .codeBlock(let code, let language):
             CodeBlockView(code: code, language: language, settings: settings)
+        case .mathBlock(let math):
+            MathBlockView(content: math, settings: settings)
         case .bulletList(let items):
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(Array(items.enumerated()), id: \.offset) { _, item in
@@ -1232,6 +1396,17 @@ struct MarkdownText: View {
                 }
             }
 
+            // Check for inline math $ (but not $$ which is display math)
+            if let mathRange = remaining.range(of: "$") {
+                // Make sure it's not $$
+                let afterDollar = remaining[mathRange.upperBound...]
+                let isDisplayMath = afterDollar.hasPrefix("$")
+                if !isDisplayMath && (earliestRange == nil || mathRange.lowerBound < earliestRange!.lowerBound) {
+                    earliestRange = mathRange
+                    markerType = "math"
+                }
+            }
+
             guard let range = earliestRange, let type = markerType else {
                 // No more formatting, add the rest
                 result.append(AttributedString(String(remaining)))
@@ -1274,6 +1449,32 @@ struct MarkdownText: View {
                 } else {
                     // No closing marker, treat as literal
                     result.append(AttributedString("`"))
+                    remaining = afterMarker
+                }
+
+            case "math":
+                // Find closing $ (but not $$)
+                if let closeRange = afterMarker.range(of: "$") {
+                    // Make sure it's a single $ not $$
+                    let beforeClose = afterMarker[..<closeRange.lowerBound]
+                    let afterClose = afterMarker[closeRange.upperBound...]
+                    let isValidClose = !afterClose.hasPrefix("$")
+                    if isValidClose && !beforeClose.isEmpty {
+                        let mathText = String(beforeClose)
+                        var mathAttr = AttributedString(mathText)
+                        mathAttr.font = .italicSystemFont(ofSize: fontSize)
+                        mathAttr.foregroundColor = CLITheme.purple
+                        mathAttr.backgroundColor = CLITheme.purple.opacity(0.1)
+                        result.append(mathAttr)
+                        remaining = afterClose
+                    } else {
+                        // Not valid inline math, treat as literal
+                        result.append(AttributedString("$"))
+                        remaining = afterMarker
+                    }
+                } else {
+                    // No closing marker, treat as literal
+                    result.append(AttributedString("$"))
                     remaining = afterMarker
                 }
 
@@ -1322,6 +1523,76 @@ struct MarkdownText: View {
         Text(attributed)
             .font(settings.scaledFont(.body))
             .foregroundColor(CLITheme.primaryText)
+    }
+}
+
+// MARK: - Escape Sequence Protection
+
+extension String {
+    /// Decode common HTML entities
+    var htmlDecoded: String {
+        var result = self
+        let entities: [(String, String)] = [
+            ("&lt;", "<"),
+            ("&gt;", ">"),
+            ("&amp;", "&"),
+            ("&quot;", "\""),
+            ("&#39;", "'"),
+            ("&apos;", "'"),
+            ("&nbsp;", " "),
+            ("&#x27;", "'"),
+            ("&#x2F;", "/"),
+            ("&#60;", "<"),
+            ("&#62;", ">"),
+        ]
+        for (entity, char) in entities {
+            result = result.replacingOccurrences(of: entity, with: char)
+        }
+        return result
+    }
+
+    /// Protect escape sequences in math content by replacing them with placeholders
+    func protectMathEscapes() -> (String, [(String, String)]) {
+        var result = self
+        var replacements: [(String, String)] = []
+
+        // Common LaTeX escape sequences to protect
+        let escapePatterns = [
+            "\\\\",  // Double backslash
+            "\\{", "\\}",  // Braces
+            "\\[", "\\]",  // Brackets
+            "\\(", "\\)",  // Parentheses
+            "\\_",  // Underscore
+            "\\^",  // Caret
+            "\\$",  // Dollar
+            "\\%",  // Percent
+            "\\&",  // Ampersand
+            "\\#",  // Hash
+        ]
+
+        for (index, pattern) in escapePatterns.enumerated() {
+            let placeholder = "§ESCAPE\(index)§"
+            if result.contains(pattern) {
+                replacements.append((placeholder, pattern))
+                result = result.replacingOccurrences(of: pattern, with: placeholder)
+            }
+        }
+
+        return (result, replacements)
+    }
+
+    /// Restore protected escape sequences
+    func restoreMathEscapes(_ replacements: [(String, String)]) -> String {
+        var result = self
+        for (placeholder, original) in replacements.reversed() {
+            result = result.replacingOccurrences(of: placeholder, with: original)
+        }
+        return result
+    }
+
+    /// Full escape processing: decode HTML entities and handle backslash escapes
+    var processedForDisplay: String {
+        return self.htmlDecoded
     }
 }
 
