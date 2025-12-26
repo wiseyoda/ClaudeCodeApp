@@ -43,7 +43,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A1000011 /* NMSSH in Frameworks */,
+				A1000011 /* Citadel in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -102,7 +102,7 @@
 			);
 			name = ClaudeCodeApp;
 			packageProductDependencies = (
-				A1100001 /* NMSSH */,
+				A1100001 /* Citadel */,
 			);
 			productName = ClaudeCodeApp;
 			productReference = A3000001 /* ClaudeCodeApp.app */;
@@ -133,7 +133,7 @@
 			);
 			mainGroup = A5000001;
 			packageReferences = (
-				A1200001 /* XCRemoteSwiftPackageReference "NMSSH" */,
+				A1200001 /* XCRemoteSwiftPackageReference "Citadel" */,
 			);
 			productRefGroup = A5000003 /* Products */;
 			projectDirPath = "";
@@ -303,19 +303,19 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 5346RAMY2B;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Claude Code";
+				INFOPLIST_KEY_NSAppTransportSecurity_AllowsArbitraryLoads = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Claude Code needs microphone access to transcribe your voice messages.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Claude Code needs photo library access to attach images to messages.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Claude Code uses speech recognition to convert your voice to text.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_NSAppTransportSecurity_AllowsArbitraryLoads = YES;
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Claude Code needs microphone access to transcribe your voice messages.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Claude Code needs photo library access to attach images to messages.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Claude Code uses speech recognition to convert your voice to text.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -336,19 +336,19 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 5346RAMY2B;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Claude Code";
+				INFOPLIST_KEY_NSAppTransportSecurity_AllowsArbitraryLoads = YES;
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Claude Code needs microphone access to transcribe your voice messages.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Claude Code needs photo library access to attach images to messages.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Claude Code uses speech recognition to convert your voice to text.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_NSAppTransportSecurity_AllowsArbitraryLoads = YES;
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Claude Code needs microphone access to transcribe your voice messages.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Claude Code needs photo library access to attach images to messages.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Claude Code uses speech recognition to convert your voice to text.";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

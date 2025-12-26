@@ -70,17 +70,30 @@ struct ChatView: View {
                 }
                 .background(CLITheme.background)
                 .onChange(of: messages.count) { _, _ in
-                    withAnimation {
-                        if let lastId = messages.last?.id {
-                            proxy.scrollTo(lastId, anchor: .bottom)
-                        } else {
-                            proxy.scrollTo("streaming", anchor: .bottom)
+                    // Delay to ensure view has rendered
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        withAnimation {
+                            if let lastId = messages.last?.id {
+                                proxy.scrollTo(lastId, anchor: .bottom)
+                            }
                         }
                     }
                 }
                 .onChange(of: wsManager.currentText) { _, _ in
                     withAnimation {
                         proxy.scrollTo("streaming", anchor: .bottom)
+                    }
+                }
+                .onChange(of: wsManager.isProcessing) { _, isProcessing in
+                    // Scroll when processing starts or ends
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                        withAnimation {
+                            if isProcessing {
+                                proxy.scrollTo("streaming", anchor: .bottom)
+                            } else if let lastId = messages.last?.id {
+                                proxy.scrollTo(lastId, anchor: .bottom)
+                            }
+                        }
                     }
                 }
             }
@@ -842,6 +855,7 @@ struct CLIInputView: View {
                     .lineLimit(1...5)
                     .focused($isFocused)
                     .disabled(isProcessing)
+                    .submitLabel(.send)
                     .onSubmit { onSend() }
                     .placeholder(when: text.isEmpty) {
                         Text("Type a message...")
