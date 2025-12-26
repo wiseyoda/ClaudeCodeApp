@@ -55,26 +55,55 @@ class APIClient: ObservableObject {
 
         let (bytes, response) = try await URLSession.shared.bytes(for: request)
 
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
+        guard let httpResponse = response as? HTTPURLResponse else {
+            print("[API] No HTTP response")
+            throw APIError.serverError
+        }
+
+        print("[API] Response status: \(httpResponse.statusCode)")
+
+        guard httpResponse.statusCode == 200 else {
+            print("[API] Non-200 status: \(httpResponse.statusCode)")
             throw APIError.serverError
         }
 
         var newSessionId: String?
         var currentText = ""
+        var lineCount = 0
 
         for try await line in bytes.lines {
+            lineCount += 1
+            print("[API] Line \(lineCount): \(line.prefix(200))")
             guard !line.isEmpty else { continue }
 
             // Parse JSON line
             guard let data = line.data(using: .utf8) else { continue }
 
             do {
-                let event = try JSONDecoder().decode(ClaudeStreamEvent.self, from: data)
+                let streamLine = try JSONDecoder().decode(StreamLine.self, from: data)
 
-                // Extract session ID from system messages
-                if event.type == "system", let sid = event.session_id {
-                    newSessionId = sid
+                // Handle "done" message
+                if streamLine.type == "done" {
+                    onEvent(.complete)
+                    continue
+                }
+
+                // Unwrap the inner event data
+                guard let event = streamLine.data else { continue }
+
+                // Extract session ID and emit system init info
+                if event.type == "system", event.subtype == "init" {
+                    if let sid = event.session_id {
+                        newSessionId = sid
+                    }
+                    let toolCount = event.tools?.count ?? 0
+                    let shortSession = event.session_id.map { String($0.prefix(8)) }
+                    onEvent(.systemInit(
+                        model: event.model,
+                        session: shortSession,
+                        tools: toolCount,
+                        cwd: event.cwd
+                    ))
                 }
 
                 // Handle assistant messages
@@ -103,17 +132,33 @@ class APIClient: ObservableObject {
                     }
                 }
 
-                // Handle result/completion
+                // Handle result/completion with result text
                 if event.type == "result" {
+                    if let resultText = event.result, currentText.isEmpty {
+                        currentText = resultText
+                        onEvent(.text(currentText))
+                    }
+                    // Emit result info
+                    let success = event.subtype == "success"
+                    onEvent(.resultInfo(
+                        success: success,
+                        durationMs: event.duration_ms,
+                        cost: event.cost,
+                        inputTokens: event.input_tokens,
+                        outputTokens: event.output_tokens
+                    ))
                     onEvent(.complete)
                 }
 
             } catch {
-                // Skip unparseable lines
+                // Show raw line for debugging
+                print("[API] JSON parse error for line: \(line.prefix(200))")
+                onEvent(.debug("RAW: \(line)"))
                 continue
             }
         }
 
+        print("[API] Stream complete. Total lines: \(lineCount), text length: \(currentText.count)")
         return newSessionId ?? sessionId
     }
 
@@ -138,6 +183,9 @@ enum StreamEvent {
     case toolUse(name: String, input: String)
     case toolResult(String)
     case complete
+    case debug(String)  // For debugging raw responses
+    case systemInit(model: String?, session: String?, tools: Int, cwd: String?)
+    case resultInfo(success: Bool, durationMs: Int?, cost: Double?, inputTokens: Int?, outputTokens: Int?)
 }
 
 enum APIError: Error, LocalizedError {

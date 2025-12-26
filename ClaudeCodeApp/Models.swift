@@ -42,6 +42,7 @@ struct ChatMessage: Identifiable, Equatable {
         case error
         case toolUse
         case toolResult
+        case resultSuccess
     }
 
     static func == (lhs: ChatMessage, rhs: ChatMessage) -> Bool {
@@ -51,6 +52,12 @@ struct ChatMessage: Identifiable, Equatable {
 
 // MARK: - Claude Streaming JSON Types
 
+// Outer wrapper from claude-code-webui
+struct StreamLine: Decodable {
+    let type: String  // "claude_json" or "done"
+    let data: ClaudeStreamEvent?
+}
+
 struct ClaudeStreamEvent: Decodable {
     let type: String
     let message: ClaudeMessage?
@@ -59,11 +66,26 @@ struct ClaudeStreamEvent: Decodable {
     let tool_name: String?
     let tool_input: [String: AnyCodable]?
     let content: String?
+    let result: String?  // For result type events
+    // System init fields
+    let cwd: String?
+    let tools: [String]?
+    let model: String?
+    let permissionMode: String?
+    // Result fields
+    let duration_ms: Int?
+    let duration_api_ms: Int?
+    let num_turns: Int?
+    let is_error: Bool?
+    let cost: Double?
+    let input_tokens: Int?
+    let output_tokens: Int?
 }
 
 struct ClaudeMessage: Decodable {
     let content: [ClaudeContent]?
     let role: String?
+    let model: String?
 }
 
 struct ClaudeContent: Decodable {

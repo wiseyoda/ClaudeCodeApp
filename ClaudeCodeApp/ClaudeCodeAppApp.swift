@@ -8,6 +8,7 @@ struct ClaudeCodeAppApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(settings)
+                .preferredColorScheme(.dark)
         }
     }
 }
