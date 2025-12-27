@@ -1,55 +1,190 @@
 import SwiftUI
 
-// MARK: - Diff View for Edit Tool
+// MARK: - Diff Line Type
+
+enum DiffLineType {
+    case context    // Unchanged line
+    case removed    // Deleted line
+    case added      // Inserted line
+    case collapsed  // Placeholder for collapsed context
+}
+
+// MARK: - Diff Line
+
+struct DiffLine: Identifiable {
+    let id = UUID()
+    let type: DiffLineType
+    let oldLineNumber: Int?
+    let newLineNumber: Int?
+    let content: String
+    let collapsedCount: Int  // For collapsed lines
+}
+
+// MARK: - Enhanced Diff View
 
 struct DiffView: View {
     let oldString: String
     let newString: String
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
+    @State private var expandedSections: Set<UUID> = []
+
+    private let contextLines = 2  // Lines of context around changes
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            // Removed section
-            if !oldString.isEmpty {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("- Removed:")
-                        .font(settings.scaledFont(.small))
-                        .foregroundColor(CLITheme.red(for: colorScheme))
-                    Text(oldString)
-                        .font(settings.scaledFont(.small))
-                        .foregroundColor(CLITheme.diffRemovedText(for: colorScheme))
-                        .padding(6)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(CLITheme.diffRemoved(for: colorScheme))
-                        .cornerRadius(4)
-                }
-            }
+        let diffLines = computeDiff()
 
-            // Added section
-            if !newString.isEmpty {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("+ Added:")
-                        .font(settings.scaledFont(.small))
-                        .foregroundColor(CLITheme.green(for: colorScheme))
-                    Text(newString)
-                        .font(settings.scaledFont(.small))
-                        .foregroundColor(CLITheme.diffAddedText(for: colorScheme))
-                        .padding(6)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(CLITheme.diffAdded(for: colorScheme))
-                        .cornerRadius(4)
-                }
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(diffLines) { line in
+                DiffLineView(
+                    line: line,
+                    isExpanded: expandedSections.contains(line.id),
+                    onToggleExpand: {
+                        if expandedSections.contains(line.id) {
+                            expandedSections.remove(line.id)
+                        } else {
+                            expandedSections.insert(line.id)
+                        }
+                    }
+                )
+                .environmentObject(settings)
             }
         }
+        .background(CLITheme.secondaryBackground(for: colorScheme))
+        .cornerRadius(6)
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(CLITheme.mutedText(for: colorScheme).opacity(0.2), lineWidth: 1)
+        )
+    }
+
+    /// Compute line-by-line diff using simple LCS-based approach
+    private func computeDiff() -> [DiffLine] {
+        let oldLines = oldString.components(separatedBy: "\n")
+        let newLines = newString.components(separatedBy: "\n")
+
+        // Simple diff: find common prefix and suffix, treat middle as changed
+        // For MVP, use a simpler approach since full LCS is complex
+
+        var result: [DiffLine] = []
+        var oldIdx = 0
+        var newIdx = 0
+
+        // Find common prefix
+        while oldIdx < oldLines.count && newIdx < newLines.count &&
+              oldLines[oldIdx] == newLines[newIdx] {
+            result.append(DiffLine(
+                type: .context,
+                oldLineNumber: oldIdx + 1,
+                newLineNumber: newIdx + 1,
+                content: oldLines[oldIdx],
+                collapsedCount: 0
+            ))
+            oldIdx += 1
+            newIdx += 1
+        }
+
+        // Find common suffix
+        var oldEnd = oldLines.count - 1
+        var newEnd = newLines.count - 1
+        var suffixLines: [DiffLine] = []
+
+        while oldEnd >= oldIdx && newEnd >= newIdx &&
+              oldLines[oldEnd] == newLines[newEnd] {
+            suffixLines.insert(DiffLine(
+                type: .context,
+                oldLineNumber: oldEnd + 1,
+                newLineNumber: newEnd + 1,
+                content: oldLines[oldEnd],
+                collapsedCount: 0
+            ), at: 0)
+            oldEnd -= 1
+            newEnd -= 1
+        }
+
+        // Middle section: all removed from old, then all added from new
+        while oldIdx <= oldEnd {
+            result.append(DiffLine(
+                type: .removed,
+                oldLineNumber: oldIdx + 1,
+                newLineNumber: nil,
+                content: oldLines[oldIdx],
+                collapsedCount: 0
+            ))
+            oldIdx += 1
+        }
+
+        while newIdx <= newEnd {
+            result.append(DiffLine(
+                type: .added,
+                oldLineNumber: nil,
+                newLineNumber: newIdx + 1,
+                content: newLines[newIdx],
+                collapsedCount: 0
+            ))
+            newIdx += 1
+        }
+
+        // Add suffix
+        result.append(contentsOf: suffixLines)
+
+        // Collapse long unchanged sections
+        return collapseContext(result)
+    }
+
+    /// Collapse long runs of unchanged context lines
+    private func collapseContext(_ lines: [DiffLine]) -> [DiffLine] {
+        guard lines.count > 10 else { return lines }
+
+        var result: [DiffLine] = []
+        var contextRun: [DiffLine] = []
+
+        for line in lines {
+            if line.type == .context {
+                contextRun.append(line)
+            } else {
+                // Flush context run with possible collapse
+                result.append(contentsOf: flushContextRun(contextRun))
+                contextRun = []
+                result.append(line)
+            }
+        }
+
+        // Final context flush
+        result.append(contentsOf: flushContextRun(contextRun))
+
+        return result
+    }
+
+    /// Convert a run of context lines, collapsing if too long
+    private func flushContextRun(_ run: [DiffLine]) -> [DiffLine] {
+        if run.count <= contextLines * 2 + 1 {
+            return run
+        }
+
+        var result: [DiffLine] = []
+
+        // Keep first N context lines
+        result.append(contentsOf: run.prefix(contextLines))
+
+        // Add collapsed placeholder
+        let collapsedCount = run.count - contextLines * 2
+        result.append(DiffLine(
+            type: .collapsed,
+            oldLineNumber: nil,
+            newLineNumber: nil,
+            content: "",
+            collapsedCount: collapsedCount
+        ))
+
+        // Keep last N context lines
+        result.append(contentsOf: run.suffix(contextLines))
+
+        return result
     }
 
     /// Parse old_string and new_string from Edit tool content
     static func parseEditContent(_ content: String) -> (old: String, new: String)? {
-        // Content format: "Edit(file_path: /path, old_string: ..., new_string: ...)"
-        // We need to extract old_string and new_string
-
-        // Simple parsing - look for old_string: and new_string:
         guard content.hasPrefix("Edit") else { return nil }
 
         var oldString = ""
@@ -58,7 +193,6 @@ struct DiffView: View {
         // Extract old_string value
         if let oldRange = content.range(of: "old_string: ") {
             let afterOld = content[oldRange.upperBound...]
-            // Find the end - either ", new_string:" or end of content
             if let endRange = afterOld.range(of: ", new_string: ") {
                 oldString = String(afterOld[..<endRange.lowerBound])
             }
@@ -67,7 +201,6 @@ struct DiffView: View {
         // Extract new_string value
         if let newRange = content.range(of: "new_string: ") {
             let afterNew = content[newRange.upperBound...]
-            // Find the end - either ")" or ", replace_all:"
             if let endRange = afterNew.range(of: ", replace_all:") {
                 newString = String(afterNew[..<endRange.lowerBound])
             } else if let endRange = afterNew.range(of: ")") {
@@ -83,4 +216,143 @@ struct DiffView: View {
 
         return (oldString, newString)
     }
+}
+
+// MARK: - Diff Line View
+
+struct DiffLineView: View {
+    let line: DiffLine
+    let isExpanded: Bool
+    let onToggleExpand: () -> Void
+    @EnvironmentObject var settings: AppSettings
+    @Environment(\.colorScheme) var colorScheme
+
+    private let lineNumberWidth: CGFloat = 32
+
+    var body: some View {
+        if line.type == .collapsed && !isExpanded {
+            collapsedView
+        } else {
+            regularLineView
+        }
+    }
+
+    private var collapsedView: some View {
+        Button(action: onToggleExpand) {
+            HStack(spacing: 0) {
+                // Empty line number columns
+                Text("┈")
+                    .frame(width: lineNumberWidth, alignment: .trailing)
+                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                Text("┈")
+                    .frame(width: lineNumberWidth, alignment: .trailing)
+                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
+
+                // Collapsed indicator
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10))
+                    Text("\(line.collapsedCount) unchanged lines")
+                }
+                .font(settings.scaledFont(.small))
+                .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+
+                Spacer()
+            }
+        }
+        .buttonStyle(.plain)
+        .background(CLITheme.background(for: colorScheme).opacity(0.5))
+    }
+
+    private var regularLineView: some View {
+        HStack(spacing: 0) {
+            // Old line number
+            Text(line.oldLineNumber.map { String($0) } ?? "")
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                .frame(width: lineNumberWidth, alignment: .trailing)
+                .padding(.trailing, 4)
+
+            // New line number
+            Text(line.newLineNumber.map { String($0) } ?? "")
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                .frame(width: lineNumberWidth, alignment: .trailing)
+                .padding(.trailing, 4)
+
+            // Change indicator
+            Text(changeIndicator)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundColor(indicatorColor)
+                .frame(width: 14)
+
+            // Content
+            Text(line.content.isEmpty ? " " : line.content)
+                .font(settings.scaledFont(.small))
+                .foregroundColor(contentColor)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 2)
+        }
+        .background(backgroundColor)
+    }
+
+    private var changeIndicator: String {
+        switch line.type {
+        case .removed: return "-"
+        case .added: return "+"
+        case .context, .collapsed: return " "
+        }
+    }
+
+    private var indicatorColor: Color {
+        switch line.type {
+        case .removed: return CLITheme.red(for: colorScheme)
+        case .added: return CLITheme.green(for: colorScheme)
+        case .context, .collapsed: return CLITheme.mutedText(for: colorScheme)
+        }
+    }
+
+    private var contentColor: Color {
+        switch line.type {
+        case .removed: return CLITheme.diffRemovedText(for: colorScheme)
+        case .added: return CLITheme.diffAddedText(for: colorScheme)
+        case .context, .collapsed: return CLITheme.secondaryText(for: colorScheme)
+        }
+    }
+
+    private var backgroundColor: Color {
+        switch line.type {
+        case .removed: return CLITheme.diffRemoved(for: colorScheme)
+        case .added: return CLITheme.diffAdded(for: colorScheme)
+        case .context, .collapsed: return .clear
+        }
+    }
+}
+
+// MARK: - Preview
+
+#Preview {
+    VStack {
+        DiffView(
+            oldString: """
+                function hello() {
+                    console.log("Hello");
+                    return true;
+                }
+                """,
+            newString: """
+                function hello() {
+                    console.log("Hello, World!");
+                    console.log("More output");
+                    return true;
+                }
+                """
+        )
+        .environmentObject(AppSettings())
+        .padding()
+    }
+    .background(Color.black)
 }

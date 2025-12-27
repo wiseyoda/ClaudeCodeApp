@@ -75,6 +75,102 @@ enum CLITheme {
             : Color(red: 0.2, green: 0.4, blue: 0.8)
     }
 
+    // MARK: - Tool Type Colors
+    // Each tool gets a distinct color for visual differentiation
+
+    enum ToolType: String, CaseIterable {
+        case bash = "Bash"
+        case read = "Read"
+        case write = "Write"
+        case edit = "Edit"
+        case grep = "Grep"
+        case glob = "Glob"
+        case task = "Task"
+        case todoWrite = "TodoWrite"
+        case webFetch = "WebFetch"
+        case webSearch = "WebSearch"
+        case askUser = "AskUserQuestion"
+        case other = ""
+
+        static func from(_ content: String) -> ToolType {
+            // Extract tool name from content like "Bash(command: ls)"
+            let toolName: String
+            if let parenIndex = content.firstIndex(of: "(") {
+                toolName = String(content[..<parenIndex])
+            } else {
+                toolName = content.components(separatedBy: " ").first ?? content
+            }
+
+            return ToolType(rawValue: toolName) ?? .other
+        }
+
+        var icon: String {
+            switch self {
+            case .bash: return "terminal"
+            case .read: return "doc.text"
+            case .write: return "doc.badge.plus"
+            case .edit: return "pencil.line"
+            case .grep: return "magnifyingglass"
+            case .glob: return "folder.badge.questionmark"
+            case .task: return "person.crop.circle.badge.clock"
+            case .todoWrite: return "checklist"
+            case .webFetch: return "globe"
+            case .webSearch: return "globe.badge.chevron.backward"
+            case .askUser: return "questionmark.circle"
+            case .other: return "wrench"
+            }
+        }
+    }
+
+    static func toolColor(for tool: ToolType, scheme: ColorScheme) -> Color {
+        switch tool {
+        case .bash:
+            return scheme == .dark
+                ? Color(red: 1.0, green: 0.6, blue: 0.2)   // Orange
+                : Color(red: 0.85, green: 0.4, blue: 0.0)
+        case .read:
+            return scheme == .dark
+                ? Color(red: 0.4, green: 0.7, blue: 1.0)   // Light blue
+                : Color(red: 0.2, green: 0.5, blue: 0.9)
+        case .write:
+            return scheme == .dark
+                ? Color(red: 0.3, green: 0.85, blue: 0.5)  // Green
+                : Color(red: 0.15, green: 0.65, blue: 0.3)
+        case .edit:
+            return scheme == .dark
+                ? Color(red: 1.0, green: 0.85, blue: 0.3)  // Yellow
+                : Color(red: 0.75, green: 0.6, blue: 0.0)
+        case .grep:
+            return scheme == .dark
+                ? Color(red: 0.8, green: 0.5, blue: 1.0)   // Purple
+                : Color(red: 0.55, green: 0.3, blue: 0.8)
+        case .glob:
+            return scheme == .dark
+                ? Color(red: 0.4, green: 0.9, blue: 0.9)   // Cyan
+                : Color(red: 0.0, green: 0.6, blue: 0.7)
+        case .task:
+            return scheme == .dark
+                ? Color(red: 1.0, green: 0.5, blue: 0.7)   // Pink
+                : Color(red: 0.85, green: 0.3, blue: 0.5)
+        case .todoWrite:
+            return scheme == .dark
+                ? Color(red: 0.5, green: 0.9, blue: 0.5)   // Bright green
+                : Color(red: 0.2, green: 0.7, blue: 0.3)
+        case .webFetch, .webSearch:
+            return scheme == .dark
+                ? Color(red: 0.4, green: 0.8, blue: 0.9)   // Teal
+                : Color(red: 0.1, green: 0.55, blue: 0.65)
+        case .askUser:
+            return scheme == .dark
+                ? Color(red: 0.9, green: 0.7, blue: 0.3)   // Gold
+                : Color(red: 0.7, green: 0.5, blue: 0.1)
+        case .other:
+            return scheme == .dark
+                ? Color(red: 0.6, green: 0.6, blue: 0.6)   // Gray
+                : Color(red: 0.4, green: 0.4, blue: 0.4)
+        }
+    }
+
     // MARK: - Diff Colors
 
     static func diffAdded(for scheme: ColorScheme) -> Color {

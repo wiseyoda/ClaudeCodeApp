@@ -36,6 +36,7 @@
 		A1000027 /* FilePickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000026 /* FilePickerSheet.swift */; };
 		A1000028 /* CloneProjectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000027 /* CloneProjectSheet.swift */; };
 		A1000029 /* NewProjectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000028 /* NewProjectSheet.swift */; };
+		A1000030 /* TruncatableText.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000029 /* TruncatableText.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -78,6 +79,7 @@
 		A2000026 /* FilePickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePickerSheet.swift; sourceTree = "<group>"; };
 		A2000027 /* CloneProjectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloneProjectSheet.swift; sourceTree = "<group>"; };
 		A2000028 /* NewProjectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewProjectSheet.swift; sourceTree = "<group>"; };
+		A2000029 /* TruncatableText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TruncatableText.swift; sourceTree = "<group>"; };
 		A3000001 /* ClaudeCodeApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClaudeCodeApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -177,6 +179,7 @@
 				A2000026 /* FilePickerSheet.swift */,
 				A2000027 /* CloneProjectSheet.swift */,
 				A2000028 /* NewProjectSheet.swift */,
+				A2000029 /* TruncatableText.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -325,6 +328,7 @@
 				A1000027 /* FilePickerSheet.swift in Sources */,
 				A1000028 /* CloneProjectSheet.swift in Sources */,
 				A1000029 /* NewProjectSheet.swift in Sources */,
+				A1000030 /* TruncatableText.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -1,6 +1,6 @@
 # ClaudeCodeApp Roadmap
 
-> Feature roadmap for the iOS Claude Code client. Organized by priority with iterative milestones.
+> Feature roadmap for the iOS Claude Code client. Organized by priority with clear milestones.
 
 ---
 
@@ -10,500 +10,270 @@
 |--------|---------|
 | ✅ | Completed |
 | 🚧 | In Progress |
-| 📋 | Planned |
-| 💡 | Idea/Future |
+| 📋 | Planned (Next) |
+| 💡 | Future Idea |
 
 ---
 
-## Current Release: v1.0
+## Completed Milestones
 
-### Core Features ✅
-- [x] WebSocket real-time streaming chat
-- [x] Full markdown rendering (headers, code, tables, lists, math)
-- [x] Tool visualization with collapsible messages
-- [x] Diff viewer for Edit tool (red/green highlighting)
-- [x] TodoWrite visual checklist rendering
-- [x] AskUserQuestion interactive UI
-- [x] Image attachments via PhotosPicker
-- [x] Voice input with Speech framework
-- [x] SSH terminal with Citadel
-- [x] Message persistence (50 per project)
-- [x] Draft auto-save per project
-- [x] Local notifications on task completion
-- [x] Slash commands (/clear, /init, /resume, /help, etc.)
-
-### Settings ✅
-- [x] iOS Form-style settings UI
-- [x] Theme selection (System/Dark/Light)
-- [x] Font size presets (XS/S/M/L/XL)
-- [x] Skip Permissions toggle
-- [x] Show Thinking Blocks toggle
-- [x] Auto-scroll toggle
-- [x] Project sort order (Name/Date)
-- [x] API Key field for REST endpoints
+| Milestone | Description | Date |
+|-----------|-------------|------|
+| **v1.0 Core** | WebSocket chat, markdown, tool visualization, SSH terminal | Dec 2024 |
+| **M1: Copy & Share** | Copy buttons, context menus, share sheet | Dec 26 |
+| **M2: Project Management** | Clone from GitHub, create projects, file browser, @ references | Dec 27 |
+| **M3: Auto-Sync** | Git status indicators, auto-pull, sync banners | Dec 27 |
+| **M4: Session Management** | Session picker, rename, delete, export as markdown | Dec 27 |
+| **M6: Tool Visualization** | Tool colors/icons, rich headers, truncation, enhanced diff | Dec 27 |
+| **Model Selection** | Opus/Sonnet/Haiku picker, per-session model switching | Dec 27 |
 
 ---
 
-## Milestone 1: Copy & Share ✅
+## Priority 1: Foundation & Reliability 📋
 
-**Goal:** Make it easy to copy and share Claude's responses.
+These improvements affect the core experience and should be addressed first.
 
-| Feature | Description | Status |
-|---------|-------------|--------|
-| Copy Message as Markdown | Button on assistant messages to copy full text | ✅ |
-| Copy Code Block | Tap-to-copy on code blocks | ✅ |
-| Long-press Context Menu | Copy, Share options on messages | ✅ |
-| Share Sheet Integration | iOS share sheet for sending to other apps | ✅ |
-
-### Implementation Notes
-- Copy button (📋) added to assistant message headers
-- Code blocks have working copy button with "Copied!" feedback
-- Context menu on all messages with Copy and Share options
-- Share sheet properly handles iPad popover presentation
-
----
-
-## Milestone 2: Project Management & File Browser ✅
-
-**Goal:** Create/manage projects and browse project files.
-
-| Feature | Description | Status |
-|---------|-------------|--------|
-| Clone from GitHub URL | Paste URL → clone to workspace → init Claude | ✅ |
-| Create New Project | Create folder in workspace, optionally init Claude | ✅ |
-| Browse GitHub Repos | OAuth + list user's repos, select to clone | 💡 |
-| Delete/Archive Project | Remove projects from list (with confirmation) | ✅ |
-| **File Browser** | List/navigate project files via SSH | ✅ |
-| **@ File References** | Mobile-friendly file picker to reference files in prompts | ✅ |
-
-### Implementation Notes
-- Clone via SSH: `git clone <url>` through SSHManager
-- New project: `mkdir` + optional `claude init`
-- GitHub OAuth would require significant work - defer to later
-- Start with URL clone + new project creation
-- ✅ File browser: Uses `ls -laF` via SSH with breadcrumb navigation
-- ✅ @ references: Button next to input opens file picker sheet with search
-
-### File Reference UI Concept
-```
-┌─────────────────────────────────┐
-│ > Type a message...    [@] 📷 🎤│  ← @ button opens file picker
-└─────────────────────────────────┘
-
-┌─ Select File ───────────────────┐
-│ 🔍 Search files...              │
-├─────────────────────────────────┤
-│ 📁 src/                         │
-│ 📁 components/                  │
-│ 📄 package.json                 │
-│ 📄 README.md                    │
-│ 📄 tsconfig.json                │
-└─────────────────────────────────┘
-        ↓ tap file
-┌─────────────────────────────────┐
-│ > @src/index.ts explain this   │
-└─────────────────────────────────┘
-```
-
-### Project Creation UI
-```
-┌─────────────────────────────────┐
-│ + New Project                   │
-├─────────────────────────────────┤
-│ 📁 Create Empty Project         │
-│ 🔗 Clone from GitHub URL        │
-│ ⭐ Browse My Repositories       │
-└─────────────────────────────────┘
-```
-
----
-
-## Milestone 3: Auto-Sync from GitHub ✅
-
-**Goal:** Keep projects up-to-date automatically when loading, with smart handling of local changes.
-
-| Feature | Description | Status |
-|---------|-------------|--------|
-| Background Git Status | Check repo status while browsing project list | ✅ |
-| Git Status Indicator | Show sync status icon on each project (✓ clean, ⚠ changes, ↓ behind) | ✅ |
-| Auto-Pull on Clean | When project has no local changes, auto-pull latest on load | ✅ |
-| Local Changes Detection | Detect uncommitted changes AND unpushed commits | ✅ |
-| Unclean Warning Banner | Show warning when local changes exist | ✅ |
-| Auto-Suggest Cleanup | "Ask Claude" button to review/handle local changes | ✅ |
-
-### User Flow
-
-**Clean Project (no local changes):**
-```
-1. User taps project
-2. Background check shows project is clean
-3. Auto-pull latest from origin (non-blocking)
-4. User enters chat with fresh codebase
-```
-
-**Unclean Project (local changes detected):**
-```
-1. User taps project
-2. Background check detects local changes
-3. Show banner: "⚠ Local changes detected"
-4. User taps "Ask Claude" button
-5. Claude analyzes git status/diff and suggests: stash, commit, discard, etc.
-```
-
-### Implementation Notes
-- `GitStatus` enum in Models.swift with 10 states (unknown, checking, notGitRepo, clean, dirty, ahead, behind, diverged, dirtyAndAhead, error)
-- SSHManager.checkGitStatus() uses `git status --porcelain` and `git rev-list HEAD...@{upstream}`
-- ContentView runs background status checks concurrently via `withTaskGroup`
-- GitStatusIndicator view shows icons with status colors (green/orange/blue/cyan/red)
-- ChatView receives `initialGitStatus` and handles auto-pull/banner
-- GitSyncBanner shows dismissible warning with "Ask Claude" action
-- `promptClaudeForCleanup()` sends context-aware message based on git state
-- `git fetch` runs with 5s timeout before checking ahead/behind
-- `git pull --ff-only` for safe auto-pull
-
-### Status Indicators
-| Icon | SF Symbol | Meaning |
-|------|-----------|---------|
-| ✓ | `checkmark.circle.fill` | Clean, up to date |
-| ↓ | `arrow.down.circle.fill` | Behind remote (will auto-pull) |
-| ⚠ | `exclamationmark.triangle.fill` | Local uncommitted changes |
-| ↑ | `arrow.up.circle.fill` | Unpushed commits |
-| ⚠↑ | `exclamationmark.arrow.triangle.2.circlepath` | Both uncommitted + unpushed |
-| ↕ | `arrow.up.arrow.down.circle.fill` | Diverged from remote |
-| — | `minus.circle` | Not a git repo |
-
----
-
-## Milestone 4: Session Management ✅
-
-**Goal:** Better organization and navigation of chat sessions.
-
-| Feature | Description | Status |
-|---------|-------------|--------|
-| Enhanced Session Picker | Full-screen list with summaries, timestamps | ✅ |
-| Session Preview | Show last message or AI-generated summary | ✅ |
-| Rename Session | Custom names instead of UUIDs | ✅ |
-| Delete Session | Swipe or long-press to delete | ✅ |
-| Export Session | Save as .md file to Files app | ✅ |
-
-### Implementation Notes
-- SessionNamesStore class for custom session name persistence (UserDefaults)
-- Swipe-to-delete with confirmation dialog
-- Swipe-to-export and context menu export option
-- Rename via context menu with alert dialog
-- Markdown export with share sheet integration
-- Session rows show custom name, message count, last activity, preview
-
----
-
-## Milestone 5: iPad Optimization 💡
-
-**Goal:** First-class iPad experience with sidebar and keyboard support. (Deferred - focusing on tool visualization first)
+### Connection Health & Recovery
 
 | Feature | Description | Effort |
 |---------|-------------|--------|
-| Sidebar Navigation | Projects list always visible on left (landscape) | Medium |
-| NavigationSplitView | Proper iPad navigation pattern | Medium |
-| Keyboard Shortcuts | Cmd+Return send, Cmd+K new session, Esc cancel | Low |
-| Split View Support | Run alongside Safari, Notes in multitasking | Low |
+| **Connection Status Indicator** | Persistent subtle indicator showing WebSocket health (connected/reconnecting/offline) | Low |
+| **Request Queuing** | Queue messages during disconnect, replay on reconnect | Medium |
+| **Pull-to-Refresh** | Refresh project list and reconnect WebSocket with pull gesture | Low |
+
+**Implementation Notes:**
+- Add `ConnectionState` enum: `.connected`, `.connecting`, `.reconnecting`, `.disconnected`
+- Show colored dot in nav bar (green/yellow/red)
+- Store pending messages in array, flush on reconnect
+- Standard `refreshable` modifier for project list
+
+---
+
+## Priority 2: iPad Experience 📋
+
+First-class iPad support with keyboard and sidebar navigation.
+
+### Features
+
+| Feature | Description | Effort |
+|---------|-------------|--------|
+| **Sidebar Navigation** | Projects list always visible in landscape | Medium |
+| **NavigationSplitView** | Proper iPad navigation pattern | Medium |
+| **Keyboard Shortcuts** | Cmd+Return send, Cmd+K clear, Cmd+. abort | Low |
+| **Split View Support** | Multitasking alongside Safari, Notes | Low |
 
 ### Keyboard Shortcuts
+
 | Shortcut | Action |
 |----------|--------|
 | `⌘ + Return` | Send message |
-| `⌘ + K` | New session |
+| `⌘ + K` | Clear conversation |
+| `⌘ + N` | New session |
 | `⌘ + .` | Abort/Cancel |
-| `⌘ + L` | Clear conversation |
 | `⌘ + /` | Show help |
-| `Esc` | Dismiss sheet/abort |
+| `Esc` | Dismiss sheet |
 
 ---
 
-## Milestone 6: Enhanced Tool Visualization 🚧
+## Priority 3: Search & Discovery 📋
 
-**Goal:** Richer display of tool calls and results.
+Find and organize important content.
 
-| Feature | Description | Effort | Status |
-|---------|-------------|--------|--------|
-| **Truncate Long Output** | Show first N lines with fade + "Show X more lines" | Medium | 📋 |
-| **Enhanced Diff View** | Line-by-line unified diff with line numbers | High | 📋 |
-| Richer Tool Headers | Show key params: `Grep "pattern" → 12 files` | Medium | 📋 |
-| Result Count Badge | Show match count when collapsed | Low | 📋 |
-| Tool Type Colors | Different accent per tool type | Low | 📋 |
-| Syntax Highlighting | Language-aware code coloring | High | 💡 |
-| Quick Actions | Copy path, copy command, expand all | Medium | 📋 |
-
-### Truncate Long Output - Details
-
-**Goal:** Prevent long tool outputs from dominating the chat while keeping full content accessible.
-
-**Content-Aware Limits:**
-| Content Type | Default Lines | Detection |
-|--------------|---------------|-----------|
-| Bash output | 5 lines | Default for shell results |
-| Stack traces | 15 lines | Detect "Error", "Exception", "at line" |
-| Grep results | 10 matches | Count file matches |
-| Read file | 20 lines | File content preview |
-| JSON/logs | 8 lines | Detect structured data |
-
-**UI Design:**
-```
-┌─────────────────────────────────────┐
-│ $ ls -la                            │
-├─────────────────────────────────────┤
-│ total 128                           │
-│ drwxr-xr-x  12 user  staff   384    │
-│ -rw-r--r--   1 user  staff  1420    │
-│ -rw-r--r--   1 user  staff   892    │
-│ -rw-r--r--   1 user  staff  2341    │
-│ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈ │  ← Fade gradient
-│      ▼ Show 47 more lines           │  ← Tap to expand
-└─────────────────────────────────────┘
-```
-
-**Behavior:**
-- Fade gradient at bottom of truncated content
-- "Show X more lines" with chevron, tappable
-- Smooth spring animation on expand/collapse
-- Copy button always copies FULL output (not just visible)
-- Collapsed by default, remembers expand state per message
-
-**Implementation Notes:**
-- Detect content type from tool name + output patterns
-- Use `withAnimation(.spring())` for expand
-- Gradient overlay with `LinearGradient` + mask
-- Store expand state in view, not persisted
-- Line count calculated on render, cached
-
-### Enhanced Diff View - Details
-
-**Goal:** Replace the basic "Removed/Added" blocks with a professional unified diff display like GitHub/VS Code.
-
-**Current State:** Basic view showing "- Removed:" and "+ Added:" text blocks with colored backgrounds.
-
-**Target State:**
-```
-┌─ Edit: src/Components/SessionRow.swift ─────┐
-│     │     │                                  │
-│ 347 │     │ -    if let summary = session... │  ← Red bg
-│ 348 │     │ -        Text(summary)           │
-│ 349 │     │ -            .font(.subheadline) │
-│     │ 362 │ +    // Show last user message   │  ← Green bg
-│     │ 363 │ +    if let lastMsg = session... │
-│ 364 │ 364 │      Text(lastMsg)               │  ← Context (gray)
-│ 365 │ 365 │          .font(.subheadline)     │
-│     │     │                                  │
-│     │     │  ┈┈┈ 12 unchanged lines ┈┈┈     │  ← Collapsed
-│     │     │                                  │
-│ 370 │     │ -    HStack {                    │
-│     │ 378 │ +    VStack {                    │
-└─────────────────────────────────────────────┘
-```
-
-**Features:**
-| Feature | Description |
-|---------|-------------|
-| Dual line numbers | Old line # (left), New line # (right) |
-| Unified diff format | +/- prefixes with colored backgrounds |
-| Collapsible context | "12 unchanged lines" collapses to single row |
-| Proper diff algorithm | Compute LCS (Longest Common Subsequence) diff |
-| Word-level highlights | Optional: highlight changed words within lines |
-| File path header | Show which file is being edited |
-| Monospace font | Proper code alignment |
-
-**Color Scheme:**
-| Element | Light Mode | Dark Mode |
-|---------|------------|-----------|
-| Removed line bg | `#FFEEF0` | `#3D1E20` |
-| Removed line text | `#B31D28` | `#F97583` |
-| Added line bg | `#E6FFEC` | `#1E3D23` |
-| Added line text | `#22863A` | `#85E89D` |
-| Context line | Default | Default |
-| Line numbers | Gray | Gray |
-
-**Implementation Notes:**
-- Use Myers diff algorithm (or simple LCS for MVP)
-- Swift package option: `swift-diff` or implement basic LCS
-- Parse `old_string` and `new_string` from Edit tool content
-- Split into lines, compute diff, render unified view
-- Context lines: show 3 before/after changes by default
-- Collapse runs of >5 unchanged lines
-- Tap collapsed section to expand
-
-**Accessibility:**
-- VoiceOver: "Line 347 removed: if let summary equals..."
-- VoiceOver: "Line 362 added: Show last user message comment"
-
----
-
-## Milestone 7: Search & Bookmarks 💡
-
-**Goal:** Find and save important messages.
+### Features
 
 | Feature | Description | Effort |
 |---------|-------------|--------|
-| Message Search | Full-text search across current session | Medium |
-| Search Across Sessions | Find messages in any session | High |
-| Bookmark Messages | Star important messages | Low |
-| Filter by Type | Show only user/assistant/tool messages | Low |
-| Bookmark View | Dedicated screen for saved messages | Medium |
+| **Message Search** | Full-text search within current session | Medium |
+| **Cross-Session Search** | Find messages across all sessions | High |
+| **Bookmark Messages** | Star important messages for quick access | Low |
+| **Filter by Type** | Show only user/assistant/tool messages | Low |
+| **Bookmarks View** | Dedicated screen for saved messages | Medium |
 
 ---
 
-## Completed Features Log
+## Priority 4: Code Quality 💡
 
-### December 2024
-- ✅ Slash commands (/clear, /init, /resume, /compact, /status, /exit, /help)
-- ✅ Help sheet with command reference
-- ✅ Session picker sheet for /resume
-- ✅ TodoWrite visual checklist rendering
-- ✅ AskUserQuestion interactive selection UI
-- ✅ Auto-focus input field on load
-- ✅ Improved numbered list parsing (sub-items)
-- ✅ REST API integration (session history, image uploads)
-- ✅ Settings overhaul (iOS Form style)
-- ✅ Light mode support
-- ✅ Font size presets
+Developer experience and code health improvements.
 
-### December 26, 2024 - Hardening Complete
-- ✅ ChatView.swift refactored (2,345 → 703 lines)
-- ✅ Extracted: MarkdownText, CLIInputView, CLIMessageView
-- ✅ File-based MessageStore (migrates from UserDefaults)
-- ✅ Logger.swift + AppError.swift for error handling
-- ✅ WebSocket retry with exponential backoff
-- ✅ 28 unit tests for parsers
-- ✅ VoiceOver accessibility labels on all interactive elements
+### Features
 
-### December 26, 2024 - Milestone 1: Copy & Share
-- ✅ Copy button on assistant messages (header icon)
-- ✅ Long-press context menu on all messages
-- ✅ Share sheet integration with iPad support
-
-### December 26, 2024 - File Browser & @ References (M2 partial)
-- ✅ FileEntry struct with icon and size formatting
-- ✅ SSHManager.listFiles() with directory listing via SSH
-- ✅ FilePickerSheet with breadcrumb navigation and search
-- ✅ @ button in CLIInputView to reference project files
-
-### December 27, 2024 - Clone from GitHub URL (M2 partial)
-- ✅ CloneProjectSheet with URL input and validation
-- ✅ SSHManager.executeCommandWithAutoConnect() for remote commands
-- ✅ + button in toolbar to open clone sheet
-- ✅ Auto-refresh project list after successful clone
-
-### December 27, 2024 - Milestone 2 Complete
-- ✅ NewProjectSheet for creating empty projects
-- ✅ + button shows action sheet (Clone vs New Project)
-- ✅ Delete project with swipe-to-delete and context menu
-- ✅ Confirmation dialog before delete (keeps files, removes from list)
-- ✅ Proper Claude project registration with cwd in session files
-- ✅ /init now passes to Claude (creates CLAUDE.md)
-- ✅ /new command for starting fresh sessions
-
-### December 27, 2024 - Milestone 4: Session Management
-- ✅ SessionNamesStore for custom session name persistence
-- ✅ Enhanced SessionPickerSheet with full-screen list
-- ✅ Session preview (last message, message count, relative time)
-- ✅ Rename session via context menu and alert dialog
-- ✅ Delete session with swipe and confirmation
-- ✅ Export session as markdown with share sheet
-- ✅ SessionRow shows custom names with monospace fallback
-
-### December 27, 2024 - Milestone 3: Auto-Sync from GitHub
-- ✅ GitStatus enum with 10 states (unknown, checking, clean, dirty, ahead, behind, diverged, etc.)
-- ✅ SSHManager git methods (checkGitStatus, gitPull, getGitDiffSummary)
-- ✅ Background status checking with concurrent task group
-- ✅ GitStatusIndicator view with SF Symbol icons and theme colors
-- ✅ Auto-pull for projects behind remote (git pull --ff-only)
-- ✅ GitSyncBanner with dismissible warning and "Ask Claude" action
-- ✅ Context-aware cleanup prompts for dirty/ahead/diverged states
-- ✅ Refresh git status via context menu on project rows
-
-### December 27, 2024 - Model Selection
-- ✅ ClaudeModel enum (Opus/Sonnet/Haiku/Custom) with display names, icons, colors
-- ✅ Model selector pill in ChatView nav bar
-- ✅ Model passed via WebSocket options field (not /model command)
-- ✅ Default model setting in app preferences
-- ✅ Custom model ID support for specific versions (e.g., claude-opus-4-5-20251101)
+| Feature | Description | Effort |
+|---------|-------------|--------|
+| **Syntax Highlighting** | Language-aware code coloring in code blocks | High |
+| **Configurable History** | Make 50-message limit configurable | Low |
+| **Error UI Component** | Centralized error display component | Medium |
 
 ---
 
-## Technical Debt & Maintenance
+## Priority 5: Power User Features 💡
 
-| Item | Description | Priority | Status |
-|------|-------------|----------|--------|
-| ChatView.swift size | Split into modules (2,345 → 703 lines) | **High** | ✅ Complete |
-| AppSettings injection | Fixed - uses EnvironmentObject + onAppear | **High** | ✅ Complete |
-| Theme migration | All views use colorScheme-aware colors | **High** | ✅ Complete |
-| MessageStore storage | File-based with auto-migration from UserDefaults | **High** | ✅ Complete |
-| Code duplication | ImageUtilities.swift consolidates MIME detection | Medium | ✅ Complete |
-| Error handling | AppError.swift + Logger.swift + retry logic | **High** | ✅ Complete |
-| Test coverage | 28 unit tests for parsers | Medium | ✅ Complete |
-| Accessibility | VoiceOver labels on all interactive elements | **High** | ✅ Complete |
+Advanced features for power users.
 
----
+### Features
 
-## Future Ideas 💡
+| Feature | Description | Effort |
+|---------|-------------|--------|
+| **Multiple Servers** | Save/switch between server configs (work/home) | Medium |
+| **Hybrid Model Mode** | Auto-select model based on task complexity | High |
+| **Session Templates** | Saved prompts/contexts for common workflows | Medium |
+| **Export All Sessions** | Bulk export project history | Low |
 
-Ideas for potential future development:
+### Multiple Servers Concept
 
-### Hybrid Model Mode ("Smart Switching")
-Inspired by Claude Code CLI's "opusplan" mode - automatically use different models for different tasks:
+```
+┌─ Servers ─────────────────────────┐
+│ ● Home NAS (connected)            │
+│   10.0.1.50:8080                  │
+│                                   │
+│ ○ Work Server                     │
+│   work.example.com:8080           │
+│                                   │
+│ ○ Dev Container                   │
+│   claude-dev:8080                 │
+│                                   │
+│ [+ Add Server]                    │
+└───────────────────────────────────┘
+```
+
+### Hybrid Model Mode Concept
 
 | Phase | Model | Use Case |
 |-------|-------|----------|
-| Planning | Opus | Complex reasoning, architecture decisions, code review |
-| Execution | Sonnet | Writing code, running commands, routine tasks |
-| Quick answers | Haiku | Simple queries, status checks, small fixes |
+| Planning | Opus | Complex reasoning, architecture |
+| Execution | Sonnet | Writing code, running commands |
+| Quick answers | Haiku | Simple queries, small fixes |
 
-**Potential Features:**
-- **Auto-detect task complexity** - Analyze prompt to choose model
-- **Per-tool model assignment** - Use Opus for planning tools, Sonnet for execution
-- **Cost optimization** - Use cheaper models when appropriate
-- **User override** - Manual model selection always available
-- **Token budget awareness** - Switch to cheaper model when budget low
+---
 
-**UI Concept:**
-```
-┌─ Model: Auto (Smart) ─────────────┐
-│  🧠 Planning → Opus               │
-│  ⚡ Execution → Sonnet            │
-│  💨 Quick → Haiku                 │
-│  ─────────────────────────────    │
-│  ○ Always Opus                    │
-│  ○ Always Sonnet                  │
-│  ○ Always Haiku                   │
-└───────────────────────────────────┘
-```
+## Priority 6: Platform Integration 💡
+
+iOS platform features that enhance the experience.
+
+### Features
+
+| Feature | Description | Effort |
+|---------|-------------|--------|
+| **Home Screen Widget** | Quick-launch recent projects, show active sessions | High |
+| **Shortcuts Integration** | Siri Shortcuts for common actions | Medium |
+| **Share Extension** | Share text/code from other apps to Claude | Medium |
+| **Handoff Support** | Continue conversations between devices | High |
 
 ---
 
 ## Not Planned
 
-These features have been considered but are not on the roadmap:
+These have been considered but are not on the roadmap:
 
-- **Haptic feedback** - Keep it simple
-- **Sound effects** - Not needed
-- **Custom themes** - System/Dark/Light is sufficient
-- **Offline mode** - Complexity outweighs benefit
-- **Apple Watch app** - Limited use case
+| Feature | Reason |
+|---------|--------|
+| **Haptic Feedback** | Keep it simple, not essential |
+| **Sound Effects** | Not needed for the use case |
+| **Custom Themes** | System/Dark/Light is sufficient |
+| **Offline Mode** | Complexity outweighs benefit |
+| **Apple Watch App** | Limited use case |
+| **Message Virtualization** | Premature optimization (50-message limit handles this) |
+| **Lazy Image Loading** | Premature optimization for current scale |
 
 ---
 
-## Implementation Approach
+## Technical Notes
 
-**Iterative & Mixed:** Tackle small wins across all areas rather than completing one milestone fully before starting another. Prioritize features that improve daily workflow.
+### Known Backend Issues
 
-**Next Actions:**
+1. **CORS Limitation**: History API endpoints don't accept Authorization headers
+   - Workaround: Load history via SSH from `~/.claude/projects/`
+   - Proper fix requires backend change
 
-1. ~~Copy Message as Markdown~~ ✅ Complete
-2. ~~File Browser + @ References~~ ✅ Complete
-3. ~~Clone from GitHub URL~~ ✅ Complete
-4. ~~Create New Project + Delete~~ ✅ Complete
-5. ~~Session Management (M4)~~ ✅ Complete
-6. ~~Auto-Sync from GitHub (M3)~~ ✅ Complete
-7. **Enhanced Tool Visualization (M6)** ← Current focus
-8. iPad Sidebar + Keyboard Shortcuts (M5) - Deferred
+2. **Session File Format**: JSONL with specific message types
+   - Location: `~/.claude/projects/{encoded-path}/{session-id}.jsonl`
+   - Encoded path: `/home/dev/project` → `-home-dev-project`
+
+### Architecture Decisions
+
+- **@StateObject** for managers (WebSocket, SSH, Speech)
+- **@EnvironmentObject** for settings (shared across views)
+- **File-based MessageStore** (migrated from UserDefaults)
+- **ATS disabled** for local/Tailscale HTTP connections
+
+---
+
+## Implementation Order
+
+```
+1. Connection Status + Pull-to-Refresh  [Low effort, high impact]
+2. Request Queuing                      [Medium effort, reliability]
+3. iPad Keyboard Shortcuts              [Low effort, iPad users]
+4. iPad Sidebar Navigation              [Medium effort, iPad UX]
+5. Message Search (current session)     [Medium effort, productivity]
+6. Bookmark Messages                    [Low effort, organization]
+7. Syntax Highlighting                  [High effort, polish]
+8. Multiple Servers                     [Medium effort, power users]
+```
+
+---
+
+## Completed Features Log
+
+<details>
+<summary>December 2024 - Full Details</summary>
+
+### v1.0 Core Features
+- WebSocket real-time streaming chat
+- Full markdown rendering (headers, code, tables, lists, math)
+- Tool visualization with collapsible messages
+- Diff viewer for Edit tool
+- TodoWrite visual checklist
+- AskUserQuestion interactive UI
+- Image attachments via PhotosPicker
+- Voice input with Speech framework
+- SSH terminal with Citadel
+- Message persistence (50 per project)
+- Draft auto-save per project
+- Local notifications on task completion
+- Slash commands (/clear, /init, /resume, /help, etc.)
+
+### M1: Copy & Share
+- Copy button on assistant messages
+- Long-press context menu
+- Share sheet with iPad support
+
+### M2: Project Management
+- Clone from GitHub URL via SSH
+- Create new empty projects
+- Delete projects with confirmation
+- File browser with breadcrumb navigation
+- @ button for file references
+
+### M3: Auto-Sync
+- GitStatus enum with 10 states
+- Background status checking
+- GitStatusIndicator icons
+- Auto-pull for clean projects
+- GitSyncBanner with "Ask Claude" action
+
+### M4: Session Management
+- SessionNamesStore for custom names
+- Full-screen session picker
+- Rename, delete, export sessions
+- Message count and preview in rows
+
+### M6: Tool Visualization
+- ToolType enum with 12 tools
+- Distinct colors and SF Symbol icons
+- Rich headers with key params
+- Result count badges
+- TruncatableText with fade + expand
+- Enhanced DiffView with line numbers
+- Context collapsing in diffs
+- Quick action copy buttons
+
+### Model Selection
+- ClaudeModel enum (Opus/Sonnet/Haiku/Custom)
+- Model selector pill in nav bar
+- Model passed via WebSocket options
+- Default model in settings
+
+</details>
 
 ---
 

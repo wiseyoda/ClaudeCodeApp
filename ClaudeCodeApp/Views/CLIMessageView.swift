@@ -21,11 +21,18 @@ struct CLIMessageView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            // Header line with bullet
+            // Header line with bullet/icon
             HStack(spacing: 6) {
-                Text(bulletChar)
-                    .foregroundColor(bulletColor)
-                    .font(settings.scaledFont(.body))
+                // Use SF Symbol icons for tools, text bullets for others
+                if message.role == .toolUse {
+                    Image(systemName: toolType.icon)
+                        .foregroundColor(bulletColor)
+                        .font(.system(size: 12))
+                } else {
+                    Text(bulletChar)
+                        .foregroundColor(bulletColor)
+                        .font(settings.scaledFont(.body))
+                }
 
                 Text(headerText)
                     .foregroundColor(headerColor)
@@ -35,9 +42,25 @@ struct CLIMessageView: View {
                     Text(isExpanded ? "[-]" : "[+]")
                         .foregroundColor(CLITheme.mutedText(for: colorScheme))
                         .font(settings.scaledFont(.small))
+
+                    // Show count badge when collapsed
+                    if !isExpanded, let badge = resultCountBadge {
+                        Text(badge)
+                            .font(settings.scaledFont(.small))
+                            .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(CLITheme.mutedText(for: colorScheme).opacity(0.15))
+                            .cornerRadius(4)
+                    }
                 }
 
                 Spacer()
+
+                // Quick action buttons for tools
+                if message.role == .toolUse {
+                    quickActionButtons
+                }
 
                 // Copy button for assistant messages
                 if message.role == .assistant && !message.content.isEmpty {
@@ -126,13 +149,17 @@ struct CLIMessageView: View {
         }
     }
 
+    private var toolType: CLITheme.ToolType {
+        CLITheme.ToolType.from(message.content)
+    }
+
     private var bulletColor: Color {
         switch message.role {
         case .user: return CLITheme.blue(for: colorScheme)
         case .assistant: return CLITheme.primaryText(for: colorScheme)
         case .system: return CLITheme.cyan(for: colorScheme)
         case .error: return CLITheme.red(for: colorScheme)
-        case .toolUse: return CLITheme.green(for: colorScheme)
+        case .toolUse: return CLITheme.toolColor(for: toolType, scheme: colorScheme)
         case .toolResult: return CLITheme.mutedText(for: colorScheme)
         case .resultSuccess: return CLITheme.green(for: colorScheme)
         case .thinking: return CLITheme.purple(for: colorScheme)
@@ -146,14 +173,234 @@ struct CLIMessageView: View {
         case .system: return "System (init)"
         case .error: return "Error"
         case .toolUse:
-            // Show just tool name in header (e.g., "Grep" from "Grep(pattern: ...)")
-            if let parenIndex = message.content.firstIndex(of: "(") {
-                return String(message.content[..<parenIndex])
-            }
-            return message.content
+            return toolHeaderText
         case .toolResult: return "Result"
         case .resultSuccess: return "Done"
         case .thinking: return "Thinking"
+        }
+    }
+
+    /// Extract tool name + key param for richer headers
+    private var toolHeaderText: String {
+        let content = message.content
+
+        // Get the tool name
+        let toolName: String
+        if let parenIndex = content.firstIndex(of: "(") {
+            toolName = String(content[..<parenIndex])
+        } else {
+            return content
+        }
+
+        // Extract key param based on tool type
+        switch toolType {
+        case .bash:
+            // Show command: Bash: $ ls -la
+            if let command = extractParam(from: content, key: "command") {
+                let shortCmd = command.count > 40 ? String(command.prefix(40)) + "..." : command
+                return "\(toolName): $ \(shortCmd)"
+            }
+        case .read:
+            // Show file path: Read: src/index.ts
+            if let path = extractParam(from: content, key: "file_path") {
+                return "\(toolName): \(shortenPath(path))"
+            }
+        case .write:
+            // Show file path: Write: src/new.ts
+            if let path = extractParam(from: content, key: "file_path") {
+                return "\(toolName): \(shortenPath(path))"
+            }
+        case .edit:
+            // Show file path: Edit: src/file.ts
+            if let path = extractParam(from: content, key: "file_path") {
+                return "\(toolName): \(shortenPath(path))"
+            }
+        case .grep:
+            // Show pattern: Grep: "pattern"
+            if let pattern = extractParam(from: content, key: "pattern") {
+                let shortPattern = pattern.count > 30 ? String(pattern.prefix(30)) + "..." : pattern
+                return "\(toolName): \"\(shortPattern)\""
+            }
+        case .glob:
+            // Show pattern: Glob: **/*.ts
+            if let pattern = extractParam(from: content, key: "pattern") {
+                return "\(toolName): \(pattern)"
+            }
+        case .task:
+            // Show description: Task: Explore codebase
+            if let desc = extractParam(from: content, key: "description") {
+                let shortDesc = desc.count > 35 ? String(desc.prefix(35)) + "..." : desc
+                return "\(toolName): \(shortDesc)"
+            }
+        case .todoWrite:
+            return "TodoWrite"
+        case .webFetch:
+            // Show URL: WebFetch: example.com
+            if let url = extractParam(from: content, key: "url") {
+                return "\(toolName): \(shortenURL(url))"
+            }
+        case .webSearch:
+            // Show query: WebSearch: "query"
+            if let query = extractParam(from: content, key: "query") {
+                let shortQuery = query.count > 30 ? String(query.prefix(30)) + "..." : query
+                return "\(toolName): \"\(shortQuery)\""
+            }
+        case .askUser:
+            return "AskUserQuestion"
+        case .other:
+            break
+        }
+
+        return toolName
+    }
+
+    /// Extract a parameter value from tool content like "Tool(key: value, ...)"
+    private func extractParam(from content: String, key: String) -> String? {
+        // Look for "key: value" pattern
+        let searchKey = "\(key): "
+        guard let keyRange = content.range(of: searchKey) else { return nil }
+
+        let afterKey = content[keyRange.upperBound...]
+
+        // Find the end of the value (next ", " or ")" or end)
+        var value = ""
+        var depth = 0
+        var inQuote = false
+
+        for char in afterKey {
+            if char == "\"" {
+                inQuote.toggle()
+            } else if !inQuote {
+                if char == "(" || char == "[" || char == "{" {
+                    depth += 1
+                } else if char == ")" || char == "]" || char == "}" {
+                    if depth == 0 {
+                        break
+                    }
+                    depth -= 1
+                } else if char == "," && depth == 0 {
+                    break
+                }
+            }
+            value.append(char)
+        }
+
+        return value.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Shorten a file path to just filename or last 2 components
+    private func shortenPath(_ path: String) -> String {
+        let components = path.split(separator: "/")
+        if components.count <= 2 {
+            return path
+        }
+        return components.suffix(2).joined(separator: "/")
+    }
+
+    /// Shorten a URL to just the domain
+    private func shortenURL(_ url: String) -> String {
+        if let urlObj = URL(string: url), let host = urlObj.host {
+            return host
+        }
+        // Fallback: just show first 30 chars
+        return url.count > 30 ? String(url.prefix(30)) + "..." : url
+    }
+
+    /// Quick action buttons for tools (copy path, copy command)
+    @ViewBuilder
+    private var quickActionButtons: some View {
+        HStack(spacing: 8) {
+            switch toolType {
+            case .bash:
+                // Copy command
+                if let cmd = extractParam(from: message.content, key: "command") {
+                    QuickActionButton(
+                        icon: "doc.on.doc",
+                        label: "Copy command",
+                        action: { UIPasteboard.general.string = cmd }
+                    )
+                }
+            case .read, .write, .edit:
+                // Copy file path
+                if let path = extractParam(from: message.content, key: "file_path") {
+                    QuickActionButton(
+                        icon: "doc.on.doc",
+                        label: "Copy path",
+                        action: { UIPasteboard.general.string = path }
+                    )
+                }
+            case .grep:
+                // Copy pattern
+                if let pattern = extractParam(from: message.content, key: "pattern") {
+                    QuickActionButton(
+                        icon: "doc.on.doc",
+                        label: "Copy pattern",
+                        action: { UIPasteboard.general.string = pattern }
+                    )
+                }
+            case .glob:
+                // Copy glob pattern
+                if let pattern = extractParam(from: message.content, key: "pattern") {
+                    QuickActionButton(
+                        icon: "doc.on.doc",
+                        label: "Copy pattern",
+                        action: { UIPasteboard.general.string = pattern }
+                    )
+                }
+            case .webFetch:
+                // Copy URL
+                if let url = extractParam(from: message.content, key: "url") {
+                    QuickActionButton(
+                        icon: "doc.on.doc",
+                        label: "Copy URL",
+                        action: { UIPasteboard.general.string = url }
+                    )
+                }
+            default:
+                EmptyView()
+            }
+        }
+    }
+
+    /// Generate a count badge for collapsed tool outputs
+    private var resultCountBadge: String? {
+        let content = message.content
+        let lineCount = content.components(separatedBy: "\n").count
+
+        switch message.role {
+        case .toolUse:
+            switch toolType {
+            case .grep, .glob:
+                // Count matching files in output (look for file paths in result)
+                // For tool use, we don't have the result yet, so show nothing
+                return nil
+            case .todoWrite:
+                // Count todos
+                if let todos = TodoListView.parseTodoContent(content) {
+                    let completed = todos.filter { $0.status == "completed" }.count
+                    return "\(completed)/\(todos.count)"
+                }
+                return nil
+            default:
+                return nil
+            }
+        case .toolResult:
+            // Show line count for results
+            if lineCount > 1 {
+                return "\(lineCount) lines"
+            } else if content.count > 100 {
+                return "\(content.count) chars"
+            }
+            return nil
+        case .thinking:
+            // Show word count for thinking blocks
+            let wordCount = content.split(separator: " ").count
+            if wordCount > 10 {
+                return "\(wordCount) words"
+            }
+            return nil
+        default:
+            return nil
         }
     }
 
@@ -163,7 +410,7 @@ struct CLIMessageView: View {
         case .assistant: return CLITheme.primaryText(for: colorScheme)
         case .system: return CLITheme.cyan(for: colorScheme)
         case .error: return CLITheme.red(for: colorScheme)
-        case .toolUse: return CLITheme.yellow(for: colorScheme)
+        case .toolUse: return CLITheme.toolColor(for: toolType, scheme: colorScheme)
         case .toolResult: return CLITheme.mutedText(for: colorScheme)
         case .resultSuccess: return CLITheme.green(for: colorScheme)
         case .thinking: return CLITheme.purple(for: colorScheme)
@@ -224,32 +471,26 @@ struct CLIMessageView: View {
                       let todos = TodoListView.parseTodoContent(message.content) {
                 TodoListView(todos: todos)
             } else {
-                Text(message.content)
-                    .font(settings.scaledFont(.small))
-                    .foregroundColor(CLITheme.secondaryText(for: colorScheme))
-                    .textSelection(.enabled)
+                // Truncate long tool use content
+                TruncatableText(
+                    content: message.content,
+                    defaultLineLimit: 10,
+                    isExpanded: $isExpanded
+                )
             }
         case .toolResult:
-            VStack(alignment: .leading, spacing: 4) {
-                Text(message.content)
-                    .font(settings.scaledFont(.small))
-                    .foregroundColor(CLITheme.secondaryText(for: colorScheme))
-                    .lineLimit(isExpanded ? nil : 3)
-                    .textSelection(.enabled)
-                // Show "Show more" hint if content is long and collapsed
-                if !isExpanded && message.content.count > 200 {
-                    Text("[\(message.content.count) chars - tap header to expand]")
-                        .font(settings.scaledFont(.small))
-                        .foregroundColor(CLITheme.mutedText(for: colorScheme))
-                        .italic()
-                }
-            }
+            // Use truncatable text with fade and "Show more" button
+            TruncatableText(
+                content: message.content,
+                defaultLineLimit: TruncatableText.lineLimit(for: message.content),
+                isExpanded: $isExpanded
+            )
         case .thinking:
-            Text(message.content)
-                .font(settings.scaledFont(.small))
-                .foregroundColor(CLITheme.purple(for: colorScheme).opacity(0.8))
-                .italic()
-                .textSelection(.enabled)
+            // Truncate long thinking blocks with purple styling
+            ThinkingBlockText(
+                content: message.content,
+                isExpanded: $isExpanded
+            )
         }
     }
 }
@@ -277,5 +518,40 @@ struct CLIProcessingView: View {
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Claude is thinking")
         .accessibilityAddTraits(.updatesFrequently)
+    }
+}
+
+// MARK: - Quick Action Button
+
+struct QuickActionButton: View {
+    let icon: String
+    let label: String
+    let action: () -> Void
+
+    @State private var showConfirmation = false
+    @Environment(\.colorScheme) var colorScheme
+
+    var body: some View {
+        Button {
+            action()
+            withAnimation(.easeInOut(duration: 0.2)) {
+                showConfirmation = true
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    showConfirmation = false
+                }
+            }
+        } label: {
+            Image(systemName: showConfirmation ? "checkmark" : icon)
+                .font(.system(size: 11))
+                .foregroundColor(
+                    showConfirmation
+                        ? CLITheme.green(for: colorScheme)
+                        : CLITheme.mutedText(for: colorScheme)
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(showConfirmation ? "Copied" : label)
     }
 }
