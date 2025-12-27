@@ -13,16 +13,18 @@ struct ContentView: View {
     @State private var showTerminal = false
     @State private var showCloneProject = false
     @State private var showNewProject = false
-    @State private var showNewProjectOptions = false
     @State private var projectToDelete: Project?
     @State private var showGlobalSearch = false
     @State private var showCommands = false
     @StateObject private var sshManager = SSHManager()
     @StateObject private var commandStore = CommandStore.shared
+    @ObservedObject private var archivedStore = ArchivedProjectsStore.shared
 
     // Git status tracking per project path
     @State private var gitStatuses: [String: GitStatus] = [:]
     @State private var isCheckingGitStatus = false
+    @State private var gitRefreshError: String?
+    @State private var showGitRefreshError = false
 
     // Selected project for NavigationSplitView
     @State private var selectedProject: Project?
@@ -56,8 +58,17 @@ struct ContentView: View {
                             .accessibilityLabel("Saved commands")
                             .accessibilityHint("Open saved commands library")
 
-                            Button {
-                                showNewProjectOptions = true
+                            Menu {
+                                Button {
+                                    showNewProject = true
+                                } label: {
+                                    Label("Create Empty Project", systemImage: "folder.badge.plus")
+                                }
+                                Button {
+                                    showCloneProject = true
+                                } label: {
+                                    Label("Clone from GitHub", systemImage: "arrow.down.doc")
+                                }
                             } label: {
                                 Image(systemName: "plus")
                                     .foregroundColor(CLITheme.green(for: colorScheme))
@@ -102,7 +113,10 @@ struct ContentView: View {
                 }
         } detail: {
             // Detail: Chat view or placeholder
-            if let project = selectedProject {
+            if isLoading {
+                // Show loading in detail pane too (iPhone shows detail first)
+                loadingView
+            } else if let project = selectedProject {
                 ChatView(
                     project: project,
                     apiClient: apiClient,
@@ -134,15 +148,6 @@ struct ContentView: View {
             CommandsView(commandStore: commandStore)
                 .environmentObject(settings)
         }
-        .confirmationDialog("New Project", isPresented: $showNewProjectOptions, titleVisibility: .visible) {
-            Button("Create Empty Project") {
-                showNewProject = true
-            }
-            Button("Clone from GitHub") {
-                showCloneProject = true
-            }
-            Button("Cancel", role: .cancel) {}
-        }
         .alert("Delete Project?", isPresented: .init(
             get: { projectToDelete != nil },
             set: { if !$0 { projectToDelete = nil } }
@@ -158,6 +163,15 @@ struct ContentView: View {
         } message: {
             if let project = projectToDelete {
                 Text("This will remove \"\(project.title)\" from your project list. The files will remain on the server.")
+            }
+        }
+        .alert("Git Refresh Error", isPresented: $showGitRefreshError) {
+            Button("OK", role: .cancel) {
+                gitRefreshError = nil
+            }
+        } message: {
+            if let error = gitRefreshError {
+                Text(error)
             }
         }
         .fullScreenCover(isPresented: $showTerminal) {
@@ -230,8 +244,12 @@ struct ContentView: View {
     }
 
     private var loadingView: some View {
-        VStack(spacing: 12) {
-            Text("+ Loading projects...")
+        VStack(spacing: 16) {
+            ProgressView()
+                .scaleEffect(1.2)
+                .tint(CLITheme.yellow(for: colorScheme))
+
+            Text("Loading projects...")
                 .font(CLITheme.monoFont)
                 .foregroundColor(CLITheme.yellow(for: colorScheme))
         }
@@ -277,58 +295,66 @@ struct ContentView: View {
         .background(CLITheme.background(for: colorScheme))
     }
 
-    /// Projects sorted according to user preference
-    private var sortedProjects: [Project] {
+    /// Active (non-archived) projects sorted according to user preference
+    private var activeProjects: [Project] {
+        let active = projects.filter { !archivedStore.isArchived($0.path) }
+        return sortProjects(active)
+    }
+
+    /// Archived projects sorted according to user preference
+    private var archivedProjects: [Project] {
+        let archived = projects.filter { archivedStore.isArchived($0.path) }
+        return sortProjects(archived)
+    }
+
+    /// Sort projects according to user preference
+    private func sortProjects(_ projectList: [Project]) -> [Project] {
         switch settings.projectSortOrder {
         case .date:
             // Sort by most recent activity (most recent first)
-            return projects.sorted { p1, p2 in
+            return projectList.sorted { p1, p2 in
                 let date1 = p1.sessions?.compactMap { $0.lastActivity }.max() ?? ""
                 let date2 = p2.sessions?.compactMap { $0.lastActivity }.max() ?? ""
                 return date1 > date2
             }
         case .name:
             // Sort alphabetically by title
-            return projects.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+            return projectList.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
         }
     }
 
     private var projectListView: some View {
-        List(sortedProjects, selection: $selectedProject) { project in
-            ProjectRow(
-                project: project,
-                gitStatus: gitStatuses[project.path] ?? .unknown,
-                isSelected: selectedProject?.id == project.id
-            )
-            .tag(project)  // Required for List selection to work properly
-            .listRowBackground(
-                selectedProject?.id == project.id
-                    ? CLITheme.blue(for: colorScheme).opacity(0.2)
-                    : CLITheme.background(for: colorScheme)
-            )
-            .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
-            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                Button(role: .destructive) {
-                    projectToDelete = project
-                } label: {
-                    Label("Delete", systemImage: "trash")
+        List(selection: $selectedProject) {
+            // Active Projects Section
+            Section {
+                ForEach(activeProjects) { project in
+                    projectRow(for: project, isArchived: false)
+                }
+            } header: {
+                if !archivedProjects.isEmpty {
+                    Text("Projects")
+                        .font(CLITheme.monoSmall)
+                        .foregroundColor(CLITheme.secondaryText(for: colorScheme))
                 }
             }
-            .contextMenu {
-                Button {
-                    Task { await refreshGitStatus(for: project) }
-                } label: {
-                    Label("Refresh Git Status", systemImage: "arrow.triangle.2.circlepath")
-                }
 
-                Button(role: .destructive) {
-                    projectToDelete = project
-                } label: {
-                    Label("Delete Project", systemImage: "trash")
+            // Archived Projects Section
+            if !archivedProjects.isEmpty {
+                Section {
+                    ForEach(archivedProjects) { project in
+                        projectRow(for: project, isArchived: true)
+                    }
+                } header: {
+                    HStack {
+                        Image(systemName: "archivebox")
+                        Text("Archived")
+                    }
+                    .font(CLITheme.monoSmall)
+                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
                 }
             }
         }
-        .listStyle(.sidebar)  // Use sidebar style for proper selection behavior
+        .listStyle(.sidebar)
         .scrollContentBackground(.hidden)
         .refreshable {
             await loadProjects()
@@ -347,6 +373,65 @@ struct ContentView: View {
                         .font(CLITheme.monoSmall)
                         .foregroundColor(CLITheme.mutedText(for: colorScheme))
                 }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func projectRow(for project: Project, isArchived: Bool) -> some View {
+        ProjectRow(
+            project: project,
+            gitStatus: gitStatuses[project.path] ?? .unknown,
+            isSelected: selectedProject?.id == project.id,
+            isArchived: isArchived
+        )
+        .tag(project)
+        .listRowBackground(
+            selectedProject?.id == project.id
+                ? CLITheme.blue(for: colorScheme).opacity(0.2)
+                : CLITheme.background(for: colorScheme)
+        )
+        .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            Button(role: .destructive) {
+                projectToDelete = project
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+            Button {
+                archivedStore.toggleArchive(project.path)
+            } label: {
+                if isArchived {
+                    Label("Unarchive", systemImage: "tray.and.arrow.up")
+                } else {
+                    Label("Archive", systemImage: "archivebox")
+                }
+            }
+            .tint(isArchived ? CLITheme.green(for: colorScheme) : CLITheme.yellow(for: colorScheme))
+        }
+        .contextMenu {
+            Button {
+                archivedStore.toggleArchive(project.path)
+            } label: {
+                if isArchived {
+                    Label("Unarchive", systemImage: "tray.and.arrow.up")
+                } else {
+                    Label("Archive", systemImage: "archivebox")
+                }
+            }
+
+            Button {
+                Task { await refreshGitStatus(for: project) }
+            } label: {
+                Label("Refresh Git Status", systemImage: "arrow.triangle.2.circlepath")
+            }
+
+            Button(role: .destructive) {
+                projectToDelete = project
+            } label: {
+                Label("Delete Project", systemImage: "trash")
             }
         }
     }
@@ -424,6 +509,24 @@ struct ContentView: View {
         }
 
         isCheckingGitStatus = false
+
+        // Check for errors and notify user
+        let errorStatuses = gitStatuses.compactMap { (path, status) -> String? in
+            if case .error(let message) = status {
+                let projectName = projects.first { $0.path == path }?.title ?? path
+                return "\(projectName): \(message)"
+            }
+            return nil
+        }
+
+        if !errorStatuses.isEmpty {
+            if errorStatuses.count == 1 {
+                gitRefreshError = errorStatuses[0]
+            } else {
+                gitRefreshError = "\(errorStatuses.count) projects failed to refresh git status"
+            }
+            showGitRefreshError = true
+        }
     }
 
     /// Refresh git status for a single project
@@ -443,6 +546,7 @@ struct ProjectRow: View {
     let project: Project
     let gitStatus: GitStatus
     var isSelected: Bool = false
+    var isArchived: Bool = false
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
@@ -450,15 +554,19 @@ struct ProjectRow: View {
             Text(isSelected ? "●" : ">")
                 .font(CLITheme.monoFont)
                 .foregroundColor(isSelected ? CLITheme.blue(for: colorScheme) : CLITheme.green(for: colorScheme))
+                .opacity(isArchived ? 0.5 : 1)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(project.title)
                         .font(CLITheme.monoFont)
                         .foregroundColor(CLITheme.primaryText(for: colorScheme))
+                        .opacity(isArchived ? 0.6 : 1)
 
                     // Git status indicator
-                    GitStatusIndicator(status: gitStatus)
+                    if !isArchived {
+                        GitStatusIndicator(status: gitStatus)
+                    }
                 }
 
                 HStack(spacing: 8) {
@@ -471,6 +579,7 @@ struct ProjectRow: View {
                         Text("[\(sessions.count) sessions]")
                             .font(CLITheme.monoSmall)
                             .foregroundColor(CLITheme.cyan(for: colorScheme))
+                            .opacity(isArchived ? 0.6 : 1)
                     }
                 }
             }

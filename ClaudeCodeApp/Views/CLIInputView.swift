@@ -7,6 +7,7 @@ struct CLIInputView: View {
     @Binding var text: String
     @Binding var selectedImage: Data?
     let isProcessing: Bool
+    let isAborting: Bool
     let projectPath: String?
     @FocusState var isFocused: Bool
     let onSend: () -> Void
@@ -32,6 +33,7 @@ struct CLIInputView: View {
         text: Binding<String>,
         selectedImage: Binding<Data?>,
         isProcessing: Bool,
+        isAborting: Bool = false,
         projectPath: String?,
         isFocused: FocusState<Bool>,
         onSend: @escaping () -> Void,
@@ -45,6 +47,7 @@ struct CLIInputView: View {
         self._text = text
         self._selectedImage = selectedImage
         self.isProcessing = isProcessing
+        self.isAborting = isAborting
         self.projectPath = projectPath
         self._isFocused = isFocused
         self.onSend = onSend
@@ -242,7 +245,12 @@ struct CLIInputView: View {
 
     private var sendButton: some View {
         Group {
-            if isProcessing {
+            if isAborting {
+                // Aborting state - show spinner
+                ProgressView()
+                    .frame(width: 28, height: 28)
+                    .accessibilityLabel("Aborting")
+            } else if isProcessing {
                 // Abort button when processing
                 Button(action: onAbort) {
                     Image(systemName: "stop.circle.fill")
@@ -250,6 +258,7 @@ struct CLIInputView: View {
                         .foregroundColor(CLITheme.red(for: colorScheme))
                 }
                 .accessibilityLabel("Stop")
+                .accessibilityHint("Double tap to stop the current task")
             } else if !text.isEmpty || selectedImage != nil {
                 // Send button when there's content
                 Button(action: onSend) {

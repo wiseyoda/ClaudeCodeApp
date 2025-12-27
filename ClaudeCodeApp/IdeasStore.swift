@@ -76,14 +76,15 @@ class IdeasStore: ObservableObject {
 
     private let projectPath: String
     private let ideasDirectory = "ideas"
+    private let baseDirectory: URL
+    private let fileManager: FileManager
 
     private var fileURL: URL {
-        let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let ideasDirURL = documentsURL.appendingPathComponent(ideasDirectory)
+        let ideasDirURL = baseDirectory.appendingPathComponent(ideasDirectory)
 
         // Create ideas directory if needed
-        if !FileManager.default.fileExists(atPath: ideasDirURL.path) {
-            try? FileManager.default.createDirectory(at: ideasDirURL, withIntermediateDirectories: true)
+        if !fileManager.fileExists(atPath: ideasDirURL.path) {
+            try? fileManager.createDirectory(at: ideasDirURL, withIntermediateDirectories: true)
         }
 
         // Encode project path: /path/to/project → -path-to-project
@@ -93,8 +94,14 @@ class IdeasStore: ObservableObject {
         return ideasDirURL.appendingPathComponent("\(encodedPath).json")
     }
 
-    init(projectPath: String) {
+    init(
+        projectPath: String,
+        baseDirectory: URL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0],
+        fileManager: FileManager = .default
+    ) {
         self.projectPath = projectPath
+        self.baseDirectory = baseDirectory
+        self.fileManager = fileManager
         load()
     }
 

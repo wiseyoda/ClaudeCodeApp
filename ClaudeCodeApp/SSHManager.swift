@@ -4,6 +4,16 @@ import NIOCore
 import Crypto
 import Security
 
+// MARK: - Shell Escaping
+
+/// Escape a string for safe use in shell commands
+/// Uses single-quote escaping: wrap in single quotes and escape any internal single quotes
+private func shellEscape(_ string: String) -> String {
+    // Replace ' with '\'' (end quote, escaped quote, start quote)
+    let escaped = string.replacingOccurrences(of: "'", with: "'\\''")
+    return "'\(escaped)'"
+}
+
 // MARK: - Keychain Helper
 
 /// Helper for secure SSH key storage in iOS Keychain
@@ -17,6 +27,7 @@ class KeychainHelper {
     private enum Account: String {
         case privateKey = "ssh_private_key"
         case passphrase = "ssh_key_passphrase"
+        case sshPassword = "ssh_password"
     }
 
     private init() {}
@@ -136,10 +147,71 @@ class KeychainHelper {
         return status == errSecSuccess || status == errSecItemNotFound
     }
 
+    // MARK: - SSH Password (fallback authentication)
+
+    /// Store the SSH password securely
+    @discardableResult
+    func storeSSHPassword(_ password: String) -> Bool {
+        guard !password.isEmpty, let data = password.data(using: .utf8) else {
+            deleteSSHPassword()
+            return true
+        }
+        deleteSSHPassword()
+
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: Account.sshPassword.rawValue,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        ]
+
+        let status = SecItemAdd(query as CFDictionary, nil)
+        return status == errSecSuccess
+    }
+
+    /// Retrieve the stored SSH password
+    func retrieveSSHPassword() -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: Account.sshPassword.rawValue,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        if status == errSecSuccess, let data = result as? Data {
+            return String(data: data, encoding: .utf8)
+        }
+        return nil
+    }
+
+    /// Delete the stored SSH password
+    @discardableResult
+    func deleteSSHPassword() -> Bool {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: Account.sshPassword.rawValue
+        ]
+
+        let status = SecItemDelete(query as CFDictionary)
+        return status == errSecSuccess || status == errSecItemNotFound
+    }
+
+    /// Check if an SSH password is stored
+    var hasSSHPassword: Bool {
+        retrieveSSHPassword() != nil
+    }
+
     /// Remove all stored SSH credentials
     func clearAll() {
         deleteSSHKey()
         deletePassphrase()
+        deleteSSHPassword()
         log.info("All SSH credentials cleared from Keychain")
     }
 }
@@ -290,6 +362,7 @@ class SSHManager: ObservableObject {
     @Published var availableHosts: [SSHConfigEntry] = []
 
     private var client: SSHClient?
+    private var disconnectTask: Task<Void, Never>?
 
     var host: String = ""
     var port: Int = 22
@@ -298,6 +371,11 @@ class SSHManager: ObservableObject {
 
     init() {
         loadSSHConfig()
+    }
+
+    deinit {
+        // Cancel any pending disconnect task and clean up
+        disconnectTask?.cancel()
     }
 
     // Get the real home directory (works around iOS Simulator sandboxing)
@@ -534,9 +612,15 @@ class SSHManager: ObservableObject {
     }
 
     func disconnect() {
-        Task {
-            try? await client?.close()
+        // Cancel any previous disconnect task
+        disconnectTask?.cancel()
+
+        // Store the task to prevent it from becoming dangling
+        let clientToClose = client
+        disconnectTask = Task {
+            try? await clientToClose?.close()
         }
+
         client = nil
         isConnected = false
         output += "\n[Disconnected]\n"
@@ -824,7 +908,7 @@ class SSHManager: ObservableObject {
 
         // Use ls -la with specific format for parsing
         // -A shows hidden files except . and ..
-        let cmd = "ls -laF \(path) 2>/dev/null | tail -n +2"
+        let cmd = "ls -laF \(shellEscape(path)) 2>/dev/null | tail -n +2"
         let result = try await client.executeCommand(cmd)
         let output = String(buffer: result)
 
@@ -853,7 +937,7 @@ class SSHManager: ObservableObject {
             throw SSHError.notConnected
         }
 
-        let cmd = "cd '\(path)' && git rev-parse --is-inside-work-tree 2>/dev/null"
+        let cmd = "cd \(shellEscape(path)) && git rev-parse --is-inside-work-tree 2>/dev/null"
         let result = try await client.executeCommand(cmd)
         let output = String(buffer: result).trimmingCharacters(in: .whitespacesAndNewlines)
         return output == "true"
@@ -867,7 +951,8 @@ class SSHManager: ObservableObject {
         }
 
         // First check if it's a git repo
-        let isGitCmd = "cd '\(path)' && git rev-parse --is-inside-work-tree 2>/dev/null"
+        let escapedPath = shellEscape(path)
+        let isGitCmd = "cd \(escapedPath) && git rev-parse --is-inside-work-tree 2>/dev/null"
         let isGitResult = try await client.executeCommand(isGitCmd)
         let isGit = String(buffer: isGitResult).trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -876,17 +961,17 @@ class SSHManager: ObservableObject {
         }
 
         // Check for uncommitted changes (including untracked files)
-        let statusCmd = "cd '\(path)' && git status --porcelain 2>/dev/null"
+        let statusCmd = "cd \(escapedPath) && git status --porcelain 2>/dev/null"
         let statusResult = try await client.executeCommand(statusCmd)
         let statusOutput = String(buffer: statusResult).trimmingCharacters(in: .whitespacesAndNewlines)
         let hasUncommittedChanges = !statusOutput.isEmpty
 
         // Fetch remote to get accurate ahead/behind (non-blocking, with timeout)
         // Use --dry-run to just check without actually fetching
-        _ = try? await client.executeCommand("cd '\(path)' && timeout 5s git fetch --quiet 2>/dev/null")
+        _ = try? await client.executeCommand("cd \(escapedPath) && timeout 5s git fetch --quiet 2>/dev/null")
 
         // Check ahead/behind status relative to upstream
-        let revListCmd = "cd '\(path)' && git rev-list --left-right --count HEAD...@{upstream} 2>/dev/null"
+        let revListCmd = "cd \(escapedPath) && git rev-list --left-right --count HEAD...@{upstream} 2>/dev/null"
         let revListResult = try await client.executeCommand(revListCmd)
         let revListOutput = String(buffer: revListResult).trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -943,7 +1028,7 @@ class SSHManager: ObservableObject {
             throw SSHError.notConnected
         }
 
-        let cmd = "cd '\(path)' && git pull --ff-only 2>&1"
+        let cmd = "cd \(shellEscape(path)) && git pull --ff-only 2>&1"
         let result = try await client.executeCommand(cmd)
         let output = String(buffer: result).trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -982,8 +1067,9 @@ class SSHManager: ObservableObject {
         }
 
         // Get a summary of changes: modified files, untracked files, staged changes
+        let escapedPath = shellEscape(path)
         let cmd = """
-        cd '\(path)' && echo "=== Git Status ===" && git status --short && \
+        cd \(escapedPath) && echo "=== Git Status ===" && git status --short && \
         echo "" && echo "=== Recent Commits (unpushed) ===" && \
         git log --oneline @{upstream}..HEAD 2>/dev/null || echo "(no upstream)" && \
         echo "" && echo "=== Diff Stats ===" && git diff --stat 2>/dev/null
@@ -1012,7 +1098,7 @@ class SSHManager: ObservableObject {
         }
 
         // Use cat to read the file
-        let cmd = "cat \(path)"
+        let cmd = "cat \(shellEscape(path))"
         let result = try await client.executeCommand(cmd)
         return String(buffer: result)
     }

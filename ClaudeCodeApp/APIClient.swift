@@ -1,5 +1,6 @@
 import Foundation
 
+@MainActor
 class APIClient: ObservableObject {
     private var settings: AppSettings
     @Published var isLoading = false
@@ -42,10 +43,8 @@ class APIClient: ObservableObject {
 
         if httpResponse.statusCode == 200 {
             let loginResponse = try JSONDecoder().decode(LoginResponse.self, from: data)
-            await MainActor.run {
-                settings.authToken = loginResponse.token
-                isAuthenticated = true
-            }
+            settings.authToken = loginResponse.token
+            isAuthenticated = true
         } else {
             throw APIError.authenticationFailed
         }
@@ -88,10 +87,8 @@ class APIClient: ObservableObject {
         }
 
         let loginResponse = try JSONDecoder().decode(LoginResponse.self, from: data)
-        await MainActor.run {
-            settings.authToken = loginResponse.token
-            isAuthenticated = true
-        }
+        settings.authToken = loginResponse.token
+        isAuthenticated = true
     }
 
     private func authorizedRequest(for url: URL) -> URLRequest {

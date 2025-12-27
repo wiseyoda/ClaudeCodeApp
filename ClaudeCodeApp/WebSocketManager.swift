@@ -62,6 +62,7 @@ class WebSocketManager: ObservableObject {
     }
 
     @Published var isProcessing = false
+    @Published var isAborting = false  // True while waiting for abort confirmation
     @Published var currentText = ""
     @Published var lastError: String?
     @Published var sessionId: String?
@@ -101,7 +102,7 @@ class WebSocketManager: ObservableObject {
         let createdAt = Date()
     }
 
-    private var pendingMessage: PendingMessage?
+    private var messageQueue: [PendingMessage] = []
     private let maxRetries = 3
     private let retryDelays: [TimeInterval] = [1, 2, 4]  // Exponential backoff
     private var retryTask: Task<Void, Never>?
@@ -117,6 +118,7 @@ class WebSocketManager: ObservableObject {
     var onError: ((String) -> Void)?
     var onSessionCreated: ((String) -> Void)?
     var onModelChanged: ((ClaudeModel, String) -> Void)?  // (model enum, full model ID)
+    var onAborted: (() -> Void)?  // Called when session is aborted
 
     /// Initialize with optional settings. Call updateSettings() in onAppear with the EnvironmentObject.
     init(settings: AppSettings? = nil) {
@@ -136,23 +138,33 @@ class WebSocketManager: ObservableObject {
         lastResponseTime = Date()
 
         processingTimeoutTask = Task { [weak self] in
-            // Wait 30 seconds
-            try? await Task.sleep(nanoseconds: 30_000_000_000)
+            while !Task.isCancelled {
+                // Wait 30 seconds
+                try? await Task.sleep(nanoseconds: 30_000_000_000)
 
-            guard !Task.isCancelled else { return }
+                guard !Task.isCancelled else { break }
 
-            await MainActor.run {
-                guard let self = self else { return }
-                // Check if we're still processing and haven't received any response
-                if self.isProcessing {
+                let shouldContinue = await MainActor.run { () -> Bool in
+                    guard let self = self else { return false }
+
+                    // If not processing anymore, stop monitoring
+                    guard self.isProcessing else { return false }
+
+                    // Check if we haven't received any response for 30+ seconds
                     if let lastResponse = self.lastResponseTime,
                        Date().timeIntervalSince(lastResponse) >= 30 {
                         log.warning("Processing timeout - no response for 30s, resetting state")
                         self.isProcessing = false
                         self.lastError = "Request timed out - no response from server"
                         self.onError?("Request timed out")
+                        return false
                     }
+
+                    // Still processing with recent activity, continue monitoring
+                    return true
                 }
+
+                if !shouldContinue { break }
             }
         }
     }
@@ -220,7 +232,8 @@ class WebSocketManager: ObservableObject {
         webSocket = session.webSocketTask(with: url)
         webSocket?.resume()
 
-        connectionState = .connected
+        // Don't set .connected immediately - wait for first successful receive
+        // The receive handler will set .connected on first successful message
         lastError = nil
 
         // Reset reconnection counter on successful connect
@@ -281,8 +294,8 @@ class WebSocketManager: ObservableObject {
     }
 
     func sendMessage(_ message: String, projectPath: String, resumeSessionId: String? = nil, permissionMode: String? = nil, imageData: Data? = nil, model: String? = nil) {
-        // Store as pending message for potential retry
-        pendingMessage = PendingMessage(
+        // Add to message queue for potential retry
+        let pending = PendingMessage(
             message: message,
             projectPath: projectPath,
             sessionId: resumeSessionId ?? sessionId,
@@ -290,20 +303,27 @@ class WebSocketManager: ObservableObject {
             imageData: imageData,
             model: model
         )
+        messageQueue.append(pending)
 
-        sendPendingMessage()
+        // Process queue if this is the only message (not already processing)
+        if messageQueue.count == 1 {
+            sendNextMessage()
+        }
     }
 
-    private func sendPendingMessage() {
-        guard let pending = pendingMessage else { return }
+    private func sendNextMessage() {
+        guard let pending = messageQueue.first else { return }
 
-        guard isConnected else {
+        // Allow sending when connected or connecting (WebSocket will queue if needed)
+        let canSend = connectionState == .connected || connectionState == .connecting
+        guard canSend else {
             connect()
-            // Queue message after connection establishes
+            // Queue message after connection starts
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 guard let self = self else { return }
-                if self.isConnected {
-                    self.sendPendingMessage()
+                let canSendNow = self.connectionState == .connected || self.connectionState == .connecting
+                if canSendNow {
+                    self.sendNextMessage()
                 } else {
                     self.handleSendFailure(AppError.connectionFailed("Not connected"))
                 }
@@ -347,10 +367,13 @@ class WebSocketManager: ObservableObject {
                             self?.handleSendFailure(AppError.messageFailed(error.localizedDescription))
                         }
                     } else {
-                        // Success - clear pending message
+                        // Success - remove from queue and process next
                         Task { @MainActor in
-                            self?.pendingMessage = nil
+                            if !self!.messageQueue.isEmpty {
+                                self?.messageQueue.removeFirst()
+                            }
                             self?.retryTask?.cancel()
+                            // Note: Don't automatically send next - wait for response completion
                         }
                     }
                 }
@@ -362,23 +385,25 @@ class WebSocketManager: ObservableObject {
 
     /// Handle send failure with retry logic
     private func handleSendFailure(_ error: AppError) {
-        guard var pending = pendingMessage else {
+        guard !messageQueue.isEmpty else {
             lastError = error.localizedDescription
             isProcessing = false
             onError?(error.localizedDescription)
             return
         }
 
-        pending.attempts += 1
-        pendingMessage = pending
+        messageQueue[0].attempts += 1
+        let pending = messageQueue[0]
 
         if pending.attempts >= maxRetries {
-            // Give up after max retries
+            // Give up after max retries - remove from queue
             log.error("Message failed after \(maxRetries) attempts: \(error.localizedDescription)")
             lastError = "Message failed after \(maxRetries) attempts"
             isProcessing = false
-            pendingMessage = nil
+            messageQueue.removeFirst()
             onError?("Message failed after \(maxRetries) attempts. Please try again.")
+            // Try next message in queue if any
+            sendNextMessage()
             return
         }
 
@@ -405,33 +430,91 @@ class WebSocketManager: ObservableObject {
                 }
                 // Retry after brief delay for connection
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                    self.sendPendingMessage()
+                    self.sendNextMessage()
                 }
             }
         }
     }
 
-    /// Cancel any pending retry
+    /// Cancel any pending retry and clear the queue
     func cancelPendingRetry() {
         retryTask?.cancel()
-        pendingMessage = nil
+        messageQueue.removeAll()
     }
 
+    // Abort timeout task
+    private var abortTimeoutTask: Task<Void, Never>?
+
+    /// Abort the current session/task
+    /// This sends an abort message to the server and resets local state
     func abortSession() {
-        guard let sid = sessionId else { return }
+        // Prevent double-abort
+        guard !isAborting else {
+            log.debug("Abort already in progress")
+            return
+        }
+
+        guard let sid = sessionId else {
+            // Even without session ID, reset local state
+            resetProcessingState()
+            onAborted?()
+            return
+        }
+
+        log.info("Aborting session: \(sid)")
+        isAborting = true
 
         let abort = WSAbortSession(sessionId: sid)
 
         do {
             let data = try JSONEncoder().encode(abort)
             if let jsonString = String(data: data, encoding: .utf8) {
-                webSocket?.send(.string(jsonString)) { _ in }
+                webSocket?.send(.string(jsonString)) { [weak self] error in
+                    if let error = error {
+                        log.error("Failed to send abort: \(error)")
+                        // Reset state on send failure
+                        Task { @MainActor in
+                            self?.resetProcessingState()
+                            self?.onAborted?()
+                        }
+                    }
+                    // Don't reset here - wait for session-aborted response or timeout
+                }
             }
         } catch {
             log.error("Failed to encode abort: \(error)")
+            resetProcessingState()
+            onAborted?()
+            return
         }
 
+        // Set a timeout in case server doesn't respond
+        abortTimeoutTask?.cancel()
+        abortTimeoutTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)  // 3 seconds
+
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                guard let self = self, self.isAborting else { return }
+                log.warning("Abort timeout - forcing state reset")
+                self.resetProcessingState()
+                self.onAborted?()
+            }
+        }
+    }
+
+    /// Reset all processing-related state
+    private func resetProcessingState() {
         isProcessing = false
+        isAborting = false
+        currentText = ""
+        isSwitchingModel = false
+        cancelProcessingTimeout()
+        cancelPendingRetry()
+        abortTimeoutTask?.cancel()
+        abortTimeoutTask = nil
+        lastError = nil
     }
 
     // Model switch timeout task
@@ -551,6 +634,11 @@ class WebSocketManager: ObservableObject {
             Task { @MainActor in
                 switch result {
                 case .success(let message):
+                    // Mark as connected on first successful receive
+                    if self?.connectionState != .connected {
+                        self?.connectionState = .connected
+                        log.info("WebSocket connected (confirmed by first message)")
+                    }
                     self?.handleMessage(message)
                     self?.receiveMessage()  // Continue listening
 
@@ -666,9 +754,9 @@ class WebSocketManager: ObservableObject {
                 onError?(errorMsg)
 
             case "session-aborted":
-                isProcessing = false
-                isSwitchingModel = false  // Reset on abort
-                cancelProcessingTimeout()
+                log.info("Session aborted confirmed by server")
+                resetProcessingState()
+                onAborted?()
 
             case "projects_updated":
                 // Project list changed, could notify UI to refresh

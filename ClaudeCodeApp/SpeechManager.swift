@@ -18,6 +18,17 @@ class SpeechManager: ObservableObject {
         checkAuthorization()
     }
 
+    deinit {
+        // Clean up audio resources to prevent memory leaks
+        audioEngine?.stop()
+        audioEngine?.inputNode.removeTap(onBus: 0)
+        recognitionRequest?.endAudio()
+        recognitionTask?.cancel()
+
+        // Deactivate audio session
+        try? AVAudioSession.sharedInstance().setActive(false)
+    }
+
     func checkAuthorization() {
         SFSpeechRecognizer.requestAuthorization { [weak self] status in
             Task { @MainActor in

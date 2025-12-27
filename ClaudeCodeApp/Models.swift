@@ -296,6 +296,8 @@ private struct ChatMessageDTO: Codable {
 
 class MessageStore {
     private static let maxMessages = 50
+    /// Serial queue for synchronized file access to prevent race conditions
+    private static let fileQueue = DispatchQueue(label: "com.claudecodeapp.messagestore", qos: .userInitiated)
 
     // MARK: - Directory Setup
 
@@ -329,6 +331,13 @@ class MessageStore {
 
     /// Load messages for a project
     static func loadMessages(for projectPath: String) -> [ChatMessage] {
+        fileQueue.sync {
+            loadMessagesUnsafe(for: projectPath)
+        }
+    }
+
+    /// Internal load without synchronization (caller must hold fileQueue)
+    private static func loadMessagesUnsafe(for projectPath: String) -> [ChatMessage] {
         let file = messagesFile(for: projectPath)
 
         guard let data = try? Data(contentsOf: file) else {
@@ -359,47 +368,47 @@ class MessageStore {
 
     /// Save messages for a project (keeps last 50)
     static func saveMessages(_ messages: [ChatMessage], for projectPath: String) {
-        let file = messagesFile(for: projectPath)
-        let imagesDir = imagesDirectory(for: projectPath)
-
-        // Keep only the last maxMessages, excluding streaming messages
+        // Capture messages as DTOs to avoid retaining ChatMessage objects
         let persistableMessages = Array(messages
             .filter { !$0.isStreaming }
             .suffix(maxMessages))
+        let dtos = persistableMessages.map { ChatMessageDTO(from: $0, imageFilename: $0.imageData != nil ? "\($0.id.uuidString).jpg" : nil) }
+        let imageDataMap = Dictionary(uniqueKeysWithValues: persistableMessages.compactMap { msg -> (String, Data)? in
+            guard let imageData = msg.imageData else { return nil }
+            return ("\(msg.id.uuidString).jpg", imageData)
+        })
+        let validImageIds = Set(persistableMessages.compactMap { $0.imageData != nil ? $0.id : nil })
 
-        // Convert to DTOs and save images separately
-        var dtos: [ChatMessageDTO] = []
+        fileQueue.async {
+            let file = messagesFile(for: projectPath)
+            let imagesDir = imagesDirectory(for: projectPath)
 
-        for message in persistableMessages {
-            var imageFilename: String?
-
-            if let imageData = message.imageData {
-                // Save image to file
-                imageFilename = "\(message.id.uuidString).jpg"
-                let imagePath = imagesDir.appendingPathComponent(imageFilename!)
+            // Save images
+            for (filename, imageData) in imageDataMap {
+                let imagePath = imagesDir.appendingPathComponent(filename)
                 try? imageData.write(to: imagePath)
             }
 
-            dtos.append(ChatMessageDTO(from: message, imageFilename: imageFilename))
-        }
+            do {
+                let data = try JSONEncoder().encode(dtos)
+                try data.write(to: file)
+                log.debug("Saved \(dtos.count) messages for \(projectPath)")
+            } catch {
+                log.error("Failed to save messages: \(error)")
+            }
 
-        do {
-            let data = try JSONEncoder().encode(dtos)
-            try data.write(to: file)
-            log.debug("Saved \(dtos.count) messages for \(projectPath)")
-        } catch {
-            log.error("Failed to save messages: \(error)")
+            // Clean up old images that are no longer referenced
+            cleanupOrphanedImages(for: projectPath, validIds: validImageIds)
         }
-
-        // Clean up old images that are no longer referenced
-        cleanupOrphanedImages(for: projectPath, validIds: Set(persistableMessages.compactMap { $0.imageData != nil ? $0.id : nil }))
     }
 
     /// Clear messages for a project
     static func clearMessages(for projectPath: String) {
-        let projectDir = projectDirectory(for: projectPath)
-        try? FileManager.default.removeItem(at: projectDir)
-        log.debug("Cleared messages for \(projectPath)")
+        fileQueue.async {
+            let projectDir = projectDirectory(for: projectPath)
+            try? FileManager.default.removeItem(at: projectDir)
+            log.debug("Cleared messages for \(projectPath)")
+        }
     }
 
     // MARK: - Migration from UserDefaults
@@ -479,22 +488,110 @@ class MessageStore {
         let key = draftKey(for: projectPath)
         UserDefaults.standard.removeObject(forKey: key)
     }
+
+    // MARK: - Session ID Persistence
+
+    private static let sessionIdPrefix = "session_id_"
+
+    private static func sessionIdKey(for projectPath: String) -> String {
+        let safeKey = projectPath
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+        return sessionIdPrefix + safeKey
+    }
+
+    /// Load the last session ID for a project
+    static func loadSessionId(for projectPath: String) -> String? {
+        let key = sessionIdKey(for: projectPath)
+        return UserDefaults.standard.string(forKey: key)
+    }
+
+    /// Save the session ID for a project
+    static func saveSessionId(_ sessionId: String?, for projectPath: String) {
+        let key = sessionIdKey(for: projectPath)
+        if let sessionId = sessionId, !sessionId.isEmpty {
+            UserDefaults.standard.set(sessionId, forKey: key)
+        } else {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+    }
+
+    /// Clear session ID for a project
+    static func clearSessionId(for projectPath: String) {
+        let key = sessionIdKey(for: projectPath)
+        UserDefaults.standard.removeObject(forKey: key)
+    }
+}
+
+// MARK: - Archived Projects Store
+
+/// Stores archived project paths
+class ArchivedProjectsStore: ObservableObject {
+    static let shared = ArchivedProjectsStore()
+
+    @Published private(set) var archivedPaths: Set<String> = []
+
+    private static let storageKey = "archived_project_paths"
+
+    init() {
+        loadArchived()
+    }
+
+    /// Check if a project is archived
+    func isArchived(_ projectPath: String) -> Bool {
+        archivedPaths.contains(projectPath)
+    }
+
+    /// Archive a project
+    func archive(_ projectPath: String) {
+        archivedPaths.insert(projectPath)
+        saveArchived()
+    }
+
+    /// Unarchive a project
+    func unarchive(_ projectPath: String) {
+        archivedPaths.remove(projectPath)
+        saveArchived()
+    }
+
+    /// Toggle archive status
+    func toggleArchive(_ projectPath: String) {
+        if isArchived(projectPath) {
+            unarchive(projectPath)
+        } else {
+            archive(projectPath)
+        }
+    }
+
+    private func loadArchived() {
+        if let paths = UserDefaults.standard.array(forKey: Self.storageKey) as? [String] {
+            archivedPaths = Set(paths)
+        }
+    }
+
+    private func saveArchived() {
+        UserDefaults.standard.set(Array(archivedPaths), forKey: Self.storageKey)
+    }
 }
 
 // MARK: - Bookmark Store
 
 /// Stores bookmarked messages across all projects
+@MainActor
 class BookmarkStore: ObservableObject {
     static let shared = BookmarkStore()
 
     @Published private(set) var bookmarks: [BookmarkedMessage] = []
 
-    private static var bookmarksFile: URL {
+    private static var defaultBookmarksFile: URL {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         return docs.appendingPathComponent("bookmarks.json")
     }
 
-    init() {
+    private let bookmarksFile: URL
+
+    init(bookmarksFile: URL? = nil) {
+        self.bookmarksFile = bookmarksFile ?? Self.defaultBookmarksFile
         loadBookmarks()
     }
 
@@ -538,7 +635,7 @@ class BookmarkStore: ObservableObject {
     }
 
     private func loadBookmarks() {
-        guard let data = try? Data(contentsOf: Self.bookmarksFile) else { return }
+        guard let data = try? Data(contentsOf: bookmarksFile) else { return }
         do {
             bookmarks = try JSONDecoder().decode([BookmarkedMessage].self, from: data)
             log.debug("Loaded \(bookmarks.count) bookmarks")
@@ -550,7 +647,7 @@ class BookmarkStore: ObservableObject {
     private func saveBookmarks() {
         do {
             let data = try JSONEncoder().encode(bookmarks)
-            try data.write(to: Self.bookmarksFile)
+            try data.write(to: bookmarksFile)
             log.debug("Saved \(bookmarks.count) bookmarks")
         } catch {
             log.error("Failed to save bookmarks: \(error)")

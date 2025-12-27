@@ -42,6 +42,18 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(project.title, "TestApp")
     }
 
+    func testProjectTitleWithoutWorkspacePrefix() {
+        let project = Project(
+            name: "StandaloneProject",
+            path: "/tmp/StandaloneProject",
+            displayName: nil,
+            fullPath: nil,
+            sessions: nil
+        )
+
+        XCTAssertEqual(project.title, "StandaloneProject")
+    }
+
     func testProjectId() {
         let project = Project(
             name: "Test",
@@ -91,6 +103,12 @@ final class ModelsTests: XCTestCase {
             XCTAssertEqual(message.role, role)
             XCTAssertEqual(message.role.rawValue, role.rawValue)
         }
+    }
+
+    func testChatMessageStreamingFlag() {
+        let message = ChatMessage(role: .assistant, content: "Streaming", isStreaming: true)
+
+        XCTAssertTrue(message.isStreaming)
     }
 
     func testChatMessageCodable() throws {

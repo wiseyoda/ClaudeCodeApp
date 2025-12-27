@@ -35,20 +35,44 @@ struct UnifiedStatusBar: View {
                 }
             }
 
-            // Mode indicators (only show when not default)
-            if settings.claudeMode != .normal {
+            // Mode toggles (always visible, tappable)
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    settings.claudeMode = settings.claudeMode.next()
+                }
+            } label: {
                 ModePill(
                     icon: settings.claudeMode.icon,
                     text: settings.claudeMode.displayName,
-                    color: settings.claudeMode.color
+                    color: settings.claudeMode.color,
+                    isActive: settings.claudeMode != .normal
                 )
             }
+            .accessibilityLabel("Mode: \(settings.claudeMode.displayName)")
+            .accessibilityHint("Tap to switch to \(settings.claudeMode.next().displayName)")
 
-            if settings.thinkingMode != .normal {
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    settings.thinkingMode = settings.thinkingMode.next()
+                }
+            } label: {
                 ModePill(
                     icon: settings.thinkingMode.icon,
                     text: settings.thinkingMode.shortDisplayName,
-                    color: settings.thinkingMode.color
+                    color: settings.thinkingMode.color,
+                    isActive: settings.thinkingMode != .normal
+                )
+            }
+            .accessibilityLabel("Thinking: \(settings.thinkingMode.displayName)")
+            .accessibilityHint("Tap to switch to \(settings.thinkingMode.next().displayName)")
+
+            // Skip permissions indicator (only when enabled)
+            if settings.skipPermissions {
+                ModePill(
+                    icon: "exclamationmark.shield",
+                    text: "Bypass",
+                    color: CLITheme.red(for: colorScheme),
+                    isActive: true
                 )
             }
 
@@ -95,7 +119,9 @@ private struct ModePill: View {
     let icon: String
     let text: String
     let color: Color
+    var isActive: Bool = true
     @EnvironmentObject var settings: AppSettings
+    @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
         HStack(spacing: 3) {
@@ -104,10 +130,10 @@ private struct ModePill: View {
             Text(text)
                 .font(settings.scaledFont(.small))
         }
-        .foregroundColor(color)
+        .foregroundColor(isActive ? color : CLITheme.mutedText(for: colorScheme))
         .padding(.horizontal, 8)
         .padding(.vertical, 3)
-        .background(color.opacity(0.15))
+        .background(isActive ? color.opacity(0.15) : CLITheme.mutedText(for: colorScheme).opacity(0.1))
         .cornerRadius(10)
     }
 }

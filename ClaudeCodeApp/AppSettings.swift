@@ -194,17 +194,25 @@ class AppSettings: ObservableObject {
     @AppStorage("projectSortOrder") private var projectSortOrderRaw: String = ProjectSortOrder.name.rawValue
 
     // Auth Settings (for claudecodeui backend)
-    @AppStorage("authUsername") var authUsername: String = "admin"
-    @AppStorage("authPassword") var authPassword: String = "claude123"
+    @AppStorage("authUsername") var authUsername: String = ""
+    @AppStorage("authPassword") var authPassword: String = ""  // Must be set by user
     @AppStorage("authToken") var authToken: String = ""
     @AppStorage("apiKey") var apiKey: String = ""  // API key for REST endpoints
 
     // SSH Settings
     @AppStorage("sshHost") var sshHost: String = "10.0.3.2"
     @AppStorage("sshPort") var sshPort: Int = 22
-    @AppStorage("sshUsername") var sshUsername: String = ""
+    @AppStorage("sshUsername") var sshUsername: String = "dev"
     @AppStorage("sshAuthMethod") private var sshAuthMethodRaw: String = SSHAuthType.password.rawValue
-    @AppStorage("sshPassword") var sshPassword: String = ""
+    // SSH password is stored in Keychain for security - see sshPassword computed property below
+    @Published private var _sshPasswordCache: String?
+
+    // MARK: - Initialization
+
+    init() {
+        // Migrate SSH password from UserDefaults to Keychain on first launch after update
+        migrateSSHPasswordIfNeeded()
+    }
 
     // MARK: - Computed Properties
 
@@ -242,6 +250,38 @@ class AppSettings: ObservableObject {
     var sshAuthType: SSHAuthType {
         get { SSHAuthType(rawValue: sshAuthMethodRaw) ?? .password }
         set { sshAuthMethodRaw = newValue.rawValue }
+    }
+
+    /// SSH password stored securely in Keychain
+    var sshPassword: String {
+        get {
+            // Use cache if available
+            if let cached = _sshPasswordCache {
+                return cached
+            }
+            // Otherwise retrieve from Keychain
+            let password = KeychainHelper.shared.retrieveSSHPassword() ?? ""
+            _sshPasswordCache = password
+            return password
+        }
+        set {
+            _sshPasswordCache = newValue
+            KeychainHelper.shared.storeSSHPassword(newValue)
+        }
+    }
+
+    /// Migrate SSH password from UserDefaults to Keychain if needed
+    func migrateSSHPasswordIfNeeded() {
+        // Check if there's a password in old UserDefaults location
+        let oldKey = "sshPassword"
+        if let oldPassword = UserDefaults.standard.string(forKey: oldKey), !oldPassword.isEmpty {
+            // Migrate to Keychain
+            if KeychainHelper.shared.storeSSHPassword(oldPassword) {
+                // Remove from UserDefaults after successful migration
+                UserDefaults.standard.removeObject(forKey: oldKey)
+                _sshPasswordCache = oldPassword
+            }
+        }
     }
 
     /// The effective permission mode to send to server

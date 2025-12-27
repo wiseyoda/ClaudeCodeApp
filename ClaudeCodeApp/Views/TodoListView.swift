@@ -83,8 +83,18 @@ struct TodoListView: View {
         guard content.hasPrefix("TodoWrite") else { return nil }
 
         // Extract the todos array part
-        // Format: TodoWrite(todos: [{...}, {...}])
-        guard let todosStart = content.range(of: "todos: ["),
+        // Format: TodoWrite(todos: [{...}, {...}]) or TodoWrite(todos:[{...}])
+        // Try both with and without space after colon
+        let todosPatterns = ["todos: [", "todos:["]
+        var todosStart: Range<String.Index>?
+        for pattern in todosPatterns {
+            if let range = content.range(of: pattern) {
+                todosStart = range
+                break
+            }
+        }
+
+        guard let todosStart = todosStart,
               let lastBracket = content.lastIndex(of: "]") else {
             return nil
         }
@@ -147,7 +157,8 @@ struct TodoListView: View {
         var dict: [String: String] = [:]
 
         // Simple regex-like parsing for "key": "value" pairs
-        let pattern = #""(\w+)":\s*"([^"\\]*(?:\\.[^"\\]*)*)""#
+        // Handle both camelCase and snake_case keys
+        let pattern = #""([a-zA-Z_][a-zA-Z0-9_]*)"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)""#
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
 
         let range = NSRange(itemString.startIndex..., in: itemString)
@@ -157,7 +168,12 @@ struct TodoListView: View {
             if let keyRange = Range(match.range(at: 1), in: itemString),
                let valueRange = Range(match.range(at: 2), in: itemString) {
                 let key = String(itemString[keyRange])
-                let value = String(itemString[valueRange])
+                var value = String(itemString[valueRange])
+                // Unescape common JSON escape sequences
+                value = value.replacingOccurrences(of: "\\n", with: "\n")
+                value = value.replacingOccurrences(of: "\\t", with: "\t")
+                value = value.replacingOccurrences(of: "\\\"", with: "\"")
+                value = value.replacingOccurrences(of: "\\\\", with: "\\")
                 dict[key] = value
             }
         }
@@ -167,7 +183,7 @@ struct TodoListView: View {
             return nil
         }
 
-        let activeForm = dict["activeForm"] ?? content
+        let activeForm = dict["activeForm"] ?? dict["active_form"] ?? content
         return TodoItem(content: content, activeForm: activeForm, status: status)
     }
 }

@@ -67,6 +67,12 @@ final class StringMarkdownTests: XCTestCase {
         XCTAssertEqual(input.htmlDecoded, input)
     }
 
+    func testEmptyStringHtmlDecoded() {
+        let input = ""
+
+        XCTAssertEqual(input.htmlDecoded, "")
+    }
+
     // MARK: - formattedUsageLimit Tests
 
     func testFormatUsageLimitMessage() {
@@ -128,5 +134,11 @@ final class StringMarkdownTests: XCTestCase {
         XCTAssertTrue(result.contains("`inline`"))
         XCTAssertFalse(result.contains("&lt;"))
         XCTAssertFalse(result.contains("```"))
+    }
+
+    func testProcessedForDisplayEmptyString() {
+        let input = ""
+
+        XCTAssertEqual(input.processedForDisplay, "")
     }
 }

@@ -100,6 +100,11 @@ struct TerminalView: View {
                     Task {
                         await connectWithConfigHost(hostAlias)
                     }
+                },
+                onQuickConnect: {
+                    Task {
+                        await quickConnect()
+                    }
                 }
             )
         }
@@ -122,6 +127,15 @@ struct TerminalView: View {
     private func connectWithConfigHost(_ hostAlias: String) async {
         do {
             try await sshManager.connectWithConfigHost(hostAlias)
+            showConnectionSheet = false
+        } catch {
+            // Error is shown in the output
+        }
+    }
+
+    private func quickConnect() async {
+        do {
+            try await sshManager.autoConnect(settings: settings)
             showConnectionSheet = false
         } catch {
             // Error is shown in the output
@@ -333,6 +347,7 @@ struct SSHConnectionSheet: View {
 
     let onConnect: (String, Int, String, String) -> Void
     let onConnectWithKey: (String) -> Void
+    let onQuickConnect: () -> Void
 
     @State private var host: String = ""
     @State private var port: String = "22"
@@ -342,8 +357,47 @@ struct SSHConnectionSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    // SSH Config Hosts (key-based auth)
+                    // Quick Connect with saved settings (Keychain key or password)
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Quick Connect")
+                            .font(settings.scaledFont(.small))
+                            .foregroundColor(CLITheme.cyan(for: colorScheme))
+
+                        Text("Use saved SSH settings")
+                            .font(settings.scaledFont(.small))
+                            .foregroundColor(CLITheme.mutedText(for: colorScheme))
+
+                        Button {
+                            onQuickConnect()
+                            dismiss()
+                        } label: {
+                            HStack {
+                                Image(systemName: KeychainHelper.shared.hasSSHKey ? "key.fill" : "lock.fill")
+                                    .foregroundColor(CLITheme.green(for: colorScheme))
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("\(settings.sshUsername)@\(settings.effectiveSSHHost)")
+                                        .font(settings.scaledFont(.body))
+                                        .foregroundColor(CLITheme.primaryText(for: colorScheme))
+                                    Text(KeychainHelper.shared.hasSSHKey ? "SSH Key (from Keychain)" : "Password auth")
+                                        .font(settings.scaledFont(.small))
+                                        .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                                }
+                                Spacer()
+                                Image(systemName: "bolt.fill")
+                                    .foregroundColor(CLITheme.green(for: colorScheme))
+                            }
+                            .padding(12)
+                            .background(CLITheme.secondaryBackground(for: colorScheme))
+                            .cornerRadius(8)
+                        }
+                    }
+
+                    // SSH Config Hosts (key-based auth) - Mac only
                     if !sshManager.availableHosts.isEmpty {
+                        Divider()
+                            .background(CLITheme.mutedText(for: colorScheme))
+                            .padding(.vertical, 8)
+
                         VStack(alignment: .leading, spacing: 12) {
                             Text("SSH Config Hosts")
                                 .font(settings.scaledFont(.small))
@@ -381,15 +435,15 @@ struct SSHConnectionSheet: View {
                                 }
                             }
                         }
-
-                        Divider()
-                            .background(CLITheme.mutedText(for: colorScheme))
-                            .padding(.vertical, 8)
-
-                        Text("Or connect with password:")
-                            .font(settings.scaledFont(.small))
-                            .foregroundColor(CLITheme.secondaryText(for: colorScheme))
                     }
+
+                    Divider()
+                        .background(CLITheme.mutedText(for: colorScheme))
+                        .padding(.vertical, 8)
+
+                    Text("Or enter credentials manually:")
+                        .font(settings.scaledFont(.small))
+                        .foregroundColor(CLITheme.secondaryText(for: colorScheme))
 
                     // Host
                     VStack(alignment: .leading, spacing: 8) {

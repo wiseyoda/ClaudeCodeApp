@@ -53,6 +53,10 @@ struct ChatView: View {
     // Quick settings sheet
     @State private var showQuickSettings = false
 
+    // Scroll position preservation for rotation
+    @State private var visibleMessageIds: Set<String> = []
+    @State private var savedScrollPosition: String?
+
     init(project: Project, apiClient: APIClient, initialGitStatus: GitStatus = .unknown) {
         self.project = project
         self.apiClient = apiClient
@@ -393,10 +397,12 @@ struct ChatView: View {
         )
         messages.append(answerMessage)
 
+        // Use stored session ID for resume
+        let sessionToResume = wsManager.sessionId ?? selectedSession?.id
         wsManager.sendMessage(
             answer,
             projectPath: project.path,
-            resumeSessionId: selectedSession?.id,
+            resumeSessionId: sessionToResume,
             permissionMode: settings.effectivePermissionMode,
             model: effectiveModelId
         )
@@ -436,6 +442,7 @@ struct ChatView: View {
                     onDismiss: { showGitBanner = false },
                     onRefresh: { refreshGitStatus() },
                     onPull: nil,
+                    onCommit: { promptClaudeForCommit() },
                     onAskClaude: { promptClaudeForCleanup() }
                 )
 
@@ -448,6 +455,7 @@ struct ChatView: View {
                     onDismiss: { showGitBanner = false },
                     onRefresh: { refreshGitStatus() },
                     onPull: { Task { await performAutoPull() } },
+                    onCommit: nil,
                     onAskClaude: nil
                 )
 
@@ -460,6 +468,7 @@ struct ChatView: View {
                     onDismiss: { showGitBanner = false },
                     onRefresh: { refreshGitStatus() },
                     onPull: nil,
+                    onCommit: { promptClaudeForPush() },
                     onAskClaude: { promptClaudeForCleanup() }
                 )
 
@@ -510,6 +519,23 @@ struct ChatView: View {
                     proxy.scrollTo("bottomAnchor", anchor: .bottom)
                 }
             }
+            .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+                // Find the first visible message to restore scroll position after rotation
+                if let firstVisibleId = visibleMessageIds.first,
+                   let messageUUID = UUID(uuidString: firstVisibleId),
+                   displayMessages.contains(where: { $0.id == messageUUID }) {
+                    savedScrollPosition = firstVisibleId
+                    // Restore scroll position after layout updates
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        if let positionId = savedScrollPosition {
+                            withAnimation(.easeInOut(duration: 0.1)) {
+                                proxy.scrollTo(UUID(uuidString: positionId), anchor: .top)
+                            }
+                            savedScrollPosition = nil
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -546,6 +572,12 @@ struct ChatView: View {
                     projectTitle: project.title
                 )
                 .id(message.id)
+                .onAppear {
+                    visibleMessageIds.insert(message.id.uuidString)
+                }
+                .onDisappear {
+                    visibleMessageIds.remove(message.id.uuidString)
+                }
             }
 
             if wsManager.isProcessing {
@@ -564,8 +596,17 @@ struct ChatView: View {
     @ViewBuilder
     private var streamingIndicatorView: some View {
         if wsManager.currentText.isEmpty {
-            CLIProcessingView()
-                .id("streaming")
+            // Minimal waiting indicator - status bar already shows processing state
+            HStack(spacing: 6) {
+                Text("+")
+                    .foregroundColor(CLITheme.yellow(for: colorScheme))
+                Text("...")
+                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                Spacer()
+            }
+            .font(settings.scaledFont(.body))
+            .padding(.vertical, 4)
+            .id("streaming")
         } else {
             CLIMessageView(
                 message: ChatMessage(
@@ -609,6 +650,7 @@ struct ChatView: View {
                 text: $inputText,
                 selectedImage: $selectedImage,
                 isProcessing: wsManager.isProcessing,
+                isAborting: wsManager.isAborting,
                 projectPath: project.path,
                 isFocused: _isInputFocused,
                 onSend: sendMessage,
@@ -720,6 +762,17 @@ struct ChatView: View {
             print("[ChatView] Received AskUserQuestion with \(questionData.questions.count) questions")
             pendingQuestions = questionData
         }
+
+        wsManager.onAborted = {
+            // Show feedback that the task was aborted
+            let abortMsg = ChatMessage(
+                role: .system,
+                content: "⏹ Task aborted",
+                timestamp: Date()
+            )
+            messages.append(abortMsg)
+            processingStartTime = nil
+        }
     }
 
     private func sendMessage() {
@@ -754,13 +807,17 @@ struct ChatView: View {
         // Apply thinking mode suffix (silently - not shown in UI)
         let messageToSend = text.isEmpty ? text : settings.applyThinkingMode(to: text)
 
+        // Use stored session ID (from wsManager) if available, falling back to selected session
+        // This ensures we resume the correct session even if selectedSession is nil
+        let sessionToResume = wsManager.sessionId ?? selectedSession?.id
+
         // If we have an image, send it with the message
         if let imageData = imageToSend {
             // Send message with image data directly via WebSocket
             wsManager.sendMessage(
                 text.isEmpty ? "What is this image?" : messageToSend,
                 projectPath: project.path,
-                resumeSessionId: selectedSession?.id,
+                resumeSessionId: sessionToResume,
                 permissionMode: settings.effectivePermissionMode,
                 imageData: imageData,
                 model: effectiveModelId
@@ -770,7 +827,7 @@ struct ChatView: View {
             wsManager.sendMessage(
                 messageToSend,
                 projectPath: project.path,
-                resumeSessionId: selectedSession?.id,
+                resumeSessionId: sessionToResume,
                 permissionMode: settings.effectivePermissionMode,
                 model: effectiveModelId
             )
@@ -1081,11 +1138,72 @@ struct ChatView: View {
         // Hide banner after adding message to avoid layout shift during scroll
         showGitBanner = false
 
-        // Send to Claude
+        // Send to Claude (use stored session ID for resume)
+        let sessionToResume = wsManager.sessionId ?? selectedSession?.id
         wsManager.sendMessage(
             cleanupPrompt,
             projectPath: project.path,
-            resumeSessionId: selectedSession?.id,
+            resumeSessionId: sessionToResume,
+            permissionMode: settings.effectivePermissionMode,
+            model: effectiveModelId
+        )
+        processingStartTime = Date()
+
+        // Trigger scroll to bottom after a brief delay to let layout settle
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            scrollToBottomTrigger = true
+        }
+    }
+
+    /// Send a message to Claude asking to commit changes
+    private func promptClaudeForCommit() {
+        let commitPrompt = """
+        Please help me commit my changes. Run `git status` and `git diff` to review what has changed, then create a commit with an appropriate message. After committing, push the changes to the remote.
+        """
+
+        // Add user message
+        let userMessage = ChatMessage(role: .user, content: commitPrompt, timestamp: Date())
+        messages.append(userMessage)
+
+        // Hide banner after adding message to avoid layout shift during scroll
+        showGitBanner = false
+
+        // Send to Claude (use stored session ID for resume)
+        let sessionToResume = wsManager.sessionId ?? selectedSession?.id
+        wsManager.sendMessage(
+            commitPrompt,
+            projectPath: project.path,
+            resumeSessionId: sessionToResume,
+            permissionMode: settings.effectivePermissionMode,
+            model: effectiveModelId
+        )
+        processingStartTime = Date()
+
+        // Trigger scroll to bottom after a brief delay to let layout settle
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            scrollToBottomTrigger = true
+        }
+    }
+
+    /// Send a message to Claude asking to push commits
+    private func promptClaudeForPush() {
+        let pushPrompt = """
+        Please push my local commits to the remote. Run `git log --oneline @{upstream}..HEAD` to show what will be pushed, then run `git push` to push the commits.
+        """
+
+        // Add user message
+        let userMessage = ChatMessage(role: .user, content: pushPrompt, timestamp: Date())
+        messages.append(userMessage)
+
+        // Hide banner after adding message to avoid layout shift during scroll
+        showGitBanner = false
+
+        // Send to Claude (use stored session ID for resume)
+        let sessionToResume = wsManager.sessionId ?? selectedSession?.id
+        wsManager.sendMessage(
+            pushPrompt,
+            projectPath: project.path,
+            resumeSessionId: sessionToResume,
             permissionMode: settings.effectivePermissionMode,
             model: effectiveModelId
         )
@@ -1178,6 +1296,7 @@ struct GitSyncBanner: View {
     let onDismiss: () -> Void
     let onRefresh: () -> Void
     let onPull: (() -> Void)?
+    let onCommit: (() -> Void)?
     let onAskClaude: (() -> Void)?
     @Environment(\.colorScheme) var colorScheme
 
@@ -1218,6 +1337,24 @@ struct GitSyncBanner: View {
                             .foregroundColor(CLITheme.cyan(for: colorScheme))
                     }
                     .accessibilityLabel("Pull changes")
+                }
+
+                // Commit button (for dirty/ahead statuses)
+                if let onCommit = onCommit {
+                    Button {
+                        onCommit()
+                    } label: {
+                        Label(commitButtonLabel, systemImage: commitButtonIcon)
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(commitButtonColor.opacity(0.2))
+                            .foregroundColor(commitButtonColor)
+                            .cornerRadius(6)
+                    }
+                    .accessibilityLabel(commitButtonAccessibilityLabel)
+                    .accessibilityHint("Ask Claude to commit your changes")
                 }
 
                 // Refresh button
@@ -1324,15 +1461,61 @@ struct GitSyncBanner: View {
 
         switch status {
         case .dirty, .dirtyAndAhead, .diverged:
-            return "Tap 'Ask Claude' to review and resolve"
+            return "Tap 'Commit' to create a commit, or 'Ask Claude' to review first"
         case .ahead:
-            return "Push your commits to sync with remote"
+            return "Tap 'Push' to sync with remote"
         case .behind:
             return "Will auto-pull when ready"
         case .error:
             return "Check your connection"
         default:
             return ""
+        }
+    }
+
+    // MARK: - Commit Button Properties
+
+    private var commitButtonLabel: String {
+        switch status {
+        case .dirty, .dirtyAndAhead, .diverged:
+            return "Commit"
+        case .ahead:
+            return "Push"
+        default:
+            return "Commit"
+        }
+    }
+
+    private var commitButtonIcon: String {
+        switch status {
+        case .dirty, .dirtyAndAhead, .diverged:
+            return "checkmark.circle"
+        case .ahead:
+            return "arrow.up.circle"
+        default:
+            return "checkmark.circle"
+        }
+    }
+
+    private var commitButtonColor: Color {
+        switch status {
+        case .dirty, .dirtyAndAhead, .diverged:
+            return CLITheme.green(for: colorScheme)
+        case .ahead:
+            return CLITheme.blue(for: colorScheme)
+        default:
+            return CLITheme.green(for: colorScheme)
+        }
+    }
+
+    private var commitButtonAccessibilityLabel: String {
+        switch status {
+        case .dirty, .dirtyAndAhead, .diverged:
+            return "Commit changes"
+        case .ahead:
+            return "Push commits"
+        default:
+            return "Commit changes"
         }
     }
 }

@@ -91,7 +91,7 @@ class ClaudeHelper: ObservableObject {
     }
 
     /// Parse JSON response into SuggestedAction array
-    private func parseSuggestedActions(from response: String) -> [SuggestedAction] {
+    func parseSuggestedActions(from response: String) -> [SuggestedAction] {
         // Try to find JSON array in response
         guard let jsonStart = response.firstIndex(of: "["),
               let jsonEnd = response.lastIndex(of: "]") else {
@@ -195,7 +195,7 @@ class ClaudeHelper: ObservableObject {
     }
 
     /// Parse JSON response into file list, filtering to only available files
-    private func parseFileList(from response: String, availableFiles: [String]) -> [String] {
+    func parseFileList(from response: String, availableFiles: [String]) -> [String] {
         guard let jsonStart = response.firstIndex(of: "["),
               let jsonEnd = response.lastIndex(of: "]") else {
             return []
@@ -266,7 +266,7 @@ class ClaudeHelper: ObservableObject {
     }
 
     /// Parse the enhanced idea JSON response
-    private func parseEnhancedIdea(from response: String) -> EnhancedIdea? {
+    func parseEnhancedIdea(from response: String) -> EnhancedIdea? {
         // Try to find JSON object in response
         guard let jsonStart = response.firstIndex(of: "{"),
               let jsonEnd = response.lastIndex(of: "}") else {

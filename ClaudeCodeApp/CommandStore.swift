@@ -26,14 +26,16 @@ class CommandStore: ObservableObject {
 
     @Published var commands: [SavedCommand] = []
 
-    private let fileName = "commands.json"
+    private static let fileName = "commands.json"
+    private let fileURL: URL
 
-    private var fileURL: URL {
+    private static var defaultFileURL: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
             .appendingPathComponent(fileName)
     }
 
-    init() {
+    init(fileURL: URL? = nil) {
+        self.fileURL = fileURL ?? Self.defaultFileURL
         load()
     }
 
