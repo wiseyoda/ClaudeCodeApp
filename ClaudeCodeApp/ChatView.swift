@@ -30,114 +30,9 @@ struct ChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Session picker if project has sessions
-            if let sessions = project.sessions, !sessions.isEmpty {
-                SessionPicker(sessions: sessions, selected: $selectedSession, isLoading: isLoadingHistory) { session in
-                    // Load session with full history
-                    wsManager.sessionId = session.id
-                    loadSessionHistory(session)
-                }
-            }
-
-            // Messages
-            ScrollViewReader { proxy in
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 2) {
-                        ForEach(messages) { message in
-                            CLIMessageView(message: message)
-                                .id(message.id)
-                        }
-
-                        // Streaming indicator
-                        if wsManager.isProcessing {
-                            if wsManager.currentText.isEmpty {
-                                CLIProcessingView()
-                                    .id("streaming")
-                            } else {
-                                CLIMessageView(message: ChatMessage(
-                                    role: .assistant,
-                                    content: wsManager.currentText,
-                                    timestamp: Date(),
-                                    isStreaming: true
-                                ))
-                                .id("streaming")
-                            }
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                }
-                .background(CLITheme.background)
-                .onChange(of: messages.count) { _, _ in
-                    // Delay to ensure view has rendered
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        withAnimation {
-                            if let lastId = messages.last?.id {
-                                proxy.scrollTo(lastId, anchor: .bottom)
-                            }
-                        }
-                    }
-                }
-                .onChange(of: wsManager.currentText) { _, _ in
-                    withAnimation {
-                        proxy.scrollTo("streaming", anchor: .bottom)
-                    }
-                }
-                .onChange(of: wsManager.isProcessing) { _, isProcessing in
-                    // Scroll when processing starts or ends
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                        withAnimation {
-                            if isProcessing {
-                                proxy.scrollTo("streaming", anchor: .bottom)
-                            } else if let lastId = messages.last?.id {
-                                proxy.scrollTo(lastId, anchor: .bottom)
-                            }
-                        }
-                    }
-                }
-                .onChange(of: scrollToBottomTrigger) { _, shouldScroll in
-                    // Scroll to bottom after history/messages load
-                    if shouldScroll {
-                        // Use longer delay to ensure view has rendered
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            if let lastId = messages.last?.id {
-                                proxy.scrollTo(lastId, anchor: .bottom)
-                            }
-                            scrollToBottomTrigger = false
-                        }
-                    }
-                }
-                .onAppear {
-                    // Scroll to bottom when view appears with messages
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        if let lastId = messages.last?.id {
-                            proxy.scrollTo(lastId, anchor: .bottom)
-                        }
-                    }
-                }
-            }
-
-            // Status bar
-            CLIStatusBar(
-                isProcessing: wsManager.isProcessing,
-                isUploadingImage: isUploadingImage,
-                startTime: processingStartTime,
-                tokenUsage: wsManager.tokenUsage
-            )
-
-            // Terminal input - use id to maintain focus stability during re-renders
-            CLIInputView(
-                text: $inputText,
-                selectedImage: $selectedImage,
-                isProcessing: wsManager.isProcessing,
-                isFocused: _isInputFocused,
-                onSend: sendMessage,
-                onAbort: { wsManager.abortSession() }
-            )
-            .id("input-view")
-
-            // Mode selector
-            CLIModeSelector()
+            sessionPickerView
+            messagesScrollView
+            statusAndInputView
         }
         .background(CLITheme.background)
         .navigationTitle(project.title)
@@ -230,6 +125,116 @@ struct ChatView: View {
             @unknown default:
                 break
             }
+        }
+    }
+
+    // MARK: - View Components (extracted to help Swift compiler)
+
+    @ViewBuilder
+    private var sessionPickerView: some View {
+        if let sessions = project.sessions, !sessions.isEmpty {
+            SessionPicker(sessions: sessions, selected: $selectedSession, isLoading: isLoadingHistory) { session in
+                wsManager.sessionId = session.id
+                loadSessionHistory(session)
+            }
+        }
+    }
+
+    private var messagesScrollView: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                messagesListView
+            }
+            .background(CLITheme.background)
+            .onChange(of: messages.count) { _, _ in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    withAnimation {
+                        proxy.scrollTo("bottomAnchor", anchor: .bottom)
+                    }
+                }
+            }
+            .onChange(of: wsManager.currentText) { _, _ in
+                proxy.scrollTo("bottomAnchor", anchor: .bottom)
+            }
+            .onChange(of: wsManager.isProcessing) { _, _ in
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    withAnimation {
+                        proxy.scrollTo("bottomAnchor", anchor: .bottom)
+                    }
+                }
+            }
+            .onChange(of: scrollToBottomTrigger) { _, shouldScroll in
+                if shouldScroll {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        proxy.scrollTo("bottomAnchor", anchor: .bottom)
+                        scrollToBottomTrigger = false
+                    }
+                }
+            }
+            .onAppear {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    proxy.scrollTo("bottomAnchor", anchor: .bottom)
+                }
+            }
+        }
+    }
+
+    private var messagesListView: some View {
+        LazyVStack(alignment: .leading, spacing: 2) {
+            ForEach(messages) { message in
+                CLIMessageView(message: message)
+                    .id(message.id)
+            }
+
+            if wsManager.isProcessing {
+                streamingIndicatorView
+            }
+
+            // Invisible bottom anchor for reliable scrolling
+            Color.clear
+                .frame(height: 1)
+                .id("bottomAnchor")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    @ViewBuilder
+    private var streamingIndicatorView: some View {
+        if wsManager.currentText.isEmpty {
+            CLIProcessingView()
+                .id("streaming")
+        } else {
+            CLIMessageView(message: ChatMessage(
+                role: .assistant,
+                content: wsManager.currentText,
+                timestamp: Date(),
+                isStreaming: true
+            ))
+            .id("streaming")
+        }
+    }
+
+    private var statusAndInputView: some View {
+        VStack(spacing: 0) {
+            CLIStatusBar(
+                isProcessing: wsManager.isProcessing,
+                isUploadingImage: isUploadingImage,
+                startTime: processingStartTime,
+                tokenUsage: wsManager.tokenUsage
+            )
+
+            CLIInputView(
+                text: $inputText,
+                selectedImage: $selectedImage,
+                isProcessing: wsManager.isProcessing,
+                isFocused: _isInputFocused,
+                onSend: sendMessage,
+                onAbort: { wsManager.abortSession() }
+            )
+            .id("input-view")
+
+            CLIModeSelector()
         }
     }
 
