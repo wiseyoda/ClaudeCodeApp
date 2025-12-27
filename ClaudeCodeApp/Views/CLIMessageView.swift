@@ -4,19 +4,28 @@ import SwiftUI
 
 struct CLIMessageView: View {
     let message: ChatMessage
+    let projectPath: String?
+    let projectTitle: String?
     @State private var isExpanded: Bool
     @State private var showCopied = false
+    @ObservedObject private var bookmarkStore = BookmarkStore.shared
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
 
-    init(message: ChatMessage) {
+    init(message: ChatMessage, projectPath: String? = nil, projectTitle: String? = nil) {
         self.message = message
+        self.projectPath = projectPath
+        self.projectTitle = projectTitle
         // Collapse result messages, Grep/Glob tool uses, and thinking blocks by default
         let shouldStartCollapsed = message.role == .resultSuccess ||
             message.role == .toolResult ||
             message.role == .thinking ||
             (message.role == .toolUse && (message.content.hasPrefix("Grep") || message.content.hasPrefix("Glob")))
         self._isExpanded = State(initialValue: !shouldStartCollapsed)
+    }
+
+    private var isBookmarked: Bool {
+        bookmarkStore.isBookmarked(messageId: message.id)
     }
 
     var body: some View {
@@ -113,6 +122,22 @@ struct CLIMessageView: View {
                 shareContent()
             } label: {
                 Label("Share", systemImage: "square.and.arrow.up")
+            }
+
+            // Bookmark button (only if project context available)
+            if let path = projectPath, let title = projectTitle {
+                Button {
+                    bookmarkStore.toggleBookmark(
+                        message: message,
+                        projectPath: path,
+                        projectTitle: title
+                    )
+                } label: {
+                    Label(
+                        isBookmarked ? "Remove Bookmark" : "Bookmark",
+                        systemImage: isBookmarked ? "bookmark.fill" : "bookmark"
+                    )
+                }
             }
         }
     }

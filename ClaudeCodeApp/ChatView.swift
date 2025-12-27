@@ -23,6 +23,12 @@ struct ChatView: View {
     @State private var pendingQuestions: AskUserQuestionData?  // For AskUserQuestion tool
     @State private var showingHelpSheet = false  // For /help command
     @State private var showingSessionPicker = false  // For /resume command
+    @State private var showingBookmarks = false  // For bookmarks view
+
+    // Search and filter state
+    @State private var isSearching = false
+    @State private var searchText = ""
+    @State private var messageFilter: MessageFilter = .all
     @State private var localSessions: [ProjectSession]?  // Local copy for session management
     @StateObject private var sshManager = SSHManager()  // For session deletion
     @FocusState private var isInputFocused: Bool
@@ -49,6 +55,18 @@ struct ChatView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Search bar (when searching)
+            if isSearching {
+                ChatSearchBar(
+                    searchText: $searchText,
+                    isSearching: $isSearching,
+                    selectedFilter: $messageFilter
+                )
+
+                // Result count
+                SearchResultCount(count: displayMessages.count, searchText: searchText)
+            }
+
             // Git status banner (when there are local changes)
             gitStatusBannerView
 
@@ -71,6 +89,21 @@ struct ChatView: View {
                     // Model selector pill
                     modelSelectorPill
 
+                    // Search button
+                    Button {
+                        withAnimation {
+                            isSearching.toggle()
+                            if !isSearching {
+                                searchText = ""
+                                messageFilter = .all
+                            }
+                        }
+                    } label: {
+                        Image(systemName: isSearching ? "magnifyingglass.circle.fill" : "magnifyingglass")
+                            .foregroundColor(isSearching ? CLITheme.blue(for: colorScheme) : CLITheme.secondaryText(for: colorScheme))
+                    }
+                    .accessibilityLabel(isSearching ? "Close search" : "Search messages")
+
                     // More options menu
                     Menu {
                         Button {
@@ -80,6 +113,12 @@ struct ChatView: View {
                             MessageStore.clearMessages(for: project.path)
                         } label: {
                             Label("New Chat", systemImage: "plus")
+                        }
+
+                        Button {
+                            showingBookmarks = true
+                        } label: {
+                            Label("Bookmarks", systemImage: "bookmark")
                         }
 
                         if wsManager.isProcessing {
@@ -94,7 +133,7 @@ struct ChatView: View {
                             .foregroundColor(CLITheme.secondaryText(for: colorScheme))
                     }
                     .accessibilityLabel("Chat options")
-                    .accessibilityHint("Open menu with new chat and abort options")
+                    .accessibilityHint("Open menu with new chat, bookmarks, and abort options")
                 }
             }
         }
@@ -208,6 +247,10 @@ struct ChatView: View {
                     showingModelPicker = false
                 }
             )
+        }
+        .sheet(isPresented: $showingBookmarks) {
+            BookmarksView()
+                .environmentObject(settings)
         }
         .onAppear {
             // Initialize local sessions copy
@@ -456,20 +499,39 @@ struct ChatView: View {
         }
     }
 
-    /// Messages filtered based on user settings (e.g., hide thinking blocks)
+    /// Messages filtered based on search, filter, and user settings
     private var displayMessages: [ChatMessage] {
-        if settings.showThinkingBlocks {
-            return messages
-        } else {
-            return messages.filter { $0.role != .thinking }
+        var filtered = messages
+
+        // Apply thinking block visibility setting
+        if !settings.showThinkingBlocks {
+            filtered = filtered.filter { $0.role != .thinking }
         }
+
+        // Apply message type filter
+        if messageFilter != .all {
+            filtered = filtered.filter { messageFilter.matches($0.role) }
+        }
+
+        // Apply search filter
+        if !searchText.isEmpty {
+            filtered = filtered.filter {
+                $0.content.localizedCaseInsensitiveContains(searchText)
+            }
+        }
+
+        return filtered
     }
 
     private var messagesListView: some View {
         LazyVStack(alignment: .leading, spacing: 2) {
             ForEach(displayMessages) { message in
-                CLIMessageView(message: message)
-                    .id(message.id)
+                CLIMessageView(
+                    message: message,
+                    projectPath: project.path,
+                    projectTitle: project.title
+                )
+                .id(message.id)
             }
 
             if wsManager.isProcessing {
@@ -491,12 +553,16 @@ struct ChatView: View {
             CLIProcessingView()
                 .id("streaming")
         } else {
-            CLIMessageView(message: ChatMessage(
-                role: .assistant,
-                content: wsManager.currentText,
-                timestamp: Date(),
-                isStreaming: true
-            ))
+            CLIMessageView(
+                message: ChatMessage(
+                    role: .assistant,
+                    content: wsManager.currentText,
+                    timestamp: Date(),
+                    isStreaming: true
+                ),
+                projectPath: project.path,
+                projectTitle: project.title
+            )
             .id("streaming")
         }
     }
@@ -637,11 +703,14 @@ struct ChatView: View {
         selectedImage = nil
         processingStartTime = Date()
 
+        // Apply thinking mode suffix (silently - not shown in UI)
+        let messageToSend = text.isEmpty ? text : settings.applyThinkingMode(to: text)
+
         // If we have an image, send it with the message
         if let imageData = imageToSend {
             // Send message with image data directly via WebSocket
             wsManager.sendMessage(
-                text.isEmpty ? "What is this image?" : text,
+                text.isEmpty ? "What is this image?" : messageToSend,
                 projectPath: project.path,
                 resumeSessionId: selectedSession?.id,
                 permissionMode: settings.effectivePermissionMode,
@@ -651,7 +720,7 @@ struct ChatView: View {
         } else {
             // No image - just send text
             wsManager.sendMessage(
-                text,
+                messageToSend,
                 projectPath: project.path,
                 resumeSessionId: selectedSession?.id,
                 permissionMode: settings.effectivePermissionMode,

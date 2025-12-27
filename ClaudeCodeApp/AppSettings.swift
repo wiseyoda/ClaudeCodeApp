@@ -1,6 +1,63 @@
 import Foundation
 import SwiftUI
 
+// Thinking mode - appends trigger words to prompts for extended thinking
+enum ThinkingMode: String, CaseIterable {
+    case normal = "normal"
+    case think = "think"
+    case thinkHard = "think_hard"
+    case thinkHarder = "think_harder"
+    case ultrathink = "ultrathink"
+
+    var displayName: String {
+        switch self {
+        case .normal: return "Normal"
+        case .think: return "Think"
+        case .thinkHard: return "Think Hard"
+        case .thinkHarder: return "Think Harder"
+        case .ultrathink: return "Ultrathink"
+        }
+    }
+
+    /// The suffix to append to messages (nil for normal mode)
+    var promptSuffix: String? {
+        switch self {
+        case .normal: return nil
+        case .think: return "think"
+        case .thinkHard: return "think hard"
+        case .thinkHarder: return "think harder"
+        case .ultrathink: return "ultrathink"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .normal: return "bolt"
+        case .think: return "brain"
+        case .thinkHard: return "brain.head.profile"
+        case .thinkHarder: return "brain.head.profile.fill"
+        case .ultrathink: return "sparkles"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .normal: return Color(white: 0.6)
+        case .think: return Color(red: 0.6, green: 0.4, blue: 0.8)  // Light purple
+        case .thinkHard: return Color(red: 0.7, green: 0.3, blue: 0.9)  // Purple
+        case .thinkHarder: return Color(red: 0.8, green: 0.2, blue: 1.0)  // Bright purple
+        case .ultrathink: return Color(red: 1.0, green: 0.4, blue: 0.8)  // Pink/magenta
+        }
+    }
+
+    func next() -> ThinkingMode {
+        let all = ThinkingMode.allCases
+        guard let idx = all.firstIndex(of: self) else { return .normal }
+        let nextIdx = (idx + 1) % all.count
+        return all[nextIdx]
+    }
+}
+
 // Claude Code modes - values must match server expectations
 // Note: bypassPermissions is now a separate toggle (skipPermissions) in AppSettings
 enum ClaudeMode: String, CaseIterable {
@@ -106,6 +163,7 @@ class AppSettings: ObservableObject {
 
     // Claude Settings
     @AppStorage("claudeMode") private var claudeModeRaw: String = ClaudeMode.normal.rawValue
+    @AppStorage("thinkingMode") private var thinkingModeRaw: String = ThinkingMode.normal.rawValue
     @AppStorage("skipPermissions") var skipPermissions: Bool = false
     @AppStorage("defaultModel") private var defaultModelRaw: String = ClaudeModel.sonnet.rawValue
     @AppStorage("customModelId") var customModelId: String = ""
@@ -140,6 +198,17 @@ class AppSettings: ObservableObject {
     var claudeMode: ClaudeMode {
         get { ClaudeMode(rawValue: claudeModeRaw) ?? .normal }
         set { claudeModeRaw = newValue.rawValue }
+    }
+
+    var thinkingMode: ThinkingMode {
+        get { ThinkingMode(rawValue: thinkingModeRaw) ?? .normal }
+        set { thinkingModeRaw = newValue.rawValue }
+    }
+
+    /// Applies thinking mode suffix to a message if needed
+    func applyThinkingMode(to message: String) -> String {
+        guard let suffix = thinkingMode.promptSuffix else { return message }
+        return "\(message) \(suffix)"
     }
 
     var defaultModel: ClaudeModel {

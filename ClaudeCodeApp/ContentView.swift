@@ -15,6 +15,7 @@ struct ContentView: View {
     @State private var showNewProject = false
     @State private var showNewProjectOptions = false
     @State private var projectToDelete: Project?
+    @State private var showGlobalSearch = false
     @StateObject private var sshManager = SSHManager()
 
     // Git status tracking per project path
@@ -35,6 +36,15 @@ struct ContentView: View {
                 .toolbar {
                     ToolbarItem(placement: .navigationBarTrailing) {
                         HStack(spacing: 16) {
+                            Button {
+                                showGlobalSearch = true
+                            } label: {
+                                Image(systemName: "magnifyingglass")
+                                    .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+                            }
+                            .accessibilityLabel("Search all sessions")
+                            .accessibilityHint("Search across all projects and sessions")
+
                             Button {
                                 showNewProjectOptions = true
                             } label: {
@@ -104,6 +114,10 @@ struct ContentView: View {
             NewProjectSheet {
                 Task { await loadProjects() }
             }
+        }
+        .sheet(isPresented: $showGlobalSearch) {
+            GlobalSearchView(projects: projects)
+                .environmentObject(settings)
         }
         .confirmationDialog("New Project", isPresented: $showNewProjectOptions, titleVisibility: .visible) {
             Button("Create Empty Project") {

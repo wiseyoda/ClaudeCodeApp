@@ -169,27 +169,56 @@ struct CLIModeSelector: View {
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
+        HStack {
+            // Claude mode toggle (left side)
+            Button {
+                withAnimation(.easeInOut(duration: 0.15)) {
+                    settings.claudeMode = settings.claudeMode.next()
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: settings.claudeMode.icon)
+                        .font(.system(size: 12))
+                    Text(settings.claudeMode.displayName)
+                        .font(settings.scaledFont(.small))
+                }
+                .foregroundColor(settings.claudeMode.color)
+            }
+            .accessibilityLabel("Claude mode: \(settings.claudeMode.displayName)")
+            .accessibilityHint("Switch to \(settings.claudeMode.next().displayName) mode")
+
+            Spacer()
+
+            // Thinking mode toggle (right side)
+            ThinkingModeIndicator()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(CLITheme.secondaryBackground(for: colorScheme))
+    }
+}
+
+// MARK: - Thinking Mode Indicator
+
+struct ThinkingModeIndicator: View {
+    @EnvironmentObject var settings: AppSettings
+    @Environment(\.colorScheme) var colorScheme
+
+    var body: some View {
         Button {
             withAnimation(.easeInOut(duration: 0.15)) {
-                settings.claudeMode = settings.claudeMode.next()
+                settings.thinkingMode = settings.thinkingMode.next()
             }
         } label: {
-            HStack(spacing: 6) {
-                Image(systemName: settings.claudeMode.icon)
-                    .font(.system(size: 12))
-                Text(settings.claudeMode.displayName)
+            HStack(spacing: 4) {
+                Image(systemName: settings.thinkingMode.icon)
+                    .font(.system(size: 10))
+                Text(settings.thinkingMode.displayName)
                     .font(settings.scaledFont(.small))
-                Text("- Tap to cycle")
-                    .font(settings.scaledFont(.small))
-                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
             }
-            .foregroundColor(settings.claudeMode.color)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .foregroundColor(settings.thinkingMode.color)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(CLITheme.secondaryBackground(for: colorScheme))
-        .accessibilityLabel("Claude mode: \(settings.claudeMode.displayName)")
-        .accessibilityHint("Tap to switch to \(settings.claudeMode.next().displayName) mode")
+        .accessibilityLabel("Thinking mode: \(settings.thinkingMode.displayName)")
+        .accessibilityHint("Switch to \(settings.thinkingMode.next().displayName) mode")
     }
 }

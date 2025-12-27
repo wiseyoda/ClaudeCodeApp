@@ -29,6 +29,8 @@
 | **P1: Connection Health** | Connection status indicator, pull-to-refresh, message queuing | Dec 27 |
 | **P1: iPad Experience** | NavigationSplitView, keyboard shortcuts, sidebar, split view | Dec 27 |
 | **SSH Key Import** | Keychain storage, paste/import keys, Ed25519/RSA support | Dec 27 |
+| **Thinking Mode** | 5-level thinking mode toggle (Normal/Think/Think Hard/Think Harder/Ultrathink) | Dec 27 |
+| **P3: Search & Discovery** | Message search, filters, bookmarks, cross-session search | Dec 27 |
 
 ---
 
@@ -58,23 +60,123 @@ First-class iPad support with keyboard and sidebar navigation.
 
 ---
 
-## Priority 2: Search & Discovery 📋
+## Priority 2: Command Library 📋
 
-Find and organize important content.
+Save and reuse common prompts/commands across all projects.
 
 ### Features
 
 | Feature | Description | Effort |
 |---------|-------------|--------|
-| **Message Search** | Full-text search within current session | Medium |
-| **Cross-Session Search** | Find messages across all sessions | High |
-| **Bookmark Messages** | Star important messages for quick access | Low |
-| **Filter by Type** | Show only user/assistant/tool messages | Low |
-| **Bookmarks View** | Dedicated screen for saved messages | Medium |
+| **Command Picker** | Tap `>` button to open saved commands sheet | Medium |
+| **Command Management** | Dedicated tab to add/edit/delete commands | Medium |
+| **Categories** | Organize commands (Git, Code Review, Testing, etc.) | Low |
+| **Multi-line Support** | Commands can be detailed multi-line prompts | Low |
+
+### Key Design Decisions
+
+- Access via repurposed `>` icon in input bar (with more padding to prevent accidental taps)
+- Dedicated tab in main navigation for CRUD management
+- Commands organized by user-defined categories (Git, Code Review, Testing, etc.)
+- No variables/placeholders for v1
+- App-wide storage (not project-specific), stored in Documents/commands.json
+- Multi-line commands supported, sent all at once
+
+### Access Flow
+
+```
+┌─ Chat Input ──────────────────────────┐
+│ [>] Ask Claude anything...    [🎤][▶] │
+└───────────────────────────────────────┘
+       │
+       ▼ Tap >
+┌─ Saved Commands ──────────────────────┐
+│ ┌─ Git ────────────────────────────┐ │
+│ │ • Commit current changes          │ │
+│ │ • Review staged files             │ │
+│ └───────────────────────────────────┘ │
+│ ┌─ Code Review ────────────────────┐ │
+│ │ • Review this file                │ │
+│ │ • Find potential bugs             │ │
+│ └───────────────────────────────────┘ │
+│ ┌─ Testing ────────────────────────┐ │
+│ │ • Run tests and fix failures      │ │
+│ │ • Add test coverage               │ │
+│ └───────────────────────────────────┘ │
+└───────────────────────────────────────┘
+```
+
+### Management UI
+
+```
+┌─ Commands ─────────────────────────────┐
+│ ◀ Back                          [+ Add]│
+├─────────────────────────────────────────┤
+│ Git (3 commands)                    >  │
+├─────────────────────────────────────────┤
+│ Code Review (2 commands)            >  │
+├─────────────────────────────────────────┤
+│ Testing (4 commands)                >  │
+├─────────────────────────────────────────┤
+│ Docs (2 commands)                   >  │
+└─────────────────────────────────────────┘
+         │
+         ▼ Tap category
+┌─ Git Commands ─────────────────────────┐
+│ ◀ Commands                      [+ Add]│
+├─────────────────────────────────────────┤
+│ Commit current changes                 │
+│ Last used: 2 hours ago          [Edit] │
+├─────────────────────────────────────────┤
+│ Review staged files                    │
+│ Last used: yesterday            [Edit] │
+├─────────────────────────────────────────┤
+│ Push and create PR                     │
+│ Last used: 3 days ago           [Edit] │
+└─────────────────────────────────────────┘
+         │
+         ▼ Tap Edit or swipe to delete
+```
+
+### Data Model
+
+```swift
+struct SavedCommand: Identifiable, Codable {
+    let id: UUID
+    var name: String
+    var content: String
+    var category: String
+    var createdAt: Date
+    var lastUsedAt: Date?
+}
+```
 
 ---
 
-## Priority 3: Code Quality 💡
+## ~~Priority 3: Search & Discovery~~ ✅ Complete
+
+Find and organize important content.
+
+### Features
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| **Message Search** | Full-text search within current session with search bar and result highlighting | ✅ Done |
+| **Filter by Type** | Filter chips for All/User/Assistant/Tools/Thinking messages | ✅ Done |
+| **Bookmark Messages** | Long-press context menu to bookmark, persisted to Documents | ✅ Done |
+| **Bookmarks View** | Dedicated sheet showing all bookmarks with search, swipe-to-delete | ✅ Done |
+| **Cross-Session Search** | SSH-based search across all session JSONL files | ✅ Done |
+
+### Implementation Details
+
+- **Search UI**: Search button in ChatView toolbar, collapsible search bar with cancel
+- **Filter Chips**: Horizontal scrolling chips below search bar (All, User, Assistant, Tools, Thinking)
+- **BookmarkStore**: Singleton storing bookmarks in Documents/bookmarks.json
+- **Global Search**: Accessed from ContentView toolbar, uses SSH to grep session files
+
+---
+
+## Priority 4: Code Quality 💡
 
 Developer experience and code health improvements.
 
@@ -88,7 +190,7 @@ Developer experience and code health improvements.
 
 ---
 
-## Priority 4: Power User Features 💡
+## Priority 5: Power User Features 💡
 
 Advanced features for power users.
 
@@ -128,7 +230,7 @@ Advanced features for power users.
 
 ---
 
-## Priority 5: Platform Integration 💡
+## Priority 6: Platform Integration 💡
 
 iOS platform features that enhance the experience.
 
@@ -185,10 +287,15 @@ These have been considered but are not on the roadmap:
 ```
 1. iPad Keyboard Shortcuts              [Low effort, iPad users] ✅ Done
 2. iPad Sidebar Navigation              [Medium effort, iPad UX] ✅ Done
-3. Message Search (current session)     [Medium effort, productivity] ✅ Next
-4. Bookmark Messages                    [Low effort, organization]
-5. Syntax Highlighting                  [High effort, polish]
-6. Multiple Servers                     [Medium effort, power users]
+3. Thinking Mode                        [Low effort, power users] ✅ Done
+4. Message Search (current session)     [Medium effort, discovery] ✅ Done
+5. Filter by Type                       [Low effort, discovery] ✅ Done
+6. Bookmark Messages                    [Low effort, organization] ✅ Done
+7. Bookmarks View                       [Medium effort, organization] ✅ Done
+8. Cross-Session Search                 [High effort, discovery] ✅ Done
+9. Command Picker                       [Medium effort, productivity] ← Next
+10. Syntax Highlighting                 [High effort, polish]
+11. Multiple Servers                    [Medium effort, power users]
 ```
 
 ---
@@ -292,6 +399,24 @@ These have been considered but are not on the roadmap:
 - Passphrase support for encrypted keys
 - Auto-connect priority: SSH Config → Keychain Key → Filesystem Key → Password
 - Works on iPhone (no ~/.ssh access) via Keychain storage
+
+### Thinking Mode
+- ThinkingMode enum with 5 levels: Normal, Think, Think Hard, Think Harder, Ultrathink
+- ThinkingModeIndicator in bottom status bar (CLIModeSelector)
+- Silently appends trigger words to messages ("think", "think hard", etc.)
+- Distinct icons and purple gradient colors per level
+- Persisted via @AppStorage
+
+### P3: Search & Discovery
+- **Message Search**: Search bar in ChatView toolbar, filter chips below
+- **MessageFilter enum**: All, User, Assistant, Tools, Thinking filters
+- **ChatSearchBar**: Collapsible search with cancel button
+- **SearchResultCount**: Shows filtered count
+- **BookmarkStore**: Singleton persisting to Documents/bookmarks.json
+- **BookmarkedMessage**: Stores message with project context
+- **BookmarksView**: Sheet with searchable list, swipe-to-delete
+- **GlobalSearchView**: SSH-based cross-session search
+- **CLIMessageView**: Long-press context menu with bookmark toggle
 
 </details>
 
