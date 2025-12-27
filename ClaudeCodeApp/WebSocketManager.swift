@@ -38,6 +38,7 @@ class WebSocketManager: ObservableObject {
     var onToolResult: ((String) -> Void)?
     var onThinking: ((String) -> Void)?  // For reasoning/thinking blocks
     var onComplete: ((String?) -> Void)?  // sessionId
+    var onAskUserQuestion: ((AskUserQuestionData) -> Void)?  // For interactive questions
     var onError: ((String) -> Void)?
     var onSessionCreated: ((String) -> Void)?
 
@@ -524,10 +525,19 @@ class WebSocketManager: ObservableObject {
                     }
                     let name = part["name"] as? String ?? "tool"
                     let input = part["input"] as? [String: Any]
-                    let inputStr = input.map { dict in
-                        dict.map { "\($0.key): \($0.value)" }.joined(separator: ", ")
-                    } ?? ""
-                    onToolUse?(name, inputStr)
+
+                    // Check for AskUserQuestion tool - needs special handling
+                    if name == "AskUserQuestion", let input = input,
+                       let questionData = AskUserQuestionData.from(input) {
+                        print("[WS] Detected AskUserQuestion tool with \(questionData.questions.count) questions")
+                        onAskUserQuestion?(questionData)
+                    } else {
+                        // Regular tool use
+                        let inputStr = input.map { dict in
+                            dict.map { "\($0.key): \($0.value)" }.joined(separator: ", ")
+                        } ?? ""
+                        onToolUse?(name, inputStr)
+                    }
 
                 case "thinking":
                     // Extended thinking/reasoning block

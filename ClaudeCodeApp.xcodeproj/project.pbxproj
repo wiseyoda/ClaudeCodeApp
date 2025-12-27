@@ -20,6 +20,7 @@
 		A1000011 /* Citadel in Frameworks */ = {isa = PBXBuildFile; productRef = A1100001 /* Citadel */; };
 		A1000012 /* WebSocketManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000011 /* WebSocketManager.swift */; };
 		A1000013 /* SpeechManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000012 /* SpeechManager.swift */; };
+		A1000014 /* UserQuestionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000013 /* UserQuestionsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -36,6 +37,7 @@
 		A2000011 /* WebSocketManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocketManager.swift; sourceTree = "<group>"; };
 		A2000012 /* SpeechManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechManager.swift; sourceTree = "<group>"; };
 		A3000001 /* ClaudeCodeApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClaudeCodeApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A2000013 /* UserQuestionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserQuestionsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -72,6 +74,7 @@
 				A2000010 /* SSHManager.swift */,
 				A2000011 /* WebSocketManager.swift */,
 				A2000012 /* SpeechManager.swift */,
+				A2000013 /* UserQuestionsView.swift */,
 				A2000007 /* Assets.xcassets */,
 			);
 			path = ClaudeCodeApp;
@@ -171,6 +174,7 @@
 				A1000010 /* SSHManager.swift in Sources */,
 				A1000012 /* WebSocketManager.swift in Sources */,
 				A1000013 /* SpeechManager.swift in Sources */,
+				A1000014 /* UserQuestionsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -18,6 +18,7 @@ struct ChatView: View {
     @State private var isUploadingImage = false
     @State private var isLoadingHistory = false
     @State private var scrollToBottomTrigger = false
+    @State private var pendingQuestions: AskUserQuestionData?  // For AskUserQuestion tool
     @FocusState private var isInputFocused: Bool
 
     init(project: Project, apiClient: APIClient) {
@@ -126,6 +127,51 @@ struct ChatView: View {
                 break
             }
         }
+        .sheet(item: $pendingQuestions) { questionData in
+            userQuestionsSheet(questionData)
+        }
+    }
+
+    /// Sheet view for AskUserQuestion - extracted to help Swift compiler
+    @ViewBuilder
+    private func userQuestionsSheet(_ questionData: AskUserQuestionData) -> some View {
+        UserQuestionsView(
+            questionData: Binding(
+                get: { questionData },
+                set: { pendingQuestions = $0 }
+            ),
+            onSubmit: { answer in
+                handleQuestionAnswer(answer)
+            },
+            onCancel: {
+                handleQuestionCancel()
+            }
+        )
+    }
+
+    /// Handle submission of question answers
+    private func handleQuestionAnswer(_ answer: String) {
+        let answerMessage = ChatMessage(
+            role: .user,
+            content: answer,
+            timestamp: Date()
+        )
+        messages.append(answerMessage)
+
+        wsManager.sendMessage(
+            answer,
+            projectPath: project.path,
+            resumeSessionId: selectedSession?.id,
+            permissionMode: settings.effectivePermissionMode
+        )
+        processingStartTime = Date()
+        pendingQuestions = nil
+    }
+
+    /// Handle cancellation of question dialog
+    private func handleQuestionCancel() {
+        wsManager.abortSession()
+        pendingQuestions = nil
     }
 
     // MARK: - View Components (extracted to help Swift compiler)
@@ -326,6 +372,12 @@ struct ChatView: View {
                 timestamp: Date()
             )
             messages.append(systemMsg)
+        }
+
+        wsManager.onAskUserQuestion = { questionData in
+            // Show the question UI sheet
+            print("[ChatView] Received AskUserQuestion with \(questionData.questions.count) questions")
+            pendingQuestions = questionData
         }
     }
 
