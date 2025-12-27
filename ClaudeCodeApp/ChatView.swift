@@ -8,6 +8,7 @@ struct ChatView: View {
     @EnvironmentObject var settings: AppSettings
     @StateObject private var wsManager: WebSocketManager
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dismiss) private var dismiss
 
     @State private var messages: [ChatMessage] = []
     @State private var inputText = ""
@@ -18,6 +19,8 @@ struct ChatView: View {
     @State private var isLoadingHistory = false
     @State private var scrollToBottomTrigger = false
     @State private var pendingQuestions: AskUserQuestionData?  // For AskUserQuestion tool
+    @State private var showingHelpSheet = false  // For /help command
+    @State private var showingSessionPicker = false  // For /resume command
     @FocusState private var isInputFocused: Bool
 
     init(project: Project, apiClient: APIClient) {
@@ -129,14 +132,31 @@ struct ChatView: View {
         .sheet(item: $pendingQuestions) { questionData in
             userQuestionsSheet(questionData)
         }
+        .sheet(isPresented: $showingHelpSheet) {
+            SlashCommandHelpSheet()
+        }
+        .sheet(isPresented: $showingSessionPicker) {
+            SessionPickerSheet(
+                project: project,
+                sessions: project.sessions ?? [],
+                onSelect: { session in
+                    showingSessionPicker = false
+                    selectedSession = session
+                    loadSessionHistory(session)
+                },
+                onCancel: {
+                    showingSessionPicker = false
+                }
+            )
+        }
     }
 
     /// Sheet view for AskUserQuestion - extracted to help Swift compiler
     @ViewBuilder
-    private func userQuestionsSheet(_ questionData: AskUserQuestionData) -> some View {
+    private func userQuestionsSheet(_ initialData: AskUserQuestionData) -> some View {
         UserQuestionsView(
             questionData: Binding(
-                get: { questionData },
+                get: { pendingQuestions ?? initialData },
                 set: { pendingQuestions = $0 }
             ),
             onSubmit: { answer in
@@ -384,6 +404,15 @@ struct ChatView: View {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty || selectedImage != nil else { return }
 
+        // Check for slash commands (client-side handling)
+        if text.hasPrefix("/") && selectedImage == nil {
+            if handleSlashCommand(text) {
+                inputText = ""
+                return
+            }
+            // If command not handled, fall through to send to server
+        }
+
         // Capture image before clearing
         let imageToSend = selectedImage
 
@@ -422,6 +451,93 @@ struct ChatView: View {
 
         // Persist messages
         MessageStore.saveMessages(messages, for: project.path)
+    }
+
+    // MARK: - Slash Commands
+
+    /// Handle slash commands, returns true if command was handled
+    private func handleSlashCommand(_ command: String) -> Bool {
+        let parts = command.lowercased().split(separator: " ", maxSplits: 1)
+        let cmd = String(parts.first ?? "")
+
+        switch cmd {
+        case "/clear":
+            handleClearCommand()
+            return true
+
+        case "/help":
+            showingHelpSheet = true
+            return true
+
+        case "/exit":
+            // Disconnect and go back
+            wsManager.disconnect()
+            dismiss()
+            return true
+
+        case "/init":
+            // Start a new session
+            handleInitCommand()
+            return true
+
+        case "/resume":
+            // Show session picker
+            showingSessionPicker = true
+            return true
+
+        case "/compact":
+            // Send to server - this is handled server-side
+            addSystemMessage("Sending compact request to server...")
+            return false  // Let it pass through to server
+
+        case "/status":
+            // Show connection status
+            showStatusInfo()
+            return true
+
+        default:
+            // Unknown command - show hint and let it pass to server
+            if cmd.hasPrefix("/") {
+                addSystemMessage("Unknown command: \(cmd). Type /help for available commands.")
+                return true
+            }
+            return false
+        }
+    }
+
+    private func handleClearCommand() {
+        // Add confirmation message, then clear
+        messages.removeAll()
+        wsManager.sessionId = nil
+        selectedSession = nil
+        addSystemMessage("Conversation cleared. Starting fresh.")
+        MessageStore.clearMessages(for: project.path)
+    }
+
+    private func handleInitCommand() {
+        // Clear and start new session
+        messages.removeAll()
+        wsManager.sessionId = nil
+        selectedSession = nil
+        addSystemMessage("New session initialized.")
+        MessageStore.clearMessages(for: project.path)
+    }
+
+    private func showStatusInfo() {
+        var status = "Connection: \(wsManager.isConnected ? "Connected" : "Disconnected")"
+        if let sessionId = wsManager.sessionId {
+            status += "\nSession: \(sessionId.prefix(8))..."
+        }
+        if let usage = wsManager.tokenUsage {
+            status += "\nTokens: \(usage.used)/\(usage.total)"
+        }
+        status += "\nProject: \(project.path)"
+        addSystemMessage(status)
+    }
+
+    private func addSystemMessage(_ content: String) {
+        let msg = ChatMessage(role: .system, content: content, timestamp: Date())
+        messages.append(msg)
     }
 
     /// Load full session history via API
@@ -676,10 +792,13 @@ struct CLIMessageView: View {
                 .foregroundColor(CLITheme.red)
                 .textSelection(.enabled)
         case .toolUse:
-            // Show diff view for Edit tool, otherwise show raw content
+            // Show specialized views for certain tools
             if message.content.hasPrefix("Edit"),
                let parsed = DiffView.parseEditContent(message.content) {
                 DiffView(oldString: parsed.old, newString: parsed.new)
+            } else if message.content.hasPrefix("TodoWrite"),
+                      let todos = TodoListView.parseTodoContent(message.content) {
+                TodoListView(todos: todos)
             } else {
                 Text(message.content)
                     .font(settings.scaledFont(.small))
@@ -792,6 +911,173 @@ struct DiffView: View {
         }
 
         return (oldString, newString)
+    }
+}
+
+// MARK: - Todo List View for TodoWrite Tool
+
+struct TodoListView: View {
+    let todos: [TodoItem]
+    @EnvironmentObject var settings: AppSettings
+    @Environment(\.colorScheme) var colorScheme
+
+    struct TodoItem {
+        let content: String
+        let activeForm: String
+        let status: String  // "pending", "in_progress", "completed"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            ForEach(Array(todos.enumerated()), id: \.offset) { index, todo in
+                HStack(alignment: .top, spacing: 8) {
+                    // Status indicator
+                    statusIcon(for: todo.status)
+                        .frame(width: 16)
+
+                    // Todo content
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(todo.status == "in_progress" ? todo.activeForm : todo.content)
+                            .font(settings.scaledFont(.small))
+                            .foregroundColor(textColor(for: todo.status))
+                            .strikethrough(todo.status == "completed", color: CLITheme.mutedText(for: colorScheme))
+                    }
+
+                    Spacer()
+                }
+                .padding(.vertical, 4)
+                .padding(.horizontal, 8)
+                .background(backgroundColor(for: todo.status))
+                .cornerRadius(6)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func statusIcon(for status: String) -> some View {
+        switch status {
+        case "completed":
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 14))
+                .foregroundColor(CLITheme.green)
+        case "in_progress":
+            Image(systemName: "arrow.right.circle.fill")
+                .font(.system(size: 14))
+                .foregroundColor(CLITheme.cyan)
+        default:  // pending
+            Image(systemName: "circle")
+                .font(.system(size: 14))
+                .foregroundColor(CLITheme.mutedText(for: colorScheme))
+        }
+    }
+
+    private func textColor(for status: String) -> Color {
+        switch status {
+        case "completed":
+            return CLITheme.mutedText(for: colorScheme)
+        case "in_progress":
+            return CLITheme.cyan
+        default:
+            return CLITheme.secondaryText(for: colorScheme)
+        }
+    }
+
+    private func backgroundColor(for status: String) -> Color {
+        switch status {
+        case "in_progress":
+            return CLITheme.cyan.opacity(0.1)
+        default:
+            return Color.clear
+        }
+    }
+
+    /// Parse TodoWrite content into TodoItems
+    static func parseTodoContent(_ content: String) -> [TodoItem]? {
+        guard content.hasPrefix("TodoWrite") else { return nil }
+
+        // Extract the todos array part
+        // Format: TodoWrite(todos: [[...], [...]])
+        guard let todosStart = content.range(of: "todos: ["),
+              let lastBracket = content.lastIndex(of: "]") else {
+            return nil
+        }
+
+        // Get the array content between the outer brackets
+        let arrayStart = content.index(after: todosStart.upperBound)
+        let arrayContent = String(content[arrayStart..<lastBracket])
+
+        var items: [TodoItem] = []
+
+        // Parse each todo item - they're dictionaries in the array
+        // Format: ["status": "completed", "activeForm": "...", "content": "..."]
+        var depth = 0
+        var currentItem = ""
+        var inString = false
+        var prevChar: Character = " "
+
+        for char in arrayContent {
+            if char == "\"" && prevChar != "\\" {
+                inString = !inString
+            }
+
+            if !inString {
+                if char == "[" {
+                    depth += 1
+                    if depth == 1 {
+                        currentItem = ""
+                        prevChar = char
+                        continue
+                    }
+                } else if char == "]" {
+                    depth -= 1
+                    if depth == 0 {
+                        // Parse this item
+                        if let item = parseItem(currentItem) {
+                            items.append(item)
+                        }
+                        currentItem = ""
+                        prevChar = char
+                        continue
+                    }
+                }
+            }
+
+            if depth >= 1 {
+                currentItem.append(char)
+            }
+            prevChar = char
+        }
+
+        return items.isEmpty ? nil : items
+    }
+
+    private static func parseItem(_ itemString: String) -> TodoItem? {
+        // Parse key-value pairs from format: "key": "value", "key2": "value2"
+        var dict: [String: String] = [:]
+
+        // Simple regex-like parsing for "key": "value" pairs
+        let pattern = #""(\w+)":\s*"([^"\\]*(?:\\.[^"\\]*)*)""#
+        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+
+        let range = NSRange(itemString.startIndex..., in: itemString)
+        let matches = regex.matches(in: itemString, range: range)
+
+        for match in matches {
+            if let keyRange = Range(match.range(at: 1), in: itemString),
+               let valueRange = Range(match.range(at: 2), in: itemString) {
+                let key = String(itemString[keyRange])
+                let value = String(itemString[valueRange])
+                dict[key] = value
+            }
+        }
+
+        guard let content = dict["content"],
+              let status = dict["status"] else {
+            return nil
+        }
+
+        let activeForm = dict["activeForm"] ?? content
+        return TodoItem(content: content, activeForm: activeForm, status: status)
     }
 }
 
@@ -1365,19 +1651,58 @@ struct MarkdownText: View {
                 continue
             }
 
-            // Numbered list
+            // Numbered list (including sub-items)
             if line.range(of: #"^\d+\.\s+"#, options: .regularExpression) != nil {
                 var items: [String] = []
+                var currentItem = ""
+
                 while i < lines.count {
-                    if lines[i].range(of: #"^\d+\.\s+"#, options: .regularExpression) != nil {
-                        let itemText = lines[i].replacingOccurrences(of: #"^\d+\.\s+"#, with: "", options: .regularExpression)
-                        items.append(itemText)
+                    let currentLine = lines[i]
+
+                    // Check if this is a new numbered item
+                    if currentLine.range(of: #"^\d+\.\s+"#, options: .regularExpression) != nil {
+                        // Save previous item if exists
+                        if !currentItem.isEmpty {
+                            items.append(currentItem.trimmingCharacters(in: .whitespacesAndNewlines))
+                        }
+                        // Start new item (strip the number prefix)
+                        currentItem = currentLine.replacingOccurrences(of: #"^\d+\.\s+"#, with: "", options: .regularExpression)
                         i += 1
-                    } else {
+                    }
+                    // Check if this is a sub-item or continuation (indented or starts with -)
+                    else if currentLine.hasPrefix("   ") || currentLine.hasPrefix("\t") ||
+                            currentLine.hasPrefix("  - ") || currentLine.hasPrefix("   - ") {
+                        // Append to current item
+                        currentItem += "\n" + currentLine
+                        i += 1
+                    }
+                    // Empty line might be part of the list (check if next line continues)
+                    else if currentLine.trimmingCharacters(in: .whitespaces).isEmpty {
+                        // Peek ahead - if next line is numbered or indented, continue
+                        if i + 1 < lines.count {
+                            let nextLine = lines[i + 1]
+                            if nextLine.range(of: #"^\d+\.\s+"#, options: .regularExpression) != nil ||
+                               nextLine.hasPrefix("   ") || nextLine.hasPrefix("  - ") {
+                                i += 1
+                                continue
+                            }
+                        }
+                        break
+                    }
+                    else {
+                        // Not part of the list anymore
                         break
                     }
                 }
-                blocks.append(.numberedList(items))
+
+                // Don't forget the last item
+                if !currentItem.isEmpty {
+                    items.append(currentItem.trimmingCharacters(in: .whitespacesAndNewlines))
+                }
+
+                if !items.isEmpty {
+                    blocks.append(.numberedList(items))
+                }
                 continue
             }
 
@@ -1425,15 +1750,9 @@ struct MarkdownText: View {
                 }
             }
         case .numberedList(let items):
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 8) {
                 ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                    HStack(alignment: .top, spacing: 8) {
-                        Text("\(index + 1).")
-                            .font(settings.scaledFont(.body))
-                            .foregroundColor(CLITheme.yellow)
-                            .frame(minWidth: 20, alignment: .trailing)
-                        renderInlineMarkdown(item)
-                    }
+                    numberedListItem(index: index + 1, content: item)
                 }
             }
         case .table(let rows):
@@ -1612,7 +1931,50 @@ struct MarkdownText: View {
         return result
     }
 
+    /// Render a numbered list item that may contain sub-items
     @ViewBuilder
+    private func numberedListItem(index: Int, content: String) -> some View {
+        let lines = content.components(separatedBy: "\n")
+        let mainLine = lines.first ?? content
+        let subLines = lines.dropFirst()
+
+        HStack(alignment: .top, spacing: 8) {
+            Text("\(index).")
+                .font(settings.scaledFont(.body))
+                .foregroundColor(CLITheme.yellow)
+                .frame(minWidth: 24, alignment: .trailing)
+
+            VStack(alignment: .leading, spacing: 4) {
+                // Main item text
+                renderInlineMarkdown(mainLine)
+
+                // Sub-items (indented bullets)
+                if !subLines.isEmpty {
+                    VStack(alignment: .leading, spacing: 2) {
+                        ForEach(Array(subLines.enumerated()), id: \.offset) { _, subLine in
+                            let trimmed = subLine.trimmingCharacters(in: .whitespaces)
+                            if trimmed.hasPrefix("- ") {
+                                // Sub-bullet
+                                HStack(alignment: .top, spacing: 6) {
+                                    Text("−")
+                                        .font(settings.scaledFont(.small))
+                                        .foregroundColor(CLITheme.mutedText)
+                                    renderInlineMarkdown(String(trimmed.dropFirst(2)))
+                                        .font(settings.scaledFont(.small))
+                                }
+                            } else if !trimmed.isEmpty {
+                                // Continuation text
+                                renderInlineMarkdown(trimmed)
+                                    .font(settings.scaledFont(.small))
+                            }
+                        }
+                    }
+                    .padding(.leading, 4)
+                }
+            }
+        }
+    }
+
     private func tableView(rows: [[String]]) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
@@ -1751,6 +2113,197 @@ extension String {
     /// Full escape processing: decode HTML entities, normalize code fences, handle backslash escapes
     var processedForDisplay: String {
         return self.htmlDecoded.normalizedCodeFences
+    }
+}
+
+// MARK: - Slash Command Help Sheet
+
+struct SlashCommandHelpSheet: View {
+    @Environment(\.dismiss) var dismiss
+    @Environment(\.colorScheme) var colorScheme
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Available Commands")
+                        .font(.headline)
+                        .foregroundColor(CLITheme.primaryText(for: colorScheme))
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        CommandRow(command: "/clear", description: "Clear conversation and start fresh")
+                        CommandRow(command: "/init", description: "Initialize a new session")
+                        CommandRow(command: "/resume", description: "Resume a previous session")
+                        CommandRow(command: "/compact", description: "Compact conversation to save context")
+                        CommandRow(command: "/status", description: "Show connection and session info")
+                        CommandRow(command: "/exit", description: "Close chat and return to projects")
+                        CommandRow(command: "/help", description: "Show this help")
+                    }
+
+                    Divider()
+                        .padding(.vertical, 8)
+
+                    Text("Claude Commands")
+                        .font(.headline)
+                        .foregroundColor(CLITheme.primaryText(for: colorScheme))
+
+                    Text("Other slash commands (like /review, /commit) are passed directly to Claude for handling.")
+                        .font(.subheadline)
+                        .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+                }
+                .padding()
+            }
+            .background(CLITheme.background(for: colorScheme))
+            .navigationTitle("Commands")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct CommandRow: View {
+    let command: String
+    let description: String
+    @Environment(\.colorScheme) var colorScheme
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(command)
+                .font(.system(.body, design: .monospaced))
+                .foregroundColor(CLITheme.cyan)
+                .frame(width: 100, alignment: .leading)
+
+            Text(description)
+                .font(.subheadline)
+                .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+
+            Spacer()
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// MARK: - Session Picker Sheet
+
+struct SessionPickerSheet: View {
+    let project: Project
+    let sessions: [ProjectSession]
+    let onSelect: (ProjectSession) -> Void
+    let onCancel: () -> Void
+    @Environment(\.colorScheme) var colorScheme
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if sessions.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 48))
+                            .foregroundColor(CLITheme.mutedText(for: colorScheme))
+
+                        Text("No Previous Sessions")
+                            .font(.headline)
+                            .foregroundColor(CLITheme.primaryText(for: colorScheme))
+
+                        Text("Start a conversation to create your first session.")
+                            .font(.subheadline)
+                            .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding()
+                } else {
+                    List(sessions) { session in
+                        Button {
+                            onSelect(session)
+                        } label: {
+                            SessionRow(session: session)
+                        }
+                        .listRowBackground(CLITheme.secondaryBackground(for: colorScheme))
+                    }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                }
+            }
+            .background(CLITheme.background(for: colorScheme))
+            .navigationTitle("Resume Session")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") {
+                        onCancel()
+                    }
+                    .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+                }
+            }
+        }
+    }
+}
+
+struct SessionRow: View {
+    let session: ProjectSession
+    @Environment(\.colorScheme) var colorScheme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(session.id.prefix(8) + "...")
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundColor(CLITheme.cyan)
+
+                Spacer()
+
+                if let activity = session.lastActivity {
+                    Text(formatRelativeTime(activity))
+                        .font(.caption)
+                        .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                }
+            }
+
+            if let summary = session.summary, !summary.isEmpty {
+                Text(summary)
+                    .font(.subheadline)
+                    .foregroundColor(CLITheme.primaryText(for: colorScheme))
+                    .lineLimit(2)
+            } else if let lastMsg = session.lastUserMessage, !lastMsg.isEmpty {
+                Text(lastMsg)
+                    .font(.subheadline)
+                    .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+                    .lineLimit(2)
+            }
+
+            if let count = session.messageCount {
+                Text("\(count) messages")
+                    .font(.caption)
+                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func formatRelativeTime(_ isoString: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        guard let date = formatter.date(from: isoString) else {
+            formatter.formatOptions = [.withInternetDateTime]
+            guard let date = formatter.date(from: isoString) else {
+                return isoString
+            }
+            return relativeString(from: date)
+        }
+        return relativeString(from: date)
+    }
+
+    private func relativeString(from date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 }
 

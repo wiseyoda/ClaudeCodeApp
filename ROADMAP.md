@@ -1,244 +1,236 @@
 # ClaudeCodeApp Roadmap
 
-Feature roadmap and improvements based on comparison with claudecodeui web frontend.
+> Feature roadmap for the iOS Claude Code client. Organized by priority with implementation details.
 
 ---
 
-## Bugs to Fix
+## Status Legend
 
-### B1. Settings Propagation Bug ✅ FIXED
-- **Location**: `ChatView.swift` lines 20-21
-- **Problem**: Creates new `AppSettings()` instead of using injected `@EnvironmentObject`
-- **Impact**: Settings changes won't propagate to WebSocket
-- **Fix**: Added `updateSettings()` method to WebSocketManager, called in ChatView's onAppear
-
-### B2. Parse Error Handling ✅ FIXED
-- **Location**: `WebSocketManager.swift` line 249
-- **Problem**: On parse error, continues listening but doesn't notify UI
-- **Fix**: Set `lastError` on parse failures so user knows something went wrong
-
-### B3. Fake Token Count Display ✅ FIXED
-- **Location**: `ChatView.swift` lines 487-495
-- **Problem**: Falls back to fake token count if `tokenUsage` is nil
-- **Fix**: Removed unused `tokenCount` fallback - only show token info if actually received from server
+| Status | Meaning |
+|--------|---------|
+| Done | Implemented and tested |
+| In Progress | Currently being worked on |
+| Planned | Approved for implementation |
+| Idea | Under consideration |
 
 ---
 
-## High Priority
+## 1. Enhanced Tool Visualization
 
-### H1. Message History Persistence ✅ FIXED
-- **Status**: Implemented
-- **Implementation**:
-  - Added `MessageStore` class using UserDefaults with JSON encoding
-  - Stores last 50 messages per project (keyed by project path)
-  - Loads on view appear, saves on each message change
-  - "New Chat" button clears persisted history
-- **Location**: `Models.swift` (MessageStore), `ChatView.swift`
+**Priority:** High | **Status:** In Progress
 
-### H2. Draft Message Saving ✅ FIXED
-- **Status**: Implemented
-- **Implementation**:
-  - Auto-saves draft via `onChange(of: inputText)`
-  - Uses UserDefaults with project path key
-  - Loads on view appear, clears on send (via empty string save)
-- **Location**: `Models.swift` (MessageStore), `ChatView.swift`
+Improve how tool calls are displayed in the chat interface.
 
-### H3. Exponential Backoff Reconnection ✅ FIXED
-- **Status**: Implemented
-- **Implementation**:
-  - Backoff: 1s -> 2s -> 4s -> 8s (max) with random jitter (0-500ms)
-  - `isReconnecting` flag prevents duplicate reconnection attempts
-  - Clears `currentText` on disconnect to prevent stale data
-  - Auto-reconnects on receive errors and send failures
-- **Location**: `WebSocketManager.swift`
+### Completed
 
-### H4. Voice Input / Voice-to-Text ✅ FIXED
-- **Status**: Implemented
-- **Implementation**:
-  - Added `SpeechManager` using iOS Speech framework (SFSpeechRecognizer)
-  - Microphone button in input bar with recording indicator
-  - Real-time transcription with partial results
-  - Appends transcribed text to input on stop
-- **Location**: `SpeechManager.swift`, `ChatView.swift` (CLIInputView), `Info.plist`
+- [x] Diff viewer for Edit tool with red/green highlighting
+- [x] Collapsible tool messages (Grep/Glob collapsed by default)
+- [x] Tool result truncation with expandable content
+- [x] TodoWrite visual checklist rendering
+- [x] AskUserQuestion interactive UI
 
-### H5. Image/File Upload & Display ✅ FIXED
-- **Status**: Implemented (UI complete, backend integration may need work)
-- **Implementation**:
-  - Added PhotosPicker in input bar
-  - Image preview before sending with remove button
-  - Images stored in ChatMessage.imageData
-  - Images displayed inline in user messages
-- **Location**: `ChatView.swift` (CLIInputView, CLIMessageView), `Models.swift`, `Info.plist`
-- **Note**: Backend integration for sending images TBD
+### Planned
 
-### H6. Copy-to-Clipboard for Code Blocks ✅ FIXED
-- **Status**: Implemented
-- **Implementation**:
-  - Added `CodeBlockView` component with copy button
-  - Uses `UIPasteboard.general.string`
-  - Shows "Copied!" feedback for 1.5 seconds with checkmark icon
-- **Location**: `ChatView.swift` (CodeBlockView)
+- [ ] **Richer Tool Headers**
+  - Extract key parameters and show in header
+  - Example: `* Grep pattern: "fetchProjects" | 12 files [+]`
+  - Show result count when collapsed
+  - Add file/folder icons using SF Symbols
 
-### H7. Collapsible Tool Results ✅ FIXED
-- **Status**: Implemented
-- **Implementation**:
-  - Grep/Glob tool uses start collapsed by default
-  - Tool header shows just tool name (e.g., "Grep" not full invocation)
-  - `[+]/[-]` toggle with animation
-  - Expanded view shows full tool invocation details
-- **Location**: `ChatView.swift` (CLIMessageView)
+- [ ] **Better Collapsed Previews**
+  - Show first meaningful line of result
+  - For file operations: show filename and line number
+  - For Bash commands: show exit code and first output line
+
+- [ ] **Syntax Highlighting**
+  - Language-aware coloring in code blocks
+  - Distinguish between file types in tool results
+
+- [ ] **Quick Actions**
+  - Copy button for paths, commands, code snippets
+  - "Jump to file" for Edit/Read tools
+  - Expand/collapse all tools button
+
+- [ ] **Color-Coded Tool Types**
+  - Different accent colors per tool (Read/Write/Edit/Bash/Grep)
 
 ---
 
-## Medium Priority
+## 2. Message Actions
 
-### M1. Extended Status Messages ✅ FIXED
-- **Status**: Implemented
-- **Implementation**:
-  - Cycles through action words: thinking, processing, analyzing, working, reasoning
-  - Changes every 3 seconds during processing
-  - Shows elapsed time
-- **Location**: `ChatView.swift` (CLIStatusBar)
+**Priority:** High | **Status:** Planned
 
-### M2. Usage Limit Time Formatting ✅ FIXED
-- **Status**: Implemented
-- **Implementation**:
-  - Parses "Claude AI usage limit reached|<epoch>" format
-  - Formats reset time with user's local timezone
-  - Applied to error messages automatically
-- **Location**: `ChatView.swift` (String.formattedUsageLimit)
+Add context menus and gestures for message interaction.
 
-### M3. HTML Entity Decoding ✅ FIXED
-- **Status**: Implemented (part of L4)
-- **Implementation**:
-  - Decodes `&lt;`, `&gt;`, `&amp;`, etc.
-  - Applied during MarkdownText initialization
-- **Location**: `ChatView.swift` (String.htmlDecoded)
+### Long-Press Context Menu
 
-### M4. Token Truncation with Expandable View ✅ FIXED
-- **Status**: Implemented
-- **Implementation**:
-  - Stores full tool result (no truncation at creation)
-  - Shows 3 lines when collapsed
-  - Shows "[X chars - tap header to expand]" hint for long content
-  - Full content visible when expanded
-- **Location**: `ChatView.swift` (CLIMessageView)
+**User Messages:**
+- Edit & Resend
+- Copy Text
+- Delete Message
+- Retry (resend)
 
-### M5. Thinking/Reasoning Blocks ✅ FIXED
-- **Status**: Implemented
-- **Implementation**:
-  - Added `.thinking` role to ChatMessage
-  - WebSocketManager parses `thinking` content type
-  - Collapsible display with 💭 icon and purple styling
-  - Starts collapsed by default
-- **Location**: `Models.swift`, `WebSocketManager.swift`, `ChatView.swift`
+**Assistant Messages:**
+- Copy Text
+- Bookmark/Favorite
+- Share (export as text/markdown)
 
-### M6. Diff Viewer for Edit Tool ✅ FIXED
-- **Status**: Implemented
-- **Implementation**:
-  - Added `DiffView` component with red/green highlighting
-  - Parses old_string/new_string from Edit tool content
-  - Uses CLITheme.diffAdded/diffRemoved colors
-  - Shows "- Removed:" and "+ Added:" sections
-- **Location**: `ChatView.swift` (DiffView)
+**Tool Messages:**
+- Copy Content
+- Copy File Path (if applicable)
+- Bookmark
 
-### M7. Inline Code Fence Normalization ✅ FIXED
-- **Status**: Implemented
-- **Implementation**:
-  - Converts ```code``` to `code` for inline code
-  - Applied via processedForDisplay in MarkdownText
-- **Location**: `ChatView.swift` (String.normalizedCodeFences)
+### Swipe Actions
 
-### M8. Multi-Provider Support
-- **Status**: Not implementing
-- **Reason**: User prefers Claude-only setup
+- Swipe left: Bookmark
+- Swipe right: Delete (with confirmation)
 
 ---
 
-## Low Priority (Polish)
+## 3. Bookmarks/Favorites System
 
-### L1. Token Usage Pie/Progress Chart ✅ FIXED
-- **Status**: Implemented
-- **Implementation**:
-  - Added `TokenUsageView` component with circular progress indicator
-  - Color changes based on usage (green < 60%, yellow 60-80%, red > 80%)
-  - Shows formatted token count (e.g., "12.5k/200k")
-- **Location**: `ChatView.swift` (TokenUsageView)
+**Priority:** Medium | **Status:** Planned
 
-### L2. LaTeX Math Rendering ✅ FIXED
-- **Status**: Implemented
-- **Implementation**:
-  - Display math blocks ($$...$$) with `MathBlockView` component
-  - Inline math ($...$) with purple italic styling
-  - Copy button for math content
-  - Distinctive purple styling with border
-- **Location**: `ChatView.swift` (MathBlockView, parseInlineFormatting)
+Save and organize important messages across sessions.
 
-### L3. Keyboard Shortcuts (iPad) ✅ FIXED
-- **Status**: Implemented
-- **Implementation**:
-  - Cmd+Return to send message
-  - Escape to abort processing
-  - Added invisible keyboard shortcut buttons in CLIInputView
-- **Location**: `ChatView.swift` (CLIInputView)
+### Implementation
 
-### L4. Escape Sequence Protection ✅ FIXED
-- **Status**: Implemented
-- **Implementation**:
-  - HTML entity decoding (&lt;, &gt;, &amp;, etc.)
-  - Math escape sequence protection for LaTeX
-  - Applied during MarkdownText initialization
-- **Location**: `ChatView.swift` (String extension)
+```swift
+// Extend ChatMessage model
+var isBookmarked: Bool = false
+
+// New storage class
+class BookmarkStore {
+    static func toggleBookmark(messageId: UUID, projectPath: String)
+    static func getBookmarkedMessages(projectPath: String) -> [ChatMessage]
+}
+```
+
+### Features
+
+- [ ] Star icon in message header (tap to toggle)
+- [ ] Toolbar button to filter bookmarked messages only
+- [ ] Visual indicator (gold star) on bookmarked messages
+- [ ] Bookmarks persist across sessions
+- [ ] Export bookmarked conversations
 
 ---
 
-## Quick Wins (< 4 hours each)
+## 4. Search & Filter
 
-1. ~~[B1] Fix Settings propagation bug - 1 hour~~ ✅
-2. ~~[B2] Fix parse error handling - 30 min~~ ✅
-3. ~~[B3] Fix fake token count - 30 min~~ ✅
-4. ~~[H2] Draft message saving - 2 hours~~ ✅
-5. ~~[H6] Copy button for code - 3 hours~~ ✅
-6. ~~[M1] Extended status messages - 2 hours~~ ✅
-7. ~~[M3] HTML entity decoding - 1 hour~~ ✅ (part of L4)
-8. ~~[L3] Keyboard shortcuts - 2 hours~~ ✅
+**Priority:** Medium | **Status:** Planned
 
----
+Find messages across conversation history.
 
-## Suggested Implementation Order
+### Search Features
 
-### Phase 1: Bug Fixes & Stability
-- [x] B1. Settings propagation bug
-- [x] B2. Parse error handling
-- [x] B3. Fake token count
-- [x] H3. Exponential backoff reconnection
+- [ ] Pull-down search bar (iOS native style)
+- [ ] Full-text search within message content
+- [ ] Highlight matching text in results
+- [ ] Jump to message in conversation
 
-### Phase 2: Core UX
-- [x] H1. Message history persistence
-- [x] H2. Draft message saving
-- [x] H6. Copy-to-clipboard for code
-- [x] H7. Collapsible tool results
+### Filter Options
 
-### Phase 3: Enhanced Features
-- [x] H4. Voice input
-- [x] H5. Image upload
-- [x] M5. Thinking/reasoning blocks
-- [x] M6. Diff viewer
-
-### Phase 4: Polish
-- [x] M1. Extended status messages
-- [x] M2. Usage limit formatting
-- [x] M4. Token truncation with expandable view
-- [x] M7. Inline code fence normalization
-- [x] L1. Token usage visualization
-- [x] L2. LaTeX math rendering
-- [x] L3. Keyboard shortcuts
-- [x] L4. Escape sequence protection
+- [ ] By message role (user/assistant/tool/error)
+- [ ] By tool type (Grep, Bash, Edit, etc.)
+- [ ] By date range
+- [ ] Bookmarked only
 
 ---
 
-## Notes
+## 5. Session Management
 
-- Web frontend source: `~/dev/claudecodeui`
-- iOS app: `~/dev/ClaudeCodeApp`
-- Server API: claudecodeui backend on QNAP container (10.0.3.2:8080)
+**Priority:** Medium | **Status:** Planned
+
+Better organization and navigation of chat sessions.
+
+### Enhanced Session Picker
+
+```
+┌─────────────────────────────────────┐
+│ [New] Session 1: "Add auth feature" │
+│       12 messages • 2m ago          │
+├─────────────────────────────────────┤
+│ Session 2: "Fix database bug"       │
+│       8 messages • 1h ago           │
+└─────────────────────────────────────┘
+```
+
+### Features
+
+- [ ] Grid or list view (replace horizontal scroll)
+- [ ] Message count and last activity time
+- [ ] Preview last message or session summary
+- [ ] Swipe to delete old sessions
+- [ ] Long-press for options (rename, duplicate, export)
+
+---
+
+## 6. Extended Data Model
+
+**Priority:** Low | **Status:** Idea
+
+Support advanced features with richer message metadata.
+
+### Proposed ChatMessage Extensions
+
+```swift
+struct ChatMessage {
+    // Existing fields...
+
+    // Organization
+    var isBookmarked: Bool = false
+    var tags: [String] = []
+    var parentMessageId: UUID?  // For threading
+
+    // Tool metadata
+    var toolMetadata: ToolMetadata?
+}
+
+struct ToolMetadata: Codable {
+    let toolName: String
+    let parameters: [String: String]
+    let resultSummary: String?
+    let affectedFiles: [String]?
+}
+```
+
+---
+
+## Recently Completed
+
+### Settings Overhaul
+- [x] iOS Form-style settings UI
+- [x] Theme selection (System/Dark/Light)
+- [x] Font size presets (XS/S/M/L/XL)
+- [x] Skip Permissions toggle
+- [x] Show Thinking Blocks toggle
+- [x] Auto-scroll toggle
+- [x] Project sort order (Name/Date)
+- [x] API Key field for REST endpoints
+
+### Core Features
+- [x] WebSocket real-time chat
+- [x] Markdown rendering (headers, code, tables, lists)
+- [x] Image attachments via PhotosPicker
+- [x] Voice input with Speech framework
+- [x] SSH terminal with Citadel
+- [x] Message persistence (50 messages per project)
+- [x] Draft auto-save
+- [x] Local notifications on task completion
+
+---
+
+## Implementation Priority
+
+| Phase | Features | Effort |
+|-------|----------|--------|
+| 1 | Message Actions (foundation for bookmarks) | Medium |
+| 2 | Bookmarks System | Low |
+| 3 | Enhanced Tool Visualization | High |
+| 4 | Search/Filter | High |
+| 5 | Session Management | Medium |
+
+---
+
+*Last updated: December 2024*
