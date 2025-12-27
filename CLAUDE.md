@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Native iOS client for claudecodeui (local fork at `~/dev/claudecodeui`, based on sugyan/claude-code-webui), enabling Claude Code access from iPhone/iPad. The app connects to a backend server (typically running on a NAS via Tailscale) via WebSocket and provides real-time streaming chat with tool visibility. Includes a built-in SSH terminal for direct server access, file browser, and project management.
+Native iOS client for [claudecodeui](https://github.com/siteboon/claudecodeui), enabling Claude Code access from iPhone/iPad. The app connects to a backend server (typically running on a NAS via Tailscale) via WebSocket and provides real-time streaming chat with tool visibility. Includes a built-in SSH terminal for direct server access, file browser, and project management.
 
 ## Build & Run
 
@@ -164,8 +164,8 @@ In Info.plist:
 
 See `requirements/BACKEND.md`. Quick start:
 ```bash
-npm install -g claude-code-webui
-claude-code-webui --host 0.0.0.0 --port 8080
+git clone https://github.com/siteboon/claudecodeui.git
+cd claudecodeui && npm install && npm run build && npm start
 ```
 
 SSH requires standard sshd running on the server.

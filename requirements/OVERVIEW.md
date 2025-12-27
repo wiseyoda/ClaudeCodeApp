@@ -2,154 +2,240 @@
 
 ## Project Goal
 
-Create a native iOS application that provides a mobile-friendly interface to Claude Code, enabling developers to interact with Claude CLI from their iPhone or iPad while away from their desk.
+Create a native iOS application that provides a full-featured mobile interface to Claude Code, enabling developers to interact with Claude CLI from their iPhone or iPad while away from their desk.
 
 ## Background
 
-The [claude-code-webui](https://github.com/sugyan/claude-code-webui) project provides a web-based interface for Claude Code. This iOS app acts as a native client for that same backend, providing a more polished mobile experience.
+The [claudecodeui](https://github.com/siteboon/claudecodeui) project provides a web-based interface for Claude Code. This iOS app acts as a native client for that same backend, providing a polished mobile experience with native features like voice input, keyboard shortcuts, and Keychain storage.
 
 ## Target Users
 
 - Developers who use Claude Code for coding assistance
 - Users who want to interact with Claude Code from mobile devices
 - Teams running Claude Code on remote servers (NAS, cloud, etc.)
+- iPad users who want a native development companion
 
 ## Key Requirements
 
 ### Functional Requirements
 
-1. **Project Management**
-   - List all available projects from the backend
-   - Display project name, path, and session count
-   - Navigate to project chat view
-   - Clone projects from GitHub URL
-   - Create new empty projects
-   - Delete projects from list (with confirmation)
-   - Project registration with Claude via session files
+#### 1. Project Management
+- List all available projects from the backend
+- Display project name, path, and session count
+- Navigate to project chat view
+- Clone projects from GitHub URL
+- Create new empty projects
+- Delete projects from list (with confirmation)
+- Project registration with Claude via session files
+- Git status tracking with 10 states (clean, dirty, ahead, behind, etc.)
+- Auto-pull for behind repositories
 
-2. **Session Management**
-   - Session selection for resuming conversations
-   - Full-screen session picker with summaries and timestamps
-   - Rename sessions with custom names
-   - Delete sessions with swipe-to-delete
-   - Export sessions as markdown with share sheet
+#### 2. Session Management
+- Session selection for resuming conversations
+- Full-screen session picker with summaries and timestamps
+- Rename sessions with custom names (persisted via SessionNamesStore)
+- Delete sessions with swipe-to-delete
+- Export sessions as markdown with share sheet
+- Session history loaded via SSH (JSONL parsing)
 
-3. **Chat Interface**
-   - Send messages to Claude (text, voice, or with images)
-   - Receive streaming responses in real-time via WebSocket
-   - Display tool usage with collapsible sections
-   - Display tool results (truncated with expand option)
-   - Show thinking/reasoning blocks (collapsible)
-   - Diff visualization for Edit tool changes
-   - TodoWrite visual checklist with status colors
-   - AskUserQuestion interactive selection UI
-   - Code blocks with syntax highlighting and copy button
-   - Support multi-turn conversations via session persistence
-   - Copy and share messages via context menu
+#### 3. Chat Interface
+- Send messages to Claude (text, voice, or with images)
+- Receive streaming responses in real-time via WebSocket
+- Display tool usage with collapsible sections (12+ tool types)
+- Display tool results (truncated with expand option)
+- Show thinking/reasoning blocks (purple, collapsible)
+- Diff visualization for Edit tool changes with line numbers
+- TodoWrite visual checklist with status colors
+- AskUserQuestion interactive selection UI
+- Code blocks with copy button
+- Full markdown rendering (headers, tables, lists, math)
+- Copy and share messages via context menu
+- Bookmark important messages
 
-4. **Slash Commands**
-   - `/clear` - Clear conversation and start fresh
-   - `/new` - Start a new session
-   - `/init` - Create/modify CLAUDE.md (via Claude)
-   - `/resume` - Open session picker
-   - `/compact` - Compact conversation to save context
-   - `/status` - Show connection and session info
-   - `/exit` - Return to project list
-   - `/help` - Show command reference
+#### 4. Model Selection
+- Opus 4, Sonnet 4, Haiku 3.5, Custom model support
+- Model selector in unified status bar
+- Model passed via WebSocket options
+- Per-session model switching
 
-5. **File Browser & References**
-   - Browse project files via SSH
-   - Breadcrumb navigation for directories
-   - Search/filter files by name
-   - @ button to insert file references into prompts
+#### 5. Thinking Modes
+- 5 levels: Normal, Think, Think Hard, Think Harder, Ultrathink
+- Visual indicator with distinct icons and colors
+- Silently appends trigger words to messages
+- Persisted via @AppStorage
 
-6. **Message Persistence**
-   - Save last 50 messages per project (file-based storage)
-   - Auto-save draft input text
-   - Load history on view appear
-   - Clear history with "New Chat" button
+#### 6. Slash Commands
+| Command | Action |
+|---------|--------|
+| `/clear` | Clear conversation and start fresh |
+| `/new` | Start a new session |
+| `/init` | Create/modify CLAUDE.md (via Claude) |
+| `/resume` | Open session picker |
+| `/compact` | Compact conversation to save context |
+| `/status` | Show connection and session info |
+| `/exit` | Return to project list |
+| `/help` | Show command reference |
 
-7. **Voice Input**
-   - Speech-to-text via iOS Speech Recognition
-   - Real-time transcription with partial results
-   - Recording indicator in input bar
+#### 7. File Browser & References
+- Browse project files via SSH
+- Breadcrumb navigation for directories
+- Search/filter files by name
+- @ button to insert file references into prompts
+- AI-suggested files based on conversation context
 
-8. **Image Attachments**
-   - Photo library picker integration
-   - Image preview before sending
-   - Images displayed inline in messages
+#### 8. Message Persistence
+- Save last 50 messages per project (file-based storage)
+- Auto-save draft input text
+- Load history on view appear
+- Clear history with "New Chat" button
+- Image storage in Documents directory
 
-9. **SSH Terminal**
-   - Native SSH client via Citadel library
-   - Special keys bar (Ctrl+C, Tab, arrows, etc.)
-   - Password authentication with saved credentials
-   - Auto-connect with stored settings
+#### 9. Voice Input
+- Speech-to-text via iOS Speech Recognition
+- Real-time transcription with partial results
+- Recording indicator in input bar
+- Microphone button for quick access
 
-10. **Configuration**
-    - Configurable backend server URL
-    - SSH host/port/username/password
-    - Font size preferences (XS/S/M/L/XL)
-    - Theme selection (System/Dark/Light)
-    - Claude mode selector (normal/plan/bypass)
-    - Skip permissions toggle
-    - Show thinking blocks toggle
-    - Auto-scroll toggle
-    - Project sort order (name/date)
-    - Persist settings across app launches
+#### 10. Image Attachments
+- Photo library picker integration
+- Image preview before sending with remove option
+- Images displayed inline in messages
 
-11. **Notifications**
-    - Local notifications when tasks complete (background only)
-    - Request notification permissions on launch
+#### 11. SSH Terminal
+- Native SSH client via Citadel library
+- Special keys bar (Ctrl+C, Tab, arrows, etc.)
+- Password and SSH key authentication
+- Ed25519, RSA, ECDSA key support
+- Keychain storage for secure keys
+- Auto-connect with stored settings
+
+#### 12. Search & Discovery
+- Message search within current session
+- Filter by message type (All/User/Assistant/Tools/Thinking)
+- Bookmark messages with cross-session persistence
+- Global search across all sessions via SSH
+- Search results with project context
+
+#### 13. Command Library
+- Save frequently-used prompts as named commands
+- Organize by categories (Git, Code Review, Testing, Docs)
+- Quick picker accessible from [+] menu
+- Last-used tracking and sorting
+- CRUD management interface
+
+#### 14. AI Suggestions
+- Context-aware action chips after responses
+- Haiku-powered fast suggestions
+- Suggested files in file picker
+- Tappable chips that auto-send prompts
+
+#### 15. iPad Experience
+- NavigationSplitView with sidebar for projects
+- Keyboard shortcuts (Cmd+Return, Cmd+K, Cmd+N, etc.)
+- Split-view multitasking support
+- Landscape orientation optimization
+
+#### 16. Configuration
+| Setting | Options |
+|---------|---------|
+| Server URL | Backend address |
+| Auth | Username/password (JWT) |
+| SSH | Host, port, username, auth method |
+| Font Size | XS / S / M / L / XL |
+| Theme | System / Dark / Light |
+| Model | Opus / Sonnet / Haiku / Custom |
+| Permission Mode | Normal / Plan / Bypass |
+| Thinking Mode | 5 levels |
+| Display | Show thinking, auto-scroll |
+| Sort | By name / By date |
+
+#### 17. Notifications
+- Local notifications when tasks complete (background only)
+- Request notification permissions on launch
 
 ### Non-Functional Requirements
 
-1. **Performance**
-   - Streaming responses must feel responsive
-   - App should handle long conversations without lag
-   - Exponential backoff reconnection (1s→2s→4s→8s + jitter)
+#### 1. Performance
+- Streaming responses must feel responsive
+- App should handle long conversations without lag
+- Exponential backoff reconnection (1s->2s->4s->8s + jitter)
+- 30-second processing timeout with auto-reset
 
-2. **Security**
-   - Rely on network-level security (Tailscale)
-   - No credentials stored in the app (backend handles auth)
-   - SSH credentials stored locally via UserDefaults
+#### 2. Security
+- JWT token-based authentication
+- SSH key storage in iOS Keychain
+- Network-level security via Tailscale
+- ATS disabled for local/Tailscale IPs only
+- **Known Issues**: SSH password in UserDefaults (should migrate to Keychain)
 
-3. **Usability**
-   - CLI-inspired theme with light/dark mode support
-   - Support for iOS 17.0+
-   - Works on iPhone and iPad
-   - VoiceOver accessibility labels on interactive elements
+#### 3. Usability
+- CLI-inspired theme with light/dark mode support
+- Support for iOS 17.0+
+- Works on iPhone and iPad
+- VoiceOver accessibility labels on interactive elements
+- Keyboard shortcuts for iPad users
 
-4. **Quality**
-   - 28+ unit tests for parsers and utilities
-   - Structured logging via Logger utility
-   - Unified error handling via AppError
+#### 4. Quality
+- 28+ unit tests for parsers and utilities
+- Structured logging via Logger utility
+- Unified error handling via AppError
 
 ## Completed Features
 
-- ✅ Real-time streaming chat
-- ✅ Tool use visualization with collapsible sections
-- ✅ Diff viewer for Edit tool
-- ✅ TodoWrite visual checklist
-- ✅ AskUserQuestion interactive UI
-- ✅ Voice input with Speech framework
-- ✅ Image attachments
-- ✅ SSH terminal
-- ✅ File browser with @ references
-- ✅ Project clone from GitHub
-- ✅ Project creation and deletion
-- ✅ Session rename, delete, export
-- ✅ Slash commands
-- ✅ Copy/share context menus
-- ✅ Light/dark theme support
-- ✅ File-based message persistence
-- ✅ Unit test coverage
+### Core
+- Real-time streaming chat via WebSocket
+- Tool use visualization with 12+ tool types
+- Diff viewer for Edit tool with line numbers
+- TodoWrite visual checklist
+- AskUserQuestion interactive UI
+- Full markdown rendering
+- Voice input with Speech framework
+- Image attachments
+- SSH terminal with key support
+- File browser with @ references
+- Project clone from GitHub
+- Project creation and deletion
+- Session rename, delete, export
+- Slash commands
+
+### Advanced
+- Model selection (Opus/Sonnet/Haiku/Custom)
+- Thinking modes (5 levels)
+- Message search and filtering
+- Bookmarks with cross-session persistence
+- Global search via SSH
+- Command library with categories
+- AI suggestions (Haiku-powered)
+- iPad sidebar navigation
+- Keyboard shortcuts
+- Git status with auto-pull
+- Connection status indicator
+- Unified status bar
+- QuickSettings sheet
+
+### Quality
+- Copy/share context menus
+- Light/dark theme support
+- File-based message persistence
+- 28+ unit tests
+- Structured logging
 
 ## Out of Scope (Current Version)
 
-- Push notifications (APNs - currently uses local notifications)
-- Offline mode
-- Multiple backend server profiles
-- File attachments beyond images
-- GitHub OAuth integration
-- Auto-sync from GitHub (background git pull)
-- iPad sidebar navigation
+| Feature | Reason |
+|---------|--------|
+| Push notifications (APNs) | Using local notifications instead |
+| Offline mode | Complexity outweighs benefit |
+| Multiple backend servers | Future priority (see ROADMAP.md) |
+| File attachments beyond images | Not essential for v1 |
+| GitHub OAuth integration | Backend handles auth |
+| Syntax highlighting in code blocks | Future priority |
+
+## Known Issues
+
+See ROADMAP.md Priority 1 for critical issues including:
+- WebSocket race conditions
+- Missing @MainActor annotations
+- SpeechManager missing deinit
+- SSH password in UserDefaults (should use Keychain)
+- Command injection vulnerabilities in SSH commands

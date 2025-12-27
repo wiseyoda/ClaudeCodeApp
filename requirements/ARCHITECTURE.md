@@ -3,64 +3,63 @@
 ## System Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                         iOS Device                                │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │                    ClaudeCodeApp                            │  │
-│  │                                                              │  │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌───────────────────┐   │  │
-│  │  │ ContentView │──│  ChatView   │──│ WebSocketManager  │   │  │
-│  │  │ (Projects)  │  │ (Messages)  │  │ (Streaming)       │   │  │
-│  │  └─────────────┘  └─────────────┘  └───────────────────┘   │  │
-│  │         │                │                                   │  │
-│  │         │         ┌──────┴──────┐                           │  │
-│  │         │         │SpeechManager│                           │  │
-│  │         │         │(Voice Input)│                           │  │
-│  │         │         └─────────────┘                           │  │
-│  │         │                                                    │  │
-│  │  ┌──────┴──────┐  ┌─────────────┐  ┌───────────────────┐   │  │
-│  │  │TerminalView │──│ SSHManager  │  │   MessageStore    │   │  │
-│  │  │ (SSH Shell) │  │ (Citadel)   │  │   (File-based)    │   │  │
-│  │  └─────────────┘  └─────────────┘  └───────────────────┘   │  │
-│  │                          │                   │              │  │
-│  │         ┌────────────────┴───────────────────┘              │  │
-│  │         │                                                    │  │
-│  │  ┌──────┴──────┐  ┌─────────────┐  ┌───────────────────┐   │  │
-│  │  │ AppSettings │  │   Logger    │  │ SessionNamesStore │   │  │
-│  │  │ (Config)    │  │  (Logging)  │  │ (Custom Names)    │   │  │
-│  │  └─────────────┘  └─────────────┘  └───────────────────┘   │  │
-│  └────────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                              iOS Device                                       │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │                         ClaudeCodeApp                                   │  │
+│  │                                                                         │  │
+│  │  ┌─────────────────┐  ┌─────────────────┐  ┌───────────────────────┐   │  │
+│  │  │   ContentView   │──│    ChatView     │──│   WebSocketManager    │   │  │
+│  │  │   (Projects)    │  │   (Messages)    │  │   (Streaming)         │   │  │
+│  │  └─────────────────┘  └─────────────────┘  └───────────────────────┘   │  │
+│  │         │                     │                      │                  │  │
+│  │         │              ┌──────┴──────┐        ┌──────┴──────┐          │  │
+│  │         │              │SpeechManager│        │ClaudeHelper │          │  │
+│  │         │              │(Voice Input)│        │(AI Suggest) │          │  │
+│  │         │              └─────────────┘        └─────────────┘          │  │
+│  │         │                                                               │  │
+│  │  ┌──────┴──────┐  ┌─────────────┐  ┌─────────────┐  ┌───────────────┐  │  │
+│  │  │TerminalView │──│ SSHManager  │  │MessageStore │  │  BookmarkStore│  │  │
+│  │  │ (SSH Shell) │  │ (Citadel)   │  │ (File-based)│  │  (Bookmarks)  │  │  │
+│  │  └─────────────┘  └─────────────┘  └─────────────┘  └───────────────┘  │  │
+│  │                          │                                              │  │
+│  │  ┌─────────────┐  ┌──────┴──────┐  ┌─────────────┐  ┌───────────────┐  │  │
+│  │  │ AppSettings │  │CommandStore │  │   Logger    │  │SessionNames   │  │  │
+│  │  │ (Config)    │  │ (Prompts)   │  │  (Logging)  │  │Store (Names)  │  │  │
+│  │  └─────────────┘  └─────────────┘  └─────────────┘  └───────────────┘  │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────────┘
                               │
                               │ WebSocket / SSH
                               │ (via Tailscale)
                               ▼
-┌──────────────────────────────────────────────────────────────────┐
-│                      Backend Server (NAS/Cloud)                   │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │                  claude-code-webui                          │  │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │  │
-│  │  │  WebSocket  │──│   Message   │──│    Claude CLI       │ │  │
-│  │  │   Server    │  │   Handler   │  │    Wrapper          │ │  │
-│  │  └─────────────┘  └─────────────┘  └─────────────────────┘ │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                              │                                    │
-│                              ▼                                    │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │                     Claude CLI                              │  │
-│  │  - Authenticated with Anthropic                             │  │
-│  │  - Access to workspace files                                │  │
-│  │  - Tool execution capabilities                              │  │
-│  └────────────────────────────────────────────────────────────┘  │
-│                                                                   │
-│  ┌────────────────────────────────────────────────────────────┐  │
-│  │                        sshd                                 │  │
-│  │  - Standard SSH daemon                                      │  │
-│  │  - Terminal access for TerminalView                         │  │
-│  │  - File listing for FilePickerSheet                         │  │
-│  │  - Git operations for CloneProjectSheet                     │  │
-│  └────────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                        Backend Server (NAS/Cloud)                             │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │                          claudecodeui                                   │  │
+│  │  ┌─────────────┐  ┌─────────────┐  ┌───────────────────────────────┐   │  │
+│  │  │  WebSocket  │──│   Message   │──│        Claude CLI             │   │  │
+│  │  │   Server    │  │   Handler   │  │        Wrapper                │   │  │
+│  │  └─────────────┘  └─────────────┘  └───────────────────────────────┘   │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│                              │                                                │
+│                              ▼                                                │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │                          Claude CLI                                     │  │
+│  │  - Authenticated with Anthropic                                         │  │
+│  │  - Access to workspace files                                            │  │
+│  │  - Tool execution capabilities                                          │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+│                                                                               │
+│  ┌────────────────────────────────────────────────────────────────────────┐  │
+│  │                            sshd                                         │  │
+│  │  - Standard SSH daemon                                                  │  │
+│  │  - Terminal access for TerminalView                                     │  │
+│  │  - File listing for FilePickerSheet                                     │  │
+│  │  - Git operations for CloneProjectSheet                                 │  │
+│  │  - Session history for GlobalSearchView                                 │  │
+│  └────────────────────────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## iOS App Components
@@ -74,91 +73,166 @@
 - Requests notification permissions
 
 #### AppSettings.swift
-- Stores server URL using @AppStorage
-- SSH credentials (host, port, username, password)
-- Font size preference (XS/S/M/L/XL)
-- Theme selection (System/Dark/Light)
-- Claude mode setting (normal/plan/bypass)
-- Skip permissions, show thinking, auto-scroll toggles
-- Project sort order (name/date)
-- Computed webSocketURL property
-- Persists across app launches
+Stores all user configuration using @AppStorage:
+
+| Category | Settings |
+|----------|----------|
+| Server | URL, username, password, JWT token |
+| Claude | Mode (normal/plan), thinking mode (5 levels), skipPermissions |
+| Model | defaultModel, customModelId |
+| Display | fontSize, appTheme, showThinkingBlocks, autoScrollEnabled |
+| Project | projectSortOrder (name/date) |
+| SSH | host, port, username, authMethod, password |
+
+Key computed properties:
+- `applyThinkingMode()` - Appends thinking trigger words
+- `effectivePermissionMode` - Resolves bypass vs mode setting
+- `webSocketURL` - Derives ws:// from serverURL with token
+- `effectiveSSHHost` - Falls back to server URL host
+- `scaledFont()` - Font scaling for accessibility
 
 #### Models.swift
-- `Project` - Represents a Claude Code project with sessions
-- `ProjectSession` - Session metadata (id, summary, message count)
-- `ChatMessage` - UI message with role, content, timestamp, imageData
-- `MessageStore` - File-based persistence in Documents directory
-- `SessionHistoryLoader` - Parses JSONL session files via SSH
-- `WSClaudeCommand` / `WSMessage` - WebSocket protocol types
-- `AnyCodable` - Helper for dynamic JSON parsing
+
+**Enums:**
+| Enum | Values |
+|------|--------|
+| `ClaudeModel` | opus, sonnet, haiku, custom |
+| `ThinkingMode` | normal, think, thinkHard, thinkHarder, ultrathink |
+| `ClaudeMode` | normal, plan |
+| `AppTheme` | system, dark, light |
+| `ProjectSortOrder` | name, date |
+| `FontSizePreset` | XS, S, M, L, XL (10-18pt) |
+| `GitStatus` | 10 states with icons and colors |
+
+**Data Models:**
+| Model | Purpose |
+|-------|---------|
+| `Project` | name, path, sessions, displayName |
+| `ProjectSession` | id, summary, messageCount, lastActivity |
+| `ChatMessage` | role, content, timestamp, imageData, isStreaming |
+| `BookmarkedMessage` | messageId, role, content, project context |
+| `SavedCommand` | name, content, category, timestamps |
+| `WSClaudeCommand` | WebSocket send format |
+| `WSMessage` | WebSocket response types |
+
+**Storage Classes:**
+| Class | Storage | Purpose |
+|-------|---------|---------|
+| `MessageStore` | Documents/{path}.json | Message persistence |
+| `BookmarkStore` | Documents/bookmarks.json | Cross-session bookmarks |
+| `SessionNamesStore` | UserDefaults | Custom session names |
+| `SessionHistoryLoader` | SSH/JSONL | Load session from server |
 
 #### WebSocketManager.swift
-- WebSocket connection management
-- Exponential backoff reconnection (1s→2s→4s→8s + jitter)
-- Message sending with session/mode support
-- Streaming response parsing (text, tool_use, thinking)
-- Local notification dispatch on completion
-- Callbacks: onText, onToolUse, onToolResult, onThinking, onComplete, onError
+
+**Connection Management:**
+- `ConnectionState` enum (disconnected/connecting/connected/reconnecting)
+- Exponential backoff reconnection (1s -> 2s -> 4s -> 8s max + jitter)
+- 30-second processing timeout with auto-reset
+- Message retry queue with max 3 attempts
+
+**Published State:**
+| Property | Type | Purpose |
+|----------|------|---------|
+| `connectionState` | ConnectionState | Current connection status |
+| `isProcessing` | Bool | Request in flight |
+| `currentText` | String | Streaming response text |
+| `lastError` | String? | Most recent error |
+| `sessionId` | String? | Active session |
+| `tokenUsage` | (current, max) | Token budget |
+| `currentModel` | ClaudeModel | Active model |
+
+**Streaming Callbacks:**
+| Callback | Purpose |
+|----------|---------|
+| `onText()` | Streaming assistant text |
+| `onTextCommit()` | Text segment complete |
+| `onToolUse(name, input)` | Tool invocation |
+| `onToolResult()` | Tool output |
+| `onThinking()` | Reasoning blocks |
+| `onComplete(sessionId)` | Task finished |
+| `onAskUserQuestion()` | Interactive questions |
+| `onError()` | Error handling |
+| `onModelChanged()` | Model switch |
 
 #### SpeechManager.swift
-- iOS Speech framework integration
-- SFSpeechRecognizer for transcription
+- iOS Speech framework integration (SFSpeechRecognizer)
 - AVAudioEngine for recording
 - Real-time partial results
 - Authorization status tracking
+- **Known Issue:** Missing deinit for cleanup
 
 #### SSHManager.swift
-- SSH connection via Citadel library
-- Channel-based I/O for terminal
-- File listing via `ls -laF` command
-- Command execution with timeout support
-- Auto-connect with saved credentials
-- Special key sequences (Ctrl+C, arrows, etc.)
-- Connection state management
+
+**Capabilities:**
+| Feature | Implementation |
+|---------|---------------|
+| SSH Client | Citadel (pure Swift) |
+| Auth | Password, SSH keys (Ed25519, RSA, ECDSA) |
+| Key Storage | iOS Keychain |
+| Operations | Terminal I/O, file listing, command execution |
+| Auto-connect | Saved credentials priority |
+
+**Known Issues:**
+- Command injection vulnerabilities (unescaped paths)
+- Password stored in UserDefaults (should use Keychain)
+
+#### CommandStore.swift
+- Singleton with JSON persistence (Documents/commands.json)
+- CRUD operations for SavedCommand
+- Category management
+- Last-used tracking and sorting
+- Default commands for Git, Code Review, Testing, Docs
+
+#### ClaudeHelper.swift
+- Haiku-powered meta-AI service
+- `SuggestedAction` model (label, prompt, icon)
+- Generate 3 suggestions based on conversation
+- Suggested files in file picker
+- Separate WebSocket with 15-second timeout
+
+#### APIClient.swift
+- HTTP client with JWT authentication
+- Project listing endpoint (GET /api/projects)
+- **Known Issue:** Missing @MainActor annotation
 
 #### Theme.swift
-- `CLITheme` - CLI-inspired colors with colorScheme awareness
-- Background, text, accent, success, error colors
-- Diff colors (added green, removed red)
-- Tool-specific colors
+- `CLITheme` with colorScheme-aware colors
 - Light and dark mode variants
+- Tool-specific colors
+- Diff colors (added/removed)
 
-#### Logger.swift
-- Structured logging utility
-- Debug, info, warning, error levels
-- File and line context
-
-#### AppError.swift
-- Unified error handling
-- User-friendly error messages
-- Error categorization
-
-#### ImageUtilities.swift
-- MIME type detection from image data
-- Supports PNG, JPEG, GIF, WebP
+#### Utilities
+| File | Purpose |
+|------|---------|
+| `Logger.swift` | Structured logging (debug/info/warning/error) |
+| `AppError.swift` | Unified error handling |
+| `ImageUtilities.swift` | MIME type detection (PNG, JPEG, GIF, WebP) |
 
 ### Main Views
 
 #### ContentView.swift
-- Main navigation container
+- Main navigation container (NavigationSplitView for iPad)
 - Project list with session counts
-- Settings sheet (SettingsView)
+- Settings sheet
 - New project action sheet (Clone vs Create)
 - Project deletion with swipe and context menu
-- Error handling and retry logic
-- Toolbar with Terminal access
+- Global search access
+- Terminal access
 
 #### ChatView.swift
-Core chat UI with many responsibilities:
+Core chat UI with responsibilities:
 - Message list with auto-scroll
 - WebSocket streaming integration
-- Slash command handling (/clear, /new, /init, /resume, etc.)
+- Slash command handling
 - Tool use/result collapsible sections
-- Thinking block display (purple, collapsible)
+- Thinking block display
 - Session picker sheet
-- Help sheet for commands
-- Draft input persistence
+- Help sheet
+- Unified status bar
+- Quick settings sheet
+- Search and filtering
+- Bookmark context menu
 
 #### TerminalView.swift
 - Interactive SSH shell display
@@ -168,57 +242,27 @@ Core chat UI with many responsibilities:
 
 ### Views/ Folder
 
-#### MarkdownText.swift
-- Full markdown rendering component
-- Headers, lists, tables, code blocks
-- Math expressions (LaTeX)
-- HTML entity decoding
-- Copy button on code blocks
-
-#### CLIInputView.swift
-- Input field with placeholder
-- Send button
-- Voice input button (microphone)
-- Image attachment button
-- @ file reference button
-- Image preview with remove option
-
-#### CLIMessageView.swift
-- Message bubble with role-based styling
-- User, assistant, system, tool variants
-- Copy and share context menu
-- Timestamp display
-- Image display for attachments
-
-#### SessionPickerViews.swift
-- `SessionNamesStore` - UserDefaults persistence for custom names
-- `SessionPicker` - Horizontal scrolling session tabs
-- `SessionPickerSheet` - Full-screen session list
-- `SessionExportSheet` - Markdown export preview
-- `SessionRow` - Session list row with metadata
-- Swipe actions (delete, export)
-- Context menu (rename, export, delete)
-- Confirmation dialogs
-
-#### FilePickerSheet.swift
-- `FileEntry` - File/directory representation
-- File browser with breadcrumb navigation
-- Directory listing via SSH
-- Search/filter functionality
-- File selection for @ references
-
-#### CloneProjectSheet.swift
-- GitHub URL input and validation
-- Git clone via SSH
-- Progress indicator
-- Claude project registration
-- Error handling
-
-#### NewProjectSheet.swift
-- Project name input with validation
-- Creates directory in ~/workspace/
-- Optional Claude initialization
-- Claude project registration
+| File | Lines | Purpose |
+|------|-------|---------|
+| `MarkdownText.swift` | 490 | Full markdown rendering with math, tables, code |
+| `CLIMessageView.swift` | 575 | Message bubble with role styling, context menu |
+| `CLIInputView.swift` | 302 | Multi-line input, attachments, voice, [+] menu |
+| `DiffView.swift` | 358 | Edit tool diff with line numbers, context collapse |
+| `TodoListView.swift` | 173 | TodoWrite checklist with status colors |
+| `CodeBlockView.swift` | 109 | Code display with copy button |
+| `TruncatableText.swift` | 275 | Truncated text with expand button |
+| `CLIStatusBarViews.swift` | 395 | Unified status bar components |
+| `SessionPickerViews.swift` | 410 | Session picker, rename, export |
+| `FilePickerSheet.swift` | 311 | File browser with AI suggestions |
+| `CloneProjectSheet.swift` | 235 | Git clone with progress |
+| `NewProjectSheet.swift` | 209 | Create empty project |
+| `CommandsView.swift` | 447 | Command library CRUD |
+| `CommandPickerSheet.swift` | 171 | Quick command selection |
+| `BookmarksView.swift` | 150 | Bookmark list with search |
+| `GlobalSearchView.swift` | 375 | Cross-session search |
+| `SearchFilterViews.swift` | 232 | Message filters and search bar |
+| `SuggestionChipsView.swift` | 202 | AI suggestion chips |
+| `QuickSettingsSheet.swift` | 270 | Fast settings access |
 
 ## Data Flow
 
@@ -226,7 +270,7 @@ Core chat UI with many responsibilities:
 ```
 1. App launches
 2. ContentView.task calls APIClient.fetchProjects()
-3. HTTP GET /api/projects
+3. HTTP GET /api/projects with JWT token
 4. Response decoded to [Project]
 5. Projects sorted by user preference
 6. UI updates with project list
@@ -234,7 +278,7 @@ Core chat UI with many responsibilities:
 
 ### Cloning a Project
 ```
-1. User taps + → Clone from GitHub
+1. User taps + -> Clone from GitHub
 2. CloneProjectSheet opens
 3. User enters GitHub URL
 4. SSHManager.executeCommandWithAutoConnect runs `git clone`
@@ -247,22 +291,25 @@ Core chat UI with many responsibilities:
 ### Sending a Message
 ```
 1. User types/speaks/attaches and taps send
-2. ChatView adds user message to list
-3. WebSocketManager.sendMessage() called with:
+2. ThinkingMode trigger appended if active
+3. ChatView adds user message to list
+4. WebSocketManager.sendMessage() called with:
    - message text
    - project path (cwd)
    - sessionId (optional)
-   - permissionMode (optional)
-4. WebSocket sends claude-command message
-5. Response streamed via claude-response messages
-6. Callbacks update UI:
+   - permissionMode
+   - model options
+5. WebSocket sends claude-command message
+6. Response streamed via claude-response messages
+7. Callbacks update UI:
    - onText: streaming assistant text
    - onToolUse: tool invocation display
    - onToolResult: tool output display
    - onThinking: reasoning block display
-7. claude-complete signals end
-8. MessageStore saves history to file
-9. Local notification sent (if backgrounded)
+8. claude-complete signals end
+9. MessageStore saves history to file
+10. AI suggestions generated via ClaudeHelper
+11. Local notification sent (if backgrounded)
 ```
 
 ### Session Management
@@ -270,34 +317,63 @@ Core chat UI with many responsibilities:
 1. User taps /resume or session picker
 2. SessionPickerSheet shows with sessions
 3. User can:
-   - Select session → loads history via SSH
-   - Rename → SessionNamesStore saves custom name
-   - Delete → removes session file via SSH
-   - Export → generates markdown, shows share sheet
+   - Select session -> loads history via SSH
+   - Rename -> SessionNamesStore saves custom name
+   - Delete -> removes session file via SSH
+   - Export -> generates markdown, shows share sheet
 4. Selected session's history loaded
 5. Conversation continues with session context
 ```
 
 ### Voice Input Flow
 ```
-1. User taps mic button
+1. User taps mic button (in [+] menu or when input empty)
 2. SpeechManager.startRecording()
 3. AVAudioEngine captures audio
 4. SFSpeechRecognizer transcribes
-5. Partial results update UI
-6. User taps mic again to stop
+5. Partial results update recording indicator
+6. User taps Done to stop
 7. Final transcription appended to input
 ```
 
 ### File Reference Flow
 ```
-1. User taps @ button
+1. User taps @ button (in [+] menu)
 2. FilePickerSheet opens
-3. SSHManager.listFiles() fetches directory
-4. User navigates/searches files
-5. User selects file
-6. @path/to/file inserted into input
-7. User sends message with reference
+3. ClaudeHelper suggests relevant files (AI-powered)
+4. SSHManager.listFiles() fetches directory
+5. User navigates/searches files
+6. User selects file
+7. @path/to/file inserted into input
+8. User sends message with reference
+```
+
+### Command Library Flow
+```
+1. User taps [+] -> Saved Commands
+2. CommandPickerSheet opens with categories
+3. User searches or browses commands
+4. User taps command
+5. Command content replaces input text
+6. CommandStore.markUsed() updates last-used
+7. User sends the command
+```
+
+### Search Flow
+```
+Current Session:
+1. User taps search icon
+2. Search bar appears with filter chips
+3. User types query
+4. Messages filtered by query and type
+5. Results highlighted
+
+Global Search:
+1. User taps global search in ContentView
+2. GlobalSearchView opens
+3. SSHManager searches session files via grep
+4. Results show with project context
+5. User can navigate to session
 ```
 
 ### Message Persistence
@@ -311,20 +387,30 @@ Core chat UI with many responsibilities:
 
 ## Security Model
 
-- **No API credentials in app** - Backend handles Claude authentication
-- **Network security** - Tailscale provides encrypted tunnel
-- **Local persistence** - Messages stored in Documents directory (device only)
-- **SSH credentials** - Stored locally via UserDefaults, never transmitted
-- **HTTP allowed** - App Transport Security disabled for local/Tailscale IPs
+| Layer | Implementation |
+|-------|---------------|
+| Authentication | JWT tokens via username/password |
+| Network | Tailscale encrypted tunnel |
+| Storage | Messages in Documents (device only) |
+| SSH Keys | iOS Keychain storage |
+| HTTP | ATS disabled for local/Tailscale IPs |
+
+**Known Security Issues:**
+- SSH password in UserDefaults (should use Keychain)
+- Command injection in SSH commands (unescaped paths)
+- Hardcoded default password in settings
 
 ## Testing
 
 28+ unit tests covering:
-- `StringMarkdownTests` - HTML entity decoding, markdown normalization
-- `DiffViewTests` - Edit tool diff parsing
-- `TodoListViewTests` - TodoWrite JSON parsing
-- `ImageUtilitiesTests` - MIME type detection
-- `ModelsTests` - WebSocket message handling
+
+| Test Suite | Coverage |
+|------------|----------|
+| `StringMarkdownTests` | HTML entity decoding, markdown normalization |
+| `DiffViewTests` | Edit tool diff parsing |
+| `TodoListViewTests` | TodoWrite JSON parsing |
+| `ImageUtilitiesTests` | MIME type detection |
+| `ModelsTests` | WebSocket message handling |
 
 Run tests:
 ```bash
@@ -332,3 +418,16 @@ xcodebuild test -project ClaudeCodeApp.xcodeproj -scheme ClaudeCodeApp \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
   -only-testing:ClaudeCodeAppTests
 ```
+
+## Known Issues
+
+See ROADMAP.md for the full list. Critical issues include:
+
+| Issue | Location | Severity |
+|-------|----------|----------|
+| WebSocket state race | WebSocketManager.swift | Critical |
+| Missing @MainActor | APIClient.swift, BookmarkStore | Critical |
+| SpeechManager no deinit | SpeechManager.swift | Critical |
+| SSH password in UserDefaults | AppSettings.swift | High |
+| Command injection | SSHManager.swift | High |
+| Message queue overwrite | WebSocketManager.swift | High |

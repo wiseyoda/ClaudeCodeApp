@@ -1,36 +1,74 @@
 # Claude Code iOS App
 
-A native iOS client for [Claude Code WebUI](https://github.com/sugyan/claude-code-webui), enabling Claude Code access from your iPhone or iPad.
+A native iOS client for [claudecodeui](https://github.com/siteboon/claudecodeui), enabling full Claude Code access from your iPhone or iPad.
 
 ## Features
 
-### Chat
-- **Real-time Streaming** - Live response updates via WebSocket
-- **Tool Visibility** - Collapsible tool use/results with expand/collapse
-- **Thinking Blocks** - View Claude's reasoning process (collapsible)
-- **Diff Viewer** - Color-coded visualization for Edit tool changes
-- **TodoWrite Visualization** - Interactive checklist rendering with status colors
-- **AskUserQuestion UI** - Interactive selection interface for Claude's questions
-- **Code Blocks** - Syntax highlighting with copy-to-clipboard
-- **Markdown Rendering** - Tables, headers, lists, inline code, math
+### Chat Interface
+| Feature | Description |
+|---------|-------------|
+| **Real-time Streaming** | Live response updates via WebSocket with smooth scrolling |
+| **Tool Visualization** | 12+ tools with distinct icons, colors, and collapsible sections |
+| **Diff Viewer** | Color-coded visualization for Edit tool with line numbers |
+| **TodoWrite Checklist** | Interactive task lists with status colors (pending/in-progress/complete) |
+| **AskUserQuestion UI** | Tappable selection interface for Claude's multi-choice questions |
+| **Thinking Blocks** | View Claude's reasoning process (purple, collapsible) |
+| **Code Blocks** | Syntax-styled display with copy-to-clipboard |
+| **Markdown Rendering** | Headers, tables, lists, math (LaTeX), inline code |
 
-### Input
-- **Voice Input** - Dictate messages using iOS Speech Recognition
-- **Image Upload** - Attach images from photo library with preview
-- **@ File References** - Reference project files in your prompts
-- **Draft Saving** - Auto-saves unsent messages per project
+### Input Methods
+| Feature | Description |
+|---------|-------------|
+| **Multi-line Text** | Word-wrapping input with adjustable height |
+| **Voice Input** | Dictate messages using iOS Speech Recognition |
+| **Image Upload** | Attach images from photo library with preview |
+| **@ File References** | Reference project files directly in prompts |
+| **Command Library** | Save and reuse frequent prompts with categories |
+| **AI Suggestions** | Context-aware action chips after responses (Haiku-powered) |
+
+### Model Selection
+| Model | Description |
+|-------|-------------|
+| **Opus 4** | Most capable, best for complex reasoning |
+| **Sonnet 4** | Balanced speed and quality |
+| **Haiku 3.5** | Fastest, best for quick tasks |
+| **Custom** | Specify any model ID |
+
+### Thinking Modes
+Control Claude's reasoning depth with 5 levels:
+
+| Mode | Description |
+|------|-------------|
+| Normal | Standard responses |
+| Think | Light reasoning with `think` trigger |
+| Think Hard | Deeper analysis |
+| Think Harder | Extended reasoning |
+| Ultrathink | Maximum depth with `ultrathink` trigger |
 
 ### Project Management
-- **Clone from GitHub** - Clone repositories directly from URL
-- **Create New Projects** - Create empty projects in workspace
-- **Delete Projects** - Remove projects from list (swipe or context menu)
-- **File Browser** - Navigate project files via SSH with breadcrumb navigation
+| Feature | Description |
+|---------|-------------|
+| **Clone from GitHub** | Clone repositories directly from URL |
+| **Create New Projects** | Create empty projects in workspace |
+| **Delete Projects** | Remove projects (swipe or context menu) |
+| **File Browser** | Navigate project files via SSH with breadcrumbs |
+| **Git Status** | 10 status states with auto-pull for behind repos |
 
 ### Session Management
-- **Session Picker** - Full-screen list with summaries and timestamps
-- **Rename Sessions** - Custom names instead of UUIDs
-- **Delete Sessions** - Swipe-to-delete with confirmation
-- **Export Sessions** - Save as markdown with share sheet
+| Feature | Description |
+|---------|-------------|
+| **Session Picker** | Full-screen list with summaries and timestamps |
+| **Rename Sessions** | Custom names instead of UUIDs |
+| **Delete Sessions** | Swipe-to-delete with confirmation |
+| **Export Sessions** | Save as markdown with share sheet |
+
+### Search & Bookmarks
+| Feature | Description |
+|---------|-------------|
+| **Message Search** | Filter current session by keyword |
+| **Filter by Type** | Filter chips: All/User/Assistant/Tools/Thinking |
+| **Bookmarks** | Star important messages across sessions |
+| **Global Search** | Cross-session search via SSH |
 
 ### Slash Commands
 | Command | Description |
@@ -44,47 +82,78 @@ A native iOS client for [Claude Code WebUI](https://github.com/sugyan/claude-cod
 | `/exit` | Close chat and return to projects |
 | `/help` | Show command reference |
 
-### Persistence
-- **Message History** - Last 50 messages saved per project (file-based)
-- **Session Continuity** - Resume conversations across app launches
-- **Reconnection** - Exponential backoff with jitter on disconnect
+### iPad Support
+| Feature | Description |
+|---------|-------------|
+| **Sidebar Navigation** | Projects list always visible in landscape |
+| **Split View** | Multitask alongside Safari, Notes |
+| **Keyboard Shortcuts** | Full keyboard navigation |
+
+#### Keyboard Shortcuts
+| Shortcut | Action |
+|----------|--------|
+| `Cmd + Return` | Send message |
+| `Cmd + K` | Clear conversation |
+| `Cmd + N` | New session |
+| `Cmd + .` | Abort/Cancel |
+| `Cmd + /` | Show help |
+| `Esc` | Dismiss sheet |
 
 ### SSH Terminal
-- **Native SSH Client** - Built with Citadel (pure Swift)
-- **Special Keys Bar** - Ctrl+C, Tab, arrows, Esc
-- **Saved Credentials** - Auto-connect with stored settings
+| Feature | Description |
+|---------|-------------|
+| **Native SSH** | Built with Citadel (pure Swift) |
+| **Special Keys** | Ctrl+C, Tab, arrows, Esc toolbar |
+| **Key Authentication** | Ed25519, RSA, ECDSA support |
+| **Keychain Storage** | Secure key storage on device |
 
-### Notifications
-- **Background Alerts** - Local notifications when tasks complete
+### Persistence
+| Feature | Description |
+|---------|-------------|
+| **Message History** | Last 50 messages saved per project |
+| **Draft Auto-save** | Unsent messages preserved |
+| **Reconnection** | Exponential backoff (1s-8s) with jitter |
+| **Background Notifications** | Local alerts when tasks complete |
 
 ## Requirements
 
 - iOS 17.0+
 - Xcode 15.0+
-- A running [claude-code-webui](https://github.com/sugyan/claude-code-webui) backend
+- A running [claudecodeui](https://github.com/siteboon/claudecodeui) backend
 - Network access to the backend (via Tailscale or local network)
 
 ## Setup
 
 ### Backend Setup
 
-The app connects to a claude-code-webui backend. See [requirements/BACKEND.md](requirements/BACKEND.md) for setup instructions.
+The app connects to a claudecodeui backend. See [requirements/BACKEND.md](requirements/BACKEND.md) for setup instructions.
+
+Quick start:
+```bash
+git clone https://github.com/siteboon/claudecodeui.git
+cd claudecodeui && npm install && npm run build && npm start
+```
 
 ### Building the App
 
 1. Open `ClaudeCodeApp.xcodeproj` in Xcode
-2. Select your target device (simulator or physical iPhone)
+2. Select your target device (simulator or physical iPhone/iPad)
 3. Press Cmd+R to build and run
 
 ### Configuration
 
-On first launch, the app defaults to `http://10.0.3.2:8080`. To change:
+On first launch, configure in Settings (gear icon):
 
-1. Tap the gear icon in the top right
-2. Enter your backend server URL
-3. Configure SSH credentials (for file browser and terminal)
-4. Adjust font size and mode preferences
-5. Tap Done
+| Setting | Description |
+|---------|-------------|
+| **Server URL** | Backend address (default: `http://10.0.3.2:8080`) |
+| **Username/Password** | JWT authentication credentials |
+| **SSH Host/Port** | SSH server for file operations |
+| **SSH Auth** | Password or SSH key (Keychain) |
+| **Font Size** | XS / S / M / L / XL |
+| **Theme** | System / Dark / Light |
+| **Model** | Default Claude model |
+| **Permission Mode** | Normal (execute) / Plan (ask first) |
 
 ## Architecture
 
@@ -98,32 +167,81 @@ On first launch, the app defaults to `http://10.0.3.2:8080`. To change:
               (secure network)
 ```
 
-## WebSocket Protocol
+### Key Components
 
-The app uses WebSocket for real-time streaming:
+| Component | Purpose |
+|-----------|---------|
+| `WebSocketManager` | Real-time streaming, reconnection, message queue |
+| `SSHManager` | Terminal, file browser, git operations |
+| `SpeechManager` | Voice input with iOS Speech framework |
+| `CommandStore` | Saved prompts with categories |
+| `ClaudeHelper` | AI suggestions via Haiku |
+| `MessageStore` | File-based message persistence |
+| `BookmarkStore` | Cross-session bookmarks |
+
+### View Structure
+
+| View | Purpose |
+|------|---------|
+| `ContentView` | Project list, navigation, settings |
+| `ChatView` | Message list, streaming, commands |
+| `TerminalView` | SSH terminal with special keys |
+| `CLIInputView` | Multi-line input, attachments |
+| `QuickSettingsSheet` | Model, mode, thinking level |
+| `CommandPickerSheet` | Saved command selection |
+| `FilePickerSheet` | File browser for @ references |
+| `BookmarksView` | Saved bookmarks list |
+| `GlobalSearchView` | Cross-session search |
+
+## WebSocket Protocol
 
 | Message Type | Direction | Description |
 |--------------|-----------|-------------|
-| `claude-command` | → Server | Send user message |
-| `claude-response` | ← Server | Streaming content |
-| `claude-complete` | ← Server | Task finished |
-| `token-budget` | ← Server | Usage stats |
-| `abort-session` | → Server | Cancel request |
+| `claude-command` | App → Server | Send user message |
+| `claude-response` | Server → App | Streaming content |
+| `claude-complete` | Server → App | Task finished |
+| `token-budget` | Server → App | Usage stats |
+| `abort-session` | App → Server | Cancel request |
 
 ## Testing
 
-The app includes 28+ unit tests for parsers and utilities:
+28+ unit tests covering parsers and utilities:
 
 ```bash
-xcodebuild test -project ClaudeCodeApp.xcodeproj -scheme ClaudeCodeApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+xcodebuild test -project ClaudeCodeApp.xcodeproj -scheme ClaudeCodeApp \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
 ```
+
+### Test Coverage
+
+| Test Suite | Coverage |
+|------------|----------|
+| `StringMarkdownTests` | Markdown parsing, HTML entities |
+| `DiffViewTests` | Edit tool diff parsing |
+| `TodoListViewTests` | TodoWrite JSON parsing |
+| `ImageUtilitiesTests` | MIME type detection |
+| `ModelsTests` | WebSocket message handling |
 
 ## Permissions
 
-The app requests these permissions:
-- **Microphone** - Voice-to-text input
-- **Speech Recognition** - Transcription
-- **Photo Library** - Image attachments
+The app requests these iOS permissions:
+
+| Permission | Purpose |
+|------------|---------|
+| Microphone | Voice-to-text input |
+| Speech Recognition | Transcription |
+| Photo Library | Image attachments |
+
+## Documentation
+
+| File | Description |
+|------|-------------|
+| [ROADMAP.md](ROADMAP.md) | Feature roadmap and known issues |
+| [FUTURE-IDEAS.md](FUTURE-IDEAS.md) | Long-term vision and ideas |
+| [CLAUDE.md](CLAUDE.md) | Claude Code project instructions |
+| [requirements/OVERVIEW.md](requirements/OVERVIEW.md) | Functional requirements |
+| [requirements/ARCHITECTURE.md](requirements/ARCHITECTURE.md) | System architecture |
+| [requirements/BACKEND.md](requirements/BACKEND.md) | Backend setup guide |
 
 ## License
 
