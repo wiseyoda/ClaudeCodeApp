@@ -227,9 +227,9 @@ class WebSocketManager: ObservableObject {
                 cwd: projectPath,
                 sessionId: resumeSessionId ?? sessionId,
                 model: nil,
-                permissionMode: permissionMode
-            ),
-            images: images
+                permissionMode: permissionMode,
+                images: images  // Images go inside options
+            )
         )
 
         do {

@@ -301,7 +301,6 @@ struct WSClaudeCommand: Encodable {
     let type: String = "claude-command"
     let command: String
     let options: WSCommandOptions
-    let images: [WSImage]?
 }
 
 struct WSImage: Encodable {
@@ -319,6 +318,7 @@ struct WSCommandOptions: Encodable {
     let sessionId: String?
     let model: String?
     let permissionMode: String?  // "default", "plan", or "bypassPermissions"
+    let images: [WSImage]?  // Images must be inside options, not at top level
 }
 
 struct WSAbortSession: Encodable {
