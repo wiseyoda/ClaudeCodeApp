@@ -17,6 +17,7 @@ struct ChatView: View {
     @State private var selectedSession: ProjectSession?
     @State private var isUploadingImage = false
     @State private var isLoadingHistory = false
+    @State private var scrollToBottomTrigger = false
     @FocusState private var isInputFocused: Bool
 
     init(project: Project, apiClient: APIClient) {
@@ -91,6 +92,19 @@ struct ChatView: View {
                             } else if let lastId = messages.last?.id {
                                 proxy.scrollTo(lastId, anchor: .bottom)
                             }
+                        }
+                    }
+                }
+                .onChange(of: scrollToBottomTrigger) { _, shouldScroll in
+                    // Scroll to bottom after history loads
+                    if shouldScroll {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                            withAnimation {
+                                if let lastId = messages.last?.id {
+                                    proxy.scrollTo(lastId, anchor: .bottom)
+                                }
+                            }
+                            scrollToBottomTrigger = false
                         }
                     }
                 }
@@ -380,6 +394,8 @@ struct ChatView: View {
                         messages = historyMessages
                         print("[ChatView] Loaded \(historyMessages.count) messages from session history")
                     }
+                    // Trigger scroll to bottom
+                    scrollToBottomTrigger = true
                 }
             } catch {
                 print("[ChatView] Failed to load session history: \(error)")
@@ -391,6 +407,8 @@ struct ChatView: View {
                     }
                     // Show error message
                     messages.append(ChatMessage(role: .system, content: "Could not load full history: \(error.localizedDescription)", timestamp: Date()))
+                    // Trigger scroll to bottom
+                    scrollToBottomTrigger = true
                 }
             }
         }
