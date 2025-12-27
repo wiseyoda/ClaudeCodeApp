@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     @EnvironmentObject var settings: AppSettings
@@ -498,6 +499,8 @@ struct GitStatusIndicator: View {
 struct SettingsView: View {
     @EnvironmentObject var settings: AppSettings
     @Environment(\.dismiss) var dismiss
+    @State private var showSSHKeyImport = false
+    @State private var hasSSHKey = KeychainHelper.shared.hasSSHKey
 
     // Binding for font size picker
     private var fontSizeBinding: Binding<FontSizePreset> {
@@ -609,7 +612,43 @@ struct SettingsView: View {
                     Text("API Key from Settings > API Keys in web UI")
                 }
 
-                // Section 6: SSH Configuration
+                // Section 6: SSH Key (for iPhone - no access to ~/.ssh)
+                Section {
+                    HStack {
+                        Text("SSH Key")
+                        Spacer()
+                        if hasSSHKey {
+                            Label("Configured", systemImage: "checkmark.circle.fill")
+                                .foregroundStyle(.green)
+                                .font(.subheadline)
+                        } else {
+                            Text("Not configured")
+                                .foregroundStyle(.secondary)
+                                .font(.subheadline)
+                        }
+                    }
+
+                    Button {
+                        showSSHKeyImport = true
+                    } label: {
+                        Label(hasSSHKey ? "Replace SSH Key..." : "Import SSH Key...", systemImage: "key")
+                    }
+
+                    if hasSSHKey {
+                        Button(role: .destructive) {
+                            KeychainHelper.shared.clearAll()
+                            hasSSHKey = false
+                        } label: {
+                            Label("Remove SSH Key", systemImage: "trash")
+                        }
+                    }
+                } header: {
+                    Text("SSH Key")
+                } footer: {
+                    Text("Import your private key for SSH authentication. Required for Git operations on iPhone.")
+                }
+
+                // Section 7: SSH Configuration (fallback/additional)
                 Section {
                     TextField("Host", text: $settings.sshHost)
                         .textInputAutocapitalization(.never)
@@ -628,11 +667,11 @@ struct SettingsView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
 
-                    SecureField("Password", text: $settings.sshPassword)
+                    SecureField("Password (fallback)", text: $settings.sshPassword)
                 } header: {
-                    Text("SSH")
+                    Text("SSH Connection")
                 } footer: {
-                    Text("Credentials are saved locally on device")
+                    Text("SSH key is preferred. Password is used as fallback if no key is configured.")
                 }
             }
             .navigationTitle("Settings")
@@ -644,6 +683,219 @@ struct SettingsView: View {
                     }
                 }
             }
+            .sheet(isPresented: $showSSHKeyImport) {
+                SSHKeyImportSheet(onKeyImported: {
+                    hasSSHKey = KeychainHelper.shared.hasSSHKey
+                })
+            }
+        }
+    }
+}
+
+// MARK: - SSH Key Import Sheet
+
+struct SSHKeyImportSheet: View {
+    @Environment(\.dismiss) var dismiss
+    @Environment(\.colorScheme) var colorScheme
+    @State private var keyContent = ""
+    @State private var passphrase = ""
+    @State private var showFileImporter = false
+    @State private var error: String?
+    @State private var isValidating = false
+    @State private var detectedKeyType: SSHKeyType?
+
+    let onKeyImported: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 20) {
+                // Icon
+                Image(systemName: "key.fill")
+                    .font(.system(size: 48))
+                    .foregroundColor(CLITheme.cyan(for: colorScheme))
+                    .padding(.top, 24)
+
+                Text("Import SSH Private Key")
+                    .font(.headline)
+
+                // Key content text editor
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Paste your private key:")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    TextEditor(text: $keyContent)
+                        .font(.system(.caption, design: .monospaced))
+                        .frame(minHeight: 120, maxHeight: 200)
+                        .padding(8)
+                        .background(CLITheme.secondaryBackground(for: colorScheme))
+                        .cornerRadius(8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                        )
+                        .onChange(of: keyContent) { _, newValue in
+                            validateKey(newValue)
+                        }
+
+                    if let keyType = detectedKeyType {
+                        HStack {
+                            Image(systemName: keyType.isSupported ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                .foregroundColor(keyType.isSupported ? .green : .red)
+                            Text("Detected: \(keyType.description)")
+                                .font(.caption)
+                                .foregroundColor(keyType.isSupported ? .gray : .red)
+                            if !keyType.isSupported {
+                                Text("(not supported)")
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal)
+
+                // Import from file button
+                Button {
+                    showFileImporter = true
+                } label: {
+                    Label("Import from Files", systemImage: "folder")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(CLITheme.secondaryBackground(for: colorScheme))
+                        .cornerRadius(8)
+                }
+                .padding(.horizontal)
+
+                // Passphrase (optional)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Passphrase (if encrypted):")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    SecureField("Optional", text: $passphrase)
+                        .padding(12)
+                        .background(CLITheme.secondaryBackground(for: colorScheme))
+                        .cornerRadius(8)
+                }
+                .padding(.horizontal)
+
+                // Error message
+                if let error = error {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                        Text(error)
+                    }
+                    .foregroundStyle(.red)
+                    .font(.caption)
+                    .padding(.horizontal)
+                }
+
+                Spacer()
+
+                // Save button
+                Button {
+                    saveKey()
+                } label: {
+                    Text("Save Key")
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(canSave ? CLITheme.cyan(for: colorScheme) : Color.gray)
+                        .foregroundColor(.white)
+                        .cornerRadius(10)
+                }
+                .disabled(!canSave)
+                .padding(.horizontal)
+                .padding(.bottom, 24)
+            }
+            .background(CLITheme.background(for: colorScheme))
+            .navigationTitle("Import SSH Key")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+            }
+            .fileImporter(
+                isPresented: $showFileImporter,
+                allowedContentTypes: [.data, .text],
+                allowsMultipleSelection: false
+            ) { result in
+                handleFileImport(result)
+            }
+        }
+    }
+
+    private var canSave: Bool {
+        guard !keyContent.isEmpty else { return false }
+        guard let keyType = detectedKeyType else { return false }
+        return keyType.isSupported
+    }
+
+    private func validateKey(_ content: String) {
+        guard !content.isEmpty else {
+            detectedKeyType = nil
+            error = nil
+            return
+        }
+
+        if SSHKeyDetection.isValidKeyFormat(content) {
+            do {
+                detectedKeyType = try SSHKeyDetection.detectPrivateKeyType(from: content)
+                error = nil
+            } catch {
+                detectedKeyType = .unknown
+                self.error = "Could not detect key type"
+            }
+        } else {
+            detectedKeyType = nil
+            error = "Invalid key format. Key should start with '-----BEGIN'"
+        }
+    }
+
+    private func handleFileImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+
+            // Request access to the file
+            guard url.startAccessingSecurityScopedResource() else {
+                error = "Could not access the selected file"
+                return
+            }
+            defer { url.stopAccessingSecurityScopedResource() }
+
+            do {
+                let content = try String(contentsOf: url, encoding: .utf8)
+                keyContent = content
+                validateKey(content)
+            } catch {
+                self.error = "Could not read file: \(error.localizedDescription)"
+            }
+
+        case .failure(let error):
+            self.error = "File selection failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func saveKey() {
+        guard canSave else { return }
+
+        // Store key in Keychain
+        if KeychainHelper.shared.storeSSHKey(keyContent) {
+            // Store passphrase if provided
+            if !passphrase.isEmpty {
+                KeychainHelper.shared.storePassphrase(passphrase)
+            } else {
+                KeychainHelper.shared.deletePassphrase()
+            }
+
+            onKeyImported()
+            dismiss()
+        } else {
+            error = "Failed to save key to Keychain"
         }
     }
 }

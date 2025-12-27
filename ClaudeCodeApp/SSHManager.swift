@@ -2,6 +2,255 @@ import Foundation
 import Citadel
 import NIOCore
 import Crypto
+import Security
+
+// MARK: - Keychain Helper
+
+/// Helper for secure SSH key storage in iOS Keychain
+class KeychainHelper {
+    static let shared = KeychainHelper()
+
+    // Keychain service identifier
+    private let service = "com.claudecodeapp.sshkeys"
+
+    // Account keys for different stored items
+    private enum Account: String {
+        case privateKey = "ssh_private_key"
+        case passphrase = "ssh_key_passphrase"
+    }
+
+    private init() {}
+
+    // MARK: - SSH Private Key
+
+    /// Store an SSH private key securely
+    @discardableResult
+    func storeSSHKey(_ key: String) -> Bool {
+        guard let data = key.data(using: .utf8) else { return false }
+        deleteSSHKey()
+
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: Account.privateKey.rawValue,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        ]
+
+        let status = SecItemAdd(query as CFDictionary, nil)
+        if status == errSecSuccess {
+            log.info("SSH key stored in Keychain")
+            return true
+        } else {
+            log.error("Failed to store SSH key in Keychain: \(status)")
+            return false
+        }
+    }
+
+    /// Retrieve the stored SSH private key
+    func retrieveSSHKey() -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: Account.privateKey.rawValue,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        if status == errSecSuccess, let data = result as? Data {
+            return String(data: data, encoding: .utf8)
+        }
+        return nil
+    }
+
+    /// Delete the stored SSH private key
+    @discardableResult
+    func deleteSSHKey() -> Bool {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: Account.privateKey.rawValue
+        ]
+
+        let status = SecItemDelete(query as CFDictionary)
+        return status == errSecSuccess || status == errSecItemNotFound
+    }
+
+    /// Check if an SSH key is stored
+    var hasSSHKey: Bool {
+        retrieveSSHKey() != nil
+    }
+
+    // MARK: - Passphrase
+
+    /// Store the passphrase for an encrypted SSH key
+    @discardableResult
+    func storePassphrase(_ passphrase: String) -> Bool {
+        guard let data = passphrase.data(using: .utf8) else { return false }
+        deletePassphrase()
+
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: Account.passphrase.rawValue,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        ]
+
+        let status = SecItemAdd(query as CFDictionary, nil)
+        return status == errSecSuccess
+    }
+
+    /// Retrieve the stored passphrase
+    func retrievePassphrase() -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: Account.passphrase.rawValue,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        if status == errSecSuccess, let data = result as? Data {
+            return String(data: data, encoding: .utf8)
+        }
+        return nil
+    }
+
+    /// Delete the stored passphrase
+    @discardableResult
+    func deletePassphrase() -> Bool {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: Account.passphrase.rawValue
+        ]
+
+        let status = SecItemDelete(query as CFDictionary)
+        return status == errSecSuccess || status == errSecItemNotFound
+    }
+
+    /// Remove all stored SSH credentials
+    func clearAll() {
+        deleteSSHKey()
+        deletePassphrase()
+        log.info("All SSH credentials cleared from Keychain")
+    }
+}
+
+// MARK: - SSH Key Detection
+
+/// Detects the type of an SSH private key from its content
+enum SSHKeyType: String {
+    case rsa = "RSA"
+    case ed25519 = "Ed25519"
+    case ecdsa256 = "ECDSA-256"
+    case ecdsa384 = "ECDSA-384"
+    case ecdsa521 = "ECDSA-521"
+    case unknown = "Unknown"
+
+    var description: String { rawValue }
+
+    var isSupported: Bool {
+        switch self {
+        case .rsa, .ed25519:
+            return true
+        default:
+            return false
+        }
+    }
+}
+
+/// Helper for detecting SSH key types
+enum SSHKeyDetection {
+
+    /// Detect the type of a private key from its string content
+    static func detectPrivateKeyType(from content: String) throws -> SSHKeyType {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // OpenSSH format (newer)
+        if trimmed.hasPrefix("-----BEGIN OPENSSH PRIVATE KEY-----") {
+            return try detectOpenSSHKeyType(from: trimmed)
+        }
+
+        // PEM RSA format
+        if trimmed.hasPrefix("-----BEGIN RSA PRIVATE KEY-----") {
+            return .rsa
+        }
+
+        // PEM EC format
+        if trimmed.hasPrefix("-----BEGIN EC PRIVATE KEY-----") {
+            return .ecdsa256
+        }
+
+        // PEM generic private key (PKCS#8)
+        if trimmed.hasPrefix("-----BEGIN PRIVATE KEY-----") {
+            return .unknown
+        }
+
+        // PEM encrypted private key
+        if trimmed.hasPrefix("-----BEGIN ENCRYPTED PRIVATE KEY-----") {
+            return .unknown
+        }
+
+        throw SSHError.keyParseError("Unrecognized key format")
+    }
+
+    /// Detect key type from OpenSSH format by parsing the key data
+    private static func detectOpenSSHKeyType(from content: String) throws -> SSHKeyType {
+        let lines = content.components(separatedBy: .newlines)
+        let base64Lines = lines.filter { !$0.hasPrefix("-----") && !$0.isEmpty }
+        let base64String = base64Lines.joined()
+
+        guard let data = Data(base64Encoded: base64String) else {
+            throw SSHError.keyParseError("Invalid base64 encoding")
+        }
+
+        // Look for key type strings in the binary data
+        let dataString = data.map { String(format: "%c", isprint(Int32($0)) != 0 ? $0 : 46) }.joined()
+
+        if dataString.contains("ssh-ed25519") {
+            return .ed25519
+        }
+        if dataString.contains("ssh-rsa") {
+            return .rsa
+        }
+        if dataString.contains("ecdsa-sha2-nistp256") {
+            return .ecdsa256
+        }
+        if dataString.contains("ecdsa-sha2-nistp384") {
+            return .ecdsa384
+        }
+        if dataString.contains("ecdsa-sha2-nistp521") {
+            return .ecdsa521
+        }
+
+        return .unknown
+    }
+
+    /// Validate that a key string looks like a valid SSH private key
+    static func isValidKeyFormat(_ content: String) -> Bool {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let validPrefixes = [
+            "-----BEGIN OPENSSH PRIVATE KEY-----",
+            "-----BEGIN RSA PRIVATE KEY-----",
+            "-----BEGIN EC PRIVATE KEY-----",
+            "-----BEGIN PRIVATE KEY-----",
+            "-----BEGIN ENCRYPTED PRIVATE KEY-----"
+        ]
+
+        return validPrefixes.contains { trimmed.hasPrefix($0) }
+    }
+}
+
+// MARK: - SSH Error
 
 enum SSHError: LocalizedError {
     case connectionFailed(String)
@@ -165,8 +414,29 @@ class SSHManager: ObservableObject {
         return nil
     }
 
-    // Connect with SSH key
+    // Connect with SSH key from file path
     func connectWithKey(host: String, port: Int, username: String, privateKeyPath: String, passphrase: String? = nil) async throws {
+        // Read the private key from file
+        guard let keyData = FileManager.default.contents(atPath: privateKeyPath),
+              let privateKeyString = String(data: keyData, encoding: .utf8) else {
+            throw SSHError.keyNotFound(privateKeyPath)
+        }
+
+        try await connectWithKeyString(host: host, port: port, username: username, privateKeyString: privateKeyString, passphrase: passphrase)
+    }
+
+    // Connect with SSH key from Keychain
+    func connectWithKeychainKey(host: String, port: Int, username: String) async throws {
+        guard let privateKeyString = KeychainHelper.shared.retrieveSSHKey() else {
+            throw SSHError.keyNotFound("No SSH key stored in Keychain")
+        }
+
+        let passphrase = KeychainHelper.shared.retrievePassphrase()
+        try await connectWithKeyString(host: host, port: port, username: username, privateKeyString: privateKeyString, passphrase: passphrase)
+    }
+
+    // Connect with SSH key string (shared implementation)
+    func connectWithKeyString(host: String, port: Int, username: String, privateKeyString: String, passphrase: String? = nil) async throws {
         self.host = host
         self.port = port
         self.username = username
@@ -176,12 +446,6 @@ class SSHManager: ObservableObject {
         output = "Connecting to \(username)@\(host):\(port) with key...\n"
 
         do {
-            // Read the private key
-            guard let keyData = FileManager.default.contents(atPath: privateKeyPath),
-                  let privateKeyString = String(data: keyData, encoding: .utf8) else {
-                throw SSHError.keyNotFound(privateKeyPath)
-            }
-
             // Detect key type and create appropriate authentication method
             let keyType = try SSHKeyDetection.detectPrivateKeyType(from: privateKeyString)
             let authMethod: SSHAuthenticationMethod
@@ -497,28 +761,55 @@ class SSHManager: ObservableObject {
     /// Execute a command with auto-connect
     func executeCommandWithAutoConnect(_ command: String, settings: AppSettings) async throws -> String {
         if !isConnected {
-            // Try SSH config hosts first
-            if let configHost = availableHosts.first(where: {
-                $0.hostName == settings.effectiveSSHHost || $0.host.contains("claude")
-            }) {
-                try await connectWithConfigHost(configHost.host)
-            } else if settings.sshAuthType == .publicKey {
+            try await autoConnect(settings: settings)
+        }
+        return try await executeCommand(command)
+    }
+
+    /// Auto-connect using the best available authentication method
+    /// Priority: 1) SSH Config hosts, 2) Keychain key, 3) Filesystem key, 4) Password
+    private func autoConnect(settings: AppSettings) async throws {
+        let username = settings.sshUsername.isEmpty ? NSUserName() : settings.sshUsername
+
+        // 1. Try SSH config hosts first (Mac only - has access to ~/.ssh/config)
+        if let configHost = availableHosts.first(where: {
+            $0.hostName == settings.effectiveSSHHost || $0.host.contains("claude")
+        }) {
+            try await connectWithConfigHost(configHost.host)
+            return
+        }
+
+        // 2. Try Keychain key (works on iPhone)
+        if KeychainHelper.shared.hasSSHKey {
+            try await connectWithKeychainKey(
+                host: settings.effectiveSSHHost,
+                port: settings.sshPort,
+                username: username
+            )
+            return
+        }
+
+        // 3. Try filesystem key (Mac only)
+        if settings.sshAuthType == .publicKey {
+            let keyPath = getRealHomeDirectory() + "/.ssh/id_ed25519"
+            if FileManager.default.fileExists(atPath: keyPath) {
                 try await connectWithKey(
                     host: settings.effectiveSSHHost,
                     port: settings.sshPort,
-                    username: settings.sshUsername.isEmpty ? NSUserName() : settings.sshUsername,
-                    privateKeyPath: getRealHomeDirectory() + "/.ssh/id_ed25519"
+                    username: username,
+                    privateKeyPath: keyPath
                 )
-            } else {
-                try await connect(
-                    host: settings.effectiveSSHHost,
-                    port: settings.sshPort,
-                    username: settings.sshUsername,
-                    password: settings.sshPassword
-                )
+                return
             }
         }
-        return try await executeCommand(command)
+
+        // 4. Fall back to password auth
+        try await connect(
+            host: settings.effectiveSSHHost,
+            port: settings.sshPort,
+            username: username,
+            password: settings.sshPassword
+        )
     }
 
     // MARK: - File Listing
@@ -636,26 +927,7 @@ class SSHManager: ObservableObject {
     func checkGitStatusWithAutoConnect(_ path: String, settings: AppSettings) async -> GitStatus {
         do {
             if !isConnected {
-                // Try SSH config hosts first
-                if let configHost = availableHosts.first(where: {
-                    $0.hostName == settings.effectiveSSHHost || $0.host.contains("claude")
-                }) {
-                    try await connectWithConfigHost(configHost.host)
-                } else if settings.sshAuthType == .publicKey {
-                    try await connectWithKey(
-                        host: settings.effectiveSSHHost,
-                        port: settings.sshPort,
-                        username: settings.sshUsername.isEmpty ? NSUserName() : settings.sshUsername,
-                        privateKeyPath: getRealHomeDirectory() + "/.ssh/id_ed25519"
-                    )
-                } else {
-                    try await connect(
-                        host: settings.effectiveSSHHost,
-                        port: settings.sshPort,
-                        username: settings.sshUsername,
-                        password: settings.sshPassword
-                    )
-                }
+                try await autoConnect(settings: settings)
             }
             return try await checkGitStatus(path)
         } catch {
@@ -694,25 +966,7 @@ class SSHManager: ObservableObject {
     func gitPullWithAutoConnect(_ path: String, settings: AppSettings) async -> Bool {
         do {
             if !isConnected {
-                if let configHost = availableHosts.first(where: {
-                    $0.hostName == settings.effectiveSSHHost || $0.host.contains("claude")
-                }) {
-                    try await connectWithConfigHost(configHost.host)
-                } else if settings.sshAuthType == .publicKey {
-                    try await connectWithKey(
-                        host: settings.effectiveSSHHost,
-                        port: settings.sshPort,
-                        username: settings.sshUsername.isEmpty ? NSUserName() : settings.sshUsername,
-                        privateKeyPath: getRealHomeDirectory() + "/.ssh/id_ed25519"
-                    )
-                } else {
-                    try await connect(
-                        host: settings.effectiveSSHHost,
-                        port: settings.sshPort,
-                        username: settings.sshUsername,
-                        password: settings.sshPassword
-                    )
-                }
+                try await autoConnect(settings: settings)
             }
             return try await gitPull(path)
         } catch {
@@ -742,26 +996,7 @@ class SSHManager: ObservableObject {
     /// List files with auto-connect
     func listFilesWithAutoConnect(_ path: String, settings: AppSettings) async throws -> [FileEntry] {
         if !isConnected {
-            // Try SSH config hosts first
-            if let configHost = availableHosts.first(where: {
-                $0.hostName == settings.effectiveSSHHost || $0.host.contains("claude")
-            }) {
-                try await connectWithConfigHost(configHost.host)
-            } else if settings.sshAuthType == .publicKey {
-                try await connectWithKey(
-                    host: settings.effectiveSSHHost,
-                    port: settings.sshPort,
-                    username: settings.sshUsername.isEmpty ? NSUserName() : settings.sshUsername,
-                    privateKeyPath: getRealHomeDirectory() + "/.ssh/id_ed25519"
-                )
-            } else {
-                try await connect(
-                    host: settings.effectiveSSHHost,
-                    port: settings.sshPort,
-                    username: settings.sshUsername,
-                    password: settings.sshPassword
-                )
-            }
+            try await autoConnect(settings: settings)
         }
         return try await listFiles(path)
     }
@@ -789,30 +1024,8 @@ class SSHManager: ObservableObject {
     /// - Returns: The file contents as a string
     func readFileWithAutoConnect(_ path: String, settings: AppSettings) async throws -> String {
         if !isConnected {
-            // Try SSH config hosts first, then fall back to settings
-            if let configHost = availableHosts.first(where: {
-                $0.hostName == settings.effectiveSSHHost || $0.host.contains("claude")
-            }) {
-                try await connectWithConfigHost(configHost.host)
-            } else if settings.sshAuthType == .publicKey {
-                // Use key auth with default key
-                try await connectWithKey(
-                    host: settings.effectiveSSHHost,
-                    port: settings.sshPort,
-                    username: settings.sshUsername.isEmpty ? NSUserName() : settings.sshUsername,
-                    privateKeyPath: getRealHomeDirectory() + "/.ssh/id_ed25519"
-                )
-            } else {
-                // Use password auth
-                try await connect(
-                    host: settings.effectiveSSHHost,
-                    port: settings.sshPort,
-                    username: settings.sshUsername,
-                    password: settings.sshPassword
-                )
-            }
+            try await autoConnect(settings: settings)
         }
-
         return try await readFile(path)
     }
 }

@@ -28,6 +28,7 @@
 | **Model Selection** | Opus/Sonnet/Haiku picker, per-session model switching | Dec 27 |
 | **P1: Connection Health** | Connection status indicator, pull-to-refresh, message queuing | Dec 27 |
 | **P1: iPad Experience** | NavigationSplitView, keyboard shortcuts, sidebar, split view | Dec 27 |
+| **SSH Key Import** | Keychain storage, paste/import keys, Ed25519/RSA support | Dec 27 |
 
 ---
 
@@ -280,6 +281,17 @@ These have been considered but are not on the roadmap:
 - Balanced navigation split view style
 - Works on iPhone (collapses to stack) and iPad (shows sidebar)
 - Split view multitasking support enabled
+
+### SSH Key Import
+- KeychainHelper class for secure key storage in iOS Keychain
+- SSHKeyType enum for Ed25519, RSA, ECDSA detection
+- SSHKeyDetection helper for parsing OpenSSH and PEM key formats
+- SSHKeyImportSheet with paste and file import options
+- Settings UI shows key status (Configured/Not configured)
+- Import from Files app with document picker
+- Passphrase support for encrypted keys
+- Auto-connect priority: SSH Config → Keychain Key → Filesystem Key → Password
+- Works on iPhone (no ~/.ssh access) via Keychain storage
 
 </details>
 
