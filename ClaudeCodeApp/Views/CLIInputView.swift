@@ -7,6 +7,7 @@ struct CLIInputView: View {
     @Binding var text: String
     @Binding var selectedImage: Data?
     let isProcessing: Bool
+    let projectPath: String?  // Project path for file browser
     @FocusState var isFocused: Bool
     let onSend: () -> Void
     let onAbort: () -> Void
@@ -14,6 +15,7 @@ struct CLIInputView: View {
     @Environment(\.colorScheme) var colorScheme
     @StateObject private var speechManager = SpeechManager()
     @State private var showImagePicker = false
+    @State private var showFilePicker = false
     @State private var selectedItem: PhotosPickerItem?
 
     var body: some View {
@@ -77,6 +79,24 @@ struct CLIInputView: View {
                     .disabled(isProcessing)
                     .submitLabel(.send)
                     .onSubmit { onSend() }
+
+                // File reference button
+                if !isProcessing, let projectPath = projectPath {
+                    Button {
+                        showFilePicker = true
+                    } label: {
+                        Text("@")
+                            .font(.system(size: 16, weight: .medium, design: .monospaced))
+                            .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                    }
+                    .accessibilityLabel("Reference file")
+                    .accessibilityHint("Select a file to reference in your message")
+                    .sheet(isPresented: $showFilePicker) {
+                        FilePickerSheet(projectPath: projectPath) { selectedPath in
+                            insertFileReference(selectedPath)
+                        }
+                    }
+                }
 
                 // Image picker button
                 if !isProcessing {
@@ -154,5 +174,17 @@ struct CLIInputView: View {
                 .opacity(0)
             }
         )
+    }
+
+    private func insertFileReference(_ path: String) {
+        // Insert @path at cursor or end of text
+        let reference = "@\(path)"
+        if text.isEmpty {
+            text = reference + " "
+        } else if text.hasSuffix(" ") {
+            text += reference + " "
+        } else {
+            text += " " + reference + " "
+        }
     }
 }

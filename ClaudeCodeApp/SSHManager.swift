@@ -454,6 +454,107 @@ class SSHManager: ObservableObject {
         return remotePath
     }
 
+    // MARK: - Command Execution
+
+    /// Execute a command and return the output
+    /// - Parameter command: The command to execute
+    /// - Returns: The command output as a string
+    func executeCommand(_ command: String) async throws -> String {
+        guard let client = client, isConnected else {
+            throw SSHError.notConnected
+        }
+
+        let result = try await client.executeCommand(command)
+        return String(buffer: result)
+    }
+
+    /// Execute a command with auto-connect
+    func executeCommandWithAutoConnect(_ command: String, settings: AppSettings) async throws -> String {
+        if !isConnected {
+            // Try SSH config hosts first
+            if let configHost = availableHosts.first(where: {
+                $0.hostName == settings.effectiveSSHHost || $0.host.contains("claude")
+            }) {
+                try await connectWithConfigHost(configHost.host)
+            } else if settings.sshAuthType == .publicKey {
+                try await connectWithKey(
+                    host: settings.effectiveSSHHost,
+                    port: settings.sshPort,
+                    username: settings.sshUsername.isEmpty ? NSUserName() : settings.sshUsername,
+                    privateKeyPath: getRealHomeDirectory() + "/.ssh/id_ed25519"
+                )
+            } else {
+                try await connect(
+                    host: settings.effectiveSSHHost,
+                    port: settings.sshPort,
+                    username: settings.sshUsername,
+                    password: settings.sshPassword
+                )
+            }
+        }
+        return try await executeCommand(command)
+    }
+
+    // MARK: - File Listing
+
+    /// List files in a remote directory
+    /// - Parameter path: The remote directory path (can include ~)
+    /// - Returns: Array of FileEntry objects
+    func listFiles(_ path: String) async throws -> [FileEntry] {
+        guard let client = client, isConnected else {
+            throw SSHError.notConnected
+        }
+
+        // Use ls -la with specific format for parsing
+        // -A shows hidden files except . and ..
+        let cmd = "ls -laF \(path) 2>/dev/null | tail -n +2"
+        let result = try await client.executeCommand(cmd)
+        let output = String(buffer: result)
+
+        var entries: [FileEntry] = []
+        for line in output.components(separatedBy: "\n") {
+            guard !line.isEmpty else { continue }
+            if let entry = FileEntry.parse(from: line, basePath: path) {
+                entries.append(entry)
+            }
+        }
+
+        // Sort: directories first, then alphabetically
+        return entries.sorted { lhs, rhs in
+            if lhs.isDirectory != rhs.isDirectory {
+                return lhs.isDirectory
+            }
+            return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+        }
+    }
+
+    /// List files with auto-connect
+    func listFilesWithAutoConnect(_ path: String, settings: AppSettings) async throws -> [FileEntry] {
+        if !isConnected {
+            // Try SSH config hosts first
+            if let configHost = availableHosts.first(where: {
+                $0.hostName == settings.effectiveSSHHost || $0.host.contains("claude")
+            }) {
+                try await connectWithConfigHost(configHost.host)
+            } else if settings.sshAuthType == .publicKey {
+                try await connectWithKey(
+                    host: settings.effectiveSSHHost,
+                    port: settings.sshPort,
+                    username: settings.sshUsername.isEmpty ? NSUserName() : settings.sshUsername,
+                    privateKeyPath: getRealHomeDirectory() + "/.ssh/id_ed25519"
+                )
+            } else {
+                try await connect(
+                    host: settings.effectiveSSHHost,
+                    port: settings.sshPort,
+                    username: settings.sshUsername,
+                    password: settings.sshPassword
+                )
+            }
+        }
+        return try await listFiles(path)
+    }
+
     // MARK: - File Reading
 
     /// Read a remote file and return its contents as a string
@@ -502,6 +603,92 @@ class SSHManager: ObservableObject {
         }
 
         return try await readFile(path)
+    }
+}
+
+// MARK: - File Entry
+
+struct FileEntry: Identifiable {
+    let id = UUID()
+    let name: String
+    let path: String
+    let isDirectory: Bool
+    let isSymlink: Bool
+    let size: Int64
+    let permissions: String
+
+    var icon: String {
+        if isSymlink {
+            return "link"
+        } else if isDirectory {
+            return "folder.fill"
+        } else if name.hasSuffix(".swift") || name.hasSuffix(".ts") || name.hasSuffix(".js") ||
+                  name.hasSuffix(".py") || name.hasSuffix(".go") || name.hasSuffix(".rs") {
+            return "doc.text.fill"
+        } else if name.hasSuffix(".json") || name.hasSuffix(".yaml") || name.hasSuffix(".yml") ||
+                  name.hasSuffix(".toml") || name.hasSuffix(".xml") {
+            return "doc.badge.gearshape.fill"
+        } else if name.hasSuffix(".md") || name.hasSuffix(".txt") || name.hasSuffix(".rst") {
+            return "doc.richtext.fill"
+        } else if name.hasSuffix(".png") || name.hasSuffix(".jpg") || name.hasSuffix(".gif") ||
+                  name.hasSuffix(".svg") || name.hasSuffix(".webp") {
+            return "photo.fill"
+        } else {
+            return "doc.fill"
+        }
+    }
+
+    var formattedSize: String {
+        if isDirectory { return "" }
+        if size < 1024 { return "\(size) B" }
+        if size < 1024 * 1024 { return String(format: "%.1f KB", Double(size) / 1024) }
+        if size < 1024 * 1024 * 1024 { return String(format: "%.1f MB", Double(size) / (1024 * 1024)) }
+        return String(format: "%.1f GB", Double(size) / (1024 * 1024 * 1024))
+    }
+
+    /// Parse ls -laF output line into FileEntry
+    static func parse(from line: String, basePath: String) -> FileEntry? {
+        // Format: -rw-r--r--  1 user group  1234 Dec 26 12:34 filename
+        // With -F: directories have /, symlinks have @, executables have *
+        let components = line.split(separator: " ", omittingEmptySubsequences: true)
+        guard components.count >= 9 else { return nil }
+
+        let permissions = String(components[0])
+        let sizeStr = String(components[4])
+        // Filename is everything after the date/time (columns 5-8)
+        let nameStartIndex = components.dropFirst(8).first.map { line.range(of: String($0))?.lowerBound } ?? nil
+        guard let startIndex = nameStartIndex else { return nil }
+
+        var name = String(line[startIndex...]).trimmingCharacters(in: .whitespaces)
+
+        // Handle symlinks: name -> target
+        var isSymlink = false
+        if permissions.hasPrefix("l") {
+            isSymlink = true
+            if let arrowRange = name.range(of: " -> ") {
+                name = String(name[..<arrowRange.lowerBound])
+            }
+        }
+
+        // Remove trailing type indicators from -F flag
+        let isDirectory = name.hasSuffix("/") || permissions.hasPrefix("d")
+        name = name.trimmingCharacters(in: CharacterSet(charactersIn: "/*@"))
+
+        // Skip . and ..
+        if name == "." || name == ".." { return nil }
+
+        let size = Int64(sizeStr) ?? 0
+        let path = basePath == "/" ? "/\(name)" :
+                   basePath.hasSuffix("/") ? "\(basePath)\(name)" : "\(basePath)/\(name)"
+
+        return FileEntry(
+            name: name,
+            path: path,
+            isDirectory: isDirectory,
+            isSymlink: isSymlink,
+            size: size,
+            permissions: permissions
+        )
     }
 }
 

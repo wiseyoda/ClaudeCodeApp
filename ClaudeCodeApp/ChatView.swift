@@ -314,6 +314,7 @@ struct ChatView: View {
                 text: $inputText,
                 selectedImage: $selectedImage,
                 isProcessing: wsManager.isProcessing,
+                projectPath: project.path,
                 isFocused: _isInputFocused,
                 onSend: sendMessage,
                 onAbort: { wsManager.abortSession() }

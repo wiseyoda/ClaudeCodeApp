@@ -9,6 +9,7 @@ struct ContentView: View {
     @State private var errorMessage: String?
     @State private var showSettings = false
     @State private var showTerminal = false
+    @State private var showCloneProject = false
 
     var body: some View {
         NavigationStack {
@@ -28,6 +29,15 @@ struct ContentView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack(spacing: 16) {
+                        Button {
+                            showCloneProject = true
+                        } label: {
+                            Image(systemName: "plus")
+                                .foregroundColor(CLITheme.green(for: colorScheme))
+                        }
+                        .accessibilityLabel("New project")
+                        .accessibilityHint("Clone a new project from Git")
+
                         Button {
                             showTerminal = true
                         } label: {
@@ -60,6 +70,11 @@ struct ContentView: View {
             }
             .sheet(isPresented: $showSettings) {
                 SettingsView()
+            }
+            .sheet(isPresented: $showCloneProject) {
+                CloneProjectSheet {
+                    Task { await loadProjects() }
+                }
             }
             .fullScreenCover(isPresented: $showTerminal) {
                 NavigationStack {

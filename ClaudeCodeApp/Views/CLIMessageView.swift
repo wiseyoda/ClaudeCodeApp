@@ -5,6 +5,7 @@ import SwiftUI
 struct CLIMessageView: View {
     let message: ChatMessage
     @State private var isExpanded: Bool
+    @State private var showCopied = false
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
 
@@ -37,6 +38,24 @@ struct CLIMessageView: View {
                 }
 
                 Spacer()
+
+                // Copy button for assistant messages
+                if message.role == .assistant && !message.content.isEmpty {
+                    Button {
+                        UIPasteboard.general.string = message.content
+                        showCopied = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                            showCopied = false
+                        }
+                    } label: {
+                        Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 12))
+                            .foregroundColor(showCopied ? CLITheme.green(for: colorScheme) : CLITheme.mutedText(for: colorScheme))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(showCopied ? "Copied" : "Copy message")
+                    .accessibilityHint("Copy Claude's response to clipboard")
+                }
             }
             .contentShape(Rectangle())
             .onTapGesture {
@@ -58,6 +77,40 @@ struct CLIMessageView: View {
             }
         }
         .padding(.vertical, 4)
+        .contextMenu {
+            // Copy button
+            Button {
+                UIPasteboard.general.string = message.content
+            } label: {
+                Label("Copy", systemImage: "doc.on.doc")
+            }
+
+            // Share button
+            Button {
+                shareContent()
+            } label: {
+                Label("Share", systemImage: "square.and.arrow.up")
+            }
+        }
+    }
+
+    private func shareContent() {
+        let activityVC = UIActivityViewController(
+            activityItems: [message.content],
+            applicationActivities: nil
+        )
+
+        // Find the window scene and present
+        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           let rootVC = windowScene.windows.first?.rootViewController {
+            // Handle iPad popover
+            if let popover = activityVC.popoverPresentationController {
+                popover.sourceView = rootVC.view
+                popover.sourceRect = CGRect(x: rootVC.view.bounds.midX, y: rootVC.view.bounds.midY, width: 0, height: 0)
+                popover.permittedArrowDirections = []
+            }
+            rootVC.present(activityVC, animated: true)
+        }
     }
 
     private var bulletChar: String {

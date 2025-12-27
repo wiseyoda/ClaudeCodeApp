@@ -33,6 +33,8 @@
 		A1000024 /* CLIMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000023 /* CLIMessageView.swift */; };
 		A1000025 /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000024 /* Logger.swift */; };
 		A1000026 /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000025 /* AppError.swift */; };
+		A1000027 /* FilePickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000026 /* FilePickerSheet.swift */; };
+		A1000028 /* CloneProjectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000027 /* CloneProjectSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -72,6 +74,8 @@
 		A2000023 /* CLIMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIMessageView.swift; sourceTree = "<group>"; };
 		A2000024 /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
 		A2000025 /* AppError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppError.swift; sourceTree = "<group>"; };
+		A2000026 /* FilePickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePickerSheet.swift; sourceTree = "<group>"; };
+		A2000027 /* CloneProjectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloneProjectSheet.swift; sourceTree = "<group>"; };
 		A3000001 /* ClaudeCodeApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClaudeCodeApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -168,6 +172,8 @@
 				A2000021 /* MarkdownText.swift */,
 				A2000022 /* CLIInputView.swift */,
 				A2000023 /* CLIMessageView.swift */,
+				A2000026 /* FilePickerSheet.swift */,
+				A2000027 /* CloneProjectSheet.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -313,6 +319,8 @@
 				A1000024 /* CLIMessageView.swift in Sources */,
 				A1000025 /* Logger.swift in Sources */,
 				A1000026 /* AppError.swift in Sources */,
+				A1000027 /* FilePickerSheet.swift in Sources */,
+				A1000028 /* CloneProjectSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

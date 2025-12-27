@@ -68,64 +68,188 @@ struct ChatMessage: Identifiable, Equatable, Codable {
     }
 }
 
-// MARK: - Message Persistence
+// MARK: - Message Persistence (File-based)
+
+/// DTO for storing messages - separates image data to avoid large JSON
+private struct ChatMessageDTO: Codable {
+    let id: UUID
+    let role: String
+    let content: String
+    let timestamp: Date
+    let imageFilename: String?  // Reference to image file, not inline data
+
+    init(from message: ChatMessage, imageFilename: String?) {
+        self.id = message.id
+        self.role = message.role.rawValue
+        self.content = message.content
+        self.timestamp = message.timestamp
+        self.imageFilename = imageFilename
+    }
+
+    func toChatMessage(imageData: Data?) -> ChatMessage {
+        return ChatMessage(
+            role: ChatMessage.Role(rawValue: role) ?? .system,
+            content: content,
+            timestamp: timestamp,
+            imageData: imageData
+        )
+    }
+}
 
 class MessageStore {
     private static let maxMessages = 50
-    private static let keyPrefix = "chat_messages_"
 
-    /// Get the storage key for a project
-    private static func key(for projectPath: String) -> String {
-        // Create a safe key from project path
+    // MARK: - Directory Setup
+
+    private static var messagesDirectory: URL {
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let dir = docs.appendingPathComponent("Messages", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    private static func projectDirectory(for projectPath: String) -> URL {
         let safeKey = projectPath
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: " ", with: "_")
-        return keyPrefix + safeKey
+        let dir = messagesDirectory.appendingPathComponent(safeKey, isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
     }
+
+    private static func messagesFile(for projectPath: String) -> URL {
+        projectDirectory(for: projectPath).appendingPathComponent("messages.json")
+    }
+
+    private static func imagesDirectory(for projectPath: String) -> URL {
+        let dir = projectDirectory(for: projectPath).appendingPathComponent("images", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    // MARK: - Load/Save Messages
 
     /// Load messages for a project
     static func loadMessages(for projectPath: String) -> [ChatMessage] {
-        let key = key(for: projectPath)
-        guard let data = UserDefaults.standard.data(forKey: key) else {
-            return []
+        let file = messagesFile(for: projectPath)
+
+        guard let data = try? Data(contentsOf: file) else {
+            // Try migrating from UserDefaults
+            return migrateFromUserDefaults(for: projectPath)
         }
 
         do {
-            let messages = try JSONDecoder().decode([ChatMessage].self, from: data)
-            print("[MessageStore] Loaded \(messages.count) messages for \(projectPath)")
+            let dtos = try JSONDecoder().decode([ChatMessageDTO].self, from: data)
+            let imagesDir = imagesDirectory(for: projectPath)
+
+            let messages = dtos.map { dto -> ChatMessage in
+                var imageData: Data?
+                if let filename = dto.imageFilename {
+                    let imagePath = imagesDir.appendingPathComponent(filename)
+                    imageData = try? Data(contentsOf: imagePath)
+                }
+                return dto.toChatMessage(imageData: imageData)
+            }
+
+            log.debug("Loaded \(messages.count) messages for \(projectPath)")
             return messages
         } catch {
-            print("[MessageStore] Failed to decode messages: \(error)")
+            log.error("Failed to decode messages: \(error)")
             return []
         }
     }
 
     /// Save messages for a project (keeps last 50)
     static func saveMessages(_ messages: [ChatMessage], for projectPath: String) {
-        let key = key(for: projectPath)
+        let file = messagesFile(for: projectPath)
+        let imagesDir = imagesDirectory(for: projectPath)
 
         // Keep only the last maxMessages, excluding streaming messages
-        let persistableMessages = messages
+        let persistableMessages = Array(messages
             .filter { !$0.isStreaming }
-            .suffix(maxMessages)
+            .suffix(maxMessages))
+
+        // Convert to DTOs and save images separately
+        var dtos: [ChatMessageDTO] = []
+
+        for message in persistableMessages {
+            var imageFilename: String?
+
+            if let imageData = message.imageData {
+                // Save image to file
+                imageFilename = "\(message.id.uuidString).jpg"
+                let imagePath = imagesDir.appendingPathComponent(imageFilename!)
+                try? imageData.write(to: imagePath)
+            }
+
+            dtos.append(ChatMessageDTO(from: message, imageFilename: imageFilename))
+        }
 
         do {
-            let data = try JSONEncoder().encode(Array(persistableMessages))
-            UserDefaults.standard.set(data, forKey: key)
-            print("[MessageStore] Saved \(persistableMessages.count) messages for \(projectPath)")
+            let data = try JSONEncoder().encode(dtos)
+            try data.write(to: file)
+            log.debug("Saved \(dtos.count) messages for \(projectPath)")
         } catch {
-            print("[MessageStore] Failed to encode messages: \(error)")
+            log.error("Failed to save messages: \(error)")
         }
+
+        // Clean up old images that are no longer referenced
+        cleanupOrphanedImages(for: projectPath, validIds: Set(persistableMessages.compactMap { $0.imageData != nil ? $0.id : nil }))
     }
 
     /// Clear messages for a project
     static func clearMessages(for projectPath: String) {
-        let key = key(for: projectPath)
-        UserDefaults.standard.removeObject(forKey: key)
-        print("[MessageStore] Cleared messages for \(projectPath)")
+        let projectDir = projectDirectory(for: projectPath)
+        try? FileManager.default.removeItem(at: projectDir)
+        log.debug("Cleared messages for \(projectPath)")
     }
 
-    // MARK: - Draft Persistence
+    // MARK: - Migration from UserDefaults
+
+    private static func migrateFromUserDefaults(for projectPath: String) -> [ChatMessage] {
+        let safeKey = projectPath
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+        let oldKey = "chat_messages_" + safeKey
+
+        guard let data = UserDefaults.standard.data(forKey: oldKey) else {
+            return []
+        }
+
+        do {
+            let messages = try JSONDecoder().decode([ChatMessage].self, from: data)
+            log.info("Migrating \(messages.count) messages from UserDefaults for \(projectPath)")
+
+            // Save to new file-based storage
+            saveMessages(messages, for: projectPath)
+
+            // Remove from UserDefaults
+            UserDefaults.standard.removeObject(forKey: oldKey)
+
+            return messages
+        } catch {
+            log.error("Failed to migrate messages from UserDefaults: \(error)")
+            return []
+        }
+    }
+
+    // MARK: - Cleanup
+
+    private static func cleanupOrphanedImages(for projectPath: String, validIds: Set<UUID>) {
+        let imagesDir = imagesDirectory(for: projectPath)
+        guard let files = try? FileManager.default.contentsOfDirectory(at: imagesDir, includingPropertiesForKeys: nil) else {
+            return
+        }
+
+        for file in files {
+            let filename = file.deletingPathExtension().lastPathComponent
+            if let uuid = UUID(uuidString: filename), !validIds.contains(uuid) {
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
+    }
+
+    // MARK: - Draft Persistence (still uses UserDefaults - small text only)
 
     private static let draftPrefix = "draft_input_"
 

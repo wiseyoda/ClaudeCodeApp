@@ -44,44 +44,45 @@
 
 ---
 
-## Milestone 1: Copy & Share 📋
+## Milestone 1: Copy & Share ✅
 
 **Goal:** Make it easy to copy and share Claude's responses.
 
-| Feature | Description | Effort |
+| Feature | Description | Status |
 |---------|-------------|--------|
-| Copy Message as Markdown | Button on assistant messages to copy full text | Low |
-| Copy Code Block | Tap-to-copy on code blocks (already exists, verify working) | Low |
-| Long-press Context Menu | Copy, Share, Bookmark options on messages | Medium |
-| Share Sheet Integration | iOS share sheet for sending to other apps | Low |
+| Copy Message as Markdown | Button on assistant messages to copy full text | ✅ |
+| Copy Code Block | Tap-to-copy on code blocks | ✅ |
+| Long-press Context Menu | Copy, Share options on messages | ✅ |
+| Share Sheet Integration | iOS share sheet for sending to other apps | ✅ |
 
 ### Implementation Notes
-- Add copy button (📋) to message header for assistant messages
-- Ensure code blocks have working copy button
-- Context menu: `.contextMenu { }` modifier on message views
+- Copy button (📋) added to assistant message headers
+- Code blocks have working copy button with "Copied!" feedback
+- Context menu on all messages with Copy and Share options
+- Share sheet properly handles iPad popover presentation
 
 ---
 
-## Milestone 2: Project Management & File Browser 📋
+## Milestone 2: Project Management & File Browser 🚧
 
 **Goal:** Create/manage projects and browse project files.
 
-| Feature | Description | Effort |
+| Feature | Description | Status |
 |---------|-------------|--------|
-| Clone from GitHub URL | Paste URL → clone to workspace → init Claude | Medium |
-| Create New Project | Create folder in workspace, optionally init Claude | Low |
-| Browse GitHub Repos | OAuth + list user's repos, select to clone | High |
-| Delete/Archive Project | Remove projects from list (with confirmation) | Low |
-| **File Browser** | List/navigate project files via SSH or API | Medium |
-| **@ File References** | Mobile-friendly file picker to reference files in prompts | Medium |
+| Clone from GitHub URL | Paste URL → clone to workspace → init Claude | ✅ |
+| Create New Project | Create folder in workspace, optionally init Claude | 📋 |
+| Browse GitHub Repos | OAuth + list user's repos, select to clone | 💡 |
+| Delete/Archive Project | Remove projects from list (with confirmation) | 📋 |
+| **File Browser** | List/navigate project files via SSH | ✅ |
+| **@ File References** | Mobile-friendly file picker to reference files in prompts | ✅ |
 
 ### Implementation Notes
 - Clone via SSH: `git clone <url>` through SSHManager
 - New project: `mkdir` + optional `claude init`
 - GitHub OAuth would require significant work - defer to later
 - Start with URL clone + new project creation
-- File browser: `ls -la` via SSH or new API endpoint
-- @ references: Button next to input that opens file picker sheet
+- ✅ File browser: Uses `ls -laF` via SSH with breadcrumb navigation
+- ✅ @ references: Button next to input opens file picker sheet with search
 
 ### File Reference UI Concept
 ```
@@ -213,22 +214,46 @@
 - ✅ Light mode support
 - ✅ Font size presets
 
+### December 26, 2024 - Hardening Complete
+- ✅ ChatView.swift refactored (2,345 → 703 lines)
+- ✅ Extracted: MarkdownText, CLIInputView, CLIMessageView
+- ✅ File-based MessageStore (migrates from UserDefaults)
+- ✅ Logger.swift + AppError.swift for error handling
+- ✅ WebSocket retry with exponential backoff
+- ✅ 28 unit tests for parsers
+- ✅ VoiceOver accessibility labels on all interactive elements
+
+### December 26, 2024 - Milestone 1: Copy & Share
+- ✅ Copy button on assistant messages (header icon)
+- ✅ Long-press context menu on all messages
+- ✅ Share sheet integration with iPad support
+
+### December 26, 2024 - File Browser & @ References (M2 partial)
+- ✅ FileEntry struct with icon and size formatting
+- ✅ SSHManager.listFiles() with directory listing via SSH
+- ✅ FilePickerSheet with breadcrumb navigation and search
+- ✅ @ button in CLIInputView to reference project files
+
+### December 27, 2024 - Clone from GitHub URL (M2 partial)
+- ✅ CloneProjectSheet with URL input and validation
+- ✅ SSHManager.executeCommandWithAutoConnect() for remote commands
+- ✅ + button in toolbar to open clone sheet
+- ✅ Auto-refresh project list after successful clone
+
 ---
 
 ## Technical Debt & Maintenance
 
-> **See [HARDENING.md](./HARDENING.md) for detailed implementation plan.**
-
 | Item | Description | Priority | Status |
 |------|-------------|----------|--------|
-| ChatView.swift size | 2,300+ lines - split into modules | **High** | 📋 Planned |
-| AppSettings injection | Fix inconsistent pattern across views | **High** | 📋 Planned |
-| Theme migration | Complete colorScheme-aware migration | **High** | 📋 Planned |
-| MessageStore storage | Move from UserDefaults to file-based | **High** | 📋 Planned |
-| Code duplication | Consolidate utilities (MIME detection) | Medium | 📋 Planned |
-| Error handling | User-facing errors + retry logic | **High** | 📋 Planned |
-| Test coverage | Unit tests for parsers, managers | Medium | 📋 Planned |
-| Accessibility | VoiceOver support, Dynamic Type | **High** | 📋 Planned |
+| ChatView.swift size | Split into modules (2,345 → 703 lines) | **High** | ✅ Complete |
+| AppSettings injection | Fixed - uses EnvironmentObject + onAppear | **High** | ✅ Complete |
+| Theme migration | All views use colorScheme-aware colors | **High** | ✅ Complete |
+| MessageStore storage | File-based with auto-migration from UserDefaults | **High** | ✅ Complete |
+| Code duplication | ImageUtilities.swift consolidates MIME detection | Medium | ✅ Complete |
+| Error handling | AppError.swift + Logger.swift + retry logic | **High** | ✅ Complete |
+| Test coverage | 28 unit tests for parsers | Medium | ✅ Complete |
+| Accessibility | VoiceOver labels on all interactive elements | **High** | ✅ Complete |
 
 ---
 
@@ -250,20 +275,12 @@ These features have been considered but are not on the roadmap:
 
 **Next Actions:**
 
-### Hardening First (see HARDENING.md)
-1. Fix AppSettings injection pattern
-2. Complete Theme migration to colorScheme-aware
-3. Break up ChatView.swift into modules
-4. Fix MessageStore (file-based storage)
-5. Add unit tests for parsers
-
-### Then Features
-6. Copy Message as Markdown (quick win)
-7. File Browser + @ References (core workflow feature)
-8. Clone from GitHub URL (enables new workflows)
-9. Enhanced Session Picker (improves navigation)
-10. iPad Sidebar (larger screen optimization)
+1. ~~Copy Message as Markdown~~ ✅ Complete
+2. ~~File Browser + @ References~~ ✅ Complete
+3. ~~Clone from GitHub URL~~ ✅ Complete
+4. Enhanced Session Picker (improves navigation)
+5. iPad Sidebar (larger screen optimization)
 
 ---
 
-*Last updated: December 2024*
+*Last updated: December 27, 2024*
