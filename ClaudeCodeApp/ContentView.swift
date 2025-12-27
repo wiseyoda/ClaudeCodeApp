@@ -10,6 +10,10 @@ struct ContentView: View {
     @State private var showSettings = false
     @State private var showTerminal = false
     @State private var showCloneProject = false
+    @State private var showNewProject = false
+    @State private var showNewProjectOptions = false
+    @State private var projectToDelete: Project?
+    @StateObject private var sshManager = SSHManager()
 
     var body: some View {
         NavigationStack {
@@ -30,13 +34,13 @@ struct ContentView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack(spacing: 16) {
                         Button {
-                            showCloneProject = true
+                            showNewProjectOptions = true
                         } label: {
                             Image(systemName: "plus")
                                 .foregroundColor(CLITheme.green(for: colorScheme))
                         }
                         .accessibilityLabel("New project")
-                        .accessibilityHint("Clone a new project from Git")
+                        .accessibilityHint("Create or clone a project")
 
                         Button {
                             showTerminal = true
@@ -74,6 +78,37 @@ struct ContentView: View {
             .sheet(isPresented: $showCloneProject) {
                 CloneProjectSheet {
                     Task { await loadProjects() }
+                }
+            }
+            .sheet(isPresented: $showNewProject) {
+                NewProjectSheet {
+                    Task { await loadProjects() }
+                }
+            }
+            .confirmationDialog("New Project", isPresented: $showNewProjectOptions, titleVisibility: .visible) {
+                Button("Create Empty Project") {
+                    showNewProject = true
+                }
+                Button("Clone from GitHub") {
+                    showCloneProject = true
+                }
+                Button("Cancel", role: .cancel) {}
+            }
+            .alert("Delete Project?", isPresented: .init(
+                get: { projectToDelete != nil },
+                set: { if !$0 { projectToDelete = nil } }
+            )) {
+                Button("Cancel", role: .cancel) {
+                    projectToDelete = nil
+                }
+                Button("Delete", role: .destructive) {
+                    if let project = projectToDelete {
+                        Task { await deleteProject(project) }
+                    }
+                }
+            } message: {
+                if let project = projectToDelete {
+                    Text("This will remove \"\(project.title)\" from your project list. The files will remain on the server.")
                 }
             }
             .fullScreenCover(isPresented: $showTerminal) {
@@ -191,6 +226,20 @@ struct ContentView: View {
                         } label: {
                             ProjectRow(project: project)
                         }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                projectToDelete = project
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                projectToDelete = project
+                            } label: {
+                                Label("Delete Project", systemImage: "trash")
+                            }
+                        }
                     }
                 }
             }
@@ -210,6 +259,28 @@ struct ContentView: View {
         } catch {
             errorMessage = "Failed to connect to server.\n\nCheck Tailscale and server at:\n\(settings.serverURL)"
             isLoading = false
+        }
+    }
+
+    private func deleteProject(_ project: Project) async {
+        // Remove project from Claude's project list (not the actual files)
+        // The project directory in ~/.claude/projects/ is what makes it appear in the list
+        let encodedPath = project.path.replacingOccurrences(of: "/", with: "-")
+        let claudeProjectDir = "~/.claude/projects/\(encodedPath)"
+
+        do {
+            // Connect if needed and delete the Claude project directory
+            let deleteCmd = "rm -rf '\(claudeProjectDir)'"
+            _ = try await sshManager.executeCommandWithAutoConnect(deleteCmd, settings: settings)
+
+            // Remove from local list immediately for responsive UI
+            await MainActor.run {
+                projects.removeAll { $0.id == project.id }
+                projectToDelete = nil
+            }
+        } catch {
+            // Still try to refresh the list
+            await loadProjects()
         }
     }
 }

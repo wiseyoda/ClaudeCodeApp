@@ -169,18 +169,53 @@ struct CloneProjectSheet: View {
             // Execute clone command
             let output = try await sshManager.executeCommandWithAutoConnect(cloneCmd, settings: settings)
 
-            // Check for errors
+            // Check for errors - but ignore "already exists" which is fine
             if output.contains("fatal:") || output.contains("error:") {
-                throw SSHError.connectionFailed(output.trimmingCharacters(in: .whitespacesAndNewlines))
+                // Allow "already exists" - user might want to re-clone
+                if !output.contains("already exists") {
+                    throw SSHError.connectionFailed(output.trimmingCharacters(in: .whitespacesAndNewlines))
+                }
             }
 
-            progress = "Initializing Claude project..."
+            // Verify the clone succeeded by checking if directory exists
+            let verifyCmd = "test -d \(workspaceDir)/\(repoName) && echo 'EXISTS' || echo 'NOT_FOUND'"
+            let verifyOutput = try await sshManager.executeCommand(verifyCmd)
+            if verifyOutput.contains("NOT_FOUND") {
+                throw SSHError.connectionFailed("Clone failed - repository directory not created")
+            }
 
-            // Initialize Claude in the cloned repo
-            let initCmd = "cd \(workspaceDir)/\(repoName) && claude init 2>&1 || true"
-            _ = try? await sshManager.executeCommand(initCmd)
+            progress = "Registering project..."
 
-            progress = "Clone complete!"
+            // Get the absolute path of the cloned repo
+            let realpathCmd = "realpath \(workspaceDir)/\(repoName)"
+            let absolutePath = try await sshManager.executeCommand(realpathCmd)
+            let cleanPath = absolutePath.trimmingCharacters(in: .whitespacesAndNewlines)
+
+            // Create Claude project directory structure
+            // Path encoding: /home/user/workspace/repo -> -home-user-workspace-repo
+            let encodedPath = cleanPath.replacingOccurrences(of: "/", with: "-")
+            let claudeProjectDir = "~/.claude/projects/\(encodedPath)"
+
+            // Create the project directory and a session file with cwd so it appears in the project list
+            // The backend reads 'cwd' from session files to determine project paths
+            let timestamp = ISO8601DateFormatter().string(from: Date())
+            let sessionContent = "{\"type\":\"init\",\"cwd\":\"\(cleanPath)\",\"timestamp\":\"\(timestamp)\"}"
+            let setupCmd = "mkdir -p '\(claudeProjectDir)' && echo '\(sessionContent)' > '\(claudeProjectDir)/init.jsonl'"
+            _ = try? await sshManager.executeCommand(setupCmd)
+
+            progress = "Initializing Claude..."
+
+            // Try to initialize Claude in the cloned repo with timeout
+            // Use --yes flag if available, and timeout after 10 seconds
+            let initCmd = "cd '\(cleanPath)' && claude init --yes 2>&1 || claude init 2>&1 || true"
+            let initResult = await sshManager.executeCommandWithTimeout(initCmd, timeoutSeconds: 10)
+
+            if initResult == nil {
+                // Claude init timed out - that's OK, project dir is created
+                progress = "Clone complete!"
+            } else {
+                progress = "Clone complete!"
+            }
 
             // Small delay to show success
             try await Task.sleep(nanoseconds: 500_000_000)

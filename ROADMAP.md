@@ -63,16 +63,16 @@
 
 ---
 
-## Milestone 2: Project Management & File Browser 🚧
+## Milestone 2: Project Management & File Browser ✅
 
 **Goal:** Create/manage projects and browse project files.
 
 | Feature | Description | Status |
 |---------|-------------|--------|
 | Clone from GitHub URL | Paste URL → clone to workspace → init Claude | ✅ |
-| Create New Project | Create folder in workspace, optionally init Claude | 📋 |
+| Create New Project | Create folder in workspace, optionally init Claude | ✅ |
 | Browse GitHub Repos | OAuth + list user's repos, select to clone | 💡 |
-| Delete/Archive Project | Remove projects from list (with confirmation) | 📋 |
+| Delete/Archive Project | Remove projects from list (with confirmation) | ✅ |
 | **File Browser** | List/navigate project files via SSH | ✅ |
 | **@ File References** | Mobile-friendly file picker to reference files in prompts | ✅ |
 
@@ -240,6 +240,15 @@
 - ✅ + button in toolbar to open clone sheet
 - ✅ Auto-refresh project list after successful clone
 
+### December 27, 2024 - Milestone 2 Complete
+- ✅ NewProjectSheet for creating empty projects
+- ✅ + button shows action sheet (Clone vs New Project)
+- ✅ Delete project with swipe-to-delete and context menu
+- ✅ Confirmation dialog before delete (keeps files, removes from list)
+- ✅ Proper Claude project registration with cwd in session files
+- ✅ /init now passes to Claude (creates CLAUDE.md)
+- ✅ /new command for starting fresh sessions
+
 ---
 
 ## Technical Debt & Maintenance
@@ -278,8 +287,9 @@ These features have been considered but are not on the roadmap:
 1. ~~Copy Message as Markdown~~ ✅ Complete
 2. ~~File Browser + @ References~~ ✅ Complete
 3. ~~Clone from GitHub URL~~ ✅ Complete
-4. Enhanced Session Picker (improves navigation)
-5. iPad Sidebar (larger screen optimization)
+4. ~~Create New Project + Delete~~ ✅ Complete
+5. Enhanced Session Picker (M3 - improves navigation)
+6. iPad Sidebar + Keyboard Shortcuts (M4)
 
 ---
 

@@ -484,8 +484,13 @@ struct ChatView: View {
             return true
 
         case "/init":
-            // Start a new session
-            handleInitCommand()
+            // Pass to Claude to create/modify CLAUDE.md
+            addSystemMessage("Initializing project with Claude...")
+            return false  // Let it pass through to server
+
+        case "/new":
+            // Start a new session (local command)
+            handleNewSessionCommand()
             return true
 
         case "/resume":
@@ -522,12 +527,12 @@ struct ChatView: View {
         MessageStore.clearMessages(for: project.path)
     }
 
-    private func handleInitCommand() {
+    private func handleNewSessionCommand() {
         // Clear and start new session
         messages.removeAll()
         wsManager.sessionId = nil
         selectedSession = nil
-        addSystemMessage("New session initialized.")
+        addSystemMessage("New session started.")
         MessageStore.clearMessages(for: project.path)
     }
 
@@ -615,7 +620,8 @@ struct SlashCommandHelpSheet: View {
 
                     VStack(alignment: .leading, spacing: 12) {
                         CommandRow(command: "/clear", description: "Clear conversation and start fresh")
-                        CommandRow(command: "/init", description: "Initialize a new session")
+                        CommandRow(command: "/new", description: "Start a new session")
+                        CommandRow(command: "/init", description: "Create/modify CLAUDE.md (via Claude)")
                         CommandRow(command: "/resume", description: "Resume a previous session")
                         CommandRow(command: "/compact", description: "Compact conversation to save context")
                         CommandRow(command: "/status", description: "Show connection and session info")

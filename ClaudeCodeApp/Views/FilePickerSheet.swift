@@ -160,7 +160,7 @@ struct FilePickerSheet: View {
 
     private var pathComponents: [(name: String, path: String)] {
         var components: [(name: String, path: String)] = []
-        var path = currentPath
+        let path = currentPath
 
         // Start with project root
         if path.hasPrefix(projectPath) {

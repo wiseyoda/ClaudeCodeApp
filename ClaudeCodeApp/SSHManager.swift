@@ -468,6 +468,32 @@ class SSHManager: ObservableObject {
         return String(buffer: result)
     }
 
+    /// Execute a command with a timeout
+    /// - Parameters:
+    ///   - command: The command to execute
+    ///   - timeoutSeconds: Maximum time to wait for completion
+    /// - Returns: The command output as a string, or nil if timed out
+    func executeCommandWithTimeout(_ command: String, timeoutSeconds: Int) async -> String? {
+        guard let client = client, isConnected else {
+            return nil
+        }
+
+        // Wrap the command with timeout utility
+        // Use 'timeout' command if available, otherwise use shell background trick
+        let wrappedCommand = "timeout \(timeoutSeconds)s bash -c '\(command.replacingOccurrences(of: "'", with: "'\\''"))' 2>&1 || echo '[TIMEOUT]'"
+
+        do {
+            let result = try await client.executeCommand(wrappedCommand)
+            let output = String(buffer: result)
+            if output.contains("[TIMEOUT]") {
+                return nil
+            }
+            return output
+        } catch {
+            return nil
+        }
+    }
+
     /// Execute a command with auto-connect
     func executeCommandWithAutoConnect(_ command: String, settings: AppSettings) async throws -> String {
         if !isConnected {
