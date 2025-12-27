@@ -108,3 +108,53 @@ claude-code-webui --host 0.0.0.0 --port 8080
 ```
 
 SSH requires standard sshd running on the server.
+
+## Backend API Notes
+
+### Authentication
+
+The claudecodeui backend uses JWT tokens for authentication:
+
+```
+POST /api/auth/login
+Body: {"username": "admin", "password": "claude123"}
+Response: {"success": true, "token": "eyJ..."}
+```
+
+**Important CORS limitation:** The backend CORS config only allows `Content-Type` header, NOT `Authorization`. This means:
+- `/api/projects` works with `Authorization: Bearer <token>` header
+- `/api/projects/:project/histories/:sessionId` does NOT work with Bearer auth (returns HTML instead of JSON)
+
+### Working Endpoints
+
+| Endpoint | Auth | Notes |
+|----------|------|-------|
+| `GET /api/projects` | Bearer token | Returns project list with sessions |
+| `POST /api/chat` | WebSocket | Real-time chat |
+| `POST /api/abort/:requestId` | None needed | Abort current request |
+| `GET /api/projects/:project/histories` | **BROKEN** | CORS blocks Authorization |
+| `GET /api/projects/:project/histories/:sessionId` | **BROKEN** | CORS blocks Authorization |
+
+### Session History Workaround
+
+Since the history API endpoints don't accept Authorization headers, we load session history via SSH instead:
+
+**Session files location:** `~/.claude/projects/{encoded-project-path}/{session-id}.jsonl`
+
+**Encoded project path format:** `/home/dev/workspace/MyProject` → `-home-dev-workspace-MyProject`
+
+**JSONL format:** Each line is a JSON object:
+```json
+{"type":"user","message":{"content":[{"type":"text","text":"user message"}]},"timestamp":"..."}
+{"type":"assistant","message":{"content":[{"type":"text","text":"response"}]},"timestamp":"..."}
+{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{...}}]},"timestamp":"..."}
+```
+
+Key message types:
+- `type: "user"` with `content[0].text` = user message
+- `type: "user"` with `content[0].type: "tool_result"` = tool output (use `toolUseResult` field)
+- `type: "assistant"` with `content[0].text` = assistant response
+- `type: "assistant"` with `content[0].type: "tool_use"` = tool invocation
+- `type: "assistant"` with `content[0].type: "thinking"` = reasoning block
+
+The `SessionHistoryLoader` class in `Models.swift` handles parsing this format.
