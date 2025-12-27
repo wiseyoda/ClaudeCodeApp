@@ -208,75 +208,68 @@ struct CLIMessageView: View {
     /// Extract tool name + key param for richer headers
     private var toolHeaderText: String {
         let content = message.content
-
-        // Get the tool name
-        let toolName: String
-        if let parenIndex = content.firstIndex(of: "(") {
-            toolName = String(content[..<parenIndex])
-        } else {
-            return content
-        }
+        let displayName = toolType.displayName
 
         // Extract key param based on tool type
         switch toolType {
         case .bash:
-            // Show command: Bash: $ ls -la
+            // Show command: Terminal: $ ls -la
             if let command = extractParam(from: content, key: "command") {
                 let shortCmd = command.count > 40 ? String(command.prefix(40)) + "..." : command
-                return "\(toolName): $ \(shortCmd)"
+                return "\(displayName): $ \(shortCmd)"
             }
         case .read:
             // Show file path: Read: src/index.ts
             if let path = extractParam(from: content, key: "file_path") {
-                return "\(toolName): \(shortenPath(path))"
+                return "\(displayName): \(shortenPath(path))"
             }
         case .write:
             // Show file path: Write: src/new.ts
             if let path = extractParam(from: content, key: "file_path") {
-                return "\(toolName): \(shortenPath(path))"
+                return "\(displayName): \(shortenPath(path))"
             }
         case .edit:
             // Show file path: Edit: src/file.ts
             if let path = extractParam(from: content, key: "file_path") {
-                return "\(toolName): \(shortenPath(path))"
+                return "\(displayName): \(shortenPath(path))"
             }
         case .grep:
-            // Show pattern: Grep: "pattern"
+            // Show pattern: Search: "pattern"
             if let pattern = extractParam(from: content, key: "pattern") {
                 let shortPattern = pattern.count > 30 ? String(pattern.prefix(30)) + "..." : pattern
-                return "\(toolName): \"\(shortPattern)\""
+                return "\(displayName): \"\(shortPattern)\""
             }
         case .glob:
-            // Show pattern: Glob: **/*.ts
+            // Show pattern: Find: **/*.ts
             if let pattern = extractParam(from: content, key: "pattern") {
-                return "\(toolName): \(pattern)"
+                return "\(displayName): \(pattern)"
             }
         case .task:
-            // Show description: Task: Explore codebase
+            // Show description: Agent: Explore codebase
             if let desc = extractParam(from: content, key: "description") {
                 let shortDesc = desc.count > 35 ? String(desc.prefix(35)) + "..." : desc
-                return "\(toolName): \(shortDesc)"
+                return "\(displayName): \(shortDesc)"
             }
         case .todoWrite:
-            return "TodoWrite"
+            return displayName
         case .webFetch:
-            // Show URL: WebFetch: example.com
+            // Show URL: Fetch: example.com
             if let url = extractParam(from: content, key: "url") {
-                return "\(toolName): \(shortenURL(url))"
+                return "\(displayName): \(shortenURL(url))"
             }
         case .webSearch:
-            // Show query: WebSearch: "query"
+            // Show query: Web: "query"
             if let query = extractParam(from: content, key: "query") {
                 let shortQuery = query.count > 30 ? String(query.prefix(30)) + "..." : query
-                return "\(toolName): \"\(shortQuery)\""
+                return "\(displayName): \"\(shortQuery)\""
             }
         case .askUser:
-            return "AskUserQuestion"
+            return displayName
         case .other:
             break
         }
 
-        return toolName
+        return displayName
     }
 
     /// Extract a parameter value from tool content like "Tool(key: value, ...)"

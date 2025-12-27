@@ -213,12 +213,7 @@ struct GlobalSearchView: View {
         searchError = nil
         Task {
             do {
-                try await sshManager.connect(
-                    host: settings.effectiveSSHHost,
-                    port: settings.sshPort,
-                    username: settings.sshUsername,
-                    password: settings.sshPassword
-                )
+                try await sshManager.autoConnect(settings: settings)
             } catch {
                 await MainActor.run {
                     searchError = "Failed to connect: \(error.localizedDescription)"

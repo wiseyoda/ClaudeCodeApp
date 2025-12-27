@@ -16,7 +16,9 @@ struct ContentView: View {
     @State private var showNewProjectOptions = false
     @State private var projectToDelete: Project?
     @State private var showGlobalSearch = false
+    @State private var showCommands = false
     @StateObject private var sshManager = SSHManager()
+    @StateObject private var commandStore = CommandStore.shared
 
     // Git status tracking per project path
     @State private var gitStatuses: [String: GitStatus] = [:]
@@ -44,6 +46,15 @@ struct ContentView: View {
                             }
                             .accessibilityLabel("Search all sessions")
                             .accessibilityHint("Search across all projects and sessions")
+
+                            Button {
+                                showCommands = true
+                            } label: {
+                                Image(systemName: "text.book.closed")
+                                    .foregroundColor(CLITheme.yellow(for: colorScheme))
+                            }
+                            .accessibilityLabel("Saved commands")
+                            .accessibilityHint("Open saved commands library")
 
                             Button {
                                 showNewProjectOptions = true
@@ -117,6 +128,10 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showGlobalSearch) {
             GlobalSearchView(projects: projects)
+                .environmentObject(settings)
+        }
+        .sheet(isPresented: $showCommands) {
+            CommandsView(commandStore: commandStore)
                 .environmentObject(settings)
         }
         .confirmationDialog("New Project", isPresented: $showNewProjectOptions, titleVisibility: .visible) {

@@ -1,6 +1,177 @@
 import SwiftUI
 
-// MARK: - CLI Status Bar
+// MARK: - Unified Status Bar (New Design)
+
+/// A clean, unified status bar combining connection, model, modes, and settings
+struct UnifiedStatusBar: View {
+    let isProcessing: Bool
+    let isConnected: Bool
+    let tokenUsage: WebSocketManager.TokenUsage?
+    @Binding var showQuickSettings: Bool
+    @EnvironmentObject var settings: AppSettings
+    @Environment(\.colorScheme) var colorScheme
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Connection status dot + Model name
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 8, height: 8)
+
+                if isProcessing {
+                    // Show animated processing indicator
+                    ProcessingIndicator()
+                } else {
+                    // Show model name (tappable)
+                    Button {
+                        showQuickSettings = true
+                    } label: {
+                        Text(settings.defaultModel.shortName)
+                            .font(settings.scaledFont(.body))
+                            .fontWeight(.medium)
+                            .foregroundColor(CLITheme.primaryText(for: colorScheme))
+                    }
+                }
+            }
+
+            // Mode indicators (only show when not default)
+            if settings.claudeMode != .normal {
+                ModePill(
+                    icon: settings.claudeMode.icon,
+                    text: settings.claudeMode.displayName,
+                    color: settings.claudeMode.color
+                )
+            }
+
+            if settings.thinkingMode != .normal {
+                ModePill(
+                    icon: settings.thinkingMode.icon,
+                    text: settings.thinkingMode.shortDisplayName,
+                    color: settings.thinkingMode.color
+                )
+            }
+
+            Spacer()
+
+            // Token count (compact)
+            if let usage = tokenUsage {
+                Button {
+                    showQuickSettings = true
+                } label: {
+                    CompactTokenView(used: usage.used, total: usage.total)
+                }
+            }
+
+            // Settings gear
+            Button {
+                showQuickSettings = true
+            } label: {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 16))
+                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
+            }
+            .accessibilityLabel("Quick settings")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(CLITheme.secondaryBackground(for: colorScheme))
+    }
+
+    private var statusColor: Color {
+        if !isConnected {
+            return CLITheme.red(for: colorScheme)
+        } else if isProcessing {
+            return CLITheme.yellow(for: colorScheme)
+        } else {
+            return CLITheme.green(for: colorScheme)
+        }
+    }
+}
+
+// MARK: - Mode Pill
+
+private struct ModePill: View {
+    let icon: String
+    let text: String
+    let color: Color
+    @EnvironmentObject var settings: AppSettings
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: icon)
+                .font(.system(size: 10))
+            Text(text)
+                .font(settings.scaledFont(.small))
+        }
+        .foregroundColor(color)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(color.opacity(0.15))
+        .cornerRadius(10)
+    }
+}
+
+// MARK: - Processing Indicator
+
+private struct ProcessingIndicator: View {
+    @EnvironmentObject var settings: AppSettings
+    @Environment(\.colorScheme) var colorScheme
+    @State private var wordIndex = 0
+    let timer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
+    private let words = ["thinking", "working", "analyzing"]
+
+    var body: some View {
+        Text(words[wordIndex])
+            .font(settings.scaledFont(.body))
+            .foregroundColor(CLITheme.yellow(for: colorScheme))
+            .onReceive(timer) { _ in
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    wordIndex = (wordIndex + 1) % words.count
+                }
+            }
+    }
+}
+
+// MARK: - Compact Token View
+
+private struct CompactTokenView: View {
+    let used: Int
+    let total: Int
+    @EnvironmentObject var settings: AppSettings
+    @Environment(\.colorScheme) var colorScheme
+
+    private var percentage: Double {
+        guard total > 0 else { return 0 }
+        return Double(used) / Double(total)
+    }
+
+    private var color: Color {
+        if percentage > 0.8 {
+            return CLITheme.red(for: colorScheme)
+        } else if percentage > 0.6 {
+            return CLITheme.yellow(for: colorScheme)
+        } else {
+            return CLITheme.secondaryText(for: colorScheme)
+        }
+    }
+
+    var body: some View {
+        Text(formatTokens(used))
+            .font(settings.scaledFont(.small))
+            .fontDesign(.monospaced)
+            .foregroundColor(color)
+    }
+
+    private func formatTokens(_ count: Int) -> String {
+        if count >= 1000 {
+            return String(format: "%.1fk", Double(count) / 1000.0)
+        }
+        return "\(count)"
+    }
+}
+
+// MARK: - CLI Status Bar (Legacy - kept for compatibility)
 
 struct CLIStatusBar: View {
     let isProcessing: Bool

@@ -8,6 +8,7 @@ struct ChatView: View {
     let initialGitStatus: GitStatus
     @EnvironmentObject var settings: AppSettings
     @StateObject private var wsManager: WebSocketManager
+    @StateObject private var claudeHelper: ClaudeHelper
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
@@ -36,7 +37,6 @@ struct ChatView: View {
     // Git sync state
     @State private var gitStatus: GitStatus = .unknown
     @State private var isAutoPulling = false
-    @State private var isRefreshingGitStatus = false
     @State private var showGitBanner = true
     @State private var hasPromptedCleanup = false
 
@@ -45,12 +45,16 @@ struct ChatView: View {
     @State private var currentModel: ClaudeModel?
     @State private var customModelId = ""
 
+    // Quick settings sheet
+    @State private var showQuickSettings = false
+
     init(project: Project, apiClient: APIClient, initialGitStatus: GitStatus = .unknown) {
         self.project = project
         self.apiClient = apiClient
         self.initialGitStatus = initialGitStatus
         // Initialize WebSocketManager without settings - will be configured in onAppear
         _wsManager = StateObject(wrappedValue: WebSocketManager())
+        _claudeHelper = StateObject(wrappedValue: ClaudeHelper(settings: AppSettings()))
     }
 
     var body: some View {
@@ -75,20 +79,29 @@ struct ChatView: View {
             statusAndInputView
         }
         .background(CLITheme.background(for: colorScheme))
-        .navigationTitle(project.title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(CLITheme.secondaryBackground(for: colorScheme), for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                // Connection status indicator
-                ConnectionStatusIndicator(state: wsManager.connectionState)
+            // Custom title with git status
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: 6) {
+                    Text(project.title)
+                        .font(.headline)
+                        .foregroundColor(CLITheme.primaryText(for: colorScheme))
+
+                    // Tappable git status indicator
+                    Button {
+                        refreshGitStatus()
+                    } label: {
+                        GitStatusIndicator(status: gitStatus)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
+
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 12) {
-                    // Model selector pill
-                    modelSelectorPill
-
                     // Search button
                     Button {
                         withAnimation {
@@ -138,8 +151,9 @@ struct ChatView: View {
             }
         }
         .onAppear {
-            // Update WebSocketManager with actual EnvironmentObject settings
+            // Update managers with actual EnvironmentObject settings
             wsManager.updateSettings(settings)
+            claudeHelper.updateSettings(settings)
             setupWebSocketCallbacks()
             wsManager.connect()
 
@@ -181,6 +195,11 @@ struct ChatView: View {
         .onChange(of: inputText) { _, newText in
             // Auto-save draft input
             MessageStore.saveDraft(newText, for: project.path)
+
+            // Clear suggestions when user starts typing
+            if !newText.isEmpty {
+                claudeHelper.clearSuggestions()
+            }
         }
         .onChange(of: wsManager.isProcessing) { _, isProcessing in
             // Refocus input when processing completes
@@ -360,49 +379,6 @@ struct ChatView: View {
     // MARK: - View Components (extracted to help Swift compiler)
 
     @ViewBuilder
-    private var modelSelectorPill: some View {
-        let displayModel = currentModel ?? settings.defaultModel
-
-        Menu {
-            ForEach(ClaudeModel.allCases.filter { $0 != .custom }) { model in
-                Button {
-                    switchToModel(model)
-                } label: {
-                    HStack {
-                        Image(systemName: model.icon)
-                        Text(model.displayName)
-                        if displayModel == model {
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-            }
-
-            Divider()
-
-            Button {
-                showingModelPicker = true
-            } label: {
-                Label("Custom Model...", systemImage: "gearshape")
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: displayModel.icon)
-                    .font(.caption)
-                Text(displayModel.shortName)
-                    .font(settings.scaledFont(.small))
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(displayModel.color(for: colorScheme).opacity(0.2))
-            .foregroundColor(displayModel.color(for: colorScheme))
-            .cornerRadius(12)
-        }
-        .accessibilityLabel("Current model: \(displayModel.displayName)")
-        .accessibilityHint("Tap to change model. Change takes effect on next message.")
-    }
-
-    @ViewBuilder
     private var sessionPickerView: some View {
         if let sessions = project.sessions, !sessions.isEmpty {
             SessionPicker(sessions: sessions, selected: $selectedSession, isLoading: isLoadingHistory) { session in
@@ -421,7 +397,7 @@ struct ChatView: View {
                 GitSyncBanner(
                     status: gitStatus,
                     isAutoPulling: false,
-                    isRefreshing: isRefreshingGitStatus,
+                    isRefreshing: gitStatus == .checking,
                     onDismiss: { showGitBanner = false },
                     onRefresh: { refreshGitStatus() },
                     onAskClaude: { promptClaudeForCleanup() }
@@ -432,7 +408,7 @@ struct ChatView: View {
                 GitSyncBanner(
                     status: gitStatus,
                     isAutoPulling: isAutoPulling,
-                    isRefreshing: isRefreshingGitStatus,
+                    isRefreshing: gitStatus == .checking,
                     onDismiss: { showGitBanner = false },
                     onRefresh: { refreshGitStatus() },
                     onAskClaude: nil
@@ -443,7 +419,7 @@ struct ChatView: View {
                 GitSyncBanner(
                     status: gitStatus,
                     isAutoPulling: false,
-                    isRefreshing: isRefreshingGitStatus,
+                    isRefreshing: gitStatus == .checking,
                     onDismiss: { showGitBanner = false },
                     onRefresh: { refreshGitStatus() },
                     onAskClaude: { promptClaudeForCleanup() }
@@ -569,12 +545,27 @@ struct ChatView: View {
 
     private var statusAndInputView: some View {
         VStack(spacing: 0) {
-            CLIStatusBar(
+            // Unified status bar with quick settings access
+            UnifiedStatusBar(
                 isProcessing: wsManager.isProcessing,
-                isUploadingImage: isUploadingImage,
-                startTime: processingStartTime,
-                tokenUsage: wsManager.tokenUsage
+                isConnected: wsManager.isConnected,
+                tokenUsage: wsManager.tokenUsage,
+                showQuickSettings: $showQuickSettings
             )
+
+            // AI-powered suggestion chips (shown when not processing and not typing)
+            if !wsManager.isProcessing && inputText.isEmpty && !claudeHelper.suggestedActions.isEmpty {
+                SuggestionChipsView(
+                    suggestions: claudeHelper.suggestedActions,
+                    isLoading: claudeHelper.isLoading,
+                    onSelect: { suggestion in
+                        // Insert the prompt and send immediately
+                        inputText = suggestion.prompt
+                        sendMessage()
+                    }
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
 
             CLIInputView(
                 text: $inputText,
@@ -583,11 +574,16 @@ struct ChatView: View {
                 projectPath: project.path,
                 isFocused: _isInputFocused,
                 onSend: sendMessage,
-                onAbort: { wsManager.abortSession() }
+                onAbort: { wsManager.abortSession() },
+                recentMessages: messages,
+                claudeHelper: claudeHelper
             )
             .id("input-view")
-
-            CLIModeSelector()
+        }
+        .sheet(isPresented: $showQuickSettings) {
+            QuickSettingsSheet(
+                tokenUsage: wsManager.tokenUsage.map { (current: $0.used, max: $0.total) }
+            )
         }
     }
 
@@ -645,6 +641,14 @@ struct ChatView: View {
                 messages.append(assistantMessage)
             }
             processingStartTime = nil
+
+            // Generate AI-powered suggestions for next actions
+            Task {
+                await claudeHelper.generateSuggestions(
+                    recentMessages: messages,
+                    projectPath: project.path
+                )
+            }
         }
 
         wsManager.onError = { error in
@@ -928,14 +932,13 @@ struct ChatView: View {
     /// Refresh git status for this project
     private func refreshGitStatus() {
         Task {
-            isRefreshingGitStatus = true
+            gitStatus = .checking
             let newStatus = await sshManager.checkGitStatusWithAutoConnect(
                 project.path,
                 settings: settings
             )
             await MainActor.run {
                 gitStatus = newStatus
-                isRefreshingGitStatus = false
 
                 // Hide banner if now clean
                 if newStatus == .clean || newStatus == .notGitRepo {
@@ -1296,14 +1299,14 @@ struct SlashCommandHelpSheet: View {
                         .foregroundColor(CLITheme.primaryText(for: colorScheme))
 
                     VStack(alignment: .leading, spacing: 12) {
-                        CommandRow(command: "/clear", description: "Clear conversation and start fresh")
-                        CommandRow(command: "/new", description: "Start a new session")
-                        CommandRow(command: "/init", description: "Create/modify CLAUDE.md (via Claude)")
-                        CommandRow(command: "/resume", description: "Resume a previous session")
-                        CommandRow(command: "/compact", description: "Compact conversation to save context")
-                        CommandRow(command: "/status", description: "Show connection and session info")
-                        CommandRow(command: "/exit", description: "Close chat and return to projects")
-                        CommandRow(command: "/help", description: "Show this help")
+                        SlashCommandRow(command: "/clear", description: "Clear conversation and start fresh")
+                        SlashCommandRow(command: "/new", description: "Start a new session")
+                        SlashCommandRow(command: "/init", description: "Create/modify CLAUDE.md (via Claude)")
+                        SlashCommandRow(command: "/resume", description: "Resume a previous session")
+                        SlashCommandRow(command: "/compact", description: "Compact conversation to save context")
+                        SlashCommandRow(command: "/status", description: "Show connection and session info")
+                        SlashCommandRow(command: "/exit", description: "Close chat and return to projects")
+                        SlashCommandRow(command: "/help", description: "Show this help")
                     }
 
                     Divider()
@@ -1359,7 +1362,7 @@ struct KeyboardShortcutRow: View {
     }
 }
 
-struct CommandRow: View {
+private struct SlashCommandRow: View {
     let command: String
     let description: String
     @Environment(\.colorScheme) var colorScheme

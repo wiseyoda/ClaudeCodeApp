@@ -40,6 +40,12 @@
 		A1000031 /* SearchFilterViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000030 /* SearchFilterViews.swift */; };
 		A1000032 /* BookmarksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000031 /* BookmarksView.swift */; };
 		A1000033 /* GlobalSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000032 /* GlobalSearchView.swift */; };
+		A1000034 /* ClaudeHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000033 /* ClaudeHelper.swift */; };
+		A1000035 /* SuggestionChipsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000034 /* SuggestionChipsView.swift */; };
+		A1000036 /* QuickSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000035 /* QuickSettingsSheet.swift */; };
+		A1000037 /* CommandStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000036 /* CommandStore.swift */; };
+		A1000038 /* CommandsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000037 /* CommandsView.swift */; };
+		A1000039 /* CommandPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000038 /* CommandPickerSheet.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -86,6 +92,12 @@
 		A2000030 /* SearchFilterViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchFilterViews.swift; sourceTree = "<group>"; };
 		A2000031 /* BookmarksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarksView.swift; sourceTree = "<group>"; };
 		A2000032 /* GlobalSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalSearchView.swift; sourceTree = "<group>"; };
+		A2000033 /* ClaudeHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeHelper.swift; sourceTree = "<group>"; };
+		A2000034 /* SuggestionChipsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionChipsView.swift; sourceTree = "<group>"; };
+		A2000035 /* QuickSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickSettingsSheet.swift; sourceTree = "<group>"; };
+		A2000036 /* CommandStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandStore.swift; sourceTree = "<group>"; };
+		A2000037 /* CommandsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandsView.swift; sourceTree = "<group>"; };
+		A2000038 /* CommandPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPickerSheet.swift; sourceTree = "<group>"; };
 		A3000001 /* ClaudeCodeApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClaudeCodeApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -130,6 +142,8 @@
 				A2000004 /* Models.swift */,
 				A2000005 /* APIClient.swift */,
 				A2000006 /* AppSettings.swift */,
+				A2000033 /* ClaudeHelper.swift */,
+				A2000036 /* CommandStore.swift */,
 				A2000008 /* Theme.swift */,
 				A2000009 /* TerminalView.swift */,
 				A2000010 /* SSHManager.swift */,
@@ -189,6 +203,10 @@
 				A2000030 /* SearchFilterViews.swift */,
 				A2000031 /* BookmarksView.swift */,
 				A2000032 /* GlobalSearchView.swift */,
+				A2000034 /* SuggestionChipsView.swift */,
+				A2000035 /* QuickSettingsSheet.swift */,
+				A2000037 /* CommandsView.swift */,
+				A2000038 /* CommandPickerSheet.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -341,6 +359,12 @@
 				A1000031 /* SearchFilterViews.swift in Sources */,
 				A1000032 /* BookmarksView.swift in Sources */,
 				A1000033 /* GlobalSearchView.swift in Sources */,
+				A1000034 /* ClaudeHelper.swift in Sources */,
+				A1000035 /* SuggestionChipsView.swift in Sources */,
+				A1000036 /* QuickSettingsSheet.swift in Sources */,
+				A1000037 /* CommandStore.swift in Sources */,
+				A1000038 /* CommandsView.swift in Sources */,
+				A1000039 /* CommandPickerSheet.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

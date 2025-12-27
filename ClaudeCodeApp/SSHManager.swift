@@ -768,7 +768,7 @@ class SSHManager: ObservableObject {
 
     /// Auto-connect using the best available authentication method
     /// Priority: 1) SSH Config hosts, 2) Keychain key, 3) Filesystem key, 4) Password
-    private func autoConnect(settings: AppSettings) async throws {
+    func autoConnect(settings: AppSettings) async throws {
         let username = settings.sshUsername.isEmpty ? NSUserName() : settings.sshUsername
 
         // 1. Try SSH config hosts first (Mac only - has access to ~/.ssh/config)

@@ -31,6 +31,7 @@
 | **SSH Key Import** | Keychain storage, paste/import keys, Ed25519/RSA support | Dec 27 |
 | **Thinking Mode** | 5-level thinking mode toggle (Normal/Think/Think Hard/Think Harder/Ultrathink) | Dec 27 |
 | **P3: Search & Discovery** | Message search, filters, bookmarks, cross-session search | Dec 27 |
+| **AI Suggestions (POC)** | Suggestion chips after responses, AI-powered file suggestions in picker | Dec 27 |
 
 ---
 
@@ -417,6 +418,15 @@ These have been considered but are not on the roadmap:
 - **BookmarksView**: Sheet with searchable list, swipe-to-delete
 - **GlobalSearchView**: SSH-based cross-session search
 - **CLIMessageView**: Long-press context menu with bookmark toggle
+
+### AI Suggestions (POC)
+- **ClaudeHelper**: Meta-AI service using Haiku for fast suggestions
+- **Suggestion Chips**: Tappable action suggestions after Claude completes
+- **SuggestionChipsView**: Horizontal scrollable chips below input
+- **File Context Suggestions**: AI-recommended files in file picker
+- **SuggestedFilesSection**: "Suggested" section with sparkle icon in picker
+- Uses separate WebSocket connection with 15-second timeout
+- Prompts Haiku for JSON responses, parses into actionable UI
 
 </details>
 

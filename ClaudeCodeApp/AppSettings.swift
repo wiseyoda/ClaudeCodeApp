@@ -19,6 +19,17 @@ enum ThinkingMode: String, CaseIterable {
         }
     }
 
+    /// Short name for compact UI (status bar pills)
+    var shortDisplayName: String {
+        switch self {
+        case .normal: return "Normal"
+        case .think: return "Think"
+        case .thinkHard: return "Hard"
+        case .thinkHarder: return "Harder"
+        case .ultrathink: return "Ultra"
+        }
+    }
+
     /// The suffix to append to messages (nil for normal mode)
     var promptSuffix: String? {
         switch self {
@@ -68,6 +79,13 @@ enum ClaudeMode: String, CaseIterable {
         switch self {
         case .normal: return "Normal"
         case .plan: return "Plan"
+        }
+    }
+
+    var description: String {
+        switch self {
+        case .normal: return "Execute tasks directly"
+        case .plan: return "Plan before executing"
         }
     }
 

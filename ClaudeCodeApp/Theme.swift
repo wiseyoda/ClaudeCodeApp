@@ -120,6 +120,24 @@ enum CLITheme {
             case .other: return "wrench"
             }
         }
+
+        /// User-friendly display name for the tool
+        var displayName: String {
+            switch self {
+            case .bash: return "Terminal"
+            case .read: return "Read"
+            case .write: return "Write"
+            case .edit: return "Edit"
+            case .grep: return "Search"
+            case .glob: return "Find"
+            case .task: return "Agent"
+            case .todoWrite: return "Todo"
+            case .webFetch: return "Fetch"
+            case .webSearch: return "Web"
+            case .askUser: return "Ask"
+            case .other: return "Tool"
+            }
+        }
     }
 
     static func toolColor(for tool: ToolType, scheme: ColorScheme) -> Color {
