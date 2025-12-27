@@ -119,6 +119,7 @@ class AppSettings: ObservableObject {
     @AppStorage("authUsername") var authUsername: String = "admin"
     @AppStorage("authPassword") var authPassword: String = "claude123"
     @AppStorage("authToken") var authToken: String = ""
+    @AppStorage("apiKey") var apiKey: String = ""  // API key for REST endpoints
 
     // SSH Settings
     @AppStorage("sshHost") var sshHost: String = "10.0.3.2"

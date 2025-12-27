@@ -316,10 +316,14 @@ struct SettingsView: View {
                         .keyboardType(.URL)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+
+                    SecureField("API Key", text: $settings.apiKey)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
                 } header: {
                     Text("Server")
                 } footer: {
-                    Text("Default: http://10.0.3.2:8080")
+                    Text("API Key from Settings > API Keys in web UI")
                 }
 
                 // Section 6: SSH Configuration

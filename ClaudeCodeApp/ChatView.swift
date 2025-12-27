@@ -7,7 +7,6 @@ struct ChatView: View {
     let apiClient: APIClient
     @EnvironmentObject var settings: AppSettings
     @StateObject private var wsManager: WebSocketManager
-    @StateObject private var sshManager = SSHManager()  // For image uploads
     @Environment(\.scenePhase) private var scenePhase
 
     @State private var messages: [ChatMessage] = []
@@ -406,7 +405,7 @@ struct ChatView: View {
             isUploadingImage = true
             Task {
                 do {
-                    let remotePath = try await uploadImageViaSSH(imageData)
+                    let remotePath = try await uploadImageViaAPI(imageData)
                     // Include the file path in the message for Claude to read
                     let messageWithPath = text.isEmpty
                         ? "Please look at this image: \(remotePath)"
@@ -453,26 +452,23 @@ struct ChatView: View {
         }
     }
 
-    /// Load full session history via SSH
+    /// Load full session history via API
     private func loadSessionHistory(_ session: ProjectSession) {
         messages = []  // Clear current messages
         isLoadingHistory = true
 
         Task {
             do {
-                // Get the session file path
-                let filePath = SessionHistoryLoader.sessionFilePath(
-                    projectPath: project.fullPath ?? project.path,
+                print("[ChatView] Loading session history via API for: \(session.id)")
+
+                // Fetch session messages via API (much simpler than SSH!)
+                let sessionMessages = try await apiClient.fetchSessionMessages(
+                    projectName: project.name,
                     sessionId: session.id
                 )
 
-                print("[ChatView] Loading session history from: \(filePath)")
-
-                // Read the file via SSH
-                let content = try await sshManager.readFileWithAutoConnect(filePath, settings: settings)
-
-                // Parse the JSONL content
-                let historyMessages = SessionHistoryLoader.parseSessionHistory(content)
+                // Convert API messages to ChatMessages
+                let historyMessages = sessionMessages.compactMap { $0.toChatMessage() }
 
                 await MainActor.run {
                     isLoadingHistory = false
@@ -483,13 +479,13 @@ struct ChatView: View {
                         }
                     } else {
                         messages = historyMessages
-                        print("[ChatView] Loaded \(historyMessages.count) messages from session history")
+                        print("[ChatView] Loaded \(historyMessages.count) messages from session history via API")
                     }
                     // Trigger scroll to bottom
                     scrollToBottomTrigger = true
                 }
             } catch {
-                print("[ChatView] Failed to load session history: \(error)")
+                print("[ChatView] Failed to load session history via API: \(error)")
                 await MainActor.run {
                     isLoadingHistory = false
                     // Fallback to lastAssistantMessage
@@ -497,7 +493,7 @@ struct ChatView: View {
                         messages.append(ChatMessage(role: .assistant, content: lastMsg, timestamp: Date()))
                     }
                     // Show error message
-                    messages.append(ChatMessage(role: .system, content: "Could not load full history: \(error.localizedDescription)", timestamp: Date()))
+                    messages.append(ChatMessage(role: .system, content: "Could not load history: \(error.localizedDescription)", timestamp: Date()))
                     // Trigger scroll to bottom
                     scrollToBottomTrigger = true
                 }
@@ -505,36 +501,13 @@ struct ChatView: View {
         }
     }
 
-    /// Upload image via SSH/SFTP and return the remote file path
-    private func uploadImageViaSSH(_ imageData: Data) async throws -> String {
-        // Connect to SSH if not already connected
-        if !sshManager.isConnected {
-            // Try SSH config hosts first, then fall back to settings
-            if let configHost = sshManager.availableHosts.first(where: {
-                $0.hostName == settings.effectiveSSHHost || $0.host.contains("claude")
-            }) {
-                try await sshManager.connectWithConfigHost(configHost.host)
-            } else if settings.sshAuthType == .publicKey {
-                // Use key auth with default key
-                try await sshManager.connectWithKey(
-                    host: settings.effectiveSSHHost,
-                    port: settings.sshPort,
-                    username: settings.sshUsername.isEmpty ? NSUserName() : settings.sshUsername,
-                    privateKeyPath: NSHomeDirectory() + "/.ssh/id_ed25519"
-                )
-            } else {
-                // Use password auth
-                try await sshManager.connect(
-                    host: settings.effectiveSSHHost,
-                    port: settings.sshPort,
-                    username: settings.sshUsername,
-                    password: settings.sshPassword
-                )
-            }
-        }
-
-        // Upload the image
-        return try await sshManager.uploadImage(imageData)
+    /// Upload image via API and return the remote file path
+    private func uploadImageViaAPI(_ imageData: Data) async throws -> String {
+        print("[ChatView] Uploading image via API for project: \(project.name)")
+        return try await apiClient.uploadImage(
+            projectName: project.name,
+            imageData: imageData
+        )
     }
 }
 
