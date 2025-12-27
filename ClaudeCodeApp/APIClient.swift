@@ -98,7 +98,8 @@ class APIClient: ObservableObject {
         var request = URLRequest(url: url)
         // Prefer API Key if available, otherwise use JWT token
         if !settings.apiKey.isEmpty {
-            // API key is used as Bearer token for claudecodeui
+            // Try both header formats for compatibility with different claudecodeui versions
+            request.setValue(settings.apiKey, forHTTPHeaderField: "X-API-Key")
             request.setValue("Bearer \(settings.apiKey)", forHTTPHeaderField: "Authorization")
         } else if !settings.authToken.isEmpty {
             request.setValue("Bearer \(settings.authToken)", forHTTPHeaderField: "Authorization")
@@ -114,19 +115,37 @@ class APIClient: ObservableObject {
         }
 
         let request = authorizedRequest(for: url)
+        log.debug("Fetching projects from: \(url)")
+        log.debug("Auth header: \(request.value(forHTTPHeaderField: "Authorization") ?? "none")")
+
         let (data, response) = try await URLSession.shared.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.serverError
         }
 
+        log.debug("Projects response status: \(httpResponse.statusCode)")
+
         if httpResponse.statusCode == 401 {
-            // Try to login and retry
-            try await login()
-            return try await fetchProjects()
+            // Only try login if we don't have an API key (login uses username/password)
+            if settings.apiKey.isEmpty {
+                try await login()
+                return try await fetchProjects()
+            } else {
+                // API key is invalid
+                log.error("API key authentication failed (401)")
+                if let responseText = String(data: data, encoding: .utf8) {
+                    log.error("Response: \(responseText)")
+                }
+                throw APIError.authenticationFailed
+            }
         }
 
         guard httpResponse.statusCode == 200 else {
+            log.error("Projects fetch failed with status: \(httpResponse.statusCode)")
+            if let responseText = String(data: data, encoding: .utf8) {
+                log.error("Response: \(responseText)")
+            }
             throw APIError.serverError
         }
 

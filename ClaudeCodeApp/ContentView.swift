@@ -329,6 +329,13 @@ struct ContentView: View {
         do {
             projects = try await apiClient.fetchProjects()
             isLoading = false
+        } catch APIError.authenticationFailed {
+            if !settings.apiKey.isEmpty {
+                errorMessage = "API Key authentication failed.\n\nCheck your API key in Settings."
+            } else {
+                errorMessage = "Authentication failed.\n\nCheck credentials in Settings."
+            }
+            isLoading = false
         } catch {
             errorMessage = "Failed to connect to server.\n\nCheck Tailscale and server at:\n\(settings.serverURL)"
             isLoading = false
