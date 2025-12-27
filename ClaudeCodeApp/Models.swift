@@ -159,6 +159,137 @@ class MessageStore {
     }
 }
 
+// MARK: - Session History Loader
+
+/// Loads full session history from JSONL files on the server via SSH
+class SessionHistoryLoader {
+
+    /// Parse a session JSONL file content into ChatMessages
+    static func parseSessionHistory(_ jsonlContent: String) -> [ChatMessage] {
+        var messages: [ChatMessage] = []
+        let lines = jsonlContent.components(separatedBy: .newlines)
+
+        for line in lines {
+            guard !line.isEmpty else { continue }
+            guard let data = line.data(using: .utf8) else { continue }
+
+            do {
+                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    if let chatMessage = parseJSONLLine(json) {
+                        messages.append(chatMessage)
+                    }
+                }
+            } catch {
+                print("[SessionHistoryLoader] Failed to parse line: \(error)")
+            }
+        }
+
+        return messages
+    }
+
+    private static func parseJSONLLine(_ json: [String: Any]) -> ChatMessage? {
+        guard let type = json["type"] as? String else { return nil }
+        guard let timestamp = parseTimestamp(json["timestamp"]) else { return nil }
+
+        switch type {
+        case "user":
+            return parseUserMessage(json, timestamp: timestamp)
+        case "assistant":
+            return parseAssistantMessage(json, timestamp: timestamp)
+        default:
+            // Skip queue-operation, system, etc.
+            return nil
+        }
+    }
+
+    private static func parseTimestamp(_ value: Any?) -> Date? {
+        guard let timestampStr = value as? String else { return nil }
+
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        if let date = formatter.date(from: timestampStr) {
+            return date
+        }
+
+        // Try without fractional seconds
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: timestampStr)
+    }
+
+    private static func parseUserMessage(_ json: [String: Any], timestamp: Date) -> ChatMessage? {
+        guard let message = json["message"] as? [String: Any],
+              let content = message["content"] as? [[String: Any]] else {
+            return nil
+        }
+
+        // Check for tool_result (skip it, we'll get it from toolUseResult)
+        if let firstItem = content.first, firstItem["type"] as? String == "tool_result" {
+            // This is a tool result wrapped in user message - get from toolUseResult
+            if let toolResult = json["toolUseResult"] as? String {
+                return ChatMessage(role: .toolResult, content: String(toolResult.prefix(500)), timestamp: timestamp)
+            } else if let toolResultDict = json["toolUseResult"] as? [String: Any],
+                      let stdout = toolResultDict["stdout"] as? String {
+                return ChatMessage(role: .toolResult, content: String(stdout.prefix(500)), timestamp: timestamp)
+            }
+            return nil
+        }
+
+        // Regular user text message
+        if let firstItem = content.first, let text = firstItem["text"] as? String {
+            return ChatMessage(role: .user, content: text, timestamp: timestamp)
+        }
+
+        return nil
+    }
+
+    private static func parseAssistantMessage(_ json: [String: Any], timestamp: Date) -> ChatMessage? {
+        guard let message = json["message"] as? [String: Any],
+              let content = message["content"] as? [[String: Any]] else {
+            return nil
+        }
+
+        // Look for text content or tool_use
+        for item in content {
+            if let itemType = item["type"] as? String {
+                switch itemType {
+                case "text":
+                    if let text = item["text"] as? String, !text.isEmpty {
+                        return ChatMessage(role: .assistant, content: text, timestamp: timestamp)
+                    }
+                case "thinking":
+                    if let thinking = item["thinking"] as? String, !thinking.isEmpty {
+                        return ChatMessage(role: .thinking, content: thinking, timestamp: timestamp)
+                    }
+                case "tool_use":
+                    if let name = item["name"] as? String {
+                        var toolContent = name
+                        if let input = item["input"] as? [String: Any] {
+                            let inputStr = input.map { "\($0.key): \($0.value)" }.joined(separator: ", ")
+                            toolContent = "\(name)(\(inputStr))"
+                        }
+                        return ChatMessage(role: .toolUse, content: toolContent, timestamp: timestamp)
+                    }
+                default:
+                    break
+                }
+            }
+        }
+
+        return nil
+    }
+
+    /// Get the path to session file on remote server
+    static func sessionFilePath(projectPath: String, sessionId: String) -> String {
+        // Convert project path to Claude's format (e.g., /home/dev/workspace -> -home-dev-workspace)
+        let encodedPath = projectPath
+            .replacingOccurrences(of: "/", with: "-")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+
+        return "~/.claude/projects/\(encodedPath)/\(sessionId).jsonl"
+    }
+}
+
 // MARK: - WebSocket Message Types (claudecodeui)
 
 // Messages sent TO server

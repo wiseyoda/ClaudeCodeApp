@@ -16,6 +16,7 @@ struct ChatView: View {
     @State private var processingStartTime: Date?
     @State private var selectedSession: ProjectSession?
     @State private var isUploadingImage = false
+    @State private var isLoadingHistory = false
     @FocusState private var isInputFocused: Bool
 
     init(project: Project, apiClient: APIClient) {
@@ -30,13 +31,10 @@ struct ChatView: View {
         VStack(spacing: 0) {
             // Session picker if project has sessions
             if let sessions = project.sessions, !sessions.isEmpty {
-                SessionPicker(sessions: sessions, selected: $selectedSession) { session in
-                    // Load session
+                SessionPicker(sessions: sessions, selected: $selectedSession, isLoading: isLoadingHistory) { session in
+                    // Load session with full history
                     wsManager.sessionId = session.id
-                    messages = []
-                    if let lastMsg = session.lastAssistantMessage {
-                        messages.append(ChatMessage(role: .assistant, content: lastMsg, timestamp: Date()))
-                    }
+                    loadSessionHistory(session)
                 }
             }
 
@@ -350,6 +348,54 @@ struct ChatView: View {
         }
     }
 
+    /// Load full session history via SSH
+    private func loadSessionHistory(_ session: ProjectSession) {
+        messages = []  // Clear current messages
+        isLoadingHistory = true
+
+        Task {
+            do {
+                // Get the session file path
+                let filePath = SessionHistoryLoader.sessionFilePath(
+                    projectPath: project.fullPath ?? project.path,
+                    sessionId: session.id
+                )
+
+                print("[ChatView] Loading session history from: \(filePath)")
+
+                // Read the file via SSH
+                let content = try await sshManager.readFileWithAutoConnect(filePath, settings: settings)
+
+                // Parse the JSONL content
+                let historyMessages = SessionHistoryLoader.parseSessionHistory(content)
+
+                await MainActor.run {
+                    isLoadingHistory = false
+                    if historyMessages.isEmpty {
+                        // Fallback to lastAssistantMessage if parsing failed
+                        if let lastMsg = session.lastAssistantMessage {
+                            messages.append(ChatMessage(role: .assistant, content: lastMsg, timestamp: Date()))
+                        }
+                    } else {
+                        messages = historyMessages
+                        print("[ChatView] Loaded \(historyMessages.count) messages from session history")
+                    }
+                }
+            } catch {
+                print("[ChatView] Failed to load session history: \(error)")
+                await MainActor.run {
+                    isLoadingHistory = false
+                    // Fallback to lastAssistantMessage
+                    if let lastMsg = session.lastAssistantMessage {
+                        messages.append(ChatMessage(role: .assistant, content: lastMsg, timestamp: Date()))
+                    }
+                    // Show error message
+                    messages.append(ChatMessage(role: .system, content: "Could not load full history: \(error.localizedDescription)", timestamp: Date()))
+                }
+            }
+        }
+    }
+
     /// Upload image via SSH/SFTP and return the remote file path
     private func uploadImageViaSSH(_ imageData: Data) async throws -> String {
         // Connect to SSH if not already connected
@@ -388,6 +434,7 @@ struct ChatView: View {
 struct SessionPicker: View {
     let sessions: [ProjectSession]
     @Binding var selected: ProjectSession?
+    var isLoading: Bool = false
     let onSelect: (ProjectSession) -> Void
     @EnvironmentObject var settings: AppSettings
 
@@ -411,15 +458,24 @@ struct SessionPicker: View {
                         selected = session
                         onSelect(session)
                     } label: {
-                        Text(session.summary ?? "Session")
-                            .font(settings.scaledFont(.small))
-                            .foregroundColor(selected?.id == session.id ? CLITheme.background : CLITheme.primaryText)
-                            .lineLimit(1)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .background(selected?.id == session.id ? CLITheme.cyan : CLITheme.secondaryBackground)
-                            .cornerRadius(4)
+                        HStack(spacing: 4) {
+                            // Show loading indicator for selected session
+                            if isLoading && selected?.id == session.id {
+                                ProgressView()
+                                    .scaleEffect(0.6)
+                                    .frame(width: 12, height: 12)
+                            }
+                            Text(session.summary ?? "Session")
+                                .font(settings.scaledFont(.small))
+                                .lineLimit(1)
+                        }
+                        .foregroundColor(selected?.id == session.id ? CLITheme.background : CLITheme.primaryText)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 6)
+                        .background(selected?.id == session.id ? CLITheme.cyan : CLITheme.secondaryBackground)
+                        .cornerRadius(4)
                     }
+                    .disabled(isLoading)
                 }
             }
             .padding(.horizontal, 12)

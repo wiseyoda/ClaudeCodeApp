@@ -453,6 +453,56 @@ class SSHManager: ObservableObject {
 
         return remotePath
     }
+
+    // MARK: - File Reading
+
+    /// Read a remote file and return its contents as a string
+    /// - Parameter path: The remote file path (can include ~)
+    /// - Returns: The file contents as a string
+    func readFile(_ path: String) async throws -> String {
+        guard let client = client, isConnected else {
+            throw SSHError.notConnected
+        }
+
+        // Use cat to read the file
+        let cmd = "cat \(path)"
+        let result = try await client.executeCommand(cmd)
+        return String(buffer: result)
+    }
+
+    /// Read a remote file and return its contents, connecting first if needed
+    /// - Parameters:
+    ///   - path: The remote file path
+    ///   - settings: AppSettings to use for connection if not connected
+    /// - Returns: The file contents as a string
+    func readFileWithAutoConnect(_ path: String, settings: AppSettings) async throws -> String {
+        if !isConnected {
+            // Try SSH config hosts first, then fall back to settings
+            if let configHost = availableHosts.first(where: {
+                $0.hostName == settings.effectiveSSHHost || $0.host.contains("claude")
+            }) {
+                try await connectWithConfigHost(configHost.host)
+            } else if settings.sshAuthType == .publicKey {
+                // Use key auth with default key
+                try await connectWithKey(
+                    host: settings.effectiveSSHHost,
+                    port: settings.sshPort,
+                    username: settings.sshUsername.isEmpty ? NSUserName() : settings.sshUsername,
+                    privateKeyPath: getRealHomeDirectory() + "/.ssh/id_ed25519"
+                )
+            } else {
+                // Use password auth
+                try await connect(
+                    host: settings.effectiveSSHHost,
+                    port: settings.sshPort,
+                    username: settings.sshUsername,
+                    password: settings.sshPassword
+                )
+            }
+        }
+
+        return try await readFile(path)
+    }
 }
 
 // Special keys for terminal
