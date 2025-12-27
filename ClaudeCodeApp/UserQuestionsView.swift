@@ -35,7 +35,7 @@ struct UserQuestionsView: View {
                         onSubmit(formattedAnswers)
                     }
                     .fontWeight(.semibold)
-                    .foregroundColor(CLITheme.cyan)
+                    .foregroundColor(CLITheme.cyan(for: colorScheme))
                     .disabled(!hasAnySelection)
                 }
             }
@@ -62,10 +62,10 @@ struct QuestionCard: View {
             if let header = question.header, !header.isEmpty {
                 Text(header.uppercased())
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundColor(CLITheme.cyan)
+                    .foregroundColor(CLITheme.cyan(for: colorScheme))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(CLITheme.cyan.opacity(0.15))
+                    .background(CLITheme.cyan(for: colorScheme).opacity(0.15))
                     .cornerRadius(4)
             }
 
@@ -116,7 +116,7 @@ struct QuestionCard: View {
                     .cornerRadius(8)
                     .overlay(
                         RoundedRectangle(cornerRadius: 8)
-                            .stroke(CLITheme.cyan.opacity(0.5), lineWidth: 1)
+                            .stroke(CLITheme.cyan(for: colorScheme).opacity(0.5), lineWidth: 1)
                     )
             }
         }
@@ -156,7 +156,7 @@ struct OptionButton: View {
                 // Selection indicator
                 Image(systemName: selectionIcon)
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(isSelected ? CLITheme.cyan : CLITheme.mutedText(for: colorScheme))
+                    .foregroundColor(isSelected ? CLITheme.cyan(for: colorScheme) : CLITheme.mutedText(for: colorScheme))
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(option.label)
@@ -177,12 +177,12 @@ struct OptionButton: View {
             }
             .padding(12)
             .background(isSelected
-                ? CLITheme.cyan.opacity(0.1)
+                ? CLITheme.cyan(for: colorScheme).opacity(0.1)
                 : CLITheme.background(for: colorScheme))
             .cornerRadius(8)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(isSelected ? CLITheme.cyan : CLITheme.mutedText(for: colorScheme).opacity(0.3), lineWidth: 1)
+                    .stroke(isSelected ? CLITheme.cyan(for: colorScheme) : CLITheme.mutedText(for: colorScheme).opacity(0.3), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)
@@ -208,7 +208,7 @@ struct OtherOptionButton: View {
             HStack(spacing: 12) {
                 Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
                     .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(isSelected ? CLITheme.yellow : CLITheme.mutedText(for: colorScheme))
+                    .foregroundColor(isSelected ? CLITheme.yellow(for: colorScheme) : CLITheme.mutedText(for: colorScheme))
 
                 Text("Other")
                     .font(.system(size: 14, weight: .medium))
@@ -224,12 +224,12 @@ struct OtherOptionButton: View {
             }
             .padding(12)
             .background(isSelected
-                ? CLITheme.yellow.opacity(0.1)
+                ? CLITheme.yellow(for: colorScheme).opacity(0.1)
                 : CLITheme.background(for: colorScheme))
             .cornerRadius(8)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(isSelected ? CLITheme.yellow : CLITheme.mutedText(for: colorScheme).opacity(0.3), lineWidth: 1)
+                    .stroke(isSelected ? CLITheme.yellow(for: colorScheme) : CLITheme.mutedText(for: colorScheme).opacity(0.3), lineWidth: 1)
             )
         }
         .buttonStyle(.plain)

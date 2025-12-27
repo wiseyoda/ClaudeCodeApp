@@ -72,14 +72,14 @@ class SSHManager: ObservableObject {
         let homeDir = getRealHomeDirectory()
         let configPath = homeDir + "/.ssh/config"
 
-        print("[SSH] Looking for config at: \(configPath)")
+        log.debug("Looking for config at: \(configPath)")
 
         guard let content = try? String(contentsOfFile: configPath, encoding: .utf8) else {
-            print("[SSH] Could not read SSH config")
+            log.warning("Could not read SSH config")
             return
         }
 
-        print("[SSH] Found SSH config, parsing...")
+        log.debug("Found SSH config, parsing...")
 
         var hosts: [SSHConfigEntry] = []
         var currentEntry: SSHConfigEntry?
@@ -122,7 +122,7 @@ class SSHManager: ObservableObject {
         }
 
         availableHosts = hosts
-        print("[SSH] Found \(hosts.count) hosts: \(hosts.map { $0.host })")
+        log.debug("Found \(hosts.count) hosts: \(hosts.map { $0.host })")
     }
 
     // Connect using SSH config host alias (e.g., "claude-dev")
@@ -157,11 +157,11 @@ class SSHManager: ObservableObject {
         for keyName in defaultKeys {
             let keyPath = sshDir + "/" + keyName
             if FileManager.default.fileExists(atPath: keyPath) {
-                print("[SSH] Found default key: \(keyPath)")
+                log.debug("Found default key: \(keyPath)")
                 return keyPath
             }
         }
-        print("[SSH] No default key found in \(sshDir)")
+        log.debug("No default key found in \(sshDir)")
         return nil
     }
 
@@ -409,14 +409,14 @@ class SSHManager: ObservableObject {
         let remoteDir = "/tmp/claude-images"
         let remotePath = "\(remoteDir)/\(actualFilename)"
 
-        print("[SSH] Starting upload of \(imageData.count) bytes to \(remotePath)")
+        log.debug("Starting upload of \(imageData.count) bytes to \(remotePath)")
 
         // Ensure the directory exists
         _ = try? await client.executeCommand("mkdir -p \(remoteDir)")
 
         // Convert image to base64 (no line wrapping)
         let base64String = imageData.base64EncodedString()
-        print("[SSH] Base64 length: \(base64String.count) chars")
+        log.debug("Base64 length: \(base64String.count) chars")
 
         // Use printf with chunks to avoid command line limits
         // printf '%s' doesn't add newlines and handles base64 chars safely
@@ -449,7 +449,7 @@ class SSHManager: ObservableObject {
         let verifyCmd = "stat -c '%s' \(remotePath) 2>/dev/null || stat -f '%z' \(remotePath) 2>/dev/null"
         let verifyResult = try await client.executeCommand(verifyCmd)
         let fileSize = String(buffer: verifyResult).trimmingCharacters(in: .whitespacesAndNewlines)
-        print("[SSH] Uploaded image to: \(remotePath) (\(fileSize) bytes)")
+        log.debug("Uploaded image to: \(remotePath) (\(fileSize) bytes)")
 
         return remotePath
     }

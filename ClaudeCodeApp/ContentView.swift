@@ -2,17 +2,13 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var settings: AppSettings
-    @StateObject private var apiClient: APIClient
+    @Environment(\.colorScheme) var colorScheme
+    @StateObject private var apiClient = APIClient()
     @State private var projects: [Project] = []
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var showSettings = false
     @State private var showTerminal = false
-
-    init() {
-        let settings = AppSettings()
-        _apiClient = StateObject(wrappedValue: APIClient(settings: settings))
-    }
 
     var body: some View {
         NavigationStack {
@@ -25,9 +21,9 @@ struct ContentView: View {
                     projectListView
                 }
             }
-            .background(CLITheme.background)
+            .background(CLITheme.background(for: colorScheme))
             .navigationTitle("Claude Code")
-            .toolbarBackground(CLITheme.secondaryBackground, for: .navigationBar)
+            .toolbarBackground(CLITheme.secondaryBackground(for: colorScheme), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
@@ -36,14 +32,19 @@ struct ContentView: View {
                             showTerminal = true
                         } label: {
                             Image(systemName: "terminal")
-                                .foregroundColor(CLITheme.cyan)
+                                .foregroundColor(CLITheme.cyan(for: colorScheme))
                         }
+                        .accessibilityLabel("SSH Terminal")
+                        .accessibilityHint("Open SSH terminal to connect to server")
+
                         Button {
                             showSettings = true
                         } label: {
                             Image(systemName: "gear")
-                                .foregroundColor(CLITheme.secondaryText)
+                                .foregroundColor(CLITheme.secondaryText(for: colorScheme))
                         }
+                        .accessibilityLabel("Settings")
+                        .accessibilityHint("Open app settings")
                     }
                 }
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -51,8 +52,10 @@ struct ContentView: View {
                         Task { await loadProjects() }
                     } label: {
                         Image(systemName: "arrow.clockwise")
-                            .foregroundColor(CLITheme.secondaryText)
+                            .foregroundColor(CLITheme.secondaryText(for: colorScheme))
                     }
+                    .accessibilityLabel("Refresh projects")
+                    .accessibilityHint("Reload project list from server")
                 }
             }
             .sheet(isPresented: $showSettings) {
@@ -70,12 +73,18 @@ struct ContentView: View {
                                         Image(systemName: "chevron.left")
                                         Text("Projects")
                                     }
-                                    .foregroundColor(CLITheme.cyan)
+                                    .foregroundColor(CLITheme.cyan(for: colorScheme))
                                 }
+                                .accessibilityLabel("Close terminal")
+                                .accessibilityHint("Return to project list")
                             }
                         }
                 }
             }
+        }
+        .onAppear {
+            // Configure APIClient with the EnvironmentObject settings
+            apiClient.configure(with: settings)
         }
         .task {
             await loadProjects()
@@ -86,21 +95,21 @@ struct ContentView: View {
         VStack(spacing: 12) {
             Text("+ Loading projects...")
                 .font(CLITheme.monoFont)
-                .foregroundColor(CLITheme.yellow)
+                .foregroundColor(CLITheme.yellow(for: colorScheme))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(CLITheme.background)
+        .background(CLITheme.background(for: colorScheme))
     }
 
     private func errorView(_ error: String) -> some View {
         VStack(spacing: 16) {
             Text("! Error")
                 .font(CLITheme.monoFont)
-                .foregroundColor(CLITheme.red)
+                .foregroundColor(CLITheme.red(for: colorScheme))
 
             Text(error)
                 .font(CLITheme.monoSmall)
-                .foregroundColor(CLITheme.secondaryText)
+                .foregroundColor(CLITheme.secondaryText(for: colorScheme))
                 .multilineTextAlignment(.center)
 
             HStack(spacing: 16) {
@@ -109,21 +118,25 @@ struct ContentView: View {
                 } label: {
                     Text("[Retry]")
                         .font(CLITheme.monoFont)
-                        .foregroundColor(CLITheme.cyan)
+                        .foregroundColor(CLITheme.cyan(for: colorScheme))
                 }
+                .accessibilityLabel("Retry")
+                .accessibilityHint("Try loading projects again")
 
                 Button {
                     showSettings = true
                 } label: {
                     Text("[Settings]")
                         .font(CLITheme.monoFont)
-                        .foregroundColor(CLITheme.cyan)
+                        .foregroundColor(CLITheme.cyan(for: colorScheme))
                 }
+                .accessibilityLabel("Settings")
+                .accessibilityHint("Open settings to configure server connection")
             }
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(CLITheme.background)
+        .background(CLITheme.background(for: colorScheme))
     }
 
     /// Projects sorted according to user preference
@@ -149,10 +162,10 @@ struct ContentView: View {
                     VStack(spacing: 8) {
                         Text("No projects found")
                             .font(CLITheme.monoFont)
-                            .foregroundColor(CLITheme.secondaryText)
+                            .foregroundColor(CLITheme.secondaryText(for: colorScheme))
                         Text("Open a project in Claude Code to see it here")
                             .font(CLITheme.monoSmall)
-                            .foregroundColor(CLITheme.mutedText)
+                            .foregroundColor(CLITheme.mutedText(for: colorScheme))
                     }
                     .frame(maxWidth: .infinity)
                     .padding(.top, 40)
@@ -169,7 +182,7 @@ struct ContentView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
         }
-        .background(CLITheme.background)
+        .background(CLITheme.background(for: colorScheme))
     }
 
     private func loadProjects() async {
@@ -190,28 +203,29 @@ struct ContentView: View {
 
 struct ProjectRow: View {
     let project: Project
+    @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
         HStack(spacing: 8) {
             Text(">")
                 .font(CLITheme.monoFont)
-                .foregroundColor(CLITheme.green)
+                .foregroundColor(CLITheme.green(for: colorScheme))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(project.title)
                     .font(CLITheme.monoFont)
-                    .foregroundColor(CLITheme.primaryText)
+                    .foregroundColor(CLITheme.primaryText(for: colorScheme))
 
                 HStack(spacing: 8) {
                     Text(project.path)
                         .font(CLITheme.monoSmall)
-                        .foregroundColor(CLITheme.mutedText)
+                        .foregroundColor(CLITheme.mutedText(for: colorScheme))
                         .lineLimit(1)
 
                     if let sessions = project.sessions, !sessions.isEmpty {
                         Text("[\(sessions.count) sessions]")
                             .font(CLITheme.monoSmall)
-                            .foregroundColor(CLITheme.cyan)
+                            .foregroundColor(CLITheme.cyan(for: colorScheme))
                     }
                 }
             }
@@ -220,7 +234,7 @@ struct ProjectRow: View {
 
             Image(systemName: "chevron.right")
                 .font(CLITheme.monoSmall)
-                .foregroundColor(CLITheme.mutedText)
+                .foregroundColor(CLITheme.mutedText(for: colorScheme))
         }
         .padding(.vertical, 12)
         .contentShape(Rectangle())

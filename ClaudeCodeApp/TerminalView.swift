@@ -2,6 +2,7 @@ import SwiftUI
 
 struct TerminalView: View {
     @EnvironmentObject var settings: AppSettings
+    @Environment(\.colorScheme) var colorScheme
     @StateObject private var sshManager = SSHManager()
     @State private var inputText = ""
     @State private var showConnectionSheet = false
@@ -20,13 +21,13 @@ struct TerminalView: View {
                 ScrollView {
                     Text(sshManager.output.isEmpty ? "Tap a saved host above or 'Connect' to start" : sshManager.output)
                         .font(settings.scaledFont(.body))
-                        .foregroundColor(sshManager.output.isEmpty ? CLITheme.mutedText : CLITheme.primaryText)
+                        .foregroundColor(sshManager.output.isEmpty ? CLITheme.mutedText(for: colorScheme) : CLITheme.primaryText(for: colorScheme))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(12)
                         .textSelection(.enabled)
                         .id("output")
                 }
-                .background(CLITheme.background)
+                .background(CLITheme.background(for: colorScheme))
                 .onChange(of: sshManager.output) { _, _ in
                     withAnimation {
                         proxy.scrollTo("output", anchor: .bottom)
@@ -50,10 +51,10 @@ struct TerminalView: View {
                 onSend: sendCommand
             )
         }
-        .background(CLITheme.background)
+        .background(CLITheme.background(for: colorScheme))
         .navigationTitle("Terminal")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(CLITheme.secondaryBackground, for: .navigationBar)
+        .toolbarBackground(CLITheme.secondaryBackground(for: colorScheme), for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -63,7 +64,7 @@ struct TerminalView: View {
                     } label: {
                         Text("Disconnect")
                             .font(settings.scaledFont(.small))
-                            .foregroundColor(CLITheme.red)
+                            .foregroundColor(CLITheme.red(for: colorScheme))
                     }
                 } else {
                     Button {
@@ -71,7 +72,7 @@ struct TerminalView: View {
                     } label: {
                         Text("Connect")
                             .font(settings.scaledFont(.small))
-                            .foregroundColor(CLITheme.green)
+                            .foregroundColor(CLITheme.green(for: colorScheme))
                     }
                 }
             }
@@ -81,7 +82,7 @@ struct TerminalView: View {
                         sshManager.clearOutput()
                     } label: {
                         Image(systemName: "trash")
-                            .foregroundColor(CLITheme.secondaryText)
+                            .foregroundColor(CLITheme.secondaryText(for: colorScheme))
                     }
                 }
             }
@@ -141,13 +142,14 @@ struct TerminalView: View {
 struct SSHHostsBar: View {
     @ObservedObject var sshManager: SSHManager
     @EnvironmentObject var settings: AppSettings
+    @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 Text("SSH:")
                     .font(settings.scaledFont(.small))
-                    .foregroundColor(CLITheme.mutedText)
+                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
 
                 ForEach(sshManager.availableHosts, id: \.host) { entry in
                     Button {
@@ -161,10 +163,10 @@ struct SSHHostsBar: View {
                             Text(entry.host)
                                 .font(settings.scaledFont(.small))
                         }
-                        .foregroundColor(CLITheme.cyan)
+                        .foregroundColor(CLITheme.cyan(for: colorScheme))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
-                        .background(CLITheme.secondaryBackground)
+                        .background(CLITheme.secondaryBackground(for: colorScheme))
                         .cornerRadius(4)
                     }
                 }
@@ -172,7 +174,7 @@ struct SSHHostsBar: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
         }
-        .background(CLITheme.background)
+        .background(CLITheme.background(for: colorScheme))
     }
 }
 
@@ -181,32 +183,33 @@ struct SSHHostsBar: View {
 struct TerminalStatusBar: View {
     @ObservedObject var sshManager: SSHManager
     @EnvironmentObject var settings: AppSettings
+    @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
         HStack(spacing: 12) {
             if sshManager.isConnecting {
                 HStack(spacing: 4) {
                     ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: CLITheme.yellow))
+                        .progressViewStyle(CircularProgressViewStyle(tint: CLITheme.yellow(for: colorScheme)))
                         .scaleEffect(0.7)
                     Text("connecting...")
-                        .foregroundColor(CLITheme.yellow)
+                        .foregroundColor(CLITheme.yellow(for: colorScheme))
                 }
             } else if sshManager.isConnected {
                 HStack(spacing: 4) {
                     Circle()
-                        .fill(CLITheme.green)
+                        .fill(CLITheme.green(for: colorScheme))
                         .frame(width: 6, height: 6)
                     Text("\(sshManager.username)@\(sshManager.host)")
-                        .foregroundColor(CLITheme.green)
+                        .foregroundColor(CLITheme.green(for: colorScheme))
                 }
             } else {
                 HStack(spacing: 4) {
                     Circle()
-                        .fill(CLITheme.red)
+                        .fill(CLITheme.red(for: colorScheme))
                         .frame(width: 6, height: 6)
                     Text("disconnected")
-                        .foregroundColor(CLITheme.red)
+                        .foregroundColor(CLITheme.red(for: colorScheme))
                 }
             }
 
@@ -214,14 +217,14 @@ struct TerminalStatusBar: View {
 
             if let error = sshManager.lastError {
                 Text(error)
-                    .foregroundColor(CLITheme.red)
+                    .foregroundColor(CLITheme.red(for: colorScheme))
                     .lineLimit(1)
             }
         }
         .font(settings.scaledFont(.small))
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .background(CLITheme.secondaryBackground)
+        .background(CLITheme.secondaryBackground(for: colorScheme))
     }
 }
 
@@ -230,6 +233,7 @@ struct TerminalStatusBar: View {
 struct SpecialKeysBar: View {
     @ObservedObject var sshManager: SSHManager
     @EnvironmentObject var settings: AppSettings
+    @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -248,7 +252,7 @@ struct SpecialKeysBar: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
         }
-        .background(CLITheme.secondaryBackground.opacity(0.5))
+        .background(CLITheme.secondaryBackground(for: colorScheme).opacity(0.5))
     }
 }
 
@@ -257,6 +261,7 @@ struct SpecialKeyButton: View {
     let key: SpecialKey
     @ObservedObject var sshManager: SSHManager
     @EnvironmentObject var settings: AppSettings
+    @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
         Button {
@@ -264,10 +269,10 @@ struct SpecialKeyButton: View {
         } label: {
             Text(label)
                 .font(settings.scaledFont(.small))
-                .foregroundColor(CLITheme.cyan)
+                .foregroundColor(CLITheme.cyan(for: colorScheme))
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
-                .background(CLITheme.secondaryBackground)
+                .background(CLITheme.secondaryBackground(for: colorScheme))
                 .cornerRadius(4)
         }
     }
@@ -281,16 +286,17 @@ struct TerminalInputView: View {
     @FocusState var isFocused: Bool
     let onSend: () -> Void
     @EnvironmentObject var settings: AppSettings
+    @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
         HStack(spacing: 8) {
             Text("$")
-                .foregroundColor(isConnected ? CLITheme.green : CLITheme.mutedText)
+                .foregroundColor(isConnected ? CLITheme.green(for: colorScheme) : CLITheme.mutedText(for: colorScheme))
                 .font(settings.scaledFont(.body))
 
             TextField("", text: $text)
                 .font(settings.scaledFont(.body))
-                .foregroundColor(CLITheme.primaryText)
+                .foregroundColor(CLITheme.primaryText(for: colorScheme))
                 .focused($isFocused)
                 .disabled(!isConnected)
                 .autocapitalization(.none)
@@ -299,20 +305,20 @@ struct TerminalInputView: View {
                 .onSubmit { onSend() }
                 .placeholder(when: text.isEmpty) {
                     Text(isConnected ? "Enter command..." : "Connect to start")
-                        .foregroundColor(CLITheme.mutedText)
+                        .foregroundColor(CLITheme.mutedText(for: colorScheme))
                         .font(settings.scaledFont(.body))
                 }
 
             if !text.isEmpty && isConnected {
                 Button(action: onSend) {
                     Image(systemName: "return")
-                        .foregroundColor(CLITheme.green)
+                        .foregroundColor(CLITheme.green(for: colorScheme))
                 }
             }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(CLITheme.background)
+        .background(CLITheme.background(for: colorScheme))
     }
 }
 
@@ -321,6 +327,7 @@ struct TerminalInputView: View {
 struct SSHConnectionSheet: View {
     @ObservedObject var sshManager: SSHManager
     @EnvironmentObject var settings: AppSettings
+    @Environment(\.colorScheme) var colorScheme
     @Environment(\.dismiss) var dismiss
     @Binding var tempPassword: String
 
@@ -340,11 +347,11 @@ struct SSHConnectionSheet: View {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("SSH Config Hosts")
                                 .font(settings.scaledFont(.small))
-                                .foregroundColor(CLITheme.cyan)
+                                .foregroundColor(CLITheme.cyan(for: colorScheme))
 
                             Text("Connect using ~/.ssh/config")
                                 .font(settings.scaledFont(.small))
-                                .foregroundColor(CLITheme.mutedText)
+                                .foregroundColor(CLITheme.mutedText(for: colorScheme))
 
                             ForEach(sshManager.availableHosts, id: \.host) { entry in
                                 Button {
@@ -353,49 +360,49 @@ struct SSHConnectionSheet: View {
                                 } label: {
                                     HStack {
                                         Image(systemName: "key.fill")
-                                            .foregroundColor(CLITheme.cyan)
+                                            .foregroundColor(CLITheme.cyan(for: colorScheme))
                                         VStack(alignment: .leading, spacing: 2) {
                                             Text(entry.host)
                                                 .font(settings.scaledFont(.body))
-                                                .foregroundColor(CLITheme.primaryText)
+                                                .foregroundColor(CLITheme.primaryText(for: colorScheme))
                                             if let hostName = entry.hostName {
                                                 Text(hostName)
                                                     .font(settings.scaledFont(.small))
-                                                    .foregroundColor(CLITheme.mutedText)
+                                                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
                                             }
                                         }
                                         Spacer()
                                         Image(systemName: "chevron.right")
-                                            .foregroundColor(CLITheme.mutedText)
+                                            .foregroundColor(CLITheme.mutedText(for: colorScheme))
                                     }
                                     .padding(12)
-                                    .background(CLITheme.secondaryBackground)
+                                    .background(CLITheme.secondaryBackground(for: colorScheme))
                                     .cornerRadius(8)
                                 }
                             }
                         }
 
                         Divider()
-                            .background(CLITheme.mutedText)
+                            .background(CLITheme.mutedText(for: colorScheme))
                             .padding(.vertical, 8)
 
                         Text("Or connect with password:")
                             .font(settings.scaledFont(.small))
-                            .foregroundColor(CLITheme.secondaryText)
+                            .foregroundColor(CLITheme.secondaryText(for: colorScheme))
                     }
 
                     // Host
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Host")
                             .font(settings.scaledFont(.small))
-                            .foregroundColor(CLITheme.secondaryText)
+                            .foregroundColor(CLITheme.secondaryText(for: colorScheme))
                         TextField("", text: $host)
                             .font(settings.scaledFont(.body))
-                            .foregroundColor(CLITheme.primaryText)
+                            .foregroundColor(CLITheme.primaryText(for: colorScheme))
                             .autocapitalization(.none)
                             .autocorrectionDisabled()
                             .padding(12)
-                            .background(CLITheme.secondaryBackground)
+                            .background(CLITheme.secondaryBackground(for: colorScheme))
                             .cornerRadius(8)
                     }
 
@@ -403,13 +410,13 @@ struct SSHConnectionSheet: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Port")
                             .font(settings.scaledFont(.small))
-                            .foregroundColor(CLITheme.secondaryText)
+                            .foregroundColor(CLITheme.secondaryText(for: colorScheme))
                         TextField("", text: $port)
                             .font(settings.scaledFont(.body))
-                            .foregroundColor(CLITheme.primaryText)
+                            .foregroundColor(CLITheme.primaryText(for: colorScheme))
                             .keyboardType(.numberPad)
                             .padding(12)
-                            .background(CLITheme.secondaryBackground)
+                            .background(CLITheme.secondaryBackground(for: colorScheme))
                             .cornerRadius(8)
                     }
 
@@ -417,14 +424,14 @@ struct SSHConnectionSheet: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Username")
                             .font(settings.scaledFont(.small))
-                            .foregroundColor(CLITheme.secondaryText)
+                            .foregroundColor(CLITheme.secondaryText(for: colorScheme))
                         TextField("", text: $username)
                             .font(settings.scaledFont(.body))
-                            .foregroundColor(CLITheme.primaryText)
+                            .foregroundColor(CLITheme.primaryText(for: colorScheme))
                             .autocapitalization(.none)
                             .autocorrectionDisabled()
                             .padding(12)
-                            .background(CLITheme.secondaryBackground)
+                            .background(CLITheme.secondaryBackground(for: colorScheme))
                             .cornerRadius(8)
                     }
 
@@ -432,12 +439,12 @@ struct SSHConnectionSheet: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Password")
                             .font(settings.scaledFont(.small))
-                            .foregroundColor(CLITheme.secondaryText)
+                            .foregroundColor(CLITheme.secondaryText(for: colorScheme))
                         SecureField("", text: $tempPassword)
                             .font(settings.scaledFont(.body))
-                            .foregroundColor(CLITheme.primaryText)
+                            .foregroundColor(CLITheme.primaryText(for: colorScheme))
                             .padding(12)
-                            .background(CLITheme.secondaryBackground)
+                            .background(CLITheme.secondaryBackground(for: colorScheme))
                             .cornerRadius(8)
                     }
 
@@ -445,18 +452,18 @@ struct SSHConnectionSheet: View {
                     Toggle(isOn: .constant(true)) {
                         Text("Save credentials")
                             .font(settings.scaledFont(.body))
-                            .foregroundColor(CLITheme.primaryText)
+                            .foregroundColor(CLITheme.primaryText(for: colorScheme))
                     }
-                    .tint(CLITheme.cyan)
+                    .tint(CLITheme.cyan(for: colorScheme))
 
                     // Error message
                     if let error = sshManager.lastError {
                         Text(error)
                             .font(settings.scaledFont(.small))
-                            .foregroundColor(CLITheme.red)
+                            .foregroundColor(CLITheme.red(for: colorScheme))
                             .padding()
                             .frame(maxWidth: .infinity)
-                            .background(CLITheme.red.opacity(0.1))
+                            .background(CLITheme.red(for: colorScheme).opacity(0.1))
                             .cornerRadius(8)
                     }
 
@@ -473,7 +480,7 @@ struct SSHConnectionSheet: View {
                         HStack {
                             if sshManager.isConnecting {
                                 ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: CLITheme.background))
+                                    .progressViewStyle(CircularProgressViewStyle(tint: CLITheme.background(for: colorScheme)))
                                     .scaleEffect(0.8)
                             }
                             Text(sshManager.isConnecting ? "Connecting..." : "Connect")
@@ -481,8 +488,8 @@ struct SSHConnectionSheet: View {
                         }
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(canConnect ? CLITheme.green : CLITheme.mutedText)
-                        .foregroundColor(CLITheme.background)
+                        .background(canConnect ? CLITheme.green(for: colorScheme) : CLITheme.mutedText(for: colorScheme))
+                        .foregroundColor(CLITheme.background(for: colorScheme))
                         .cornerRadius(8)
                     }
                     .disabled(!canConnect || sshManager.isConnecting)
@@ -491,17 +498,17 @@ struct SSHConnectionSheet: View {
                 }
                 .padding()
             }
-            .background(CLITheme.background)
+            .background(CLITheme.background(for: colorScheme))
             .navigationTitle("SSH Connection")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(CLITheme.secondaryBackground, for: .navigationBar)
+            .toolbarBackground(CLITheme.secondaryBackground(for: colorScheme), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancel") {
                         dismiss()
                     }
-                    .foregroundColor(CLITheme.cyan)
+                    .foregroundColor(CLITheme.cyan(for: colorScheme))
                 }
             }
         }

@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 56;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -21,9 +21,32 @@
 		A1000012 /* WebSocketManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000011 /* WebSocketManager.swift */; };
 		A1000013 /* SpeechManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000012 /* SpeechManager.swift */; };
 		A1000014 /* UserQuestionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000013 /* UserQuestionsView.swift */; };
+		A1000015 /* ImageUtilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000014 /* ImageUtilities.swift */; };
+		A1000016 /* String+Markdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000015 /* String+Markdown.swift */; };
+		A1000017 /* CodeBlockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000016 /* CodeBlockView.swift */; };
+		A1000018 /* DiffView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000017 /* DiffView.swift */; };
+		A1000019 /* TodoListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000018 /* TodoListView.swift */; };
+		A1000020 /* SessionPickerViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000019 /* SessionPickerViews.swift */; };
+		A1000021 /* CLIStatusBarViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000020 /* CLIStatusBarViews.swift */; };
+		A1000022 /* MarkdownText.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000021 /* MarkdownText.swift */; };
+		A1000023 /* CLIInputView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000022 /* CLIInputView.swift */; };
+		A1000024 /* CLIMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000023 /* CLIMessageView.swift */; };
+		A1000025 /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000024 /* Logger.swift */; };
+		A1000026 /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000025 /* AppError.swift */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		2509F4FF2EFF976200EAFBFE /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A8000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A6000001;
+			remoteInfo = ClaudeCodeApp;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
+		2509F4FB2EFF976200EAFBFE /* ClaudeCodeAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClaudeCodeAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A2000001 /* ClaudeCodeAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeCodeAppApp.swift; sourceTree = "<group>"; };
 		A2000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		A2000003 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
@@ -36,11 +59,34 @@
 		A2000010 /* SSHManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHManager.swift; sourceTree = "<group>"; };
 		A2000011 /* WebSocketManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocketManager.swift; sourceTree = "<group>"; };
 		A2000012 /* SpeechManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechManager.swift; sourceTree = "<group>"; };
-		A3000001 /* ClaudeCodeApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClaudeCodeApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A2000013 /* UserQuestionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserQuestionsView.swift; sourceTree = "<group>"; };
+		A2000014 /* ImageUtilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageUtilities.swift; sourceTree = "<group>"; };
+		A2000015 /* String+Markdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "String+Markdown.swift"; sourceTree = "<group>"; };
+		A2000016 /* CodeBlockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeBlockView.swift; sourceTree = "<group>"; };
+		A2000017 /* DiffView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiffView.swift; sourceTree = "<group>"; };
+		A2000018 /* TodoListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoListView.swift; sourceTree = "<group>"; };
+		A2000019 /* SessionPickerViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionPickerViews.swift; sourceTree = "<group>"; };
+		A2000020 /* CLIStatusBarViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIStatusBarViews.swift; sourceTree = "<group>"; };
+		A2000021 /* MarkdownText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MarkdownText.swift; sourceTree = "<group>"; };
+		A2000022 /* CLIInputView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIInputView.swift; sourceTree = "<group>"; };
+		A2000023 /* CLIMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIMessageView.swift; sourceTree = "<group>"; };
+		A2000024 /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
+		A2000025 /* AppError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppError.swift; sourceTree = "<group>"; };
+		A3000001 /* ClaudeCodeApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClaudeCodeApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		2509F4FC2EFF976200EAFBFE /* ClaudeCodeAppTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = ClaudeCodeAppTests; sourceTree = "<group>"; };
+/* End PBXFileSystemSynchronizedRootGroup section */
+
 /* Begin PBXFrameworksBuildPhase section */
+		2509F4F82EFF976200EAFBFE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A4000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -56,6 +102,7 @@
 			isa = PBXGroup;
 			children = (
 				A5000002 /* ClaudeCodeApp */,
+				2509F4FC2EFF976200EAFBFE /* ClaudeCodeAppTests */,
 				A5000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -75,6 +122,9 @@
 				A2000011 /* WebSocketManager.swift */,
 				A2000012 /* SpeechManager.swift */,
 				A2000013 /* UserQuestionsView.swift */,
+				A5000004 /* Utilities */,
+				A5000005 /* Extensions */,
+				A5000006 /* Views */,
 				A2000007 /* Assets.xcassets */,
 			);
 			path = ClaudeCodeApp;
@@ -84,13 +134,70 @@
 			isa = PBXGroup;
 			children = (
 				A3000001 /* ClaudeCodeApp.app */,
+				2509F4FB2EFF976200EAFBFE /* ClaudeCodeAppTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		A5000004 /* Utilities */ = {
+			isa = PBXGroup;
+			children = (
+				A2000014 /* ImageUtilities.swift */,
+				A2000024 /* Logger.swift */,
+				A2000025 /* AppError.swift */,
+			);
+			path = Utilities;
+			sourceTree = "<group>";
+		};
+		A5000005 /* Extensions */ = {
+			isa = PBXGroup;
+			children = (
+				A2000015 /* String+Markdown.swift */,
+			);
+			path = Extensions;
+			sourceTree = "<group>";
+		};
+		A5000006 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				A2000016 /* CodeBlockView.swift */,
+				A2000017 /* DiffView.swift */,
+				A2000018 /* TodoListView.swift */,
+				A2000019 /* SessionPickerViews.swift */,
+				A2000020 /* CLIStatusBarViews.swift */,
+				A2000021 /* MarkdownText.swift */,
+				A2000022 /* CLIInputView.swift */,
+				A2000023 /* CLIMessageView.swift */,
+			);
+			path = Views;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		2509F4FA2EFF976200EAFBFE /* ClaudeCodeAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2509F5032EFF976200EAFBFE /* Build configuration list for PBXNativeTarget "ClaudeCodeAppTests" */;
+			buildPhases = (
+				2509F4F72EFF976200EAFBFE /* Sources */,
+				2509F4F82EFF976200EAFBFE /* Frameworks */,
+				2509F4F92EFF976200EAFBFE /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				2509F5002EFF976200EAFBFE /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				2509F4FC2EFF976200EAFBFE /* ClaudeCodeAppTests */,
+			);
+			name = ClaudeCodeAppTests;
+			packageProductDependencies = (
+			);
+			productName = ClaudeCodeAppTests;
+			productReference = 2509F4FB2EFF976200EAFBFE /* ClaudeCodeAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		A6000001 /* ClaudeCodeApp */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = A7000003 /* Build configuration list for PBXNativeTarget "ClaudeCodeApp" */;
@@ -118,9 +225,13 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1500;
+				LastSwiftUpdateCheck = 2620;
 				LastUpgradeCheck = 1500;
 				TargetAttributes = {
+					2509F4FA2EFF976200EAFBFE = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = A6000001;
+					};
 					A6000001 = {
 						CreatedOnToolsVersion = 15.0;
 					};
@@ -143,11 +254,19 @@
 			projectRoot = "";
 			targets = (
 				A6000001 /* ClaudeCodeApp */,
+				2509F4FA2EFF976200EAFBFE /* ClaudeCodeAppTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		2509F4F92EFF976200EAFBFE /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A4000003 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -159,6 +278,13 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		2509F4F72EFF976200EAFBFE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A4000002 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -175,12 +301,76 @@
 				A1000012 /* WebSocketManager.swift in Sources */,
 				A1000013 /* SpeechManager.swift in Sources */,
 				A1000014 /* UserQuestionsView.swift in Sources */,
+				A1000015 /* ImageUtilities.swift in Sources */,
+				A1000016 /* String+Markdown.swift in Sources */,
+				A1000017 /* CodeBlockView.swift in Sources */,
+				A1000018 /* DiffView.swift in Sources */,
+				A1000019 /* TodoListView.swift in Sources */,
+				A1000020 /* SessionPickerViews.swift in Sources */,
+				A1000021 /* CLIStatusBarViews.swift in Sources */,
+				A1000022 /* MarkdownText.swift in Sources */,
+				A1000023 /* CLIInputView.swift in Sources */,
+				A1000024 /* CLIMessageView.swift in Sources */,
+				A1000025 /* Logger.swift in Sources */,
+				A1000026 /* AppError.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		2509F5002EFF976200EAFBFE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A6000001 /* ClaudeCodeApp */;
+			targetProxy = 2509F4FF2EFF976200EAFBFE /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		2509F5012EFF976200EAFBFE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5346RAMY2B;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = patrickpatterson.ClaudeCodeAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ClaudeCodeApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ClaudeCodeApp";
+			};
+			name = Debug;
+		};
+		2509F5022EFF976200EAFBFE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 5346RAMY2B;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = patrickpatterson.ClaudeCodeAppTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ClaudeCodeApp.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ClaudeCodeApp";
+			};
+			name = Release;
+		};
 		A9000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -369,6 +559,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		2509F5032EFF976200EAFBFE /* Build configuration list for PBXNativeTarget "ClaudeCodeAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				2509F5012EFF976200EAFBFE /* Debug */,
+				2509F5022EFF976200EAFBFE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		A7000001 /* Build configuration list for PBXProject "ClaudeCodeApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

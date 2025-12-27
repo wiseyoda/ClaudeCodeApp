@@ -1,14 +1,23 @@
 import Foundation
 
 class APIClient: ObservableObject {
-    private let settings: AppSettings
+    private var settings: AppSettings
     @Published var isLoading = false
     @Published var isAuthenticated = false
 
-    init(settings: AppSettings) {
-        self.settings = settings
+    /// Initialize with optional settings. Call configure() in onAppear with the EnvironmentObject.
+    init(settings: AppSettings? = nil) {
+        // Use provided settings or create temporary placeholder
+        // The real settings should be provided via configure() in onAppear
+        self.settings = settings ?? AppSettings()
         // Check if we have a stored token
-        self.isAuthenticated = !settings.authToken.isEmpty
+        self.isAuthenticated = !self.settings.authToken.isEmpty
+    }
+
+    /// Update settings reference (call from onAppear with actual EnvironmentObject)
+    func configure(with newSettings: AppSettings) {
+        self.settings = newSettings
+        self.isAuthenticated = !newSettings.authToken.isEmpty
     }
 
     // MARK: - Authentication
@@ -157,7 +166,7 @@ class APIClient: ObservableObject {
         }
 
         guard httpResponse.statusCode == 200 else {
-            print("[APIClient] Session messages failed with status: \(httpResponse.statusCode)")
+            log.error("Session messages failed with status: \(httpResponse.statusCode)")
             throw APIError.serverError
         }
 
@@ -217,7 +226,7 @@ class APIClient: ObservableObject {
         body.append("Content-Disposition: form-data; name=\"images\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
 
         // Detect MIME type
-        let mimeType = detectMimeType(from: imageData)
+        let mimeType = ImageUtilities.detectMediaType(from: imageData)
         body.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
         body.append(imageData)
         body.append("\r\n".data(using: .utf8)!)
@@ -236,9 +245,9 @@ class APIClient: ObservableObject {
         }
 
         guard httpResponse.statusCode == 200 else {
-            print("[APIClient] Image upload failed with status: \(httpResponse.statusCode)")
+            log.error("Image upload failed with status: \(httpResponse.statusCode)")
             if let errorText = String(data: data, encoding: .utf8) {
-                print("[APIClient] Error: \(errorText)")
+                log.error("Error: \(errorText)")
             }
             throw APIError.serverError
         }
@@ -249,33 +258,6 @@ class APIClient: ObservableObject {
         }
 
         return firstImage
-    }
-
-    /// Detect MIME type from image data
-    private func detectMimeType(from data: Data) -> String {
-        guard data.count >= 4 else { return "image/jpeg" }
-
-        let bytes = [UInt8](data.prefix(4))
-
-        // PNG: 89 50 4E 47
-        if bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47 {
-            return "image/png"
-        }
-        // GIF: 47 49 46 38
-        if bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x38 {
-            return "image/gif"
-        }
-        // WebP: 52 49 46 46 ... 57 45 42 50
-        if bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46 {
-            if data.count >= 12 {
-                let webpBytes = [UInt8](data[8..<12])
-                if webpBytes[0] == 0x57 && webpBytes[1] == 0x45 && webpBytes[2] == 0x42 && webpBytes[3] == 0x50 {
-                    return "image/webp"
-                }
-            }
-        }
-        // Default to JPEG
-        return "image/jpeg"
     }
 
     // Note: Chat is now handled via WebSocket - see WebSocketManager

@@ -31,6 +31,23 @@ class WebSocketManager: ObservableObject {
         let total: Int
     }
 
+    // Message retry queue
+    struct PendingMessage: Identifiable {
+        let id = UUID()
+        let message: String
+        let projectPath: String
+        let sessionId: String?
+        let permissionMode: String?
+        let imageData: Data?
+        var attempts: Int = 0
+        let createdAt = Date()
+    }
+
+    private var pendingMessage: PendingMessage?
+    private let maxRetries = 3
+    private let retryDelays: [TimeInterval] = [1, 2, 4]  // Exponential backoff
+    private var retryTask: Task<Void, Never>?
+
     // Callbacks for streaming events
     var onText: ((String) -> Void)?
     var onTextCommit: ((String) -> Void)?  // Called when text segment is complete (before tool use)
@@ -42,8 +59,11 @@ class WebSocketManager: ObservableObject {
     var onError: ((String) -> Void)?
     var onSessionCreated: ((String) -> Void)?
 
-    init(settings: AppSettings) {
-        self.settings = settings
+    /// Initialize with optional settings. Call updateSettings() in onAppear with the EnvironmentObject.
+    init(settings: AppSettings? = nil) {
+        // Use provided settings or create temporary placeholder
+        // The real settings should be provided via updateSettings() in onAppear
+        self.settings = settings ?? AppSettings()
     }
 
     /// Update settings reference (call from onAppear with actual EnvironmentObject)
@@ -68,7 +88,7 @@ class WebSocketManager: ObservableObject {
                 if self.isProcessing {
                     if let lastResponse = self.lastResponseTime,
                        Date().timeIntervalSince(lastResponse) >= 30 {
-                        print("[WS] Processing timeout - no response for 30s, resetting state")
+                        log.warning("Processing timeout - no response for 30s, resetting state")
                         self.isProcessing = false
                         self.lastError = "Request timed out - no response from server"
                         self.onError?("Request timed out")
@@ -92,7 +112,7 @@ class WebSocketManager: ObservableObject {
     /// Send a local notification (only when app is backgrounded)
     func sendLocalNotification(title: String, body: String) {
         guard !isAppInForeground else {
-            print("[WS] Skipping notification - app in foreground")
+            log.debug("Skipping notification - app in foreground")
             return
         }
 
@@ -109,7 +129,7 @@ class WebSocketManager: ObservableObject {
 
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
-                print("[WS] Notification error: \(error)")
+                log.error("Notification error: \(error)")
             }
         }
     }
@@ -128,7 +148,7 @@ class WebSocketManager: ObservableObject {
         // Clean up existing connection if any
         webSocket?.cancel(with: .goingAway, reason: nil)
 
-        print("[WS] Connecting to: \(url)")
+        log.info("Connecting to: \(url)")
 
         let session = URLSession(configuration: .default)
         webSocket = session.webSocketTask(with: url)
@@ -160,7 +180,7 @@ class WebSocketManager: ObservableObject {
     /// Schedule a reconnection with exponential backoff
     private func scheduleReconnect() {
         guard !isReconnecting else {
-            print("[WS] Reconnection already scheduled, skipping")
+            log.debug("Reconnection already scheduled, skipping")
             return
         }
 
@@ -174,7 +194,7 @@ class WebSocketManager: ObservableObject {
         let totalDelay = delay + jitter
 
         reconnectAttempt += 1
-        print("[WS] Scheduling reconnect attempt \(reconnectAttempt) in \(String(format: "%.1f", totalDelay))s")
+        log.info("Scheduling reconnect attempt \(reconnectAttempt) in \(String(format: "%.1f", totalDelay))s")
 
         reconnectTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(totalDelay * 1_000_000_000))
@@ -192,15 +212,30 @@ class WebSocketManager: ObservableObject {
     }
 
     func sendMessage(_ message: String, projectPath: String, resumeSessionId: String? = nil, permissionMode: String? = nil, imageData: Data? = nil) {
+        // Store as pending message for potential retry
+        pendingMessage = PendingMessage(
+            message: message,
+            projectPath: projectPath,
+            sessionId: resumeSessionId ?? sessionId,
+            permissionMode: permissionMode,
+            imageData: imageData
+        )
+
+        sendPendingMessage()
+    }
+
+    private func sendPendingMessage() {
+        guard var pending = pendingMessage else { return }
+
         guard isConnected else {
             connect()
             // Queue message after connection establishes
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 guard let self = self else { return }
                 if self.isConnected {
-                    self.sendMessage(message, projectPath: projectPath, resumeSessionId: resumeSessionId, permissionMode: permissionMode, imageData: imageData)
+                    self.sendPendingMessage()
                 } else {
-                    self.lastError = "Failed to connect to server"
+                    self.handleSendFailure(AppError.connectionFailed("Not connected"))
                 }
             }
             return
@@ -213,21 +248,21 @@ class WebSocketManager: ObservableObject {
 
         // Convert image data to base64 WSImage if present
         var images: [WSImage]? = nil
-        if let imageData = imageData {
+        if let imageData = pending.imageData {
             let base64String = imageData.base64EncodedString()
             // Detect image type from data header
-            let mediaType = detectMediaType(from: imageData)
+            let mediaType = ImageUtilities.detectMediaType(from: imageData)
             images = [WSImage(mediaType: mediaType, base64Data: base64String)]
-            print("[WS] Attaching image: \(mediaType), \(base64String.count) chars base64")
+            log.debug("Attaching image: \(mediaType), \(base64String.count) chars base64")
         }
 
         let command = WSClaudeCommand(
-            command: message,
+            command: pending.message,
             options: WSCommandOptions(
-                cwd: projectPath,
-                sessionId: resumeSessionId ?? sessionId,
+                cwd: pending.projectPath,
+                sessionId: pending.sessionId,
                 model: nil,
-                permissionMode: permissionMode,
+                permissionMode: pending.permissionMode,
                 images: images  // Images go inside options
             )
         )
@@ -235,23 +270,81 @@ class WebSocketManager: ObservableObject {
         do {
             let data = try JSONEncoder().encode(command)
             if let jsonString = String(data: data, encoding: .utf8) {
-                print("[WS] Sending with permissionMode=\(permissionMode ?? "nil"): \(jsonString.prefix(300))")
+                log.debug("Sending (attempt \(pending.attempts + 1)): \(jsonString.prefix(300))")
                 webSocket?.send(.string(jsonString)) { [weak self] error in
                     if let error = error {
                         Task { @MainActor in
-                            self?.lastError = error.localizedDescription
-                            self?.isProcessing = false
-                            // Connection may have dropped, trigger reconnect
-                            self?.isConnected = false
-                            self?.scheduleReconnect()
+                            self?.handleSendFailure(AppError.messageFailed(error.localizedDescription))
+                        }
+                    } else {
+                        // Success - clear pending message
+                        Task { @MainActor in
+                            self?.pendingMessage = nil
+                            self?.retryTask?.cancel()
                         }
                     }
                 }
             }
         } catch {
+            handleSendFailure(AppError.messageFailed(error.localizedDescription))
+        }
+    }
+
+    /// Handle send failure with retry logic
+    private func handleSendFailure(_ error: AppError) {
+        guard var pending = pendingMessage else {
             lastError = error.localizedDescription
             isProcessing = false
+            onError?(error.localizedDescription)
+            return
         }
+
+        pending.attempts += 1
+        pendingMessage = pending
+
+        if pending.attempts >= maxRetries {
+            // Give up after max retries
+            log.error("Message failed after \(maxRetries) attempts: \(error.localizedDescription)")
+            lastError = "Message failed after \(maxRetries) attempts"
+            isProcessing = false
+            pendingMessage = nil
+            onError?("Message failed after \(maxRetries) attempts. Please try again.")
+            return
+        }
+
+        // Schedule retry with exponential backoff
+        let delayIndex = min(pending.attempts - 1, retryDelays.count - 1)
+        let delay = retryDelays[delayIndex]
+
+        log.info("Retrying message in \(delay)s (attempt \(pending.attempts + 1)/\(maxRetries))")
+
+        // Update error message to show retry is happening
+        lastError = "Retrying... (attempt \(pending.attempts + 1)/\(maxRetries))"
+
+        retryTask?.cancel()
+        retryTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+
+            guard !Task.isCancelled else { return }
+
+            await MainActor.run {
+                guard let self = self else { return }
+                // Reconnect if needed
+                if !self.isConnected {
+                    self.connect()
+                }
+                // Retry after brief delay for connection
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    self.sendPendingMessage()
+                }
+            }
+        }
+    }
+
+    /// Cancel any pending retry
+    func cancelPendingRetry() {
+        retryTask?.cancel()
+        pendingMessage = nil
     }
 
     func abortSession() {
@@ -265,7 +358,7 @@ class WebSocketManager: ObservableObject {
                 webSocket?.send(.string(jsonString)) { _ in }
             }
         } catch {
-            print("[WS] Failed to encode abort: \(error)")
+            log.error("Failed to encode abort: \(error)")
         }
 
         isProcessing = false
@@ -280,7 +373,7 @@ class WebSocketManager: ObservableObject {
                     self?.receiveMessage()  // Continue listening
 
                 case .failure(let error):
-                    print("[WS] Receive error: \(error)")
+                    log.error("Receive error: \(error)")
                     self?.isConnected = false
                     self?.isProcessing = false  // Reset processing state on disconnect
                     self?.cancelProcessingTimeout()
@@ -310,7 +403,7 @@ class WebSocketManager: ObservableObject {
     }
 
     private func parseMessage(_ text: String) {
-        print("[WS] Received: \(text.prefix(300))")
+        log.debug("Received: \(text.prefix(300))")
 
         // Reset timeout on any received message
         resetProcessingTimeout()
@@ -335,11 +428,11 @@ class WebSocketManager: ObservableObject {
                     // 3. Result: {type: "result", ...}
 
                     let outerType = responseData["type"] as? String
-                    print("[WS] claude-response outer type: \(outerType ?? "nil")")
+                    log.debug("claude-response outer type: \(outerType ?? "nil")")
 
                     if outerType == "assistant", let messageData = responseData["message"] as? [String: Any] {
                         // For assistant messages, the content is in message.content
-                        print("[WS] Processing assistant message wrapper")
+                        log.debug("Processing assistant message wrapper")
                         processContent(messageData)
                     } else {
                         // For system, result, and other types
@@ -384,11 +477,11 @@ class WebSocketManager: ObservableObject {
                 break
 
             default:
-                print("[WS] Unknown message type: \(msg.type)")
+                log.debug("Unknown message type: \(msg.type)")
             }
 
         } catch {
-            print("[WS] Parse error: \(error), text: \(text.prefix(200))")
+            log.error("Parse error: \(error), text: \(text.prefix(200))")
             // Notify UI of parse errors (but don't stop processing - could be non-critical)
             lastError = "Message parse error: \(error.localizedDescription)"
         }
@@ -402,15 +495,15 @@ class WebSocketManager: ObservableObject {
         // - type: "result" (final summary with modelUsage)
 
         // Debug: log all keys and type
-        print("[WS] handleClaudeResponse keys: \(data.keys.sorted())")
+        log.debug("handleClaudeResponse keys: \(data.keys.sorted())")
         if let type = data["type"] {
-            print("[WS] handleClaudeResponse type: \(type)")
+            log.debug("handleClaudeResponse type: \(type)")
         }
         if let role = data["role"] {
-            print("[WS] handleClaudeResponse role: \(role)")
+            log.debug("handleClaudeResponse role: \(role)")
         }
         if let content = data["content"] {
-            print("[WS] handleClaudeResponse content type: \(Swift.type(of: content))")
+            log.debug("handleClaudeResponse content type: \(Swift.type(of: content))")
         }
 
         // Check for type field (SDK format) or role field (API format)
@@ -419,11 +512,11 @@ class WebSocketManager: ObservableObject {
         // If no type, but has content, process it directly (SDK sometimes omits type)
         if messageType == nil {
             if data["content"] != nil {
-                print("[WS] No type but has content, processing directly")
+                log.debug("No type but has content, processing directly")
                 processContent(data)
                 return
             }
-            print("[WS] No type/role in claude-response: \(data.keys)")
+            log.debug("No type/role in claude-response: \(data.keys)")
             return
         }
 
@@ -443,7 +536,7 @@ class WebSocketManager: ObservableObject {
 
         case "assistant":
             // Assistant message with content array
-            print("[WS] Processing assistant message")
+            log.debug("Processing assistant message")
             processContent(data)
 
         case "user":
@@ -471,35 +564,8 @@ class WebSocketManager: ObservableObject {
             break
 
         default:
-            print("[WS] Unknown SDK message type: \(type)")
+            log.debug("Unknown SDK message type: \(type)")
         }
-    }
-
-    /// Detect image media type from data header (magic bytes)
-    private func detectMediaType(from data: Data) -> String {
-        guard data.count >= 4 else { return "image/jpeg" }
-
-        let bytes = [UInt8](data.prefix(4))
-
-        // PNG: 89 50 4E 47
-        if bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47 {
-            return "image/png"
-        }
-        // GIF: 47 49 46 38
-        if bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x38 {
-            return "image/gif"
-        }
-        // WebP: 52 49 46 46 ... 57 45 42 50
-        if bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46 {
-            if data.count >= 12 {
-                let webpBytes = [UInt8](data[8..<12])
-                if webpBytes[0] == 0x57 && webpBytes[1] == 0x45 && webpBytes[2] == 0x42 && webpBytes[3] == 0x50 {
-                    return "image/webp"
-                }
-            }
-        }
-        // Default to JPEG
-        return "image/jpeg"
     }
 
     /// Process content from a message (handles both array and string content)
@@ -512,7 +578,7 @@ class WebSocketManager: ObservableObject {
                 switch partType {
                 case "text":
                     if let text = part["text"] as? String, !text.isEmpty {
-                        print("[WS] Found text in content array: \(text.prefix(100))")
+                        log.debug("Found text in content array: \(text.prefix(100))")
                         currentText += text
                         onText?(currentText)
                     }
@@ -529,7 +595,7 @@ class WebSocketManager: ObservableObject {
                     // Check for AskUserQuestion tool - needs special handling
                     if name == "AskUserQuestion", let input = input,
                        let questionData = AskUserQuestionData.from(input) {
-                        print("[WS] Detected AskUserQuestion tool with \(questionData.questions.count) questions")
+                        log.debug("Detected AskUserQuestion tool with \(questionData.questions.count) questions")
                         onAskUserQuestion?(questionData)
                     } else {
                         // Regular tool use
@@ -542,25 +608,25 @@ class WebSocketManager: ObservableObject {
                 case "thinking":
                     // Extended thinking/reasoning block
                     if let thinking = part["thinking"] as? String, !thinking.isEmpty {
-                        print("[WS] Found thinking block: \(thinking.prefix(100))")
+                        log.debug("Found thinking block: \(thinking.prefix(100))")
                         onThinking?(thinking)
                     }
 
                 default:
-                    print("[WS] Unknown content part type: \(partType)")
+                    log.debug("Unknown content part type: \(partType)")
                 }
             }
         }
         // Handle string content
         else if let content = data["content"] as? String, !content.isEmpty {
-            print("[WS] Found string content: \(content.prefix(100))")
+            log.debug("Found string content: \(content.prefix(100))")
             currentText += content
             onText?(currentText)
         }
         // Handle message.content nested structure
         else if let message = data["message"] as? [String: Any],
                 message["content"] != nil {
-            print("[WS] Found nested message.content")
+            log.debug("Found nested message.content")
             processContent(message)
         }
     }
