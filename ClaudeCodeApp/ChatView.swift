@@ -226,7 +226,17 @@ struct ChatView: View {
 
     private func setupWebSocketCallbacks() {
         wsManager.onText = { text in
-            // Text is accumulated in wsManager.currentText
+            // Text is accumulated in wsManager.currentText (shown in streaming view)
+        }
+
+        wsManager.onTextCommit = { text in
+            // Text segment is complete (before a tool use) - add as message
+            let assistantMsg = ChatMessage(
+                role: .assistant,
+                content: text,
+                timestamp: Date()
+            )
+            messages.append(assistantMsg)
         }
 
         wsManager.onToolUse = { name, input in

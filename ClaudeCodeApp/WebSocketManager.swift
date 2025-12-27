@@ -33,6 +33,7 @@ class WebSocketManager: ObservableObject {
 
     // Callbacks for streaming events
     var onText: ((String) -> Void)?
+    var onTextCommit: ((String) -> Void)?  // Called when text segment is complete (before tool use)
     var onToolUse: ((String, String) -> Void)?
     var onToolResult: ((String) -> Void)?
     var onThinking: ((String) -> Void)?  // For reasoning/thinking blocks
@@ -516,6 +517,11 @@ class WebSocketManager: ObservableObject {
                     }
 
                 case "tool_use":
+                    // Commit any accumulated text before the tool use
+                    if !currentText.isEmpty {
+                        onTextCommit?(currentText)
+                        currentText = ""
+                    }
                     let name = part["name"] as? String ?? "tool"
                     let input = part["input"] as? [String: Any]
                     let inputStr = input.map { dict in
