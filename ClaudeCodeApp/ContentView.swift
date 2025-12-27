@@ -126,6 +126,22 @@ struct ContentView: View {
         .background(CLITheme.background)
     }
 
+    /// Projects sorted according to user preference
+    private var sortedProjects: [Project] {
+        switch settings.projectSortOrder {
+        case .date:
+            // Sort by most recent activity (most recent first)
+            return projects.sorted { p1, p2 in
+                let date1 = p1.sessions?.compactMap { $0.lastActivity }.max() ?? ""
+                let date2 = p2.sessions?.compactMap { $0.lastActivity }.max() ?? ""
+                return date1 > date2
+            }
+        case .name:
+            // Sort alphabetically by title
+            return projects.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+        }
+    }
+
     private var projectListView: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
@@ -141,7 +157,7 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity)
                     .padding(.top, 40)
                 } else {
-                    ForEach(projects) { project in
+                    ForEach(sortedProjects) { project in
                         NavigationLink {
                             ChatView(project: project, apiClient: apiClient)
                         } label: {
@@ -217,149 +233,127 @@ struct SettingsView: View {
     @EnvironmentObject var settings: AppSettings
     @Environment(\.dismiss) var dismiss
 
+    // Binding for font size picker
+    private var fontSizeBinding: Binding<FontSizePreset> {
+        Binding(
+            get: { FontSizePreset(rawValue: settings.fontSize) ?? .medium },
+            set: { settings.fontSize = $0.rawValue }
+        )
+    }
+
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    // Server Configuration
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("* Server Configuration")
-                            .font(CLITheme.monoFont)
-                            .foregroundColor(CLITheme.cyan)
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("URL:")
-                                .font(CLITheme.monoSmall)
-                                .foregroundColor(CLITheme.secondaryText)
-
-                            TextField("", text: $settings.serverURL)
-                                .font(CLITheme.monoFont)
-                                .foregroundColor(CLITheme.primaryText)
-                                .keyboardType(.URL)
-                                .autocapitalization(.none)
-                                .autocorrectionDisabled()
-                                .padding(12)
-                                .background(CLITheme.secondaryBackground)
-                                .cornerRadius(8)
+            Form {
+                // Section 1: Appearance
+                Section("Appearance") {
+                    Picker("Theme", selection: Binding(
+                        get: { settings.appTheme },
+                        set: { settings.appTheme = $0 }
+                    )) {
+                        ForEach(AppTheme.allCases, id: \.self) { theme in
+                            Text(theme.displayName).tag(theme)
                         }
-
-                        Text("Default: http://10.0.3.2:8080")
-                            .font(CLITheme.monoSmall)
-                            .foregroundColor(CLITheme.mutedText)
                     }
 
-                    // Font Size
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("* Font Size")
-                            .font(CLITheme.monoFont)
-                            .foregroundColor(CLITheme.cyan)
-
-                        HStack(spacing: 8) {
-                            ForEach(FontSizePreset.allCases, id: \.rawValue) { preset in
-                                Button {
-                                    settings.fontSize = preset.rawValue
-                                } label: {
-                                    Text(preset.displayName)
-                                        .font(CLITheme.monoSmall)
-                                        .foregroundColor(settings.fontSize == preset.rawValue ? CLITheme.background : CLITheme.primaryText)
-                                        .padding(.horizontal, 12)
-                                        .padding(.vertical, 8)
-                                        .background(settings.fontSize == preset.rawValue ? CLITheme.cyan : CLITheme.secondaryBackground)
-                                        .cornerRadius(6)
-                                }
-                            }
+                    Picker("Font Size", selection: fontSizeBinding) {
+                        ForEach(FontSizePreset.allCases, id: \.rawValue) { preset in
+                            Text(preset.displayName).tag(preset)
                         }
+                    }
 
-                        Text("Preview: The quick brown fox")
+                    // Font preview
+                    HStack {
+                        Text("Preview:")
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Text("The quick brown fox")
                             .font(settings.scaledFont(.body))
-                            .foregroundColor(CLITheme.primaryText)
-                            .padding(.top, 4)
                     }
-
-                    // SSH Configuration
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("* SSH Configuration")
-                            .font(CLITheme.monoFont)
-                            .foregroundColor(CLITheme.cyan)
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Host:")
-                                .font(CLITheme.monoSmall)
-                                .foregroundColor(CLITheme.secondaryText)
-                            TextField("", text: $settings.sshHost)
-                                .font(CLITheme.monoFont)
-                                .foregroundColor(CLITheme.primaryText)
-                                .autocapitalization(.none)
-                                .autocorrectionDisabled()
-                                .padding(12)
-                                .background(CLITheme.secondaryBackground)
-                                .cornerRadius(8)
-                        }
-
-                        HStack(spacing: 12) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Port:")
-                                    .font(CLITheme.monoSmall)
-                                    .foregroundColor(CLITheme.secondaryText)
-                                TextField("", value: $settings.sshPort, format: .number)
-                                    .font(CLITheme.monoFont)
-                                    .foregroundColor(CLITheme.primaryText)
-                                    .keyboardType(.numberPad)
-                                    .padding(12)
-                                    .background(CLITheme.secondaryBackground)
-                                    .cornerRadius(8)
-                            }
-                            .frame(width: 100)
-
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Username:")
-                                    .font(CLITheme.monoSmall)
-                                    .foregroundColor(CLITheme.secondaryText)
-                                TextField("", text: $settings.sshUsername)
-                                    .font(CLITheme.monoFont)
-                                    .foregroundColor(CLITheme.primaryText)
-                                    .autocapitalization(.none)
-                                    .autocorrectionDisabled()
-                                    .padding(12)
-                                    .background(CLITheme.secondaryBackground)
-                                    .cornerRadius(8)
-                            }
-                        }
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Password:")
-                                .font(CLITheme.monoSmall)
-                                .foregroundColor(CLITheme.secondaryText)
-                            SecureField("", text: $settings.sshPassword)
-                                .font(CLITheme.monoFont)
-                                .foregroundColor(CLITheme.primaryText)
-                                .padding(12)
-                                .background(CLITheme.secondaryBackground)
-                                .cornerRadius(8)
-                        }
-
-                        Text("Credentials are saved locally")
-                            .font(CLITheme.monoSmall)
-                            .foregroundColor(CLITheme.mutedText)
-                    }
-
-                    Spacer()
                 }
-                .padding()
+
+                // Section 2: Claude Behavior
+                Section {
+                    Picker("Default Mode", selection: Binding(
+                        get: { settings.claudeMode },
+                        set: { settings.claudeMode = $0 }
+                    )) {
+                        ForEach(ClaudeMode.allCases, id: \.self) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+
+                    Toggle("Skip Permission Prompts", isOn: $settings.skipPermissions)
+                } header: {
+                    Text("Claude")
+                } footer: {
+                    if settings.skipPermissions {
+                        Label("All tool executions will be auto-approved without confirmation.", systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                    }
+                }
+
+                // Section 3: Chat Display
+                Section("Chat Display") {
+                    Toggle("Show Thinking Blocks", isOn: $settings.showThinkingBlocks)
+                    Toggle("Auto-scroll to Bottom", isOn: $settings.autoScrollEnabled)
+                }
+
+                // Section 4: Project List
+                Section("Projects") {
+                    Picker("Sort Order", selection: Binding(
+                        get: { settings.projectSortOrder },
+                        set: { settings.projectSortOrder = $0 }
+                    )) {
+                        ForEach(ProjectSortOrder.allCases, id: \.self) { order in
+                            Text(order.displayName).tag(order)
+                        }
+                    }
+                }
+
+                // Section 5: Server Configuration
+                Section {
+                    TextField("URL", text: $settings.serverURL)
+                        .keyboardType(.URL)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                } header: {
+                    Text("Server")
+                } footer: {
+                    Text("Default: http://10.0.3.2:8080")
+                }
+
+                // Section 6: SSH Configuration
+                Section {
+                    TextField("Host", text: $settings.sshHost)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+
+                    HStack {
+                        Text("Port")
+                        Spacer()
+                        TextField("22", value: $settings.sshPort, format: .number)
+                            .keyboardType(.numberPad)
+                            .multilineTextAlignment(.trailing)
+                            .frame(width: 80)
+                    }
+
+                    TextField("Username", text: $settings.sshUsername)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+
+                    SecureField("Password", text: $settings.sshPassword)
+                } header: {
+                    Text("SSH")
+                } footer: {
+                    Text("Credentials are saved locally on device")
+                }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(CLITheme.background)
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(CLITheme.secondaryBackground, for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
+                    Button("Done") {
                         dismiss()
-                    } label: {
-                        Text("Done")
-                            .foregroundColor(CLITheme.cyan)
                     }
                 }
             }

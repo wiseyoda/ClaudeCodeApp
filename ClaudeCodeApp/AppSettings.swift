@@ -2,16 +2,15 @@ import Foundation
 import SwiftUI
 
 // Claude Code modes - values must match server expectations
+// Note: bypassPermissions is now a separate toggle (skipPermissions) in AppSettings
 enum ClaudeMode: String, CaseIterable {
     case normal = "default"
     case plan = "plan"
-    case bypassPermissions = "bypassPermissions"
 
     var displayName: String {
         switch self {
-        case .normal: return "normal mode"
-        case .plan: return "plan mode"
-        case .bypassPermissions: return "bypass permissions"
+        case .normal: return "Normal"
+        case .plan: return "Plan"
         }
     }
 
@@ -20,7 +19,6 @@ enum ClaudeMode: String, CaseIterable {
         switch self {
         case .normal: return nil  // Server treats nil/default as normal
         case .plan: return "plan"
-        case .bypassPermissions: return "bypassPermissions"
         }
     }
 
@@ -28,23 +26,54 @@ enum ClaudeMode: String, CaseIterable {
         switch self {
         case .normal: return "wrench"
         case .plan: return "doc.text"
-        case .bypassPermissions: return "bolt"
         }
     }
 
     var color: Color {
         switch self {
-        case .normal: return CLITheme.secondaryText
-        case .plan: return CLITheme.cyan
-        case .bypassPermissions: return CLITheme.orange
+        case .normal: return Color(white: 0.6)  // Secondary text color
+        case .plan: return Color(red: 0.4, green: 0.8, blue: 0.9)  // Cyan
         }
     }
 
     func next() -> ClaudeMode {
-        let modes = ClaudeMode.allCases
-        guard let currentIndex = modes.firstIndex(of: self) else { return .normal }
-        let nextIndex = (currentIndex + 1) % modes.count
-        return modes[nextIndex]
+        self == .normal ? .plan : .normal
+    }
+}
+
+// Theme preference
+enum AppTheme: String, CaseIterable {
+    case system = "system"
+    case dark = "dark"
+    case light = "light"
+
+    var displayName: String {
+        switch self {
+        case .system: return "System"
+        case .dark: return "Dark"
+        case .light: return "Light"
+        }
+    }
+
+    var colorScheme: ColorScheme? {
+        switch self {
+        case .system: return nil  // Follow system
+        case .dark: return .dark
+        case .light: return .light
+        }
+    }
+}
+
+// Project sort order
+enum ProjectSortOrder: String, CaseIterable {
+    case name = "name"
+    case date = "date"
+
+    var displayName: String {
+        switch self {
+        case .name: return "Name (A-Z)"
+        case .date: return "Recent Activity"
+        }
     }
 }
 
@@ -68,9 +97,23 @@ enum FontSizePreset: Int, CaseIterable {
 }
 
 class AppSettings: ObservableObject {
+    // Server Configuration
     @AppStorage("serverURL") var serverURL: String = "http://10.0.3.2:8080"
+
+    // Appearance Settings
+    @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
     @AppStorage("fontSize") var fontSize: Int = 14
+
+    // Claude Settings
     @AppStorage("claudeMode") private var claudeModeRaw: String = ClaudeMode.normal.rawValue
+    @AppStorage("skipPermissions") var skipPermissions: Bool = false
+
+    // Chat Display Settings
+    @AppStorage("showThinkingBlocks") var showThinkingBlocks: Bool = true
+    @AppStorage("autoScrollEnabled") var autoScrollEnabled: Bool = true
+
+    // Project List Settings
+    @AppStorage("projectSortOrder") private var projectSortOrderRaw: String = ProjectSortOrder.name.rawValue
 
     // Auth Settings (for claudecodeui backend)
     @AppStorage("authUsername") var authUsername: String = "admin"
@@ -82,18 +125,34 @@ class AppSettings: ObservableObject {
     @AppStorage("sshPort") var sshPort: Int = 22
     @AppStorage("sshUsername") var sshUsername: String = ""
     @AppStorage("sshAuthMethod") private var sshAuthMethodRaw: String = SSHAuthType.password.rawValue
-
-    // Note: Password is stored in Keychain in production, using UserDefaults for simplicity here
     @AppStorage("sshPassword") var sshPassword: String = ""
+
+    // MARK: - Computed Properties
+
+    var appTheme: AppTheme {
+        get { AppTheme(rawValue: appThemeRaw) ?? .system }
+        set { appThemeRaw = newValue.rawValue }
+    }
 
     var claudeMode: ClaudeMode {
         get { ClaudeMode(rawValue: claudeModeRaw) ?? .normal }
         set { claudeModeRaw = newValue.rawValue }
     }
 
+    var projectSortOrder: ProjectSortOrder {
+        get { ProjectSortOrder(rawValue: projectSortOrderRaw) ?? .name }
+        set { projectSortOrderRaw = newValue.rawValue }
+    }
+
     var sshAuthType: SSHAuthType {
         get { SSHAuthType(rawValue: sshAuthMethodRaw) ?? .password }
         set { sshAuthMethodRaw = newValue.rawValue }
+    }
+
+    /// The effective permission mode to send to server
+    /// If skipPermissions is enabled, always use bypassPermissions
+    var effectivePermissionMode: String? {
+        skipPermissions ? "bypassPermissions" : claudeMode.serverValue
     }
 
     var baseURL: URL? {

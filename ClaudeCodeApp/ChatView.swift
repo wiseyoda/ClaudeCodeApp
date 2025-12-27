@@ -147,6 +147,7 @@ struct ChatView: View {
             }
             .background(CLITheme.background)
             .onChange(of: messages.count) { _, _ in
+                guard settings.autoScrollEnabled else { return }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     withAnimation {
                         proxy.scrollTo("bottomAnchor", anchor: .bottom)
@@ -154,9 +155,11 @@ struct ChatView: View {
                 }
             }
             .onChange(of: wsManager.currentText) { _, _ in
+                guard settings.autoScrollEnabled else { return }
                 proxy.scrollTo("bottomAnchor", anchor: .bottom)
             }
             .onChange(of: wsManager.isProcessing) { _, _ in
+                guard settings.autoScrollEnabled else { return }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     withAnimation {
                         proxy.scrollTo("bottomAnchor", anchor: .bottom)
@@ -164,6 +167,7 @@ struct ChatView: View {
                 }
             }
             .onChange(of: scrollToBottomTrigger) { _, shouldScroll in
+                // Always honor explicit scroll triggers (e.g., loading history)
                 if shouldScroll {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                         proxy.scrollTo("bottomAnchor", anchor: .bottom)
@@ -172,6 +176,7 @@ struct ChatView: View {
                 }
             }
             .onAppear {
+                // Always scroll to bottom on initial appear
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     proxy.scrollTo("bottomAnchor", anchor: .bottom)
                 }
@@ -179,9 +184,18 @@ struct ChatView: View {
         }
     }
 
+    /// Messages filtered based on user settings (e.g., hide thinking blocks)
+    private var displayMessages: [ChatMessage] {
+        if settings.showThinkingBlocks {
+            return messages
+        } else {
+            return messages.filter { $0.role != .thinking }
+        }
+    }
+
     private var messagesListView: some View {
         LazyVStack(alignment: .leading, spacing: 2) {
-            ForEach(messages) { message in
+            ForEach(displayMessages) { message in
                 CLIMessageView(message: message)
                     .id(message.id)
             }
@@ -352,7 +366,7 @@ struct ChatView: View {
                             messageWithPath,
                             projectPath: project.path,
                             resumeSessionId: selectedSession?.id,
-                            permissionMode: settings.claudeMode.serverValue
+                            permissionMode: settings.effectivePermissionMode
                         )
                     }
                 } catch {
@@ -370,7 +384,7 @@ struct ChatView: View {
                                 text,
                                 projectPath: project.path,
                                 resumeSessionId: selectedSession?.id,
-                                permissionMode: settings.claudeMode.serverValue
+                                permissionMode: settings.effectivePermissionMode
                             )
                         }
                     }
@@ -382,7 +396,7 @@ struct ChatView: View {
                 text,
                 projectPath: project.path,
                 resumeSessionId: selectedSession?.id,
-                permissionMode: settings.claudeMode.serverValue
+                permissionMode: settings.effectivePermissionMode
             )
         }
     }
