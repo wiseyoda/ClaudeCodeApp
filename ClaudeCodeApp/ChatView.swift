@@ -400,6 +400,7 @@ struct ChatView: View {
                     isRefreshing: gitStatus == .checking,
                     onDismiss: { showGitBanner = false },
                     onRefresh: { refreshGitStatus() },
+                    onPull: nil,
                     onAskClaude: { promptClaudeForCleanup() }
                 )
 
@@ -411,6 +412,7 @@ struct ChatView: View {
                     isRefreshing: gitStatus == .checking,
                     onDismiss: { showGitBanner = false },
                     onRefresh: { refreshGitStatus() },
+                    onPull: { Task { await performAutoPull() } },
                     onAskClaude: nil
                 )
 
@@ -422,6 +424,7 @@ struct ChatView: View {
                     isRefreshing: gitStatus == .checking,
                     onDismiss: { showGitBanner = false },
                     onRefresh: { refreshGitStatus() },
+                    onPull: nil,
                     onAskClaude: { promptClaudeForCleanup() }
                 )
 
@@ -1119,6 +1122,7 @@ struct GitSyncBanner: View {
     let isRefreshing: Bool
     let onDismiss: () -> Void
     let onRefresh: () -> Void
+    let onPull: (() -> Void)?
     let onAskClaude: (() -> Void)?
     @Environment(\.colorScheme) var colorScheme
 
@@ -1149,6 +1153,18 @@ struct GitSyncBanner: View {
 
             // Actions
             if !isAutoPulling && !isRefreshing {
+                // Pull button (for behind status)
+                if let onPull = onPull {
+                    Button {
+                        onPull()
+                    } label: {
+                        Image(systemName: "arrow.down.circle")
+                            .font(.system(size: 16))
+                            .foregroundColor(CLITheme.cyan(for: colorScheme))
+                    }
+                    .accessibilityLabel("Pull changes")
+                }
+
                 // Refresh button
                 Button {
                     onRefresh()
