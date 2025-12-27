@@ -96,15 +96,22 @@ struct ChatView: View {
                     }
                 }
                 .onChange(of: scrollToBottomTrigger) { _, shouldScroll in
-                    // Scroll to bottom after history loads
+                    // Scroll to bottom after history/messages load
                     if shouldScroll {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                            withAnimation {
-                                if let lastId = messages.last?.id {
-                                    proxy.scrollTo(lastId, anchor: .bottom)
-                                }
+                        // Use longer delay to ensure view has rendered
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            if let lastId = messages.last?.id {
+                                proxy.scrollTo(lastId, anchor: .bottom)
                             }
                             scrollToBottomTrigger = false
+                        }
+                    }
+                }
+                .onAppear {
+                    // Scroll to bottom when view appears with messages
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        if let lastId = messages.last?.id {
+                            proxy.scrollTo(lastId, anchor: .bottom)
                         }
                     }
                 }
@@ -172,6 +179,8 @@ struct ChatView: View {
             let savedMessages = MessageStore.loadMessages(for: project.path)
             if !savedMessages.isEmpty {
                 messages = savedMessages
+                // Trigger scroll to bottom after loading persisted messages
+                scrollToBottomTrigger = true
             }
 
             // Load draft input
