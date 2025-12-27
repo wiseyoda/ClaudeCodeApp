@@ -217,7 +217,7 @@ class WebSocketManager: ObservableObject {
             let base64String = imageData.base64EncodedString()
             // Detect image type from data header
             let mediaType = detectMediaType(from: imageData)
-            images = [WSImage(mediaType: mediaType, data: base64String)]
+            images = [WSImage(mediaType: mediaType, base64Data: base64String)]
             print("[WS] Attaching image: \(mediaType), \(base64String.count) chars base64")
         }
 

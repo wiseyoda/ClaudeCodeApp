@@ -305,14 +305,12 @@ struct WSClaudeCommand: Encodable {
 }
 
 struct WSImage: Encodable {
-    let type: String = "base64"
-    let mediaType: String
-    let data: String  // base64-encoded image data
+    let data: String  // Full data URL: "data:image/png;base64,<base64data>"
 
-    enum CodingKeys: String, CodingKey {
-        case type
-        case mediaType = "media_type"
-        case data
+    /// Create WSImage from raw image data
+    init(mediaType: String, base64Data: String) {
+        // Server expects: "data:image/png;base64,<base64data>"
+        self.data = "data:\(mediaType);base64,\(base64Data)"
     }
 }
 
