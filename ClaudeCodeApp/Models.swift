@@ -282,11 +282,14 @@ class SessionHistoryLoader {
     /// Get the path to session file on remote server
     static func sessionFilePath(projectPath: String, sessionId: String) -> String {
         // Convert project path to Claude's format (e.g., /home/dev/workspace -> -home-dev-workspace)
-        let encodedPath = projectPath
-            .replacingOccurrences(of: "/", with: "-")
-            .trimmingCharacters(in: CharacterSet(charactersIn: "-"))
+        // Note: The encoded path STARTS with a dash (slashes become dashes)
+        let encodedPath = projectPath.replacingOccurrences(of: "/", with: "-")
+        // Only trim trailing dashes if any
+        let trimmedPath = encodedPath.hasSuffix("-")
+            ? String(encodedPath.dropLast())
+            : encodedPath
 
-        return "~/.claude/projects/\(encodedPath)/\(sessionId).jsonl"
+        return "~/.claude/projects/\(trimmedPath)/\(sessionId).jsonl"
     }
 }
 
