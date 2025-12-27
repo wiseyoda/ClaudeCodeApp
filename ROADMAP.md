@@ -92,38 +92,37 @@ Feature roadmap and improvements based on comparison with claudecodeui web front
 
 ## Medium Priority
 
-### M1. Extended Status Messages
-- **Status**: Basic "Thinking..." only
-- **Web App**: Shows animated action words (Thinking, Processing, Analyzing, etc.)
+### M1. Extended Status Messages ✅ FIXED
+- **Status**: Implemented
 - **Implementation**:
-  - Cycle through action words based on elapsed time
-  - Show token count and elapsed time
-- **Effort**: 2 hours
+  - Cycles through action words: thinking, processing, analyzing, working, reasoning
+  - Changes every 3 seconds during processing
+  - Shows elapsed time
+- **Location**: `ChatView.swift` (CLIStatusBar)
 
-### M2. Usage Limit Time Formatting
-- **Status**: Not implemented
-- **Web App**: Parses usage limit messages and shows local timezone
+### M2. Usage Limit Time Formatting ✅ FIXED
+- **Status**: Implemented
 - **Implementation**:
-  - Parse "Claude AI usage limit reached|<epoch>" format
-  - Format with user's local timezone
-- **Effort**: 2 hours
+  - Parses "Claude AI usage limit reached|<epoch>" format
+  - Formats reset time with user's local timezone
+  - Applied to error messages automatically
+- **Location**: `ChatView.swift` (String.formattedUsageLimit)
 
-### M3. HTML Entity Decoding
-- **Status**: Not implemented
-- **Web App**: Decodes `&lt;`, `&gt;`, etc.
+### M3. HTML Entity Decoding ✅ FIXED
+- **Status**: Implemented (part of L4)
 - **Implementation**:
-  - Add `decodeHtmlEntities` in message processing
-- **Location**: `WebSocketManager.swift` - `parseMessage()`
-- **Effort**: 1 hour
+  - Decodes `&lt;`, `&gt;`, `&amp;`, etc.
+  - Applied during MarkdownText initialization
+- **Location**: `ChatView.swift` (String.htmlDecoded)
 
-### M4. Token Truncation with Expandable View
-- **Status**: Truncates at 500 chars
-- **Web App**: Smart truncation with expand option
+### M4. Token Truncation with Expandable View ✅ FIXED
+- **Status**: Implemented
 - **Implementation**:
-  - Keep truncation at 500 for display
-  - Store full result internally
-  - Add "Show more" button for truncated results
-- **Effort**: 3 hours
+  - Stores full tool result (no truncation at creation)
+  - Shows 3 lines when collapsed
+  - Shows "[X chars - tap header to expand]" hint for long content
+  - Full content visible when expanded
+- **Location**: `ChatView.swift` (CLIMessageView)
 
 ### M5. Thinking/Reasoning Blocks ✅ FIXED
 - **Status**: Implemented
@@ -143,22 +142,16 @@ Feature roadmap and improvements based on comparison with claudecodeui web front
   - Shows "- Removed:" and "+ Added:" sections
 - **Location**: `ChatView.swift` (DiffView)
 
-### M7. Inline Code Fence Normalization
-- **Status**: Not implemented
-- **Web App**: Fixes triple backticks around inline code
+### M7. Inline Code Fence Normalization ✅ FIXED
+- **Status**: Implemented
 - **Implementation**:
-  - Add regex replacement in markdown parser
-  - Convert ```code``` to `code` for inline
-- **Effort**: 1 hour
+  - Converts ```code``` to `code` for inline code
+  - Applied via processedForDisplay in MarkdownText
+- **Location**: `ChatView.swift` (String.normalizedCodeFences)
 
 ### M8. Multi-Provider Support
-- **Status**: Claude-only
-- **Web App**: Toggles between Claude/Cursor provider
-- **Implementation**:
-  - Add `@AppStorage("selected-provider")` to AppSettings
-  - Pass provider in message send
-  - Show provider icon in chat
-- **Effort**: 4 hours
+- **Status**: Not implementing
+- **Reason**: User prefers Claude-only setup
 
 ---
 
@@ -206,7 +199,7 @@ Feature roadmap and improvements based on comparison with claudecodeui web front
 3. ~~[B3] Fix fake token count - 30 min~~ ✅
 4. ~~[H2] Draft message saving - 2 hours~~ ✅
 5. ~~[H6] Copy button for code - 3 hours~~ ✅
-6. [M1] Extended status messages - 2 hours
+6. ~~[M1] Extended status messages - 2 hours~~ ✅
 7. ~~[M3] HTML entity decoding - 1 hour~~ ✅ (part of L4)
 8. ~~[L3] Keyboard shortcuts - 2 hours~~ ✅
 
@@ -233,8 +226,10 @@ Feature roadmap and improvements based on comparison with claudecodeui web front
 - [x] M6. Diff viewer
 
 ### Phase 4: Polish
-- [ ] M1. Extended status messages
-- [ ] M2. Usage limit formatting
+- [x] M1. Extended status messages
+- [x] M2. Usage limit formatting
+- [x] M4. Token truncation with expandable view
+- [x] M7. Inline code fence normalization
 - [x] L1. Token usage visualization
 - [x] L2. LaTeX math rendering
 - [x] L3. Keyboard shortcuts

@@ -249,9 +249,10 @@ struct ChatView: View {
         }
 
         wsManager.onToolResult = { result in
+            // Store full result - truncation is handled in display
             let resultMsg = ChatMessage(
                 role: .toolResult,
-                content: String(result.prefix(500)) + (result.count > 500 ? "..." : ""),
+                content: result,
                 timestamp: Date()
             )
             messages.append(resultMsg)
@@ -653,7 +654,7 @@ struct CLIMessageView: View {
                 .foregroundColor(CLITheme.secondaryText)
                 .textSelection(.enabled)
         case .error:
-            Text(message.content)
+            Text(message.content.formattedUsageLimit)
                 .font(settings.scaledFont(.body))
                 .foregroundColor(CLITheme.red)
                 .textSelection(.enabled)
@@ -669,11 +670,20 @@ struct CLIMessageView: View {
                     .textSelection(.enabled)
             }
         case .toolResult:
-            Text(message.content)
-                .font(settings.scaledFont(.small))
-                .foregroundColor(CLITheme.secondaryText)
-                .lineLimit(isExpanded ? nil : 3)
-                .textSelection(.enabled)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(message.content)
+                    .font(settings.scaledFont(.small))
+                    .foregroundColor(CLITheme.secondaryText)
+                    .lineLimit(isExpanded ? nil : 3)
+                    .textSelection(.enabled)
+                // Show "Show more" hint if content is long and collapsed
+                if !isExpanded && message.content.count > 200 {
+                    Text("[\(message.content.count) chars - tap header to expand]")
+                        .font(settings.scaledFont(.small))
+                        .foregroundColor(CLITheme.mutedText)
+                        .italic()
+                }
+            }
         case .thinking:
             Text(message.content)
                 .font(settings.scaledFont(.small))
@@ -800,7 +810,11 @@ struct CLIStatusBar: View {
     @EnvironmentObject var settings: AppSettings
 
     @State private var elapsedTime: String = "0s"
+    @State private var statusWordIndex: Int = 0
     let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    // Cycling status words for processing state
+    private let statusWords = ["thinking", "processing", "analyzing", "working", "reasoning"]
 
     var body: some View {
         HStack(spacing: 12) {
@@ -817,8 +831,9 @@ struct CLIStatusBar: View {
                     Circle()
                         .fill(CLITheme.yellow)
                         .frame(width: 6, height: 6)
-                    Text("processing")
+                    Text(statusWords[statusWordIndex])
                         .foregroundColor(CLITheme.yellow)
+                        .animation(.easeInOut(duration: 0.3), value: statusWordIndex)
                 }
             } else {
                 HStack(spacing: 4) {
@@ -854,6 +869,16 @@ struct CLIStatusBar: View {
                 } else {
                     elapsedTime = "\(elapsed / 60)m \(elapsed % 60)s"
                 }
+                // Cycle status word every 3 seconds
+                if isProcessing && elapsed > 0 && elapsed % 3 == 0 {
+                    statusWordIndex = (statusWordIndex + 1) % statusWords.count
+                }
+            }
+        }
+        .onChange(of: isProcessing) { _, processing in
+            // Reset to first word when processing starts
+            if processing {
+                statusWordIndex = 0
             }
         }
     }
@@ -1613,6 +1638,38 @@ struct MarkdownText: View {
 // MARK: - Escape Sequence Protection
 
 extension String {
+    /// Normalize inline code fences - convert ```code``` to `code` when on single line
+    var normalizedCodeFences: String {
+        // Match triple backticks that don't span multiple lines (inline code)
+        // Pattern: ```something``` where "something" has no newlines
+        var result = self
+        let pattern = "```([^`\\n]+?)```"
+        if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
+            let range = NSRange(result.startIndex..., in: result)
+            result = regex.stringByReplacingMatches(in: result, options: [], range: range, withTemplate: "`$1`")
+        }
+        return result
+    }
+
+    /// Parse and format usage limit messages with local timezone
+    /// Format: "Claude AI usage limit reached|<epoch>"
+    var formattedUsageLimit: String {
+        // Check for usage limit message pattern
+        if self.contains("usage limit") && self.contains("|") {
+            let parts = self.split(separator: "|")
+            if parts.count == 2, let epoch = Double(parts[1]) {
+                let date = Date(timeIntervalSince1970: epoch)
+                let formatter = DateFormatter()
+                formatter.dateStyle = .none
+                formatter.timeStyle = .short
+                formatter.timeZone = .current
+                let timeString = formatter.string(from: date)
+                return "\(parts[0]) (resets at \(timeString))"
+            }
+        }
+        return self
+    }
+
     /// Decode common HTML entities
     var htmlDecoded: String {
         var result = self
@@ -1674,9 +1731,9 @@ extension String {
         return result
     }
 
-    /// Full escape processing: decode HTML entities and handle backslash escapes
+    /// Full escape processing: decode HTML entities, normalize code fences, handle backslash escapes
     var processedForDisplay: String {
-        return self.htmlDecoded
+        return self.htmlDecoded.normalizedCodeFences
     }
 }
 

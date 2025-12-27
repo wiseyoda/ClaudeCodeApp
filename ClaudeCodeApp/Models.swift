@@ -226,11 +226,12 @@ class SessionHistoryLoader {
         // Check for tool_result (skip it, we'll get it from toolUseResult)
         if let firstItem = content.first, firstItem["type"] as? String == "tool_result" {
             // This is a tool result wrapped in user message - get from toolUseResult
+            // Store full result - truncation is handled in display
             if let toolResult = json["toolUseResult"] as? String {
-                return ChatMessage(role: .toolResult, content: String(toolResult.prefix(500)), timestamp: timestamp)
+                return ChatMessage(role: .toolResult, content: toolResult, timestamp: timestamp)
             } else if let toolResultDict = json["toolUseResult"] as? [String: Any],
                       let stdout = toolResultDict["stdout"] as? String {
-                return ChatMessage(role: .toolResult, content: String(stdout.prefix(500)), timestamp: timestamp)
+                return ChatMessage(role: .toolResult, content: stdout, timestamp: timestamp)
             }
             return nil
         }
