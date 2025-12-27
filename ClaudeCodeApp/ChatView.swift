@@ -86,6 +86,11 @@ struct ChatView: View {
             if !savedDraft.isEmpty {
                 inputText = savedDraft
             }
+
+            // Auto-focus input field after view loads
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                isInputFocused = true
+            }
         }
         .onDisappear {
             wsManager.disconnect()
