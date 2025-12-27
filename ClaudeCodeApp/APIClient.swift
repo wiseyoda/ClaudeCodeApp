@@ -96,12 +96,8 @@ class APIClient: ObservableObject {
 
     private func authorizedRequest(for url: URL) -> URLRequest {
         var request = URLRequest(url: url)
-        // Prefer API Key if available, otherwise use JWT token
-        if !settings.apiKey.isEmpty {
-            // Try both header formats for compatibility with different claudecodeui versions
-            request.setValue(settings.apiKey, forHTTPHeaderField: "X-API-Key")
-            request.setValue("Bearer \(settings.apiKey)", forHTTPHeaderField: "Authorization")
-        } else if !settings.authToken.isEmpty {
+        // Use JWT token from login (apiKey field is deprecated - ck_ keys only work for /api/agent)
+        if !settings.authToken.isEmpty {
             request.setValue("Bearer \(settings.authToken)", forHTTPHeaderField: "Authorization")
         }
         return request
@@ -127,18 +123,10 @@ class APIClient: ObservableObject {
         log.debug("Projects response status: \(httpResponse.statusCode)")
 
         if httpResponse.statusCode == 401 {
-            // Only try login if we don't have an API key (login uses username/password)
-            if settings.apiKey.isEmpty {
-                try await login()
-                return try await fetchProjects()
-            } else {
-                // API key is invalid
-                log.error("API key authentication failed (401)")
-                if let responseText = String(data: data, encoding: .utf8) {
-                    log.error("Response: \(responseText)")
-                }
-                throw APIError.authenticationFailed
-            }
+            // Try to login with username/password and retry
+            log.debug("Got 401, attempting login...")
+            try await login()
+            return try await fetchProjects()
         }
 
         guard httpResponse.statusCode == 200 else {

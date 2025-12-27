@@ -611,13 +611,15 @@ struct SettingsView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
 
-                    SecureField("API Key", text: $settings.apiKey)
+                    TextField("Username", text: $settings.authUsername)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled()
+
+                    SecureField("Password", text: $settings.authPassword)
                 } header: {
                     Text("Server")
                 } footer: {
-                    Text("API Key from Settings > API Keys in web UI")
+                    Text("Login credentials for claudecodeui web UI")
                 }
 
                 // Section 6: SSH Key (for iPhone - no access to ~/.ssh)

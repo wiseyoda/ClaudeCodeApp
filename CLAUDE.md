@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Native iOS client for [claude-code-webui](https://github.com/sugyan/claude-code-webui), enabling Claude Code access from iPhone/iPad. The app connects to a backend server (typically running on a NAS via Tailscale) via WebSocket and provides real-time streaming chat with tool visibility. Includes a built-in SSH terminal for direct server access, file browser, and project management.
+Native iOS client for claudecodeui (local fork at `~/dev/claudecodeui`, based on sugyan/claude-code-webui), enabling Claude Code access from iPhone/iPad. The app connects to a backend server (typically running on a NAS via Tailscale) via WebSocket and provides real-time streaming chat with tool visibility. Includes a built-in SSH terminal for direct server access, file browser, and project management.
 
 ## Build & Run
 
@@ -174,13 +174,34 @@ SSH requires standard sshd running on the server.
 
 ### Authentication
 
-The claudecodeui backend uses JWT tokens for authentication:
+The claudecodeui backend (source at `~/dev/claudecodeui`) uses JWT tokens for the main API:
 
 ```
 POST /api/auth/login
-Body: {"username": "admin", "password": "claude123"}
+Body: {"username": "admin", "password": "yourpassword"}
 Response: {"success": true, "token": "eyJ..."}
 ```
+
+**Two Authentication Methods:**
+
+1. **JWT (Username/Password)** - For web UI and iOS app
+   - Login with username/password to get a JWT token
+   - Use `Authorization: Bearer <jwt_token>` header
+   - Required for `/api/projects`, `/api/settings`, etc.
+   - **This is what the iOS app uses**
+
+2. **API Keys (`ck_...`)** - For Agent API only
+   - Created in Web UI: Settings > API Keys
+   - Use `X-API-Key: ck_...` header
+   - **Only works for `/api/agent/*` endpoints**
+   - Used for external integrations (n8n, etc.)
+   - **NOT for iOS app - leave API Key field empty!**
+
+**iOS App Configuration:**
+- Server URL: `http://10.0.3.2:8080` (your claudecodeui server)
+- **Leave "API Key" field empty**
+- Enter your web UI username/password
+- The app authenticates via JWT automatically
 
 **Important CORS limitation:** The backend CORS config only allows `Content-Type` header, NOT `Authorization`. This means:
 - `/api/projects` works with `Authorization: Bearer <token>` header
