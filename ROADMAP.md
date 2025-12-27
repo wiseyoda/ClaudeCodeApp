@@ -19,7 +19,7 @@
 
 | Milestone | Description | Date |
 |-----------|-------------|------|
-| **v1.0 Core** | WebSocket chat, markdown, tool viz, SSH terminal, voice input | Dec 2024 |
+| **v1.0 Core** | WebSocket chat, markdown, tool viz, SSH terminal, voice input | Dec 2025 |
 | **Copy & Share** | Copy buttons, context menus, share sheet | Dec 26 |
 | **Project Mgmt** | Clone GitHub, create projects, file browser, @ references | Dec 27 |
 | **Auto-Sync** | Git status indicators, auto-pull, sync banners | Dec 27 |
@@ -205,7 +205,7 @@ Phase 4: Platform (P4)
 ## Completed Features Log
 
 <details>
-<summary>December 2024 - Full Details</summary>
+<summary>December 2025 - Full Details</summary>
 
 ### v1.0 Core Features
 - WebSocket real-time streaming chat
@@ -321,4 +321,4 @@ Phase 4: Platform (P4)
 
 ---
 
-*Last updated: December 27, 2024*
+*Last updated: December 27, 2025*

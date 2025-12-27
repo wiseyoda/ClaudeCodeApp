@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Native iOS client for [claudecodeui](https://github.com/siteboon/claudecodeui), enabling Claude Code access from iPhone/iPad. The app connects to a backend server (typically running on a NAS via Tailscale) via WebSocket and provides real-time streaming chat with tool visibility. Includes a built-in SSH terminal for direct server access, file browser, and project management.
+Native iOS client for [claudecodeui](https://github.com/siteboon/claudecodeui), enabling Claude Code access from iPhone/iPad. The app connects to a backend server (typically running on a NAS via Tailscale) via WebSocket and provides real-time streaming chat with tool visibility. Includes a built-in SSH terminal, file browser, command library, and project management.
 
 ## Build & Run
 
@@ -22,45 +22,61 @@ xcodebuild test -project ClaudeCodeApp.xcodeproj -scheme ClaudeCodeApp -destinat
 ```
 ClaudeCodeApp/
 ├── ClaudeCodeAppApp.swift    # App entry, notification permissions, injects AppSettings
-├── AppSettings.swift         # @AppStorage for server URL, SSH, font size, mode
-├── Models.swift              # Project, ChatMessage, MessageStore, WS message types
-├── APIClient.swift           # HTTP client for project listing
+├── AppSettings.swift         # @AppStorage for server URL, SSH, font size, mode, thinking
+├── Models.swift              # Project, ChatMessage, MessageStore, BookmarkStore, enums
+├── APIClient.swift           # HTTP client for project listing (JWT auth)
 ├── WebSocketManager.swift    # WebSocket connection, message parsing, reconnection
 ├── SpeechManager.swift       # Voice input using iOS Speech framework
 ├── SSHManager.swift          # SSH connection handling via Citadel
+├── CommandStore.swift        # Saved commands with categories
+├── ClaudeHelper.swift        # AI suggestions via Haiku
 ├── Theme.swift               # CLI-inspired theme colors (light/dark aware)
 ├── Logger.swift              # Structured logging utility
 ├── AppError.swift            # Unified error handling
 ├── ImageUtilities.swift      # MIME type detection for images
 │
-├── ContentView.swift         # Project list, settings, new project actions
-├── ChatView.swift            # Message list, streaming, slash commands
+├── ContentView.swift         # Project list, settings, global search
+├── ChatView.swift            # Message list, streaming, slash commands, search
 ├── TerminalView.swift        # SSH terminal with CLI theme
 │
 └── Views/
-    ├── MarkdownText.swift        # Full markdown rendering component
-    ├── CLIInputView.swift        # Input field with send, voice, image, @ buttons
-    ├── CLIMessageView.swift      # Message bubble with role-based styling
+    ├── MarkdownText.swift        # Full markdown rendering with math
+    ├── CLIInputView.swift        # Multi-line input, [+] menu, voice, image
+    ├── CLIMessageView.swift      # Message bubble with context menu
+    ├── CLIStatusBarViews.swift   # Unified status bar components
+    ├── DiffView.swift            # Edit tool diff with line numbers
+    ├── TodoListView.swift        # TodoWrite checklist
+    ├── CodeBlockView.swift       # Code display with copy
+    ├── TruncatableText.swift     # Expandable truncated text
     ├── SessionPickerViews.swift  # Session list, rename, delete, export
-    ├── FilePickerSheet.swift     # File browser with breadcrumb navigation
+    ├── FilePickerSheet.swift     # File browser with AI suggestions
     ├── CloneProjectSheet.swift   # Clone from GitHub URL
-    └── NewProjectSheet.swift     # Create empty project
+    ├── NewProjectSheet.swift     # Create empty project
+    ├── CommandsView.swift        # Command library CRUD
+    ├── CommandPickerSheet.swift  # Quick command selection
+    ├── BookmarksView.swift       # Bookmarked messages
+    ├── GlobalSearchView.swift    # Cross-session search
+    ├── SearchFilterViews.swift   # Message filters
+    ├── SuggestionChipsView.swift # AI suggestion chips
+    └── QuickSettingsSheet.swift  # Fast settings access
 ```
 
 ### Data Flow
 
-1. **AppSettings** stores server URL, SSH credentials, font size, mode preferences
+1. **AppSettings** stores server URL, SSH credentials, font size, mode, thinking level
 2. **WebSocketManager** handles real-time communication with claudecodeui backend
 3. **ContentView** fetches projects via APIClient, manages project creation/deletion
 4. **ChatView** manages session state, streams responses via WebSocket callbacks
-5. **MessageStore** persists last 50 messages per project to Documents directory (file-based)
+5. **MessageStore** persists last 50 messages per project to Documents directory
 6. **SSHManager** provides SSH terminal, file listing, and remote command execution
-7. **SessionNamesStore** persists custom session names via UserDefaults
+7. **CommandStore** persists saved commands to Documents/commands.json
+8. **BookmarkStore** persists bookmarks to Documents/bookmarks.json
+9. **ClaudeHelper** generates AI suggestions via separate Haiku WebSocket
 
 ### WebSocket Communication
 
 The app uses WebSocket for real-time chat with the backend:
-- `WSClaudeCommand` - sent to server with message, cwd, sessionId, permissionMode
+- `WSClaudeCommand` - sent to server with message, cwd, sessionId, permissionMode, model
 - `WSMessage` - received from server with type (claude-response, claude-complete, etc.)
 - Auto-reconnection with exponential backoff (1s → 2s → 4s → 8s max + jitter)
 
@@ -68,17 +84,36 @@ The app uses WebSocket for real-time chat with the backend:
 
 ### Claude Code Chat
 - Real-time streaming responses via WebSocket
-- Tool use visualization (collapsible, Grep/Glob collapsed by default)
-- Diff viewer for Edit tool with red/green highlighting
+- Model selection (Opus/Sonnet/Haiku/Custom) in status bar
+- Thinking modes (5 levels: Normal → Ultrathink)
+- Tool use visualization (12+ tools with icons/colors)
+- Diff viewer for Edit tool with line numbers
 - Thinking/reasoning blocks (collapsible with purple styling)
-- TodoWrite visual checklist with status colors (pending/in_progress/completed)
+- TodoWrite visual checklist with status colors
 - AskUserQuestion interactive selection UI
-- Markdown rendering (tables, headers, code blocks, lists, math)
+- Full markdown rendering (tables, headers, code, math)
 - Copy-to-clipboard button on code blocks and messages
-- Long-press context menu with copy/share options
-- Message history persistence (50 messages per project, file-based)
+- Long-press context menu with copy/share/bookmark options
+- Message history persistence (50 messages per project)
 - Draft input auto-save
-- Local notifications on task completion (when backgrounded)
+- Local notifications on task completion
+
+### Model Selection
+| Model | Description |
+|-------|-------------|
+| Opus 4 | Most capable, complex reasoning |
+| Sonnet 4 | Balanced speed and quality |
+| Haiku 3.5 | Fastest, quick tasks |
+| Custom | Any model ID |
+
+### Thinking Modes
+| Mode | Trigger |
+|------|---------|
+| Normal | Standard responses |
+| Think | Appends "think" |
+| Think Hard | Appends "think hard" |
+| Think Harder | Appends "think harder" |
+| Ultrathink | Appends "ultrathink" |
 
 ### Slash Commands
 | Command | Description |
@@ -92,58 +127,85 @@ The app uses WebSocket for real-time chat with the backend:
 | `/exit` | Close chat and return to projects |
 | `/help` | Show command reference sheet |
 
+### Search & Bookmarks
+- Message search within current session
+- Filter chips (All/User/Assistant/Tools/Thinking)
+- Bookmark messages via context menu
+- Global search across all sessions via SSH
+- Bookmarks view with search and swipe-to-delete
+
+### Command Library
+- Save frequently-used prompts
+- Organize by categories (Git, Code Review, Testing, Docs)
+- Quick picker in [+] menu
+- Last-used tracking and sorting
+- CRUD management interface
+
+### AI Suggestions
+- Haiku-powered action chips after responses
+- Suggested files in file picker
+- Tappable chips auto-send prompts
+- 15-second timeout with fallback
+
 ### Project Management
 - Clone from GitHub URL with SSH-based git clone
 - Create new empty projects in ~/workspace/
-- Delete projects from list (removes Claude registration, keeps files)
-- Project registration via session files with `cwd` field
+- Delete projects from list (removes Claude registration)
+- Git status tracking with 10 states
+- Auto-pull for behind repositories
 
 ### Session Management
-- Full-screen session picker with summaries and timestamps
-- Rename sessions with custom names (persisted via SessionNamesStore)
-- Delete sessions with swipe-to-delete and confirmation
-- Export sessions as markdown with share sheet integration
-- Session rows show message count, last user message preview, relative time
+- Full-screen session picker with summaries
+- Rename sessions with custom names
+- Delete sessions with swipe-to-delete
+- Export sessions as markdown
+- Session rows show message count, preview, time
 
 ### File Browser & @ References
-- Browse project files via SSH with `ls -laF`
-- Breadcrumb navigation for directory traversal
+- Browse project files via SSH
+- Breadcrumb navigation
 - Search/filter files by name
-- @ button in input to insert file references into prompts
+- AI-suggested files based on context
+- @ button to insert file references
 
-### Voice Input
-- Microphone button for voice-to-text
-- Uses iOS Speech framework (SFSpeechRecognizer)
-- Real-time transcription with recording indicator
-- Appends transcribed text to input field
+### Input Methods
+- Multi-line text with word wrap
+- [+] menu for attachments
+- Voice input via Speech framework
+- Image attachments via PhotosPicker
+- Saved commands quick access
 
-### Image Attachments
-- PhotosPicker for image selection
-- Preview before sending with remove option
-- Images displayed inline in messages
+### iPad Experience
+- NavigationSplitView with sidebar
+- Keyboard shortcuts (Cmd+Return, Cmd+K, Cmd+N, etc.)
+- Split-view multitasking support
 
 ### SSH Terminal
 - Native SSH client via Citadel (pure Swift)
-- Special keys bar (Ctrl+C, Tab, arrows, etc.)
-- Password authentication
-- Credentials saved locally
+- Special keys bar (Ctrl+C, Tab, arrows)
+- Password and SSH key authentication
+- Ed25519, RSA, ECDSA key support
+- Keychain storage for keys
 - Auto-connect with saved credentials
 
 ### Settings
 - Server URL configuration
+- Username/password (JWT auth)
 - Font size (XS/S/M/L/XL)
 - Theme (System/Dark/Light)
-- SSH host/port/username/password
-- Claude mode selector (normal/plan/bypass permissions)
-- Skip permission prompts toggle
+- Default model selection
+- Permission mode (normal/plan/bypass)
+- Thinking mode (5 levels)
 - Show thinking blocks toggle
 - Auto-scroll toggle
 - Project sort order (name/date)
+- SSH credentials and key import
 
 ## Key Patterns
 
 - **@StateObject** for WebSocketManager, SpeechManager, SSHManager (owns instances)
 - **@EnvironmentObject** for AppSettings (shared across views)
+- **@ObservedObject** for CommandStore.shared, BookmarkStore.shared (singletons)
 - **WebSocket callbacks** for streaming events (onText, onToolUse, onComplete, etc.)
 - **MessageStore** for file-based persistence in Documents directory
 - **SessionNamesStore** for custom session name persistence via UserDefaults
@@ -174,7 +236,7 @@ SSH requires standard sshd running on the server.
 
 ### Authentication
 
-The claudecodeui backend (source at `~/dev/claudecodeui`) uses JWT tokens for the main API:
+The claudecodeui backend uses JWT tokens for the main API:
 
 ```
 POST /api/auth/login
@@ -194,7 +256,6 @@ Response: {"success": true, "token": "eyJ..."}
    - Created in Web UI: Settings > API Keys
    - Use `X-API-Key: ck_...` header
    - **Only works for `/api/agent/*` endpoints**
-   - Used for external integrations (n8n, etc.)
    - **NOT for iOS app - leave API Key field empty!**
 
 **iOS App Configuration:**
@@ -205,17 +266,16 @@ Response: {"success": true, "token": "eyJ..."}
 
 **Important CORS limitation:** The backend CORS config only allows `Content-Type` header, NOT `Authorization`. This means:
 - `/api/projects` works with `Authorization: Bearer <token>` header
-- `/api/projects/:project/histories/:sessionId` does NOT work with Bearer auth (returns HTML instead of JSON)
+- `/api/projects/:project/histories/:sessionId` does NOT work with Bearer auth
 
 ### Working Endpoints
 
 | Endpoint | Auth | Notes |
 |----------|------|-------|
 | `GET /api/projects` | Bearer token | Returns project list with sessions |
-| `POST /api/chat` | WebSocket | Real-time chat |
+| `WebSocket /ws` | Token param | Real-time chat |
 | `POST /api/abort/:requestId` | None needed | Abort current request |
 | `GET /api/projects/:project/histories` | **BROKEN** | CORS blocks Authorization |
-| `GET /api/projects/:project/histories/:sessionId` | **BROKEN** | CORS blocks Authorization |
 
 ### Session History Workaround
 
@@ -231,13 +291,6 @@ Since the history API endpoints don't accept Authorization headers, we load sess
 {"type":"assistant","message":{"content":[{"type":"text","text":"response"}]},"timestamp":"..."}
 {"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash","input":{...}}]},"timestamp":"..."}
 ```
-
-Key message types:
-- `type: "user"` with `content[0].text` = user message
-- `type: "user"` with `content[0].type: "tool_result"` = tool output (use `toolUseResult` field)
-- `type: "assistant"` with `content[0].text` = assistant response
-- `type: "assistant"` with `content[0].type: "tool_use"` = tool invocation
-- `type: "assistant"` with `content[0].type: "thinking"` = reasoning block
 
 The `SessionHistoryLoader` class in `Models.swift` handles parsing this format.
 
@@ -263,3 +316,12 @@ Run tests:
 ```bash
 xcodebuild test -project ClaudeCodeApp.xcodeproj -scheme ClaudeCodeApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:ClaudeCodeAppTests
 ```
+
+## Known Issues
+
+See ROADMAP.md Priority 1 for critical issues including:
+- WebSocket state race conditions
+- Missing @MainActor on APIClient, BookmarkStore
+- SpeechManager missing deinit
+- SSH password in UserDefaults (should use Keychain)
+- Command injection vulnerabilities in SSH commands

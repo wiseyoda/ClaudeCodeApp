@@ -197,7 +197,7 @@ To register a project (done automatically by the iOS app during clone/create):
 mkdir -p ~/.claude/projects/-home-dev-workspace-my-project
 
 # Create an init session file with cwd
-echo '{"type":"init","cwd":"/home/dev/workspace/my-project","timestamp":"2024-12-27T00:00:00.000Z"}' > ~/.claude/projects/-home-dev-workspace-my-project/init.jsonl
+echo '{"type":"init","cwd":"/home/dev/workspace/my-project","timestamp":"2025-12-27T00:00:00.000Z"}' > ~/.claude/projects/-home-dev-workspace-my-project/init.jsonl
 ```
 
 The `cwd` field in the session file is what determines the project path displayed in the app.

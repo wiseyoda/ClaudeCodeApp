@@ -4,21 +4,14 @@
 
 ---
 
-## 1. Contextual AI Copilot ✅ POC Implemented
+## Implemented Ideas
 
+### Contextual AI Copilot (POC)
 Smart suggestions that understand your project context.
 
-**Concept:**
-- Auto-suggest next prompts based on conversation flow
-- Detect patterns ("you often run tests after code changes")
-- Proactive suggestions: "Want me to run `pnpm test` now?"
-- Learn from your workflows across sessions
+**Status:** Implemented Dec 27, 2025
 
-**Why it's compelling:** No other mobile Claude client learns your habits.
-
-**Effort:** ~~High (requires ML/pattern detection, persistent learning)~~ **Turned out to be Low** - just ask Haiku!
-
-**POC Implementation (Dec 27, 2024):**
+**What's Working:**
 - `ClaudeHelper` service sends recent messages to Haiku
 - Returns JSON array of 3 suggested actions with labels, prompts, and icons
 - `SuggestionChipsView` displays tappable chips below input
@@ -31,9 +24,28 @@ Smart suggestions that understand your project context.
 - Project-specific suggestion tuning
 - Confidence scoring for suggestions
 
+### Smart Context Injection (Partial POC)
+Auto-attach relevant files to every message.
+
+**Status:** Partial implementation Dec 27, 2025
+
+**What's Working:**
+- `ClaudeHelper.suggestRelevantFiles()` analyzes conversation context
+- File picker shows "Suggested" section with AI-recommended files
+- Uses Haiku to match conversation topics to available files
+- Sparkle icon distinguishes AI suggestions from regular files
+
+**Remaining Work:**
+- Auto-attach without opening file picker
+- Pin files to always include
+- Token usage meter
+- Proactive suggestions in chat
+
 ---
 
-## 2. Voice-Driven Coding Mode
+## Priority Ideas
+
+### 1. Voice-Driven Coding Mode
 
 Hands-free coding for commuting/walking.
 
@@ -50,92 +62,7 @@ Hands-free coding for commuting/walking.
 
 ---
 
-## 3. Project Timeline / Activity Feed
-
-Visual history of everything that happened in a project.
-
-**Concept:**
-- Timeline showing: commits, sessions, tool executions, errors
-- "What happened yesterday?" at a glance
-- Searchable activity log across all sessions
-- Diff snapshots at key points
-- Filter by activity type (git, tools, errors)
-
-**Why it's compelling:** Context switching is hard. See exactly where you left off.
-
-**Effort:** Medium (aggregates existing data, new UI)
-
----
-
-## 4. Shareable Session Links
-
-Share Claude conversations with teammates.
-
-**Concept:**
-- Generate a link to a session (or session excerpt)
-- Optional: embed as code gist/GitHub discussion
-- Read-only viewer that renders tool outputs properly
-- "Here's how I fixed that bug" - sharable proof of work
-- QR code for quick sharing
-
-**Why it's compelling:** Team collaboration and knowledge sharing. Great for async teams.
-
-**Effort:** Medium (requires backend support or static export)
-
----
-
-## 5. Workflow Automation (Recipes)
-
-Multi-step automation chains.
-
-**Concept:**
-- "When I say 'deploy', run tests -> commit -> push -> create PR"
-- Visual recipe builder with drag-and-drop steps
-- Conditional logic: "If tests fail, stop and show me"
-- Scheduled recipes: "Every morning, show me failing tests"
-- Share recipes with team
-
-**Why it's compelling:** Goes beyond single commands to full automation.
-
-**Effort:** High (visual builder, scheduling, conditionals)
-
----
-
-## 6. Split View Code Editor
-
-View/edit files alongside chat.
-
-**Concept:**
-- Show file contents in split view while chatting
-- Tap code references in chat to open the file
-- Make quick edits without asking Claude
-- Real-time diff preview before Claude commits
-- Syntax highlighting with language detection
-
-**Why it's compelling:** iPad becomes a legitimate dev environment.
-
-**Effort:** High (requires code editor component, syntax highlighting)
-
----
-
-## 7. AI-Powered Code Search
-
-Natural language search across your entire codebase.
-
-**Concept:**
-- "Find where we handle authentication errors"
-- "Show functions that call the database"
-- Semantic search, not just grep
-- Cross-project search with project selection
-- Results ranked by relevance
-
-**Why it's compelling:** Natural language is more accessible than grep.
-
-**Effort:** High (requires embeddings, semantic search infrastructure)
-
----
-
-## 8. Approval Queue Widget
+### 2. Approval Queue Widget
 
 iOS Lock Screen widget for tool approvals.
 
@@ -152,36 +79,92 @@ iOS Lock Screen widget for tool approvals.
 
 ---
 
-## 9. Smart Context Injection 🚧 Partial POC
+### 3. Project Timeline / Activity Feed
 
-Auto-attach relevant files to every message.
+Visual history of everything that happened in a project.
 
 **Concept:**
-- Detect what files you're likely talking about
-- "Add error handling" auto-attaches the file you just mentioned
-- Pin files to always include in context
-- Show context usage meter (tokens used / 200K limit)
-- Suggest files based on conversation topic
+- Timeline showing: commits, sessions, tool executions, errors
+- "What happened yesterday?" at a glance
+- Searchable activity log across all sessions
+- Diff snapshots at key points
+- Filter by activity type (git, tools, errors)
 
-**Why it's compelling:** Removes friction of manually referencing files.
+**Why it's compelling:** Context switching is hard. See exactly where you left off.
 
-**Effort:** Medium (heuristics, file tracking, token counting)
-
-**POC Implementation (Dec 27, 2024):**
-- `ClaudeHelper.suggestRelevantFiles()` analyzes conversation context
-- File picker shows "Suggested" section with AI-recommended files
-- Uses Haiku to match conversation topics to available files
-- Sparkle icon distinguishes AI suggestions from regular files
-
-**Remaining Work:**
-- Auto-attach without opening file picker
-- Pin files to always include
-- Token usage meter
-- Proactive suggestions in chat
+**Effort:** Medium (aggregates existing data, new UI)
 
 ---
 
-## 10. Session Templates
+### 4. Shareable Session Links
+
+Share Claude conversations with teammates.
+
+**Concept:**
+- Generate a link to a session (or session excerpt)
+- Optional: embed as code gist/GitHub discussion
+- Read-only viewer that renders tool outputs properly
+- "Here's how I fixed that bug" - sharable proof of work
+- QR code for quick sharing
+
+**Why it's compelling:** Team collaboration and knowledge sharing. Great for async teams.
+
+**Effort:** Medium (requires backend support or static export)
+
+---
+
+### 5. Workflow Automation (Recipes)
+
+Multi-step automation chains.
+
+**Concept:**
+- "When I say 'deploy', run tests -> commit -> push -> create PR"
+- Visual recipe builder with drag-and-drop steps
+- Conditional logic: "If tests fail, stop and show me"
+- Scheduled recipes: "Every morning, show me failing tests"
+- Share recipes with team
+
+**Why it's compelling:** Goes beyond single commands to full automation.
+
+**Effort:** High (visual builder, scheduling, conditionals)
+
+---
+
+### 6. Split View Code Editor
+
+View/edit files alongside chat.
+
+**Concept:**
+- Show file contents in split view while chatting
+- Tap code references in chat to open the file
+- Make quick edits without asking Claude
+- Real-time diff preview before Claude commits
+- Syntax highlighting with language detection
+
+**Why it's compelling:** iPad becomes a legitimate dev environment.
+
+**Effort:** High (requires code editor component, syntax highlighting)
+
+---
+
+### 7. AI-Powered Code Search
+
+Natural language search across your entire codebase.
+
+**Concept:**
+- "Find where we handle authentication errors"
+- "Show functions that call the database"
+- Semantic search, not just grep
+- Cross-project search with project selection
+- Results ranked by relevance
+
+**Why it's compelling:** Natural language is more accessible than grep.
+
+**Effort:** High (requires embeddings, semantic search infrastructure)
+
+---
+
+### 8. Session Templates
 
 Preset conversation starters with system prompts.
 
@@ -203,9 +186,9 @@ Preset conversation starters with system prompts.
 ```
                     HIGH IMPACT
                          |
-    Contextual Copilot   |   Approval Widget
-    Workflow Automation  |   Voice Mode
-                         |   Smart Context
+    Workflow Automation  |   Approval Widget
+                         |   Voice Mode
+                         |
     ─────────────────────┼─────────────────────
     AI Code Search       |   Session Templates
     Split View Editor    |   Project Timeline
@@ -222,11 +205,11 @@ Preset conversation starters with system prompts.
 
 If exploring these ideas, consider this sequence:
 
-1. **Session Templates** - Low effort, builds on Command Library
+1. **Session Templates** - Low effort, builds on Command Library (which is now done)
 2. **Approval Queue Widget** - High visibility, solves real pain point
 3. **Voice-Driven Mode** - Unique differentiator, extends existing speech code
-4. **Smart Context Injection** - Quality of life improvement
-5. **Project Timeline** - Aggregates existing data in new way
+4. **Project Timeline** - Aggregates existing data in new way
+5. **Shareable Links** - Medium effort, high team value
 
 ---
 
@@ -234,16 +217,14 @@ If exploring these ideas, consider this sequence:
 
 | Feature | Requires |
 |---------|----------|
-| Contextual Copilot | Session history analysis, pattern detection |
 | Voice Mode | AVSpeechSynthesizer, background audio |
 | Project Timeline | Git log parsing, session aggregation |
 | Shareable Links | Backend support or static HTML export |
-| Workflow Automation | Command Library (Priority 2 in roadmap) |
+| Workflow Automation | Already has Command Library foundation |
 | Split View Editor | Syntax highlighting library |
 | AI Code Search | Embeddings API, vector search |
 | Approval Widget | WidgetKit, push notification infrastructure |
-| Smart Context | Token counting, file relevance scoring |
-| Session Templates | Command Library extension |
+| Session Templates | Already has Command Library foundation |
 
 ---
 
@@ -252,9 +233,10 @@ If exploring these ideas, consider this sequence:
 - These ideas emerged from a comprehensive code review of the current app
 - Many build on existing infrastructure (SSH, WebSocket, file browser)
 - Voice Mode and Approval Widget have highest unique value
-- Some features (AI Search, Copilot) may require backend changes
+- Some features (AI Search) may require backend changes
 - Consider user research before major investment
 
 ---
 
-*Created: December 27, 2024*
+*Created: December 27, 2025*
+*Updated: December 27, 2025*
