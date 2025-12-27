@@ -141,7 +141,7 @@ Since the history API endpoints don't accept Authorization headers, we load sess
 
 **Session files location:** `~/.claude/projects/{encoded-project-path}/{session-id}.jsonl`
 
-**Encoded project path format:** `/home/dev/workspace/MyProject` → `-home-dev-workspace-MyProject`
+**Encoded project path format:** `/home/dev/workspace/MyProject` → `-home-dev-workspace-MyProject` (note: STARTS with dash)
 
 **JSONL format:** Each line is a JSON object:
 ```json
