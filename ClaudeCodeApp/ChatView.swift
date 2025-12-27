@@ -400,49 +400,18 @@ struct ChatView: View {
         selectedImage = nil
         processingStartTime = Date()
 
-        // If we have an image, upload it via SFTP first
+        // If we have an image, send it with the message
         if let imageData = imageToSend {
-            isUploadingImage = true
-            Task {
-                do {
-                    let remotePath = try await uploadImageViaAPI(imageData)
-                    // Include the file path in the message for Claude to read
-                    let messageWithPath = text.isEmpty
-                        ? "Please look at this image: \(remotePath)"
-                        : "\(text)\n\n[Image uploaded to: \(remotePath)]"
-
-                    await MainActor.run {
-                        isUploadingImage = false
-                        wsManager.sendMessage(
-                            messageWithPath,
-                            projectPath: project.path,
-                            resumeSessionId: selectedSession?.id,
-                            permissionMode: settings.effectivePermissionMode
-                        )
-                    }
-                } catch {
-                    await MainActor.run {
-                        isUploadingImage = false
-                        // Show error but still send the text-only message
-                        let errorMsg = ChatMessage(
-                            role: .error,
-                            content: "Image upload failed: \(error.localizedDescription). Sending text only."
-                        )
-                        messages.append(errorMsg)
-
-                        if !text.isEmpty {
-                            wsManager.sendMessage(
-                                text,
-                                projectPath: project.path,
-                                resumeSessionId: selectedSession?.id,
-                                permissionMode: settings.effectivePermissionMode
-                            )
-                        }
-                    }
-                }
-            }
+            // Send message with image data directly via WebSocket
+            wsManager.sendMessage(
+                text.isEmpty ? "What is this image?" : text,
+                projectPath: project.path,
+                resumeSessionId: selectedSession?.id,
+                permissionMode: settings.effectivePermissionMode,
+                imageData: imageData
+            )
         } else {
-            // No image, send text directly
+            // No image - just send text
             wsManager.sendMessage(
                 text,
                 projectPath: project.path,
@@ -450,6 +419,9 @@ struct ChatView: View {
                 permissionMode: settings.effectivePermissionMode
             )
         }
+
+        // Persist messages
+        MessageStore.saveMessages(messages, for: project.path)
     }
 
     /// Load full session history via API
@@ -501,14 +473,6 @@ struct ChatView: View {
         }
     }
 
-    /// Upload image via API and return the remote file path
-    private func uploadImageViaAPI(_ imageData: Data) async throws -> String {
-        print("[ChatView] Uploading image via API for project: \(project.name)")
-        return try await apiClient.uploadImage(
-            projectName: project.name,
-            imageData: imageData
-        )
-    }
 }
 
 // MARK: - Session Picker

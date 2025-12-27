@@ -191,8 +191,8 @@ class APIClient: ObservableObject {
 
     // MARK: - Image Upload
 
-    /// Upload image via API (replaces SSH/SFTP upload)
-    func uploadImage(projectName: String, imageData: Data, filename: String = "image.png") async throws -> String {
+    /// Upload image via API and get back the processed image with base64 data
+    func uploadImage(projectName: String, imageData: Data, filename: String = "image.png") async throws -> UploadedImage {
         guard let baseURL = settings.baseURL else {
             throw APIError.invalidURL
         }
@@ -244,11 +244,11 @@ class APIClient: ObservableObject {
         }
 
         let uploadResponse = try JSONDecoder().decode(ImageUploadResponse.self, from: data)
-        guard let firstPath = uploadResponse.paths.first else {
+        guard let firstImage = uploadResponse.images.first else {
             throw APIError.serverError
         }
 
-        return firstPath
+        return firstImage
     }
 
     /// Detect MIME type from image data
@@ -444,8 +444,32 @@ struct SessionTokenUsage: Codable {
 }
 
 struct ImageUploadResponse: Codable {
-    let success: Bool
-    let paths: [String]
+    let images: [UploadedImage]
+}
+
+struct UploadedImage: Codable {
+    let name: String
+    let data: String  // "data:image/png;base64,..."
+    let size: Int
+    let mimeType: String
+
+    /// Extract just the base64 part (without data: prefix)
+    var base64Data: String {
+        if let range = data.range(of: "base64,") {
+            return String(data[range.upperBound...])
+        }
+        return data
+    }
+
+    /// Extract media type for WebSocket message
+    var mediaType: String {
+        // data:image/png;base64,... -> image/png
+        if let start = data.range(of: "data:"),
+           let end = data.range(of: ";base64") {
+            return String(data[start.upperBound..<end.lowerBound])
+        }
+        return mimeType
+    }
 }
 
 // MARK: - Types
