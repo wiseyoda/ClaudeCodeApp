@@ -203,3 +203,97 @@ enum CLITheme {
     static let monoSmall = Font.system(.caption, design: .monospaced)
     static let monoLarge = Font.system(.title3, design: .monospaced)
 }
+
+// MARK: - Connection Status Indicator
+
+/// A subtle colored dot indicating WebSocket connection state
+struct ConnectionStatusIndicator: View {
+    let state: ConnectionState
+    @Environment(\.colorScheme) var colorScheme
+
+    private let dotSize: CGFloat = 8
+
+    var body: some View {
+        HStack(spacing: 4) {
+            // Animated dot for connecting/reconnecting states
+            ZStack {
+                Circle()
+                    .fill(dotColor)
+                    .frame(width: dotSize, height: dotSize)
+
+                // Pulsing animation for connecting states
+                if state.isConnecting {
+                    Circle()
+                        .stroke(dotColor.opacity(0.5), lineWidth: 2)
+                        .frame(width: dotSize + 4, height: dotSize + 4)
+                        .modifier(PulseAnimation())
+                }
+            }
+            .frame(width: dotSize + 6, height: dotSize + 6)
+
+            // Show text only when not connected
+            if !state.isConnected {
+                Text(state.displayText)
+                    .font(.system(size: 10))
+                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(state.accessibilityLabel)
+    }
+
+    private var dotColor: Color {
+        switch state {
+        case .connected:
+            return CLITheme.green(for: colorScheme)
+        case .connecting, .reconnecting:
+            return CLITheme.yellow(for: colorScheme)
+        case .disconnected:
+            return CLITheme.red(for: colorScheme)
+        }
+    }
+}
+
+/// Pulsing animation modifier for connection indicator
+private struct PulseAnimation: ViewModifier {
+    @State private var isAnimating = false
+
+    func body(content: Content) -> some View {
+        content
+            .scaleEffect(isAnimating ? 1.5 : 1.0)
+            .opacity(isAnimating ? 0 : 0.7)
+            .animation(
+                .easeOut(duration: 1.0)
+                .repeatForever(autoreverses: false),
+                value: isAnimating
+            )
+            .onAppear {
+                isAnimating = true
+            }
+    }
+}
+
+// MARK: - Connection Status Preview
+
+#Preview("Connection States") {
+    VStack(spacing: 20) {
+        HStack {
+            Text("Connected:")
+            ConnectionStatusIndicator(state: .connected)
+        }
+        HStack {
+            Text("Connecting:")
+            ConnectionStatusIndicator(state: .connecting)
+        }
+        HStack {
+            Text("Reconnecting:")
+            ConnectionStatusIndicator(state: .reconnecting(attempt: 2))
+        }
+        HStack {
+            Text("Disconnected:")
+            ConnectionStatusIndicator(state: .disconnected)
+        }
+    }
+    .padding()
+    .preferredColorScheme(.dark)
+}

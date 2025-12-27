@@ -62,6 +62,10 @@ struct ChatView: View {
         .toolbarBackground(CLITheme.secondaryBackground(for: colorScheme), for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                // Connection status indicator
+                ConnectionStatusIndicator(state: wsManager.connectionState)
+            }
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack(spacing: 12) {
                     // Model selector pill
@@ -211,6 +215,60 @@ struct ChatView: View {
                 localSessions = project.sessions
             }
         }
+        // MARK: - Keyboard Shortcuts (iPad)
+        .background {
+            keyboardShortcutButtons
+        }
+    }
+
+    // MARK: - Keyboard Shortcut Buttons
+
+    /// Hidden buttons that respond to keyboard shortcuts on iPad
+    @ViewBuilder
+    private var keyboardShortcutButtons: some View {
+        // Cmd+Return: Send message
+        Button("") {
+            sendMessage()
+        }
+        .keyboardShortcut(.return, modifiers: .command)
+        .hidden()
+
+        // Cmd+K: Clear conversation
+        Button("") {
+            handleClearCommand()
+        }
+        .keyboardShortcut("k", modifiers: .command)
+        .hidden()
+
+        // Cmd+N: New session
+        Button("") {
+            handleNewSessionCommand()
+        }
+        .keyboardShortcut("n", modifiers: .command)
+        .hidden()
+
+        // Cmd+.: Abort current request
+        Button("") {
+            if wsManager.isProcessing {
+                wsManager.abortSession()
+            }
+        }
+        .keyboardShortcut(".", modifiers: .command)
+        .hidden()
+
+        // Cmd+/: Show help
+        Button("") {
+            showingHelpSheet = true
+        }
+        .keyboardShortcut("/", modifiers: .command)
+        .hidden()
+
+        // Cmd+R: Resume session picker
+        Button("") {
+            showingSessionPicker = true
+        }
+        .keyboardShortcut("r", modifiers: .command)
+        .hidden()
     }
 
     /// Sheet view for AskUserQuestion - extracted to help Swift compiler
@@ -1146,7 +1204,25 @@ struct SlashCommandHelpSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("Available Commands")
+                    // Keyboard Shortcuts section
+                    Text("Keyboard Shortcuts")
+                        .font(.headline)
+                        .foregroundColor(CLITheme.primaryText(for: colorScheme))
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        KeyboardShortcutRow(shortcut: "⌘ Return", description: "Send message")
+                        KeyboardShortcutRow(shortcut: "⌘ K", description: "Clear conversation")
+                        KeyboardShortcutRow(shortcut: "⌘ N", description: "New session")
+                        KeyboardShortcutRow(shortcut: "⌘ .", description: "Abort current request")
+                        KeyboardShortcutRow(shortcut: "⌘ /", description: "Show this help")
+                        KeyboardShortcutRow(shortcut: "⌘ R", description: "Resume session picker")
+                    }
+
+                    Divider()
+                        .padding(.vertical, 8)
+
+                    // Slash Commands section
+                    Text("Slash Commands")
                         .font(.headline)
                         .foregroundColor(CLITheme.primaryText(for: colorScheme))
 
@@ -1175,16 +1251,42 @@ struct SlashCommandHelpSheet: View {
                 .padding()
             }
             .background(CLITheme.background(for: colorScheme))
-            .navigationTitle("Commands")
+            .navigationTitle("Help")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Done") {
                         dismiss()
                     }
+                    .keyboardShortcut(.escape)
                 }
             }
         }
+    }
+}
+
+struct KeyboardShortcutRow: View {
+    let shortcut: String
+    let description: String
+    @Environment(\.colorScheme) var colorScheme
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            Text(shortcut)
+                .font(.system(.body, design: .monospaced))
+                .foregroundColor(CLITheme.yellow(for: colorScheme))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(CLITheme.secondaryBackground(for: colorScheme))
+                .cornerRadius(6)
+
+            Text(description)
+                .font(.subheadline)
+                .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+
+            Spacer()
+        }
+        .padding(.vertical, 2)
     }
 }
 

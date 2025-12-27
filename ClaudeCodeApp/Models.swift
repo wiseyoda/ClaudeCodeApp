@@ -191,7 +191,7 @@ enum GitStatus: Equatable {
 
 // MARK: - Project Models (new claudecodeui API)
 
-struct Project: Codable, Identifiable {
+struct Project: Codable, Identifiable, Hashable {
     let name: String
     let path: String
     let displayName: String?
@@ -199,6 +199,15 @@ struct Project: Codable, Identifiable {
     let sessions: [ProjectSession]?
 
     var id: String { path }
+
+    // Hashable conformance based on unique path
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(path)
+    }
+
+    static func == (lhs: Project, rhs: Project) -> Bool {
+        lhs.path == rhs.path
+    }
 
     // For display, prefer displayName, then name cleaned up
     var title: String {

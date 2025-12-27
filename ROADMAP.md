@@ -26,41 +26,23 @@
 | **M4: Session Management** | Session picker, rename, delete, export as markdown | Dec 27 |
 | **M6: Tool Visualization** | Tool colors/icons, rich headers, truncation, enhanced diff | Dec 27 |
 | **Model Selection** | Opus/Sonnet/Haiku picker, per-session model switching | Dec 27 |
+| **P1: Connection Health** | Connection status indicator, pull-to-refresh, message queuing | Dec 27 |
+| **P1: iPad Experience** | NavigationSplitView, keyboard shortcuts, sidebar, split view | Dec 27 |
 
 ---
 
-## Priority 1: Foundation & Reliability 📋
-
-These improvements affect the core experience and should be addressed first.
-
-### Connection Health & Recovery
-
-| Feature | Description | Effort |
-|---------|-------------|--------|
-| **Connection Status Indicator** | Persistent subtle indicator showing WebSocket health (connected/reconnecting/offline) | Low |
-| **Request Queuing** | Queue messages during disconnect, replay on reconnect | Medium |
-| **Pull-to-Refresh** | Refresh project list and reconnect WebSocket with pull gesture | Low |
-
-**Implementation Notes:**
-- Add `ConnectionState` enum: `.connected`, `.connecting`, `.reconnecting`, `.disconnected`
-- Show colored dot in nav bar (green/yellow/red)
-- Store pending messages in array, flush on reconnect
-- Standard `refreshable` modifier for project list
-
----
-
-## Priority 2: iPad Experience 📋
+## ~~Priority 1: iPad Experience~~ ✅ Complete
 
 First-class iPad support with keyboard and sidebar navigation.
 
 ### Features
 
-| Feature | Description | Effort |
+| Feature | Description | Status |
 |---------|-------------|--------|
-| **Sidebar Navigation** | Projects list always visible in landscape | Medium |
-| **NavigationSplitView** | Proper iPad navigation pattern | Medium |
-| **Keyboard Shortcuts** | Cmd+Return send, Cmd+K clear, Cmd+. abort | Low |
-| **Split View Support** | Multitasking alongside Safari, Notes | Low |
+| **Keyboard Shortcuts** | Cmd+Return send, Cmd+K clear, Cmd+. abort, Cmd+/ help, Cmd+R resume, Esc dismiss | ✅ Done |
+| **Sidebar Navigation** | Projects list always visible in landscape | ✅ Done |
+| **NavigationSplitView** | Proper iPad navigation pattern | ✅ Done |
+| **Split View Support** | Multitasking alongside Safari, Notes | ✅ Done |
 
 ### Keyboard Shortcuts
 
@@ -75,7 +57,7 @@ First-class iPad support with keyboard and sidebar navigation.
 
 ---
 
-## Priority 3: Search & Discovery 📋
+## Priority 2: Search & Discovery 📋
 
 Find and organize important content.
 
@@ -91,7 +73,7 @@ Find and organize important content.
 
 ---
 
-## Priority 4: Code Quality 💡
+## Priority 3: Code Quality 💡
 
 Developer experience and code health improvements.
 
@@ -105,7 +87,7 @@ Developer experience and code health improvements.
 
 ---
 
-## Priority 5: Power User Features 💡
+## Priority 4: Power User Features 💡
 
 Advanced features for power users.
 
@@ -145,7 +127,7 @@ Advanced features for power users.
 
 ---
 
-## Priority 6: Platform Integration 💡
+## Priority 5: Platform Integration 💡
 
 iOS platform features that enhance the experience.
 
@@ -200,14 +182,12 @@ These have been considered but are not on the roadmap:
 ## Implementation Order
 
 ```
-1. Connection Status + Pull-to-Refresh  [Low effort, high impact]
-2. Request Queuing                      [Medium effort, reliability]
-3. iPad Keyboard Shortcuts              [Low effort, iPad users]
-4. iPad Sidebar Navigation              [Medium effort, iPad UX]
-5. Message Search (current session)     [Medium effort, productivity]
-6. Bookmark Messages                    [Low effort, organization]
-7. Syntax Highlighting                  [High effort, polish]
-8. Multiple Servers                     [Medium effort, power users]
+1. iPad Keyboard Shortcuts              [Low effort, iPad users] ✅ Done
+2. iPad Sidebar Navigation              [Medium effort, iPad UX] ✅ Done
+3. Message Search (current session)     [Medium effort, productivity] ✅ Next
+4. Bookmark Messages                    [Low effort, organization]
+5. Syntax Highlighting                  [High effort, polish]
+6. Multiple Servers                     [Medium effort, power users]
 ```
 
 ---
@@ -272,6 +252,34 @@ These have been considered but are not on the roadmap:
 - Model selector pill in nav bar
 - Model passed via WebSocket options
 - Default model in settings
+
+### P1: Connection Health
+- ConnectionState enum (.connected/.connecting/.reconnecting/.disconnected)
+- ConnectionStatusIndicator view with animated pulsing dot
+- Color-coded status (green=connected, yellow=connecting, red=disconnected)
+- Pull-to-refresh on project list with .refreshable modifier
+- Message queuing with retry logic (already existed, now visible)
+
+### iPad Keyboard Shortcuts
+- Cmd+Return: Send message
+- Cmd+K: Clear conversation
+- Cmd+N: New session
+- Cmd+.: Abort current request
+- Cmd+/: Show help
+- Cmd+R: Resume session picker
+- Esc: Dismiss sheets (via Done button)
+- Updated SlashCommandHelpSheet with keyboard shortcuts section
+- KeyboardShortcutRow component with styled key badges
+
+### iPad Sidebar Navigation
+- NavigationSplitView for iPad with sidebar + detail layout
+- Project list as sidebar with selection state
+- ProjectRow with isSelected visual indicator (● vs >)
+- noProjectSelectedView placeholder when no project selected
+- Project struct conforms to Hashable for List selection
+- Balanced navigation split view style
+- Works on iPhone (collapses to stack) and iPad (shows sidebar)
+- Split view multitasking support enabled
 
 </details>
 

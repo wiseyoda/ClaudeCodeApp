@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.horizontalSizeClass) var horizontalSizeClass
     @StateObject private var apiClient = APIClient()
     @State private var projects: [Project] = []
     @State private var isLoading = true
@@ -19,140 +20,183 @@ struct ContentView: View {
     @State private var gitStatuses: [String: GitStatus] = [:]
     @State private var isCheckingGitStatus = false
 
+    // Selected project for NavigationSplitView
+    @State private var selectedProject: Project?
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+
     var body: some View {
-        NavigationStack {
-            Group {
-                if isLoading {
-                    loadingView
-                } else if let error = errorMessage {
-                    errorView(error)
-                } else {
-                    projectListView
-                }
-            }
-            .background(CLITheme.background(for: colorScheme))
-            .navigationTitle("Claude Code")
-            .toolbarBackground(CLITheme.secondaryBackground(for: colorScheme), for: .navigationBar)
-            .toolbarBackground(.visible, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack(spacing: 16) {
-                        Button {
-                            showNewProjectOptions = true
-                        } label: {
-                            Image(systemName: "plus")
-                                .foregroundColor(CLITheme.green(for: colorScheme))
-                        }
-                        .accessibilityLabel("New project")
-                        .accessibilityHint("Create or clone a project")
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            // Sidebar: Project list
+            sidebarContent
+                .navigationTitle("Claude Code")
+                .toolbarBackground(CLITheme.secondaryBackground(for: colorScheme), for: .navigationBar)
+                .toolbarBackground(.visible, for: .navigationBar)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        HStack(spacing: 16) {
+                            Button {
+                                showNewProjectOptions = true
+                            } label: {
+                                Image(systemName: "plus")
+                                    .foregroundColor(CLITheme.green(for: colorScheme))
+                            }
+                            .accessibilityLabel("New project")
+                            .accessibilityHint("Create or clone a project")
 
-                        Button {
-                            showTerminal = true
-                        } label: {
-                            Image(systemName: "terminal")
-                                .foregroundColor(CLITheme.cyan(for: colorScheme))
-                        }
-                        .accessibilityLabel("SSH Terminal")
-                        .accessibilityHint("Open SSH terminal to connect to server")
+                            Button {
+                                showTerminal = true
+                            } label: {
+                                Image(systemName: "terminal")
+                                    .foregroundColor(CLITheme.cyan(for: colorScheme))
+                            }
+                            .accessibilityLabel("SSH Terminal")
+                            .accessibilityHint("Open SSH terminal to connect to server")
 
+                            Button {
+                                showSettings = true
+                            } label: {
+                                Image(systemName: "gear")
+                                    .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+                            }
+                            .accessibilityLabel("Settings")
+                            .accessibilityHint("Open app settings")
+                        }
+                    }
+                    ToolbarItem(placement: .navigationBarLeading) {
                         Button {
-                            showSettings = true
+                            Task {
+                                await loadProjects()
+                                if !projects.isEmpty {
+                                    await checkAllGitStatuses()
+                                }
+                            }
                         } label: {
-                            Image(systemName: "gear")
+                            Image(systemName: "arrow.clockwise")
                                 .foregroundColor(CLITheme.secondaryText(for: colorScheme))
                         }
-                        .accessibilityLabel("Settings")
-                        .accessibilityHint("Open app settings")
+                        .accessibilityLabel("Refresh projects")
+                        .accessibilityHint("Reload project list and git statuses")
                     }
                 }
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button {
-                        Task {
-                            await loadProjects()
-                            // Also refresh git statuses
-                            if !projects.isEmpty {
-                                await checkAllGitStatuses()
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "arrow.clockwise")
-                            .foregroundColor(CLITheme.secondaryText(for: colorScheme))
-                    }
-                    .accessibilityLabel("Refresh projects")
-                    .accessibilityHint("Reload project list and git statuses")
-                }
+        } detail: {
+            // Detail: Chat view or placeholder
+            if let project = selectedProject {
+                ChatView(
+                    project: project,
+                    apiClient: apiClient,
+                    initialGitStatus: gitStatuses[project.path] ?? .unknown
+                )
+            } else {
+                noProjectSelectedView
             }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
+        }
+        .navigationSplitViewStyle(.balanced)
+        .sheet(isPresented: $showSettings) {
+            SettingsView()
+        }
+        .sheet(isPresented: $showCloneProject) {
+            CloneProjectSheet {
+                Task { await loadProjects() }
             }
-            .sheet(isPresented: $showCloneProject) {
-                CloneProjectSheet {
-                    Task { await loadProjects() }
-                }
+        }
+        .sheet(isPresented: $showNewProject) {
+            NewProjectSheet {
+                Task { await loadProjects() }
             }
-            .sheet(isPresented: $showNewProject) {
-                NewProjectSheet {
-                    Task { await loadProjects() }
-                }
+        }
+        .confirmationDialog("New Project", isPresented: $showNewProjectOptions, titleVisibility: .visible) {
+            Button("Create Empty Project") {
+                showNewProject = true
             }
-            .confirmationDialog("New Project", isPresented: $showNewProjectOptions, titleVisibility: .visible) {
-                Button("Create Empty Project") {
-                    showNewProject = true
-                }
-                Button("Clone from GitHub") {
-                    showCloneProject = true
-                }
-                Button("Cancel", role: .cancel) {}
+            Button("Clone from GitHub") {
+                showCloneProject = true
             }
-            .alert("Delete Project?", isPresented: .init(
-                get: { projectToDelete != nil },
-                set: { if !$0 { projectToDelete = nil } }
-            )) {
-                Button("Cancel", role: .cancel) {
-                    projectToDelete = nil
-                }
-                Button("Delete", role: .destructive) {
-                    if let project = projectToDelete {
-                        Task { await deleteProject(project) }
-                    }
-                }
-            } message: {
+            Button("Cancel", role: .cancel) {}
+        }
+        .alert("Delete Project?", isPresented: .init(
+            get: { projectToDelete != nil },
+            set: { if !$0 { projectToDelete = nil } }
+        )) {
+            Button("Cancel", role: .cancel) {
+                projectToDelete = nil
+            }
+            Button("Delete", role: .destructive) {
                 if let project = projectToDelete {
-                    Text("This will remove \"\(project.title)\" from your project list. The files will remain on the server.")
+                    Task { await deleteProject(project) }
                 }
             }
-            .fullScreenCover(isPresented: $showTerminal) {
-                NavigationStack {
-                    TerminalView()
-                        .toolbar {
-                            ToolbarItem(placement: .navigationBarLeading) {
-                                Button {
-                                    showTerminal = false
-                                } label: {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "chevron.left")
-                                        Text("Projects")
-                                    }
-                                    .foregroundColor(CLITheme.cyan(for: colorScheme))
+        } message: {
+            if let project = projectToDelete {
+                Text("This will remove \"\(project.title)\" from your project list. The files will remain on the server.")
+            }
+        }
+        .fullScreenCover(isPresented: $showTerminal) {
+            NavigationStack {
+                TerminalView()
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button {
+                                showTerminal = false
+                            } label: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "chevron.left")
+                                    Text("Projects")
                                 }
-                                .accessibilityLabel("Close terminal")
-                                .accessibilityHint("Return to project list")
+                                .foregroundColor(CLITheme.cyan(for: colorScheme))
                             }
+                            .accessibilityLabel("Close terminal")
+                            .accessibilityHint("Return to project list")
                         }
-                }
+                    }
             }
         }
         .onAppear {
-            // Configure APIClient with the EnvironmentObject settings
             apiClient.configure(with: settings)
         }
         .task {
             await loadProjects()
-            // Check git status in background after projects load
             if !projects.isEmpty {
                 await checkAllGitStatuses()
             }
         }
+    }
+
+    // MARK: - Sidebar Content
+
+    @ViewBuilder
+    private var sidebarContent: some View {
+        Group {
+            if isLoading {
+                loadingView
+            } else if let error = errorMessage {
+                errorView(error)
+            } else {
+                projectListView
+            }
+        }
+        .background(CLITheme.background(for: colorScheme))
+    }
+
+    // MARK: - No Project Selected Placeholder
+
+    private var noProjectSelectedView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "folder.badge.questionmark")
+                .font(.system(size: 48))
+                .foregroundColor(CLITheme.mutedText(for: colorScheme))
+
+            Text("Select a Project")
+                .font(CLITheme.monoFont)
+                .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+
+            Text("Choose a project from the sidebar to start a conversation")
+                .font(CLITheme.monoSmall)
+                .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(CLITheme.background(for: colorScheme))
     }
 
     private var loadingView: some View {
@@ -220,60 +264,60 @@ struct ContentView: View {
     }
 
     private var projectListView: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
-                if projects.isEmpty {
-                    VStack(spacing: 8) {
-                        Text("No projects found")
-                            .font(CLITheme.monoFont)
-                            .foregroundColor(CLITheme.secondaryText(for: colorScheme))
-                        Text("Open a project in Claude Code to see it here")
-                            .font(CLITheme.monoSmall)
-                            .foregroundColor(CLITheme.mutedText(for: colorScheme))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 40)
-                } else {
-                    ForEach(sortedProjects) { project in
-                        NavigationLink {
-                            ChatView(
-                                project: project,
-                                apiClient: apiClient,
-                                initialGitStatus: gitStatuses[project.path] ?? .unknown
-                            )
-                        } label: {
-                            ProjectRow(
-                                project: project,
-                                gitStatus: gitStatuses[project.path] ?? .unknown
-                            )
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button(role: .destructive) {
-                                projectToDelete = project
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        }
-                        .contextMenu {
-                            Button {
-                                Task { await refreshGitStatus(for: project) }
-                            } label: {
-                                Label("Refresh Git Status", systemImage: "arrow.triangle.2.circlepath")
-                            }
-
-                            Button(role: .destructive) {
-                                projectToDelete = project
-                            } label: {
-                                Label("Delete Project", systemImage: "trash")
-                            }
-                        }
-                    }
+        List(sortedProjects, selection: $selectedProject) { project in
+            ProjectRow(
+                project: project,
+                gitStatus: gitStatuses[project.path] ?? .unknown,
+                isSelected: selectedProject?.id == project.id
+            )
+            .listRowBackground(
+                selectedProject?.id == project.id
+                    ? CLITheme.blue(for: colorScheme).opacity(0.2)
+                    : CLITheme.background(for: colorScheme)
+            )
+            .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                Button(role: .destructive) {
+                    projectToDelete = project
+                } label: {
+                    Label("Delete", systemImage: "trash")
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .contextMenu {
+                Button {
+                    Task { await refreshGitStatus(for: project) }
+                } label: {
+                    Label("Refresh Git Status", systemImage: "arrow.triangle.2.circlepath")
+                }
+
+                Button(role: .destructive) {
+                    projectToDelete = project
+                } label: {
+                    Label("Delete Project", systemImage: "trash")
+                }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .refreshable {
+            await loadProjects()
+            if !projects.isEmpty {
+                await checkAllGitStatuses()
+            }
         }
         .background(CLITheme.background(for: colorScheme))
+        .overlay {
+            if projects.isEmpty {
+                VStack(spacing: 8) {
+                    Text("No projects found")
+                        .font(CLITheme.monoFont)
+                        .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+                    Text("Open a project in Claude Code to see it here")
+                        .font(CLITheme.monoSmall)
+                        .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                }
+            }
+        }
     }
 
     private func loadProjects() async {
@@ -360,13 +404,14 @@ struct ContentView: View {
 struct ProjectRow: View {
     let project: Project
     let gitStatus: GitStatus
+    var isSelected: Bool = false
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
         HStack(spacing: 8) {
-            Text(">")
+            Text(isSelected ? "●" : ">")
                 .font(CLITheme.monoFont)
-                .foregroundColor(CLITheme.green(for: colorScheme))
+                .foregroundColor(isSelected ? CLITheme.blue(for: colorScheme) : CLITheme.green(for: colorScheme))
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {

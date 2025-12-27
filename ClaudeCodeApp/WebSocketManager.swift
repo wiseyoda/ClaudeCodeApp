@@ -1,12 +1,66 @@
 import Foundation
 import UserNotifications
 
+// MARK: - Connection State
+
+/// Represents the current state of the WebSocket connection
+enum ConnectionState: Equatable {
+    case disconnected       // Not connected, not attempting to connect
+    case connecting         // Initial connection attempt
+    case connected          // WebSocket is connected and healthy
+    case reconnecting(attempt: Int)  // Lost connection, attempting to reconnect
+
+    var isConnected: Bool {
+        if case .connected = self { return true }
+        return false
+    }
+
+    var isConnecting: Bool {
+        switch self {
+        case .connecting, .reconnecting: return true
+        default: return false
+        }
+    }
+
+    var displayText: String {
+        switch self {
+        case .disconnected: return "Disconnected"
+        case .connecting: return "Connecting..."
+        case .connected: return "Connected"
+        case .reconnecting(let attempt): return "Reconnecting (\(attempt))..."
+        }
+    }
+
+    var accessibilityLabel: String {
+        switch self {
+        case .disconnected: return "Server disconnected"
+        case .connecting: return "Connecting to server"
+        case .connected: return "Connected to server"
+        case .reconnecting(let attempt): return "Reconnecting to server, attempt \(attempt)"
+        }
+    }
+}
+
 @MainActor
 class WebSocketManager: ObservableObject {
     private var webSocket: URLSessionWebSocketTask?
     private var settings: AppSettings
 
-    @Published var isConnected = false
+    /// Current connection state - use this instead of isConnected
+    @Published var connectionState: ConnectionState = .disconnected
+
+    /// Legacy property for backward compatibility
+    var isConnected: Bool {
+        get { connectionState.isConnected }
+        set {
+            if newValue && !connectionState.isConnected {
+                connectionState = .connected
+            } else if !newValue && connectionState.isConnected {
+                connectionState = .disconnected
+            }
+        }
+    }
+
     @Published var isProcessing = false
     @Published var currentText = ""
     @Published var lastError: String?
@@ -142,6 +196,7 @@ class WebSocketManager: ObservableObject {
     func connect() {
         guard let url = settings.webSocketURL else {
             lastError = "Invalid WebSocket URL"
+            connectionState = .disconnected
             return
         }
 
@@ -153,13 +208,19 @@ class WebSocketManager: ObservableObject {
         // Clean up existing connection if any
         webSocket?.cancel(with: .goingAway, reason: nil)
 
-        log.info("Connecting to: \(url)")
+        // Set connecting state (preserve reconnect attempt for UI if reconnecting)
+        if case .reconnecting(let attempt) = connectionState {
+            log.info("Reconnecting to: \(url) (attempt \(attempt))")
+        } else {
+            connectionState = .connecting
+            log.info("Connecting to: \(url)")
+        }
 
         let session = URLSession(configuration: .default)
         webSocket = session.webSocketTask(with: url)
         webSocket?.resume()
 
-        isConnected = true
+        connectionState = .connected
         lastError = nil
 
         // Reset reconnection counter on successful connect
@@ -178,7 +239,7 @@ class WebSocketManager: ObservableObject {
 
         webSocket?.cancel(with: .goingAway, reason: nil)
         webSocket = nil
-        isConnected = false
+        connectionState = .disconnected
         isProcessing = false
     }
 
@@ -190,15 +251,18 @@ class WebSocketManager: ObservableObject {
         }
 
         isReconnecting = true
+        reconnectAttempt += 1
+
+        // Update connection state to show reconnecting with attempt number
+        connectionState = .reconnecting(attempt: reconnectAttempt)
 
         // Calculate delay with exponential backoff: 1s, 2s, 4s, 8s max
         let baseDelay: Double = 1.0
-        let delay = baseDelay * pow(2.0, Double(min(reconnectAttempt, maxReconnectAttempt - 1)))
+        let delay = baseDelay * pow(2.0, Double(min(reconnectAttempt - 1, maxReconnectAttempt - 1)))
         // Add jitter (0-500ms) to prevent thundering herd
         let jitter = Double.random(in: 0...0.5)
         let totalDelay = delay + jitter
 
-        reconnectAttempt += 1
         log.info("Scheduling reconnect attempt \(reconnectAttempt) in \(String(format: "%.1f", totalDelay))s")
 
         reconnectTask = Task { [weak self] in
@@ -209,7 +273,7 @@ class WebSocketManager: ObservableObject {
             await MainActor.run {
                 guard let self = self else { return }
                 self.isReconnecting = false
-                if !self.isConnected {
+                if !self.connectionState.isConnected {
                     self.connect()
                 }
             }
@@ -231,7 +295,7 @@ class WebSocketManager: ObservableObject {
     }
 
     private func sendPendingMessage() {
-        guard var pending = pendingMessage else { return }
+        guard let pending = pendingMessage else { return }
 
         guard isConnected else {
             connect()
