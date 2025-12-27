@@ -1,4 +1,193 @@
 import Foundation
+import SwiftUI
+
+// MARK: - Claude Model Selection
+
+/// Available Claude models for the app
+enum ClaudeModel: String, CaseIterable, Identifiable, Codable {
+    case opus = "opus"
+    case sonnet = "sonnet"
+    case haiku = "haiku"
+    case custom = "custom"
+
+    var id: String { rawValue }
+
+    /// Display name shown in UI
+    var displayName: String {
+        switch self {
+        case .opus: return "Opus 4.5"
+        case .sonnet: return "Sonnet 4.5"
+        case .haiku: return "Haiku 4.5"
+        case .custom: return "Custom"
+        }
+    }
+
+    /// Short label for nav bar pill
+    var shortName: String {
+        switch self {
+        case .opus: return "Opus"
+        case .sonnet: return "Sonnet"
+        case .haiku: return "Haiku"
+        case .custom: return "Custom"
+        }
+    }
+
+    /// Description of the model's characteristics
+    var description: String {
+        switch self {
+        case .opus: return "Most capable for complex work"
+        case .sonnet: return "Best for everyday tasks"
+        case .haiku: return "Fastest for quick answers"
+        case .custom: return "Custom model ID"
+        }
+    }
+
+    /// Icon for the model
+    var icon: String {
+        switch self {
+        case .opus: return "brain.head.profile"
+        case .sonnet: return "sparkles"
+        case .haiku: return "bolt.fill"
+        case .custom: return "gearshape"
+        }
+    }
+
+    /// Color for the model indicator
+    func color(for scheme: ColorScheme) -> Color {
+        switch self {
+        case .opus:
+            return scheme == .dark
+                ? Color(red: 0.7, green: 0.5, blue: 0.9)  // Purple
+                : Color(red: 0.5, green: 0.3, blue: 0.7)
+        case .sonnet:
+            return scheme == .dark
+                ? Color(red: 0.4, green: 0.8, blue: 0.9)  // Cyan
+                : Color(red: 0.0, green: 0.55, blue: 0.7)
+        case .haiku:
+            return scheme == .dark
+                ? Color(red: 0.9, green: 0.8, blue: 0.4)  // Yellow
+                : Color(red: 0.7, green: 0.55, blue: 0.0)
+        case .custom:
+            return scheme == .dark
+                ? Color(white: 0.6)
+                : Color(white: 0.4)
+        }
+    }
+
+    /// The alias to send to /model command (nil for custom, which requires full model ID)
+    var modelAlias: String? {
+        switch self {
+        case .opus: return "opus"
+        case .sonnet: return "sonnet"
+        case .haiku: return "haiku"
+        case .custom: return nil
+        }
+    }
+}
+
+// MARK: - Git Status
+
+/// Represents the git sync status of a project
+enum GitStatus: Equatable {
+    case unknown        // Status not yet checked
+    case checking       // Currently checking status
+    case notGitRepo     // Not a git repository
+    case clean          // Clean, up to date with remote
+    case dirty          // Has uncommitted local changes
+    case ahead(Int)     // Has unpushed commits
+    case behind(Int)    // Behind remote (can auto-pull)
+    case diverged       // Both ahead and behind (needs manual resolution)
+    case dirtyAndAhead  // Uncommitted changes + unpushed commits
+    case error(String)  // Failed to check status
+
+    /// Icon to display for this status
+    var icon: String {
+        switch self {
+        case .unknown, .checking:
+            return "circle.dotted"
+        case .notGitRepo:
+            return "minus.circle"
+        case .clean:
+            return "checkmark.circle.fill"
+        case .dirty:
+            return "exclamationmark.triangle.fill"
+        case .ahead:
+            return "arrow.up.circle.fill"
+        case .behind:
+            return "arrow.down.circle.fill"
+        case .diverged:
+            return "arrow.up.arrow.down.circle.fill"
+        case .dirtyAndAhead:
+            return "exclamationmark.arrow.triangle.2.circlepath"
+        case .error:
+            return "xmark.circle"
+        }
+    }
+
+    /// Color name for the status icon
+    var colorName: String {
+        switch self {
+        case .unknown, .checking, .notGitRepo:
+            return "gray"
+        case .clean:
+            return "green"
+        case .dirty, .dirtyAndAhead, .diverged:
+            return "orange"
+        case .ahead:
+            return "blue"
+        case .behind:
+            return "cyan"
+        case .error:
+            return "red"
+        }
+    }
+
+    /// Short description for accessibility
+    var accessibilityLabel: String {
+        switch self {
+        case .unknown:
+            return "Status unknown"
+        case .checking:
+            return "Checking status"
+        case .notGitRepo:
+            return "Not a git repository"
+        case .clean:
+            return "Clean, up to date"
+        case .dirty:
+            return "Has uncommitted changes"
+        case .ahead(let count):
+            return "\(count) unpushed commit\(count == 1 ? "" : "s")"
+        case .behind(let count):
+            return "\(count) commit\(count == 1 ? "" : "s") behind remote"
+        case .diverged:
+            return "Diverged from remote"
+        case .dirtyAndAhead:
+            return "Uncommitted changes and unpushed commits"
+        case .error(let msg):
+            return "Error: \(msg)"
+        }
+    }
+
+    /// Whether auto-pull is safe for this status
+    var canAutoPull: Bool {
+        switch self {
+        case .behind:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Whether this status indicates local changes that need attention
+    var hasLocalChanges: Bool {
+        switch self {
+        case .dirty, .ahead, .dirtyAndAhead, .diverged:
+            return true
+        default:
+            return false
+        }
+    }
+}
 
 // MARK: - Project Models (new claudecodeui API)
 

@@ -554,6 +554,191 @@ class SSHManager: ObservableObject {
         }
     }
 
+    // MARK: - Git Operations
+
+    /// Check if a path is a git repository
+    func isGitRepo(_ path: String) async throws -> Bool {
+        guard let client = client, isConnected else {
+            throw SSHError.notConnected
+        }
+
+        let cmd = "cd '\(path)' && git rev-parse --is-inside-work-tree 2>/dev/null"
+        let result = try await client.executeCommand(cmd)
+        let output = String(buffer: result).trimmingCharacters(in: .whitespacesAndNewlines)
+        return output == "true"
+    }
+
+    /// Check git status for a project path
+    /// Returns a GitStatus enum indicating the sync state
+    func checkGitStatus(_ path: String) async throws -> GitStatus {
+        guard let client = client, isConnected else {
+            throw SSHError.notConnected
+        }
+
+        // First check if it's a git repo
+        let isGitCmd = "cd '\(path)' && git rev-parse --is-inside-work-tree 2>/dev/null"
+        let isGitResult = try await client.executeCommand(isGitCmd)
+        let isGit = String(buffer: isGitResult).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if isGit != "true" {
+            return .notGitRepo
+        }
+
+        // Check for uncommitted changes (including untracked files)
+        let statusCmd = "cd '\(path)' && git status --porcelain 2>/dev/null"
+        let statusResult = try await client.executeCommand(statusCmd)
+        let statusOutput = String(buffer: statusResult).trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasUncommittedChanges = !statusOutput.isEmpty
+
+        // Fetch remote to get accurate ahead/behind (non-blocking, with timeout)
+        // Use --dry-run to just check without actually fetching
+        _ = try? await client.executeCommand("cd '\(path)' && timeout 5s git fetch --quiet 2>/dev/null")
+
+        // Check ahead/behind status relative to upstream
+        let revListCmd = "cd '\(path)' && git rev-list --left-right --count HEAD...@{upstream} 2>/dev/null"
+        let revListResult = try await client.executeCommand(revListCmd)
+        let revListOutput = String(buffer: revListResult).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var aheadCount = 0
+        var behindCount = 0
+
+        // Parse "ahead\tbehind" format
+        let parts = revListOutput.split(separator: "\t")
+        if parts.count == 2 {
+            aheadCount = Int(parts[0]) ?? 0
+            behindCount = Int(parts[1]) ?? 0
+        }
+
+        // Determine status based on combinations
+        if hasUncommittedChanges {
+            if aheadCount > 0 {
+                return .dirtyAndAhead
+            }
+            return .dirty
+        }
+
+        if aheadCount > 0 && behindCount > 0 {
+            return .diverged
+        }
+
+        if aheadCount > 0 {
+            return .ahead(aheadCount)
+        }
+
+        if behindCount > 0 {
+            return .behind(behindCount)
+        }
+
+        return .clean
+    }
+
+    /// Check git status with auto-connect
+    func checkGitStatusWithAutoConnect(_ path: String, settings: AppSettings) async -> GitStatus {
+        do {
+            if !isConnected {
+                // Try SSH config hosts first
+                if let configHost = availableHosts.first(where: {
+                    $0.hostName == settings.effectiveSSHHost || $0.host.contains("claude")
+                }) {
+                    try await connectWithConfigHost(configHost.host)
+                } else if settings.sshAuthType == .publicKey {
+                    try await connectWithKey(
+                        host: settings.effectiveSSHHost,
+                        port: settings.sshPort,
+                        username: settings.sshUsername.isEmpty ? NSUserName() : settings.sshUsername,
+                        privateKeyPath: getRealHomeDirectory() + "/.ssh/id_ed25519"
+                    )
+                } else {
+                    try await connect(
+                        host: settings.effectiveSSHHost,
+                        port: settings.sshPort,
+                        username: settings.sshUsername,
+                        password: settings.sshPassword
+                    )
+                }
+            }
+            return try await checkGitStatus(path)
+        } catch {
+            log.error("Failed to check git status for \(path): \(error)")
+            return .error(error.localizedDescription)
+        }
+    }
+
+    /// Pull latest changes from remote (fast-forward only)
+    /// Returns true if successful, false otherwise
+    func gitPull(_ path: String) async throws -> Bool {
+        guard let client = client, isConnected else {
+            throw SSHError.notConnected
+        }
+
+        let cmd = "cd '\(path)' && git pull --ff-only 2>&1"
+        let result = try await client.executeCommand(cmd)
+        let output = String(buffer: result).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Check for success indicators
+        if output.contains("Already up to date") || output.contains("Fast-forward") {
+            log.info("Git pull successful for \(path)")
+            return true
+        }
+
+        // Check for failure indicators
+        if output.contains("fatal:") || output.contains("error:") {
+            log.warning("Git pull failed for \(path): \(output)")
+            return false
+        }
+
+        return true
+    }
+
+    /// Pull with auto-connect
+    func gitPullWithAutoConnect(_ path: String, settings: AppSettings) async -> Bool {
+        do {
+            if !isConnected {
+                if let configHost = availableHosts.first(where: {
+                    $0.hostName == settings.effectiveSSHHost || $0.host.contains("claude")
+                }) {
+                    try await connectWithConfigHost(configHost.host)
+                } else if settings.sshAuthType == .publicKey {
+                    try await connectWithKey(
+                        host: settings.effectiveSSHHost,
+                        port: settings.sshPort,
+                        username: settings.sshUsername.isEmpty ? NSUserName() : settings.sshUsername,
+                        privateKeyPath: getRealHomeDirectory() + "/.ssh/id_ed25519"
+                    )
+                } else {
+                    try await connect(
+                        host: settings.effectiveSSHHost,
+                        port: settings.sshPort,
+                        username: settings.sshUsername,
+                        password: settings.sshPassword
+                    )
+                }
+            }
+            return try await gitPull(path)
+        } catch {
+            log.error("Failed to git pull for \(path): \(error)")
+            return false
+        }
+    }
+
+    /// Get git diff summary for dirty repos
+    func getGitDiffSummary(_ path: String) async throws -> String {
+        guard let client = client, isConnected else {
+            throw SSHError.notConnected
+        }
+
+        // Get a summary of changes: modified files, untracked files, staged changes
+        let cmd = """
+        cd '\(path)' && echo "=== Git Status ===" && git status --short && \
+        echo "" && echo "=== Recent Commits (unpushed) ===" && \
+        git log --oneline @{upstream}..HEAD 2>/dev/null || echo "(no upstream)" && \
+        echo "" && echo "=== Diff Stats ===" && git diff --stat 2>/dev/null
+        """
+
+        let result = try await client.executeCommand(cmd)
+        return String(buffer: result)
+    }
+
     /// List files with auto-connect
     func listFilesWithAutoConnect(_ path: String, settings: AppSettings) async throws -> [FileEntry] {
         if !isConnected {

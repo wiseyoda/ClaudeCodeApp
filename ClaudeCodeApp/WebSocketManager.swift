@@ -12,6 +12,9 @@ class WebSocketManager: ObservableObject {
     @Published var lastError: String?
     @Published var sessionId: String?
     @Published var tokenUsage: TokenUsage?
+    @Published var currentModel: ClaudeModel?
+    @Published var currentModelId: String?  // The full model ID (e.g., "claude-sonnet-4-5-20250929")
+    @Published var isSwitchingModel = false
 
     /// Track whether app is in foreground - set by ChatView
     var isAppInForeground = true
@@ -39,6 +42,7 @@ class WebSocketManager: ObservableObject {
         let sessionId: String?
         let permissionMode: String?
         let imageData: Data?
+        let model: String?
         var attempts: Int = 0
         let createdAt = Date()
     }
@@ -58,6 +62,7 @@ class WebSocketManager: ObservableObject {
     var onAskUserQuestion: ((AskUserQuestionData) -> Void)?  // For interactive questions
     var onError: ((String) -> Void)?
     var onSessionCreated: ((String) -> Void)?
+    var onModelChanged: ((ClaudeModel, String) -> Void)?  // (model enum, full model ID)
 
     /// Initialize with optional settings. Call updateSettings() in onAppear with the EnvironmentObject.
     init(settings: AppSettings? = nil) {
@@ -211,14 +216,15 @@ class WebSocketManager: ObservableObject {
         }
     }
 
-    func sendMessage(_ message: String, projectPath: String, resumeSessionId: String? = nil, permissionMode: String? = nil, imageData: Data? = nil) {
+    func sendMessage(_ message: String, projectPath: String, resumeSessionId: String? = nil, permissionMode: String? = nil, imageData: Data? = nil, model: String? = nil) {
         // Store as pending message for potential retry
         pendingMessage = PendingMessage(
             message: message,
             projectPath: projectPath,
             sessionId: resumeSessionId ?? sessionId,
             permissionMode: permissionMode,
-            imageData: imageData
+            imageData: imageData,
+            model: model
         )
 
         sendPendingMessage()
@@ -261,7 +267,7 @@ class WebSocketManager: ObservableObject {
             options: WSCommandOptions(
                 cwd: pending.projectPath,
                 sessionId: pending.sessionId,
-                model: nil,
+                model: pending.model,
                 permissionMode: pending.permissionMode,
                 images: images  // Images go inside options
             )
@@ -364,6 +370,118 @@ class WebSocketManager: ObservableObject {
         isProcessing = false
     }
 
+    // Model switch timeout task
+    private var modelSwitchTimeoutTask: Task<Void, Never>?
+
+    /// Switch to a different Claude model
+    /// - Parameters:
+    ///   - model: The ClaudeModel preset to switch to
+    ///   - customId: For custom models, the full model ID (e.g., "claude-opus-4-5-20251101")
+    ///   - projectPath: The current project path for the session
+    func switchModel(_ model: ClaudeModel, customId: String? = nil, projectPath: String) {
+        let modelArg: String
+        if model == .custom, let customId = customId, !customId.isEmpty {
+            modelArg = customId
+        } else if let alias = model.modelAlias {
+            modelArg = alias
+        } else {
+            log.error("Cannot switch model: no alias or custom ID provided")
+            return
+        }
+
+        isSwitchingModel = true
+
+        // Set timeout to reset switching state after 5 seconds
+        modelSwitchTimeoutTask?.cancel()
+        modelSwitchTimeoutTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 5_000_000_000)  // 5 seconds
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                if self?.isSwitchingModel == true {
+                    log.warning("Model switch timed out")
+                    self?.isSwitchingModel = false
+                }
+            }
+        }
+
+        // Send /model command as a regular message
+        let command = "/model \(modelArg)"
+        log.info("Switching model: \(command)")
+
+        // Send via WebSocket directly (not through sendMessage which adds to pending)
+        let wsCommand = WSClaudeCommand(
+            command: command,
+            options: WSCommandOptions(
+                cwd: projectPath,
+                sessionId: sessionId,
+                model: nil,
+                permissionMode: nil,
+                images: nil
+            )
+        )
+
+        do {
+            let data = try JSONEncoder().encode(wsCommand)
+            if let jsonString = String(data: data, encoding: .utf8) {
+                log.debug("Sending model switch: \(jsonString)")
+                webSocket?.send(.string(jsonString)) { [weak self] error in
+                    Task { @MainActor in
+                        if let error = error {
+                            log.error("Model switch send failed: \(error)")
+                            self?.isSwitchingModel = false
+                            self?.modelSwitchTimeoutTask?.cancel()
+                            self?.lastError = "Failed to switch model"
+                        }
+                    }
+                }
+            }
+        } catch {
+            log.error("Failed to encode model switch: \(error)")
+            isSwitchingModel = false
+            modelSwitchTimeoutTask?.cancel()
+        }
+    }
+
+    /// Parse model from a model ID string (e.g., "claude-sonnet-4-5-20250929" -> .sonnet)
+    private func parseModelFromId(_ modelId: String) -> ClaudeModel {
+        let lowerId = modelId.lowercased()
+        if lowerId.contains("opus") {
+            return .opus
+        } else if lowerId.contains("sonnet") {
+            return .sonnet
+        } else if lowerId.contains("haiku") {
+            return .haiku
+        } else {
+            return .custom
+        }
+    }
+
+    /// Parse model switch confirmation from response text
+    /// Expected format: "Set model to sonnet (claude-sonnet-4-5-20250929)"
+    private func parseModelSwitchResponse(_ text: String) {
+        modelSwitchTimeoutTask?.cancel()  // Cancel timeout since we got a response
+
+        // Extract model ID from parentheses: "(claude-sonnet-4-5-20250929)"
+        if let openParen = text.firstIndex(of: "("),
+           let closeParen = text.firstIndex(of: ")"),
+           openParen < closeParen {
+            let start = text.index(after: openParen)
+            let modelId = String(text[start..<closeParen])
+
+            let model = parseModelFromId(modelId)
+            log.info("Model switch confirmed: \(model.displayName) (\(modelId))")
+
+            currentModel = model
+            currentModelId = modelId
+            isSwitchingModel = false
+            onModelChanged?(model, modelId)
+        } else {
+            // Couldn't parse, but still mark as done
+            log.warning("Could not parse model ID from: \(text)")
+            isSwitchingModel = false
+        }
+    }
+
     private func receiveMessage() {
         webSocket?.receive { [weak self] result in
             Task { @MainActor in
@@ -453,6 +571,20 @@ class WebSocketManager: ObservableObject {
                 if let sid = msg.sessionId {
                     sessionId = sid
                 }
+
+                // Check if this was a model switch that completed
+                if isSwitchingModel {
+                    modelSwitchTimeoutTask?.cancel()
+                    // Try to parse model from accumulated text
+                    if currentText.contains("Set model to") {
+                        parseModelSwitchResponse(currentText)
+                    } else {
+                        // Timeout/fallback - reset switching state
+                        log.warning("Model switch completed but no confirmation found in: \(currentText.prefix(200))")
+                        isSwitchingModel = false
+                    }
+                }
+
                 // Send notification when task completes (only if backgrounded)
                 let preview = currentText.prefix(100)
                 sendLocalNotification(
@@ -463,6 +595,7 @@ class WebSocketManager: ObservableObject {
 
             case "claude-error":
                 isProcessing = false
+                isSwitchingModel = false  // Reset on error
                 cancelProcessingTimeout()
                 let errorMsg = msg.error ?? "Unknown error"
                 lastError = errorMsg
@@ -470,6 +603,7 @@ class WebSocketManager: ObservableObject {
 
             case "session-aborted":
                 isProcessing = false
+                isSwitchingModel = false  // Reset on abort
                 cancelProcessingTimeout()
 
             case "projects_updated":
@@ -524,13 +658,20 @@ class WebSocketManager: ObservableObject {
 
         switch type {
         case "system":
-            // System init message - contains session info
+            // System init message - contains session info and model
             // Note: session-created is already handled separately in parseMessage
             // Only update sessionId here if not already set (avoid duplicate notifications)
             if let subtype = data["subtype"] as? String, subtype == "init" {
                 if let sid = data["session_id"] as? String, sessionId == nil {
                     sessionId = sid
                     // Don't call onSessionCreated here - it's handled by session-created message
+                }
+                // Capture the model from system init
+                if let modelId = data["model"] as? String {
+                    let model = parseModelFromId(modelId)
+                    log.info("Session model from init: \(model.displayName) (\(modelId))")
+                    currentModel = model
+                    currentModelId = modelId
                 }
             }
 
@@ -579,6 +720,12 @@ class WebSocketManager: ObservableObject {
                 case "text":
                     if let text = part["text"] as? String, !text.isEmpty {
                         log.debug("Found text in content array: \(text.prefix(100))")
+
+                        // Check for model switch confirmation: "Set model to sonnet (claude-sonnet-4-5-20250929)"
+                        if isSwitchingModel, text.contains("Set model to") {
+                            parseModelSwitchResponse(text)
+                        }
+
                         currentText += text
                         onText?(currentText)
                     }

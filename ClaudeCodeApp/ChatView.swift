@@ -5,6 +5,7 @@ import PhotosUI
 struct ChatView: View {
     let project: Project
     let apiClient: APIClient
+    let initialGitStatus: GitStatus
     @EnvironmentObject var settings: AppSettings
     @StateObject private var wsManager: WebSocketManager
     @Environment(\.scenePhase) private var scenePhase
@@ -26,15 +27,31 @@ struct ChatView: View {
     @StateObject private var sshManager = SSHManager()  // For session deletion
     @FocusState private var isInputFocused: Bool
 
-    init(project: Project, apiClient: APIClient) {
+    // Git sync state
+    @State private var gitStatus: GitStatus = .unknown
+    @State private var isAutoPulling = false
+    @State private var isRefreshingGitStatus = false
+    @State private var showGitBanner = true
+    @State private var hasPromptedCleanup = false
+
+    // Model selection state
+    @State private var showingModelPicker = false
+    @State private var currentModel: ClaudeModel?
+    @State private var customModelId = ""
+
+    init(project: Project, apiClient: APIClient, initialGitStatus: GitStatus = .unknown) {
         self.project = project
         self.apiClient = apiClient
+        self.initialGitStatus = initialGitStatus
         // Initialize WebSocketManager without settings - will be configured in onAppear
         _wsManager = StateObject(wrappedValue: WebSocketManager())
     }
 
     var body: some View {
         VStack(spacing: 0) {
+            // Git status banner (when there are local changes)
+            gitStatusBannerView
+
             sessionPickerView
             messagesScrollView
             statusAndInputView
@@ -46,29 +63,35 @@ struct ChatView: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Menu {
-                    Button {
-                        messages = []
-                        wsManager.sessionId = nil
-                        selectedSession = nil
-                        MessageStore.clearMessages(for: project.path)
-                    } label: {
-                        Label("New Chat", systemImage: "plus")
-                    }
+                HStack(spacing: 12) {
+                    // Model selector pill
+                    modelSelectorPill
 
-                    if wsManager.isProcessing {
-                        Button(role: .destructive) {
-                            wsManager.abortSession()
+                    // More options menu
+                    Menu {
+                        Button {
+                            messages = []
+                            wsManager.sessionId = nil
+                            selectedSession = nil
+                            MessageStore.clearMessages(for: project.path)
                         } label: {
-                            Label("Abort", systemImage: "stop.circle")
+                            Label("New Chat", systemImage: "plus")
                         }
+
+                        if wsManager.isProcessing {
+                            Button(role: .destructive) {
+                                wsManager.abortSession()
+                            } label: {
+                                Label("Abort", systemImage: "stop.circle")
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .foregroundColor(CLITheme.secondaryText(for: colorScheme))
                     }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                        .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+                    .accessibilityLabel("Chat options")
+                    .accessibilityHint("Open menu with new chat and abort options")
                 }
-                .accessibilityLabel("Chat options")
-                .accessibilityHint("Open menu with new chat and abort options")
             }
         }
         .onAppear {
@@ -95,6 +118,13 @@ struct ChatView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 isInputFocused = true
             }
+
+            // Handle git status from ContentView
+            gitStatus = initialGitStatus
+            handleGitStatusOnLoad()
+
+            // Initialize model state
+            customModelId = settings.customModelId
         }
         .onDisappear {
             wsManager.disconnect()
@@ -161,6 +191,20 @@ struct ChatView: View {
                 }
             )
         }
+        .sheet(isPresented: $showingModelPicker) {
+            CustomModelPickerSheet(
+                customModelId: $customModelId,
+                onConfirm: { modelId in
+                    showingModelPicker = false
+                    switchToModel(.custom, customId: modelId)
+                    // Save custom model ID to settings
+                    settings.customModelId = modelId
+                },
+                onCancel: {
+                    showingModelPicker = false
+                }
+            )
+        }
         .onAppear {
             // Initialize local sessions copy
             if localSessions == nil {
@@ -199,7 +243,8 @@ struct ChatView: View {
             answer,
             projectPath: project.path,
             resumeSessionId: selectedSession?.id,
-            permissionMode: settings.effectivePermissionMode
+            permissionMode: settings.effectivePermissionMode,
+            model: effectiveModelId
         )
         processingStartTime = Date()
         pendingQuestions = nil
@@ -214,11 +259,97 @@ struct ChatView: View {
     // MARK: - View Components (extracted to help Swift compiler)
 
     @ViewBuilder
+    private var modelSelectorPill: some View {
+        let displayModel = currentModel ?? settings.defaultModel
+
+        Menu {
+            ForEach(ClaudeModel.allCases.filter { $0 != .custom }) { model in
+                Button {
+                    switchToModel(model)
+                } label: {
+                    HStack {
+                        Image(systemName: model.icon)
+                        Text(model.displayName)
+                        if displayModel == model {
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+
+            Divider()
+
+            Button {
+                showingModelPicker = true
+            } label: {
+                Label("Custom Model...", systemImage: "gearshape")
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: displayModel.icon)
+                    .font(.caption)
+                Text(displayModel.shortName)
+                    .font(settings.scaledFont(.small))
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(displayModel.color(for: colorScheme).opacity(0.2))
+            .foregroundColor(displayModel.color(for: colorScheme))
+            .cornerRadius(12)
+        }
+        .accessibilityLabel("Current model: \(displayModel.displayName)")
+        .accessibilityHint("Tap to change model. Change takes effect on next message.")
+    }
+
+    @ViewBuilder
     private var sessionPickerView: some View {
         if let sessions = project.sessions, !sessions.isEmpty {
             SessionPicker(sessions: sessions, selected: $selectedSession, isLoading: isLoadingHistory) { session in
                 wsManager.sessionId = session.id
                 loadSessionHistory(session)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var gitStatusBannerView: some View {
+        if showGitBanner {
+            switch gitStatus {
+            case .dirty, .dirtyAndAhead, .diverged:
+                // Warning banner for local changes
+                GitSyncBanner(
+                    status: gitStatus,
+                    isAutoPulling: false,
+                    isRefreshing: isRefreshingGitStatus,
+                    onDismiss: { showGitBanner = false },
+                    onRefresh: { refreshGitStatus() },
+                    onAskClaude: { promptClaudeForCleanup() }
+                )
+
+            case .behind:
+                // Auto-pull in progress or behind indicator
+                GitSyncBanner(
+                    status: gitStatus,
+                    isAutoPulling: isAutoPulling,
+                    isRefreshing: isRefreshingGitStatus,
+                    onDismiss: { showGitBanner = false },
+                    onRefresh: { refreshGitStatus() },
+                    onAskClaude: nil
+                )
+
+            case .ahead:
+                // Unpushed commits indicator
+                GitSyncBanner(
+                    status: gitStatus,
+                    isAutoPulling: false,
+                    isRefreshing: isRefreshingGitStatus,
+                    onDismiss: { showGitBanner = false },
+                    onRefresh: { refreshGitStatus() },
+                    onAskClaude: { promptClaudeForCleanup() }
+                )
+
+            default:
+                EmptyView()
             }
         }
     }
@@ -456,7 +587,8 @@ struct ChatView: View {
                 projectPath: project.path,
                 resumeSessionId: selectedSession?.id,
                 permissionMode: settings.effectivePermissionMode,
-                imageData: imageData
+                imageData: imageData,
+                model: effectiveModelId
             )
         } else {
             // No image - just send text
@@ -464,7 +596,8 @@ struct ChatView: View {
                 text,
                 projectPath: project.path,
                 resumeSessionId: selectedSession?.id,
-                permissionMode: settings.effectivePermissionMode
+                permissionMode: settings.effectivePermissionMode,
+                model: effectiveModelId
             )
         }
 
@@ -636,6 +769,369 @@ struct ChatView: View {
             }
         } catch {
             print("[ChatView] Failed to delete session: \(error)")
+        }
+    }
+
+    // MARK: - Git Sync Handling
+
+    /// Handle git status when view loads
+    private func handleGitStatusOnLoad() {
+        Task {
+            switch gitStatus {
+            case .behind:
+                // Auto-pull for clean projects that are behind
+                await performAutoPull()
+
+            case .dirty, .dirtyAndAhead, .diverged:
+                // Show banner and optionally auto-prompt Claude
+                if !hasPromptedCleanup && messages.isEmpty {
+                    // Only auto-prompt if this is a fresh session
+                    // User can tap the banner to ask Claude later
+                }
+
+            default:
+                // Hide banner for clean/unknown/notGitRepo
+                if gitStatus == .clean || gitStatus == .notGitRepo {
+                    showGitBanner = false
+                }
+            }
+        }
+    }
+
+    /// Refresh git status for this project
+    private func refreshGitStatus() {
+        Task {
+            isRefreshingGitStatus = true
+            let newStatus = await sshManager.checkGitStatusWithAutoConnect(
+                project.path,
+                settings: settings
+            )
+            await MainActor.run {
+                gitStatus = newStatus
+                isRefreshingGitStatus = false
+
+                // Hide banner if now clean
+                if newStatus == .clean || newStatus == .notGitRepo {
+                    showGitBanner = false
+                } else {
+                    // Show banner for any actionable status
+                    showGitBanner = true
+                }
+            }
+        }
+    }
+
+    /// Perform auto-pull for projects that are behind remote
+    private func performAutoPull() async {
+        isAutoPulling = true
+
+        let success = await sshManager.gitPullWithAutoConnect(project.path, settings: settings)
+
+        await MainActor.run {
+            isAutoPulling = false
+            if success {
+                // Update status to clean after successful pull
+                gitStatus = .clean
+                showGitBanner = false
+
+                // Add system message about the pull
+                messages.append(ChatMessage(
+                    role: .system,
+                    content: "✓ Auto-pulled latest changes from remote",
+                    timestamp: Date()
+                ))
+            } else {
+                // Show error in banner
+                gitStatus = .error("Auto-pull failed")
+            }
+        }
+    }
+
+    /// Send a message to Claude asking to help with local changes
+    private func promptClaudeForCleanup() {
+        hasPromptedCleanup = true
+
+        let cleanupPrompt: String
+        switch gitStatus {
+        case .dirty:
+            cleanupPrompt = """
+            There are uncommitted changes in this project. Please run `git status` and `git diff` to review the changes, then help me decide how to handle them. Options might include:
+            - Committing the changes with an appropriate message
+            - Stashing them for later
+            - Discarding them if they're not needed
+            """
+
+        case .ahead(let count):
+            cleanupPrompt = """
+            This project has \(count) unpushed commit\(count == 1 ? "" : "s"). Please run `git log --oneline @{upstream}..HEAD` to show me what commits need to be pushed, then help me decide whether to push them now.
+            """
+
+        case .dirtyAndAhead:
+            cleanupPrompt = """
+            This project has both uncommitted changes AND unpushed commits. Please:
+            1. Run `git status` to show uncommitted changes
+            2. Run `git log --oneline @{upstream}..HEAD` to show unpushed commits
+            3. Help me decide how to handle both - whether to commit, stash, push, or discard.
+            """
+
+        case .diverged:
+            cleanupPrompt = """
+            This project has diverged from the remote - there are both local and remote changes. Please:
+            1. Run `git status` to show the current state
+            2. Run `git log --oneline HEAD...@{upstream}` to show the divergence
+            3. Help me resolve this - we may need to rebase or merge.
+            """
+
+        default:
+            return
+        }
+
+        // Add user message
+        let userMessage = ChatMessage(role: .user, content: cleanupPrompt, timestamp: Date())
+        messages.append(userMessage)
+
+        // Hide banner after adding message to avoid layout shift during scroll
+        showGitBanner = false
+
+        // Send to Claude
+        wsManager.sendMessage(
+            cleanupPrompt,
+            projectPath: project.path,
+            resumeSessionId: selectedSession?.id,
+            permissionMode: settings.effectivePermissionMode,
+            model: effectiveModelId
+        )
+        processingStartTime = Date()
+
+        // Trigger scroll to bottom after a brief delay to let layout settle
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            scrollToBottomTrigger = true
+        }
+    }
+
+    // MARK: - Model Selection
+
+    private func switchToModel(_ model: ClaudeModel, customId: String? = nil) {
+        // Just update local state - model is passed with each message
+        currentModel = model
+        if model == .custom, let customId = customId {
+            self.customModelId = customId
+            settings.customModelId = customId
+        }
+    }
+
+    /// Get the model ID to pass in WebSocket messages
+    private var effectiveModelId: String? {
+        let model = currentModel ?? settings.defaultModel
+        switch model {
+        case .opus:
+            return "claude-opus-4-5-20251101"
+        case .sonnet:
+            return "claude-sonnet-4-5-20250929"
+        case .haiku:
+            return "claude-3-5-haiku-20241022"
+        case .custom:
+            return customModelId.isEmpty ? nil : customModelId
+        }
+    }
+}
+
+// MARK: - Custom Model Picker Sheet
+
+struct CustomModelPickerSheet: View {
+    @Binding var customModelId: String
+    let onConfirm: (String) -> Void
+    let onCancel: () -> Void
+    @Environment(\.colorScheme) var colorScheme
+
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 20) {
+                Text("Enter a custom model ID")
+                    .font(CLITheme.monoFont)
+                    .foregroundColor(CLITheme.primaryText(for: colorScheme))
+
+                TextField("e.g., claude-opus-4-5-20251101", text: $customModelId)
+                    .font(CLITheme.monoFont)
+                    .textFieldStyle(.roundedBorder)
+                    .autocapitalization(.none)
+                    .disableAutocorrection(true)
+
+                Text("Examples:\n• claude-opus-4-5-20251101\n• claude-sonnet-4-5-20250929\n• claude-sonnet-4-5-20250929[1m]")
+                    .font(CLITheme.monoSmall)
+                    .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                Spacer()
+            }
+            .padding()
+            .background(CLITheme.background(for: colorScheme))
+            .navigationTitle("Custom Model")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { onCancel() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Switch") { onConfirm(customModelId) }
+                        .disabled(customModelId.isEmpty)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Git Sync Banner
+
+struct GitSyncBanner: View {
+    let status: GitStatus
+    let isAutoPulling: Bool
+    let isRefreshing: Bool
+    let onDismiss: () -> Void
+    let onRefresh: () -> Void
+    let onAskClaude: (() -> Void)?
+    @Environment(\.colorScheme) var colorScheme
+
+    var body: some View {
+        HStack(spacing: 10) {
+            // Status icon
+            if isAutoPulling || isRefreshing {
+                ProgressView()
+                    .scaleEffect(0.8)
+            } else {
+                Image(systemName: status.icon)
+                    .foregroundColor(iconColor)
+            }
+
+            // Status text
+            VStack(alignment: .leading, spacing: 2) {
+                Text(isRefreshing ? "Checking..." : statusTitle)
+                    .font(CLITheme.monoSmall)
+                    .fontWeight(.medium)
+                    .foregroundColor(CLITheme.primaryText(for: colorScheme))
+
+                Text(isRefreshing ? "Refreshing git status" : statusSubtitle)
+                    .font(.caption)
+                    .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+            }
+
+            Spacer()
+
+            // Actions
+            if !isAutoPulling && !isRefreshing {
+                // Refresh button
+                Button {
+                    onRefresh()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.caption)
+                        .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+                }
+                .accessibilityLabel("Refresh git status")
+
+                if let onAskClaude = onAskClaude {
+                    Button {
+                        onAskClaude()
+                    } label: {
+                        Text("Ask Claude")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(CLITheme.cyan(for: colorScheme).opacity(0.2))
+                            .foregroundColor(CLITheme.cyan(for: colorScheme))
+                            .cornerRadius(6)
+                    }
+                }
+            }
+
+            // Dismiss button
+            Button {
+                onDismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.caption)
+                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(bannerBackground)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(status.accessibilityLabel)
+    }
+
+    private var iconColor: Color {
+        switch status.colorName {
+        case "green":
+            return CLITheme.green(for: colorScheme)
+        case "orange":
+            return CLITheme.yellow(for: colorScheme)
+        case "blue":
+            return CLITheme.blue(for: colorScheme)
+        case "cyan":
+            return CLITheme.cyan(for: colorScheme)
+        case "red":
+            return CLITheme.red(for: colorScheme)
+        default:
+            return CLITheme.mutedText(for: colorScheme)
+        }
+    }
+
+    private var bannerBackground: Color {
+        switch status {
+        case .dirty, .dirtyAndAhead, .diverged:
+            return CLITheme.yellow(for: colorScheme).opacity(0.1)
+        case .behind:
+            return CLITheme.cyan(for: colorScheme).opacity(0.1)
+        case .ahead:
+            return CLITheme.blue(for: colorScheme).opacity(0.1)
+        case .error:
+            return CLITheme.red(for: colorScheme).opacity(0.1)
+        default:
+            return CLITheme.secondaryBackground(for: colorScheme)
+        }
+    }
+
+    private var statusTitle: String {
+        if isAutoPulling {
+            return "Pulling latest changes..."
+        }
+
+        switch status {
+        case .dirty:
+            return "Uncommitted changes"
+        case .ahead(let count):
+            return "\(count) unpushed commit\(count == 1 ? "" : "s")"
+        case .behind(let count):
+            return "\(count) commit\(count == 1 ? "" : "s") behind"
+        case .dirtyAndAhead:
+            return "Local changes + unpushed commits"
+        case .diverged:
+            return "Diverged from remote"
+        case .error(let msg):
+            return "Error: \(msg)"
+        default:
+            return ""
+        }
+    }
+
+    private var statusSubtitle: String {
+        if isAutoPulling {
+            return "Auto-syncing with remote..."
+        }
+
+        switch status {
+        case .dirty, .dirtyAndAhead, .diverged:
+            return "Tap 'Ask Claude' to review and resolve"
+        case .ahead:
+            return "Push your commits to sync with remote"
+        case .behind:
+            return "Will auto-pull when ready"
+        case .error:
+            return "Check your connection"
+        default:
+            return ""
         }
     }
 }

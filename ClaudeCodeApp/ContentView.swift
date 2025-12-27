@@ -15,6 +15,10 @@ struct ContentView: View {
     @State private var projectToDelete: Project?
     @StateObject private var sshManager = SSHManager()
 
+    // Git status tracking per project path
+    @State private var gitStatuses: [String: GitStatus] = [:]
+    @State private var isCheckingGitStatus = false
+
     var body: some View {
         NavigationStack {
             Group {
@@ -63,13 +67,19 @@ struct ContentView: View {
                 }
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button {
-                        Task { await loadProjects() }
+                        Task {
+                            await loadProjects()
+                            // Also refresh git statuses
+                            if !projects.isEmpty {
+                                await checkAllGitStatuses()
+                            }
+                        }
                     } label: {
                         Image(systemName: "arrow.clockwise")
                             .foregroundColor(CLITheme.secondaryText(for: colorScheme))
                     }
                     .accessibilityLabel("Refresh projects")
-                    .accessibilityHint("Reload project list from server")
+                    .accessibilityHint("Reload project list and git statuses")
                 }
             }
             .sheet(isPresented: $showSettings) {
@@ -138,6 +148,10 @@ struct ContentView: View {
         }
         .task {
             await loadProjects()
+            // Check git status in background after projects load
+            if !projects.isEmpty {
+                await checkAllGitStatuses()
+            }
         }
     }
 
@@ -222,9 +236,16 @@ struct ContentView: View {
                 } else {
                     ForEach(sortedProjects) { project in
                         NavigationLink {
-                            ChatView(project: project, apiClient: apiClient)
+                            ChatView(
+                                project: project,
+                                apiClient: apiClient,
+                                initialGitStatus: gitStatuses[project.path] ?? .unknown
+                            )
                         } label: {
-                            ProjectRow(project: project)
+                            ProjectRow(
+                                project: project,
+                                gitStatus: gitStatuses[project.path] ?? .unknown
+                            )
                         }
                         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                             Button(role: .destructive) {
@@ -234,6 +255,12 @@ struct ContentView: View {
                             }
                         }
                         .contextMenu {
+                            Button {
+                                Task { await refreshGitStatus(for: project) }
+                            } label: {
+                                Label("Refresh Git Status", systemImage: "arrow.triangle.2.circlepath")
+                            }
+
                             Button(role: .destructive) {
                                 projectToDelete = project
                             } label: {
@@ -276,6 +303,7 @@ struct ContentView: View {
             // Remove from local list immediately for responsive UI
             await MainActor.run {
                 projects.removeAll { $0.id == project.id }
+                gitStatuses.removeValue(forKey: project.path)
                 projectToDelete = nil
             }
         } catch {
@@ -283,12 +311,55 @@ struct ContentView: View {
             await loadProjects()
         }
     }
+
+    // MARK: - Git Status Checking
+
+    /// Check git status for all projects in background
+    private func checkAllGitStatuses() async {
+        guard !isCheckingGitStatus else { return }
+        isCheckingGitStatus = true
+
+        // Mark all as checking
+        for project in projects {
+            gitStatuses[project.path] = .checking
+        }
+
+        // Check each project's git status concurrently but with some batching
+        await withTaskGroup(of: (String, GitStatus).self) { group in
+            for project in projects {
+                group.addTask {
+                    let status = await sshManager.checkGitStatusWithAutoConnect(
+                        project.path,
+                        settings: settings
+                    )
+                    return (project.path, status)
+                }
+            }
+
+            for await (path, status) in group {
+                gitStatuses[path] = status
+            }
+        }
+
+        isCheckingGitStatus = false
+    }
+
+    /// Refresh git status for a single project
+    private func refreshGitStatus(for project: Project) async {
+        gitStatuses[project.path] = .checking
+        let status = await sshManager.checkGitStatusWithAutoConnect(
+            project.path,
+            settings: settings
+        )
+        gitStatuses[project.path] = status
+    }
 }
 
 // MARK: - Project Row
 
 struct ProjectRow: View {
     let project: Project
+    let gitStatus: GitStatus
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
@@ -298,9 +369,14 @@ struct ProjectRow: View {
                 .foregroundColor(CLITheme.green(for: colorScheme))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(project.title)
-                    .font(CLITheme.monoFont)
-                    .foregroundColor(CLITheme.primaryText(for: colorScheme))
+                HStack(spacing: 6) {
+                    Text(project.title)
+                        .font(CLITheme.monoFont)
+                        .foregroundColor(CLITheme.primaryText(for: colorScheme))
+
+                    // Git status indicator
+                    GitStatusIndicator(status: gitStatus)
+                }
 
                 HStack(spacing: 8) {
                     Text(project.path)
@@ -324,6 +400,51 @@ struct ProjectRow: View {
         }
         .padding(.vertical, 12)
         .contentShape(Rectangle())
+    }
+}
+
+// MARK: - Git Status Indicator
+
+struct GitStatusIndicator: View {
+    let status: GitStatus
+    @Environment(\.colorScheme) var colorScheme
+
+    var body: some View {
+        Group {
+            switch status {
+            case .unknown:
+                EmptyView()
+            case .checking:
+                ProgressView()
+                    .scaleEffect(0.6)
+                    .frame(width: 14, height: 14)
+            case .notGitRepo:
+                // Don't show anything for non-git repos
+                EmptyView()
+            default:
+                Image(systemName: status.icon)
+                    .font(.system(size: 12))
+                    .foregroundColor(statusColor)
+            }
+        }
+        .accessibilityLabel(status.accessibilityLabel)
+    }
+
+    private var statusColor: Color {
+        switch status.colorName {
+        case "green":
+            return CLITheme.green(for: colorScheme)
+        case "orange":
+            return CLITheme.yellow(for: colorScheme)
+        case "blue":
+            return CLITheme.blue(for: colorScheme)
+        case "cyan":
+            return CLITheme.cyan(for: colorScheme)
+        case "red":
+            return CLITheme.red(for: colorScheme)
+        default:
+            return CLITheme.mutedText(for: colorScheme)
+        }
     }
 }
 
@@ -373,6 +494,19 @@ struct SettingsView: View {
 
                 // Section 2: Claude Behavior
                 Section {
+                    Picker("Default Model", selection: Binding(
+                        get: { settings.defaultModel },
+                        set: { settings.defaultModel = $0 }
+                    )) {
+                        ForEach(ClaudeModel.allCases.filter { $0 != .custom }, id: \.self) { model in
+                            HStack {
+                                Image(systemName: model.icon)
+                                Text(model.displayName)
+                            }
+                            .tag(model)
+                        }
+                    }
+
                     Picker("Default Mode", selection: Binding(
                         get: { settings.claudeMode },
                         set: { settings.claudeMode = $0 }
@@ -386,9 +520,13 @@ struct SettingsView: View {
                 } header: {
                     Text("Claude")
                 } footer: {
-                    if settings.skipPermissions {
-                        Label("All tool executions will be auto-approved without confirmation.", systemImage: "exclamationmark.triangle.fill")
-                            .foregroundStyle(.orange)
+                    VStack(alignment: .leading, spacing: 4) {
+                        if settings.skipPermissions {
+                            Label("All tool executions will be auto-approved without confirmation.", systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.orange)
+                        }
+                        Text("Model: \(settings.defaultModel.description)")
+                            .foregroundStyle(.secondary)
                     }
                 }
 

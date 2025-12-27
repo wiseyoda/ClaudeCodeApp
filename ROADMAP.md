@@ -118,18 +118,18 @@
 
 ---
 
-## Milestone 3: Auto-Sync from GitHub 📋
+## Milestone 3: Auto-Sync from GitHub ✅
 
 **Goal:** Keep projects up-to-date automatically when loading, with smart handling of local changes.
 
-| Feature | Description | Effort |
+| Feature | Description | Status |
 |---------|-------------|--------|
-| Background Git Status | Check repo status while browsing project list | Medium |
-| Git Status Indicator | Show sync status icon on each project (✓ clean, ⚠ changes, ↓ behind) | Low |
-| Auto-Pull on Clean | When project has no local changes, auto-pull latest on load | Medium |
-| Local Changes Detection | Detect uncommitted changes AND unpushed commits | Medium |
-| Unclean Warning Banner | Show warning when local changes exist | Low |
-| Auto-Suggest Cleanup | Auto-send message to Claude to review/handle local changes | Medium |
+| Background Git Status | Check repo status while browsing project list | ✅ |
+| Git Status Indicator | Show sync status icon on each project (✓ clean, ⚠ changes, ↓ behind) | ✅ |
+| Auto-Pull on Clean | When project has no local changes, auto-pull latest on load | ✅ |
+| Local Changes Detection | Detect uncommitted changes AND unpushed commits | ✅ |
+| Unclean Warning Banner | Show warning when local changes exist | ✅ |
+| Auto-Suggest Cleanup | "Ask Claude" button to review/handle local changes | ✅ |
 
 ### User Flow
 
@@ -146,28 +146,31 @@
 1. User taps project
 2. Background check detects local changes
 3. Show banner: "⚠ Local changes detected"
-4. Auto-send to Claude: "There are uncommitted changes in this project.
-   Please review and help me decide how to handle them before I start working."
+4. User taps "Ask Claude" button
 5. Claude analyzes git status/diff and suggests: stash, commit, discard, etc.
 ```
 
 ### Implementation Notes
-- Use `git status --porcelain` for uncommitted changes
-- Use `git rev-list HEAD...@{upstream}` for unpushed commits
-- Cache git status per project to avoid repeated SSH calls
-- Status check runs in background via SSHManager
-- Show spinner/indicator while checking
-- Pull uses `git pull --ff-only` to avoid merge conflicts
+- `GitStatus` enum in Models.swift with 10 states (unknown, checking, notGitRepo, clean, dirty, ahead, behind, diverged, dirtyAndAhead, error)
+- SSHManager.checkGitStatus() uses `git status --porcelain` and `git rev-list HEAD...@{upstream}`
+- ContentView runs background status checks concurrently via `withTaskGroup`
+- GitStatusIndicator view shows icons with status colors (green/orange/blue/cyan/red)
+- ChatView receives `initialGitStatus` and handles auto-pull/banner
+- GitSyncBanner shows dismissible warning with "Ask Claude" action
+- `promptClaudeForCleanup()` sends context-aware message based on git state
+- `git fetch` runs with 5s timeout before checking ahead/behind
+- `git pull --ff-only` for safe auto-pull
 
 ### Status Indicators
-| Icon | Meaning |
-|------|---------|
-| ✓ | Clean, up to date |
-| ↓ | Behind remote (will auto-pull) |
-| ⚠ | Local uncommitted changes |
-| ↑ | Unpushed commits |
-| ⚠↑ | Both uncommitted + unpushed |
-| — | Not a git repo |
+| Icon | SF Symbol | Meaning |
+|------|-----------|---------|
+| ✓ | `checkmark.circle.fill` | Clean, up to date |
+| ↓ | `arrow.down.circle.fill` | Behind remote (will auto-pull) |
+| ⚠ | `exclamationmark.triangle.fill` | Local uncommitted changes |
+| ↑ | `arrow.up.circle.fill` | Unpushed commits |
+| ⚠↑ | `exclamationmark.arrow.triangle.2.circlepath` | Both uncommitted + unpushed |
+| ↕ | `arrow.up.arrow.down.circle.fill` | Diverged from remote |
+| — | `minus.circle` | Not a git repo |
 
 ---
 
@@ -193,9 +196,9 @@
 
 ---
 
-## Milestone 5: iPad Optimization 📋
+## Milestone 5: iPad Optimization 💡
 
-**Goal:** First-class iPad experience with sidebar and keyboard support.
+**Goal:** First-class iPad experience with sidebar and keyboard support. (Deferred - focusing on tool visualization first)
 
 | Feature | Description | Effort |
 |---------|-------------|--------|
@@ -216,19 +219,19 @@
 
 ---
 
-## Milestone 6: Enhanced Tool Visualization 💡
+## Milestone 6: Enhanced Tool Visualization 🚧
 
 **Goal:** Richer display of tool calls and results.
 
-| Feature | Description | Effort |
-|---------|-------------|--------|
-| **Truncate Long Output** | Show first N lines with fade + "Show X more lines" | Medium |
-| **Enhanced Diff View** | Line-by-line unified diff with line numbers | High |
-| Richer Tool Headers | Show key params: `Grep "pattern" → 12 files` | Medium |
-| Result Count Badge | Show match count when collapsed | Low |
-| Tool Type Colors | Different accent per tool type | Low |
-| Syntax Highlighting | Language-aware code coloring | High |
-| Quick Actions | Copy path, copy command, expand all | Medium |
+| Feature | Description | Effort | Status |
+|---------|-------------|--------|--------|
+| **Truncate Long Output** | Show first N lines with fade + "Show X more lines" | Medium | 📋 |
+| **Enhanced Diff View** | Line-by-line unified diff with line numbers | High | 📋 |
+| Richer Tool Headers | Show key params: `Grep "pattern" → 12 files` | Medium | 📋 |
+| Result Count Badge | Show match count when collapsed | Low | 📋 |
+| Tool Type Colors | Different accent per tool type | Low | 📋 |
+| Syntax Highlighting | Language-aware code coloring | High | 💡 |
+| Quick Actions | Copy path, copy command, expand all | Medium | 📋 |
 
 ### Truncate Long Output - Details
 
@@ -406,6 +409,23 @@
 - ✅ Export session as markdown with share sheet
 - ✅ SessionRow shows custom names with monospace fallback
 
+### December 27, 2024 - Milestone 3: Auto-Sync from GitHub
+- ✅ GitStatus enum with 10 states (unknown, checking, clean, dirty, ahead, behind, diverged, etc.)
+- ✅ SSHManager git methods (checkGitStatus, gitPull, getGitDiffSummary)
+- ✅ Background status checking with concurrent task group
+- ✅ GitStatusIndicator view with SF Symbol icons and theme colors
+- ✅ Auto-pull for projects behind remote (git pull --ff-only)
+- ✅ GitSyncBanner with dismissible warning and "Ask Claude" action
+- ✅ Context-aware cleanup prompts for dirty/ahead/diverged states
+- ✅ Refresh git status via context menu on project rows
+
+### December 27, 2024 - Model Selection
+- ✅ ClaudeModel enum (Opus/Sonnet/Haiku/Custom) with display names, icons, colors
+- ✅ Model selector pill in ChatView nav bar
+- ✅ Model passed via WebSocket options field (not /model command)
+- ✅ Default model setting in app preferences
+- ✅ Custom model ID support for specific versions (e.g., claude-opus-4-5-20251101)
+
 ---
 
 ## Technical Debt & Maintenance
@@ -420,6 +440,41 @@
 | Error handling | AppError.swift + Logger.swift + retry logic | **High** | ✅ Complete |
 | Test coverage | 28 unit tests for parsers | Medium | ✅ Complete |
 | Accessibility | VoiceOver labels on all interactive elements | **High** | ✅ Complete |
+
+---
+
+## Future Ideas 💡
+
+Ideas for potential future development:
+
+### Hybrid Model Mode ("Smart Switching")
+Inspired by Claude Code CLI's "opusplan" mode - automatically use different models for different tasks:
+
+| Phase | Model | Use Case |
+|-------|-------|----------|
+| Planning | Opus | Complex reasoning, architecture decisions, code review |
+| Execution | Sonnet | Writing code, running commands, routine tasks |
+| Quick answers | Haiku | Simple queries, status checks, small fixes |
+
+**Potential Features:**
+- **Auto-detect task complexity** - Analyze prompt to choose model
+- **Per-tool model assignment** - Use Opus for planning tools, Sonnet for execution
+- **Cost optimization** - Use cheaper models when appropriate
+- **User override** - Manual model selection always available
+- **Token budget awareness** - Switch to cheaper model when budget low
+
+**UI Concept:**
+```
+┌─ Model: Auto (Smart) ─────────────┐
+│  🧠 Planning → Opus               │
+│  ⚡ Execution → Sonnet            │
+│  💨 Quick → Haiku                 │
+│  ─────────────────────────────    │
+│  ○ Always Opus                    │
+│  ○ Always Sonnet                  │
+│  ○ Always Haiku                   │
+└───────────────────────────────────┘
+```
 
 ---
 
@@ -446,8 +501,9 @@ These features have been considered but are not on the roadmap:
 3. ~~Clone from GitHub URL~~ ✅ Complete
 4. ~~Create New Project + Delete~~ ✅ Complete
 5. ~~Session Management (M4)~~ ✅ Complete
-6. **Auto-Sync from GitHub (M3)** - Background git status + auto-pull
-7. iPad Sidebar + Keyboard Shortcuts (M5)
+6. ~~Auto-Sync from GitHub (M3)~~ ✅ Complete
+7. **Enhanced Tool Visualization (M6)** ← Current focus
+8. iPad Sidebar + Keyboard Shortcuts (M5) - Deferred
 
 ---
 

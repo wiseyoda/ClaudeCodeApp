@@ -107,6 +107,8 @@ class AppSettings: ObservableObject {
     // Claude Settings
     @AppStorage("claudeMode") private var claudeModeRaw: String = ClaudeMode.normal.rawValue
     @AppStorage("skipPermissions") var skipPermissions: Bool = false
+    @AppStorage("defaultModel") private var defaultModelRaw: String = ClaudeModel.sonnet.rawValue
+    @AppStorage("customModelId") var customModelId: String = ""
 
     // Chat Display Settings
     @AppStorage("showThinkingBlocks") var showThinkingBlocks: Bool = true
@@ -138,6 +140,11 @@ class AppSettings: ObservableObject {
     var claudeMode: ClaudeMode {
         get { ClaudeMode(rawValue: claudeModeRaw) ?? .normal }
         set { claudeModeRaw = newValue.rawValue }
+    }
+
+    var defaultModel: ClaudeModel {
+        get { ClaudeModel(rawValue: defaultModelRaw) ?? .sonnet }
+        set { defaultModelRaw = newValue.rawValue }
     }
 
     var projectSortOrder: ProjectSortOrder {
