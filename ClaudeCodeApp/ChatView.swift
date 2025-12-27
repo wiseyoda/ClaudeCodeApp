@@ -22,6 +22,8 @@ struct ChatView: View {
     @State private var pendingQuestions: AskUserQuestionData?  // For AskUserQuestion tool
     @State private var showingHelpSheet = false  // For /help command
     @State private var showingSessionPicker = false  // For /resume command
+    @State private var localSessions: [ProjectSession]?  // Local copy for session management
+    @StateObject private var sshManager = SSHManager()  // For session deletion
     @FocusState private var isInputFocused: Bool
 
     init(project: Project, apiClient: APIClient) {
@@ -145,7 +147,7 @@ struct ChatView: View {
         .sheet(isPresented: $showingSessionPicker) {
             SessionPickerSheet(
                 project: project,
-                sessions: project.sessions ?? [],
+                sessions: localSessions ?? project.sessions ?? [],
                 onSelect: { session in
                     showingSessionPicker = false
                     selectedSession = session
@@ -153,8 +155,17 @@ struct ChatView: View {
                 },
                 onCancel: {
                     showingSessionPicker = false
+                },
+                onDelete: { session in
+                    Task { await deleteSession(session) }
                 }
             )
+        }
+        .onAppear {
+            // Initialize local sessions copy
+            if localSessions == nil {
+                localSessions = project.sessions
+            }
         }
     }
 
@@ -602,6 +613,31 @@ struct ChatView: View {
         }
     }
 
+    /// Delete a session from the server
+    private func deleteSession(_ session: ProjectSession) async {
+        // Session files are stored at: ~/.claude/projects/{encoded-path}/{session-id}.jsonl
+        let encodedPath = project.path.replacingOccurrences(of: "/", with: "-")
+        let sessionFile = "~/.claude/projects/\(encodedPath)/\(session.id).jsonl"
+
+        do {
+            let deleteCmd = "rm -f '\(sessionFile)'"
+            _ = try await sshManager.executeCommandWithAutoConnect(deleteCmd, settings: settings)
+
+            // Remove from local list
+            await MainActor.run {
+                localSessions?.removeAll { $0.id == session.id }
+
+                // If we deleted the currently selected session, clear it
+                if selectedSession?.id == session.id {
+                    selectedSession = nil
+                    messages.removeAll()
+                    wsManager.sessionId = nil
+                }
+            }
+        } catch {
+            print("[ChatView] Failed to delete session: \(error)")
+        }
+    }
 }
 
 // MARK: - Slash Command Help Sheet

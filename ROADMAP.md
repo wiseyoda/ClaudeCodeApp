@@ -118,37 +118,82 @@
 
 ---
 
-## Milestone 3: Session Management 📋
+## Milestone 3: Auto-Sync from GitHub 📋
 
-**Goal:** Better organization and navigation of chat sessions.
+**Goal:** Keep projects up-to-date automatically when loading, with smart handling of local changes.
 
 | Feature | Description | Effort |
 |---------|-------------|--------|
-| Enhanced Session Picker | Full-screen list with summaries, timestamps | Medium |
-| Session Preview | Show last message or AI-generated summary | Low |
-| Rename Session | Custom names instead of UUIDs | Low |
-| Delete Session | Swipe or long-press to delete | Low |
-| Export Session | Save as .md file to Files app | Medium |
+| Background Git Status | Check repo status while browsing project list | Medium |
+| Git Status Indicator | Show sync status icon on each project (✓ clean, ⚠ changes, ↓ behind) | Low |
+| Auto-Pull on Clean | When project has no local changes, auto-pull latest on load | Medium |
+| Local Changes Detection | Detect uncommitted changes AND unpushed commits | Medium |
+| Unclean Warning Banner | Show warning when local changes exist | Low |
+| Auto-Suggest Cleanup | Auto-send message to Claude to review/handle local changes | Medium |
 
-### UI Concept
+### User Flow
+
+**Clean Project (no local changes):**
 ```
-┌─────────────────────────────────────┐
-│ Sessions                    [+ New] │
-├─────────────────────────────────────┤
-│ "Add authentication feature"        │
-│ 12 messages • 2 min ago             │
-├─────────────────────────────────────┤
-│ "Fix database connection bug"       │
-│ 8 messages • 1 hour ago             │
-├─────────────────────────────────────┤
-│ Session 5836831b...                 │
-│ 3 messages • Yesterday              │
-└─────────────────────────────────────┘
+1. User taps project
+2. Background check shows project is clean
+3. Auto-pull latest from origin (non-blocking)
+4. User enters chat with fresh codebase
 ```
+
+**Unclean Project (local changes detected):**
+```
+1. User taps project
+2. Background check detects local changes
+3. Show banner: "⚠ Local changes detected"
+4. Auto-send to Claude: "There are uncommitted changes in this project.
+   Please review and help me decide how to handle them before I start working."
+5. Claude analyzes git status/diff and suggests: stash, commit, discard, etc.
+```
+
+### Implementation Notes
+- Use `git status --porcelain` for uncommitted changes
+- Use `git rev-list HEAD...@{upstream}` for unpushed commits
+- Cache git status per project to avoid repeated SSH calls
+- Status check runs in background via SSHManager
+- Show spinner/indicator while checking
+- Pull uses `git pull --ff-only` to avoid merge conflicts
+
+### Status Indicators
+| Icon | Meaning |
+|------|---------|
+| ✓ | Clean, up to date |
+| ↓ | Behind remote (will auto-pull) |
+| ⚠ | Local uncommitted changes |
+| ↑ | Unpushed commits |
+| ⚠↑ | Both uncommitted + unpushed |
+| — | Not a git repo |
 
 ---
 
-## Milestone 4: iPad Optimization 📋
+## Milestone 4: Session Management ✅
+
+**Goal:** Better organization and navigation of chat sessions.
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| Enhanced Session Picker | Full-screen list with summaries, timestamps | ✅ |
+| Session Preview | Show last message or AI-generated summary | ✅ |
+| Rename Session | Custom names instead of UUIDs | ✅ |
+| Delete Session | Swipe or long-press to delete | ✅ |
+| Export Session | Save as .md file to Files app | ✅ |
+
+### Implementation Notes
+- SessionNamesStore class for custom session name persistence (UserDefaults)
+- Swipe-to-delete with confirmation dialog
+- Swipe-to-export and context menu export option
+- Rename via context menu with alert dialog
+- Markdown export with share sheet integration
+- Session rows show custom name, message count, last activity, preview
+
+---
+
+## Milestone 5: iPad Optimization 📋
 
 **Goal:** First-class iPad experience with sidebar and keyboard support.
 
@@ -171,21 +216,124 @@
 
 ---
 
-## Milestone 5: Enhanced Tool Visualization 💡
+## Milestone 6: Enhanced Tool Visualization 💡
 
 **Goal:** Richer display of tool calls and results.
 
 | Feature | Description | Effort |
 |---------|-------------|--------|
+| **Truncate Long Output** | Show first N lines with fade + "Show X more lines" | Medium |
+| **Enhanced Diff View** | Line-by-line unified diff with line numbers | High |
 | Richer Tool Headers | Show key params: `Grep "pattern" → 12 files` | Medium |
 | Result Count Badge | Show match count when collapsed | Low |
 | Tool Type Colors | Different accent per tool type | Low |
 | Syntax Highlighting | Language-aware code coloring | High |
 | Quick Actions | Copy path, copy command, expand all | Medium |
 
+### Truncate Long Output - Details
+
+**Goal:** Prevent long tool outputs from dominating the chat while keeping full content accessible.
+
+**Content-Aware Limits:**
+| Content Type | Default Lines | Detection |
+|--------------|---------------|-----------|
+| Bash output | 5 lines | Default for shell results |
+| Stack traces | 15 lines | Detect "Error", "Exception", "at line" |
+| Grep results | 10 matches | Count file matches |
+| Read file | 20 lines | File content preview |
+| JSON/logs | 8 lines | Detect structured data |
+
+**UI Design:**
+```
+┌─────────────────────────────────────┐
+│ $ ls -la                            │
+├─────────────────────────────────────┤
+│ total 128                           │
+│ drwxr-xr-x  12 user  staff   384    │
+│ -rw-r--r--   1 user  staff  1420    │
+│ -rw-r--r--   1 user  staff   892    │
+│ -rw-r--r--   1 user  staff  2341    │
+│ ┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈ │  ← Fade gradient
+│      ▼ Show 47 more lines           │  ← Tap to expand
+└─────────────────────────────────────┘
+```
+
+**Behavior:**
+- Fade gradient at bottom of truncated content
+- "Show X more lines" with chevron, tappable
+- Smooth spring animation on expand/collapse
+- Copy button always copies FULL output (not just visible)
+- Collapsed by default, remembers expand state per message
+
+**Implementation Notes:**
+- Detect content type from tool name + output patterns
+- Use `withAnimation(.spring())` for expand
+- Gradient overlay with `LinearGradient` + mask
+- Store expand state in view, not persisted
+- Line count calculated on render, cached
+
+### Enhanced Diff View - Details
+
+**Goal:** Replace the basic "Removed/Added" blocks with a professional unified diff display like GitHub/VS Code.
+
+**Current State:** Basic view showing "- Removed:" and "+ Added:" text blocks with colored backgrounds.
+
+**Target State:**
+```
+┌─ Edit: src/Components/SessionRow.swift ─────┐
+│     │     │                                  │
+│ 347 │     │ -    if let summary = session... │  ← Red bg
+│ 348 │     │ -        Text(summary)           │
+│ 349 │     │ -            .font(.subheadline) │
+│     │ 362 │ +    // Show last user message   │  ← Green bg
+│     │ 363 │ +    if let lastMsg = session... │
+│ 364 │ 364 │      Text(lastMsg)               │  ← Context (gray)
+│ 365 │ 365 │          .font(.subheadline)     │
+│     │     │                                  │
+│     │     │  ┈┈┈ 12 unchanged lines ┈┈┈     │  ← Collapsed
+│     │     │                                  │
+│ 370 │     │ -    HStack {                    │
+│     │ 378 │ +    VStack {                    │
+└─────────────────────────────────────────────┘
+```
+
+**Features:**
+| Feature | Description |
+|---------|-------------|
+| Dual line numbers | Old line # (left), New line # (right) |
+| Unified diff format | +/- prefixes with colored backgrounds |
+| Collapsible context | "12 unchanged lines" collapses to single row |
+| Proper diff algorithm | Compute LCS (Longest Common Subsequence) diff |
+| Word-level highlights | Optional: highlight changed words within lines |
+| File path header | Show which file is being edited |
+| Monospace font | Proper code alignment |
+
+**Color Scheme:**
+| Element | Light Mode | Dark Mode |
+|---------|------------|-----------|
+| Removed line bg | `#FFEEF0` | `#3D1E20` |
+| Removed line text | `#B31D28` | `#F97583` |
+| Added line bg | `#E6FFEC` | `#1E3D23` |
+| Added line text | `#22863A` | `#85E89D` |
+| Context line | Default | Default |
+| Line numbers | Gray | Gray |
+
+**Implementation Notes:**
+- Use Myers diff algorithm (or simple LCS for MVP)
+- Swift package option: `swift-diff` or implement basic LCS
+- Parse `old_string` and `new_string` from Edit tool content
+- Split into lines, compute diff, render unified view
+- Context lines: show 3 before/after changes by default
+- Collapse runs of >5 unchanged lines
+- Tap collapsed section to expand
+
+**Accessibility:**
+- VoiceOver: "Line 347 removed: if let summary equals..."
+- VoiceOver: "Line 362 added: Show last user message comment"
+
 ---
 
-## Milestone 6: Search & Bookmarks 💡
+## Milestone 7: Search & Bookmarks 💡
 
 **Goal:** Find and save important messages.
 
@@ -249,6 +397,15 @@
 - ✅ /init now passes to Claude (creates CLAUDE.md)
 - ✅ /new command for starting fresh sessions
 
+### December 27, 2024 - Milestone 4: Session Management
+- ✅ SessionNamesStore for custom session name persistence
+- ✅ Enhanced SessionPickerSheet with full-screen list
+- ✅ Session preview (last message, message count, relative time)
+- ✅ Rename session via context menu and alert dialog
+- ✅ Delete session with swipe and confirmation
+- ✅ Export session as markdown with share sheet
+- ✅ SessionRow shows custom names with monospace fallback
+
 ---
 
 ## Technical Debt & Maintenance
@@ -288,8 +445,9 @@ These features have been considered but are not on the roadmap:
 2. ~~File Browser + @ References~~ ✅ Complete
 3. ~~Clone from GitHub URL~~ ✅ Complete
 4. ~~Create New Project + Delete~~ ✅ Complete
-5. Enhanced Session Picker (M3 - improves navigation)
-6. iPad Sidebar + Keyboard Shortcuts (M4)
+5. ~~Session Management (M4)~~ ✅ Complete
+6. **Auto-Sync from GitHub (M3)** - Background git status + auto-pull
+7. iPad Sidebar + Keyboard Shortcuts (M5)
 
 ---
 
