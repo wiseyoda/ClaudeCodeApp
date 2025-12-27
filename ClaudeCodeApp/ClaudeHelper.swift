@@ -13,6 +13,10 @@ class ClaudeHelper: ObservableObject {
     @Published var suggestedActions: [SuggestedAction] = []
     @Published var suggestedFiles: [String] = []
 
+    // Idea enhancement state
+    @Published var isEnhancingIdea = false
+    @Published var enhancedIdea: EnhancedIdea?
+
     /// A suggested action that the user can tap to execute
     struct SuggestedAction: Identifiable, Equatable {
         let id = UUID()
@@ -215,18 +219,100 @@ class ClaudeHelper: ObservableObject {
         suggestedFiles = []
     }
 
+    // MARK: - Idea Enhancement
+
+    /// Result of AI-enhanced idea
+    struct EnhancedIdea {
+        let expandedPrompt: String
+        let suggestedFollowups: [String]
+    }
+
+    /// Enhance an idea into a detailed prompt using Sonnet for higher quality
+    func enhanceIdea(_ ideaText: String, projectPath: String) async {
+        await MainActor.run {
+            isEnhancingIdea = true
+            enhancedIdea = nil
+        }
+
+        let prompt = """
+        You are helping a developer expand a quick idea into an actionable prompt for Claude Code.
+
+        IDEA: \(ideaText)
+
+        Return ONLY a JSON object with this exact structure:
+        {
+            "expandedPrompt": "A detailed, actionable prompt (2-3 paragraphs) that Claude Code can execute. Be specific about what to build, test cases, edge cases, and success criteria.",
+            "suggestedFollowups": ["3 related ideas or next steps the developer might want to explore after this"]
+        }
+
+        Make the expanded prompt specific and actionable. Include concrete steps, considerations, and acceptance criteria.
+        Respond with ONLY the JSON object, no other text.
+        """
+
+        do {
+            // Use Sonnet model for higher quality expansions
+            let response = try await sendQuickQuery(prompt: prompt, projectPath: projectPath, model: "sonnet")
+            let enhanced = parseEnhancedIdea(from: response)
+            await MainActor.run {
+                enhancedIdea = enhanced
+                isEnhancingIdea = false
+            }
+        } catch {
+            log.error("Failed to enhance idea: \(error)")
+            await MainActor.run {
+                isEnhancingIdea = false
+            }
+        }
+    }
+
+    /// Parse the enhanced idea JSON response
+    private func parseEnhancedIdea(from response: String) -> EnhancedIdea? {
+        // Try to find JSON object in response
+        guard let jsonStart = response.firstIndex(of: "{"),
+              let jsonEnd = response.lastIndex(of: "}") else {
+            log.warning("No JSON object found in enhancement response")
+            return nil
+        }
+
+        let jsonString = String(response[jsonStart...jsonEnd])
+
+        guard let data = jsonString.data(using: .utf8) else {
+            return nil
+        }
+
+        do {
+            let decoded = try JSONDecoder().decode(EnhancedIdeaJSON.self, from: data)
+            return EnhancedIdea(
+                expandedPrompt: decoded.expandedPrompt,
+                suggestedFollowups: decoded.suggestedFollowups
+            )
+        } catch {
+            log.error("Failed to decode enhanced idea JSON: \(error)")
+            return nil
+        }
+    }
+
+    private struct EnhancedIdeaJSON: Codable {
+        let expandedPrompt: String
+        let suggestedFollowups: [String]
+    }
+
+    func clearEnhancedIdea() {
+        enhancedIdea = nil
+    }
+
     // MARK: - WebSocket Communication
 
-    /// Send a quick query using Haiku for fast response
-    private func sendQuickQuery(prompt: String, projectPath: String) async throws -> String {
+    /// Send a quick query, defaults to Haiku for speed but can use other models
+    private func sendQuickQuery(prompt: String, projectPath: String, model: String = "haiku") async throws -> String {
         try await withCheckedThrowingContinuation { continuation in
-            sendQueryViaWebSocket(prompt: prompt, projectPath: projectPath) { result in
+            sendQueryViaWebSocket(prompt: prompt, projectPath: projectPath, model: model) { result in
                 continuation.resume(with: result)
             }
         }
     }
 
-    private func sendQueryViaWebSocket(prompt: String, projectPath: String, completion: @escaping (Result<String, Error>) -> Void) {
+    private func sendQueryViaWebSocket(prompt: String, projectPath: String, model: String = "haiku", completion: @escaping (Result<String, Error>) -> Void) {
         guard let url = settings.webSocketURL else {
             completion(.failure(ClaudeHelperError.invalidURL))
             return
@@ -244,13 +330,13 @@ class ClaudeHelper: ObservableObject {
         // Start receiving messages
         receiveMessage()
 
-        // Send the query with Haiku model for speed
+        // Send the query with specified model
         let command = WSClaudeCommand(
             command: prompt,
             options: WSCommandOptions(
                 cwd: projectPath,
                 sessionId: nil,
-                model: "haiku",  // Use Haiku for fast, cheap responses
+                model: model,  // Use specified model (haiku for suggestions, sonnet for enhancement)
                 permissionMode: nil,
                 images: nil
             )

@@ -7,6 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		F651E84643F2460D8BA6DFB9 /* IdeasFAB.swift in Sources */ = {isa = PBXBuildFile; fileRef = D406B32A88A3423899A037FB /* IdeasFAB.swift */; };
+		6649DD89AF7741A49571016E /* IdeasDrawerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55A0D1D2E7D841C39956EF33 /* IdeasDrawerSheet.swift */; };
+		730BCCA17F1640EF98105BAB /* IdeaRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 829A5F0CE0184E598DD8CC00 /* IdeaRowView.swift */; };
+		8D08C46693BF46478325D485 /* IdeaEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B423E7C7AA924BD1BA2E2418 /* IdeaEditorSheet.swift */; };
+		1597F6A073B1490D948C46FE /* QuickCaptureSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F4D52190DB54B75A6081DAA /* QuickCaptureSheet.swift */; };
+		F52215AB5E74451A8C111231 /* TagsFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CE0280C4CD14A61A45D94D0 /* TagsFlowView.swift */; };
+		1D727765964448C0BF0B34A9 /* IdeasStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4676361593D14ED18823954D /* IdeasStore.swift */; };
 		A1000001 /* ClaudeCodeAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001 /* ClaudeCodeAppApp.swift */; };
 		A1000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000002 /* ContentView.swift */; };
 		A1000003 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000003 /* ChatView.swift */; };
@@ -59,6 +66,13 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		D406B32A88A3423899A037FB /* IdeasFAB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeasFAB.swift; sourceTree = "<group>"; };
+		55A0D1D2E7D841C39956EF33 /* IdeasDrawerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeasDrawerSheet.swift; sourceTree = "<group>"; };
+		829A5F0CE0184E598DD8CC00 /* IdeaRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeaRowView.swift; sourceTree = "<group>"; };
+		B423E7C7AA924BD1BA2E2418 /* IdeaEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeaEditorSheet.swift; sourceTree = "<group>"; };
+		1F4D52190DB54B75A6081DAA /* QuickCaptureSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickCaptureSheet.swift; sourceTree = "<group>"; };
+		2CE0280C4CD14A61A45D94D0 /* TagsFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagsFlowView.swift; sourceTree = "<group>"; };
+		4676361593D14ED18823954D /* IdeasStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeasStore.swift; sourceTree = "<group>"; };
 		2509F4FB2EFF976200EAFBFE /* ClaudeCodeAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClaudeCodeAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A2000001 /* ClaudeCodeAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeCodeAppApp.swift; sourceTree = "<group>"; };
 		A2000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -144,6 +158,7 @@
 				A2000006 /* AppSettings.swift */,
 				A2000033 /* ClaudeHelper.swift */,
 				A2000036 /* CommandStore.swift */,
+				4676361593D14ED18823954D /* IdeasStore.swift */,
 				A2000008 /* Theme.swift */,
 				A2000009 /* TerminalView.swift */,
 				A2000010 /* SSHManager.swift */,
@@ -207,6 +222,12 @@
 				A2000035 /* QuickSettingsSheet.swift */,
 				A2000037 /* CommandsView.swift */,
 				A2000038 /* CommandPickerSheet.swift */,
+				D406B32A88A3423899A037FB /* IdeasFAB.swift */,
+				55A0D1D2E7D841C39956EF33 /* IdeasDrawerSheet.swift */,
+				829A5F0CE0184E598DD8CC00 /* IdeaRowView.swift */,
+				B423E7C7AA924BD1BA2E2418 /* IdeaEditorSheet.swift */,
+				1F4D52190DB54B75A6081DAA /* QuickCaptureSheet.swift */,
+				2CE0280C4CD14A61A45D94D0 /* TagsFlowView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -363,6 +384,13 @@
 				A1000035 /* SuggestionChipsView.swift in Sources */,
 				A1000036 /* QuickSettingsSheet.swift in Sources */,
 				A1000037 /* CommandStore.swift in Sources */,
+				F651E84643F2460D8BA6DFB9 /* IdeasFAB.swift in Sources */,
+				6649DD89AF7741A49571016E /* IdeasDrawerSheet.swift in Sources */,
+				730BCCA17F1640EF98105BAB /* IdeaRowView.swift in Sources */,
+				8D08C46693BF46478325D485 /* IdeaEditorSheet.swift in Sources */,
+				1597F6A073B1490D948C46FE /* QuickCaptureSheet.swift in Sources */,
+				F52215AB5E74451A8C111231 /* TagsFlowView.swift in Sources */,
+				1D727765964448C0BF0B34A9 /* IdeasStore.swift in Sources */,
 				A1000038 /* CommandsView.swift in Sources */,
 				A1000039 /* CommandPickerSheet.swift in Sources */,
 			);

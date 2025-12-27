@@ -26,6 +26,11 @@ struct ChatView: View {
     @State private var showingSessionPicker = false  // For /resume command
     @State private var showingBookmarks = false  // For bookmarks view
 
+    // Ideas drawer state
+    @StateObject private var ideasStore: IdeasStore
+    @State private var showIdeasDrawer = false
+    @State private var showQuickCapture = false
+
     // Search and filter state
     @State private var isSearching = false
     @State private var searchText = ""
@@ -55,6 +60,7 @@ struct ChatView: View {
         // Initialize WebSocketManager without settings - will be configured in onAppear
         _wsManager = StateObject(wrappedValue: WebSocketManager())
         _claudeHelper = StateObject(wrappedValue: ClaudeHelper(settings: AppSettings()))
+        _ideasStore = StateObject(wrappedValue: IdeasStore(projectPath: project.path))
     }
 
     var body: some View {
@@ -124,6 +130,7 @@ struct ChatView: View {
                             wsManager.sessionId = nil
                             selectedSession = nil
                             MessageStore.clearMessages(for: project.path)
+                            MessageStore.clearSessionId(for: project.path)
                         } label: {
                             Label("New Chat", systemImage: "plus")
                         }
@@ -163,6 +170,15 @@ struct ChatView: View {
                 messages = savedMessages
                 // Trigger scroll to bottom after loading persisted messages
                 scrollToBottomTrigger = true
+            }
+
+            // Restore last session ID for conversation continuity
+            if let savedSessionId = MessageStore.loadSessionId(for: project.path) {
+                wsManager.sessionId = savedSessionId
+                // Find matching session in project sessions for UI
+                if let sessions = project.sessions {
+                    selectedSession = sessions.first { $0.id == savedSessionId }
+                }
             }
 
             // Load draft input
@@ -243,6 +259,8 @@ struct ChatView: View {
                 onSelect: { session in
                     showingSessionPicker = false
                     selectedSession = session
+                    wsManager.sessionId = session.id
+                    MessageStore.saveSessionId(session.id, for: project.path)
                     loadSessionHistory(session)
                 },
                 onCancel: {
@@ -270,6 +288,22 @@ struct ChatView: View {
         .sheet(isPresented: $showingBookmarks) {
             BookmarksView()
                 .environmentObject(settings)
+        }
+        .sheet(isPresented: $showIdeasDrawer) {
+            IdeasDrawerSheet(
+                isPresented: $showIdeasDrawer,
+                ideasStore: ideasStore,
+                claudeHelper: claudeHelper,
+                projectPath: project.path,
+                onSendIdea: { idea in
+                    appendToInput(idea.formattedPrompt)
+                }
+            )
+        }
+        .sheet(isPresented: $showQuickCapture) {
+            QuickCaptureSheet(isPresented: $showQuickCapture) { text in
+                ideasStore.quickAdd(text)
+            }
         }
         .onAppear {
             // Initialize local sessions copy
@@ -383,6 +417,7 @@ struct ChatView: View {
         if let sessions = project.sessions, !sessions.isEmpty {
             SessionPicker(sessions: sessions, selected: $selectedSession, isLoading: isLoadingHistory) { session in
                 wsManager.sessionId = session.id
+                MessageStore.saveSessionId(session.id, for: project.path)
                 loadSessionHistory(session)
             }
         }
@@ -579,7 +614,10 @@ struct ChatView: View {
                 onSend: sendMessage,
                 onAbort: { wsManager.abortSession() },
                 recentMessages: messages,
-                claudeHelper: claudeHelper
+                claudeHelper: claudeHelper,
+                ideaCount: ideasStore.ideas.count,
+                onIdeasTap: { showIdeasDrawer = true },
+                onIdeasLongPress: { showQuickCapture = true }
             )
             .id("input-view")
         }
@@ -665,6 +703,9 @@ struct ChatView: View {
         }
 
         wsManager.onSessionCreated = { sessionId in
+            // Save session ID for continuity when returning to this project
+            MessageStore.saveSessionId(sessionId, for: project.path)
+
             // Session created notification
             let systemMsg = ChatMessage(
                 role: .system,
@@ -803,6 +844,7 @@ struct ChatView: View {
         selectedSession = nil
         addSystemMessage("Conversation cleared. Starting fresh.")
         MessageStore.clearMessages(for: project.path)
+        MessageStore.clearSessionId(for: project.path)
     }
 
     private func handleNewSessionCommand() {
@@ -812,6 +854,7 @@ struct ChatView: View {
         selectedSession = nil
         addSystemMessage("New session started.")
         MessageStore.clearMessages(for: project.path)
+        MessageStore.clearSessionId(for: project.path)
     }
 
     private func showStatusInfo() {
@@ -829,6 +872,17 @@ struct ChatView: View {
     private func addSystemMessage(_ content: String) {
         let msg = ChatMessage(role: .system, content: content, timestamp: Date())
         messages.append(msg)
+    }
+
+    /// Append content to the input field with smart spacing
+    private func appendToInput(_ content: String) {
+        if inputText.isEmpty {
+            inputText = content + " "
+        } else if inputText.hasSuffix(" ") {
+            inputText += content + " "
+        } else {
+            inputText += " " + content + " "
+        }
     }
 
     /// Load full session history via API
@@ -899,6 +953,7 @@ struct ChatView: View {
                     selectedSession = nil
                     messages.removeAll()
                     wsManager.sessionId = nil
+                    MessageStore.clearSessionId(for: project.path)
                 }
             }
         } catch {

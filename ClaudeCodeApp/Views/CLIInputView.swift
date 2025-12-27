@@ -13,6 +13,12 @@ struct CLIInputView: View {
     let onAbort: () -> Void
     var recentMessages: [ChatMessage]
     var claudeHelper: ClaudeHelper?
+
+    // Ideas FAB properties
+    var ideaCount: Int
+    var onIdeasTap: () -> Void
+    var onIdeasLongPress: () -> Void
+
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
     @StateObject private var speechManager = SpeechManager()
@@ -31,7 +37,10 @@ struct CLIInputView: View {
         onSend: @escaping () -> Void,
         onAbort: @escaping () -> Void,
         recentMessages: [ChatMessage] = [],
-        claudeHelper: ClaudeHelper? = nil
+        claudeHelper: ClaudeHelper? = nil,
+        ideaCount: Int = 0,
+        onIdeasTap: @escaping () -> Void = {},
+        onIdeasLongPress: @escaping () -> Void = {}
     ) {
         self._text = text
         self._selectedImage = selectedImage
@@ -42,52 +51,66 @@ struct CLIInputView: View {
         self.onAbort = onAbort
         self.recentMessages = recentMessages
         self.claudeHelper = claudeHelper
+        self.ideaCount = ideaCount
+        self.onIdeasTap = onIdeasTap
+        self.onIdeasLongPress = onIdeasLongPress
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Recording indicator
-            if speechManager.isRecording {
-                recordingIndicator
-            }
-
-            // Image preview
-            if let imageData = selectedImage, let uiImage = UIImage(data: imageData) {
-                imagePreview(uiImage)
-            }
-
-            // Main input row
-            HStack(alignment: .bottom, spacing: 8) {
-                // [+] Attachment menu button
-                if !isProcessing {
-                    attachmentMenuButton
+        ZStack(alignment: .topTrailing) {
+            VStack(spacing: 0) {
+                // Recording indicator
+                if speechManager.isRecording {
+                    recordingIndicator
                 }
 
-                // Multi-line text input
-                TextField("Type a message...", text: $text, axis: .vertical)
-                    .font(settings.scaledFont(.body))
-                    .foregroundColor(CLITheme.primaryText(for: colorScheme))
-                    .focused($isFocused)
-                    .disabled(isProcessing)
-                    .lineLimit(1...8)
-                    .textFieldStyle(.plain)
-                    .submitLabel(.send)
-                    .onSubmit {
-                        if !isProcessing && (!text.isEmpty || selectedImage != nil) {
-                            onSend()
-                        }
-                    }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(CLITheme.secondaryBackground(for: colorScheme))
-                    .cornerRadius(20)
+                // Image preview
+                if let imageData = selectedImage, let uiImage = UIImage(data: imageData) {
+                    imagePreview(uiImage)
+                }
 
-                // Send button
-                sendButton
+                // Main input row
+                HStack(alignment: .bottom, spacing: 8) {
+                    // [+] Attachment menu button
+                    if !isProcessing {
+                        attachmentMenuButton
+                    }
+
+                    // Multi-line text input
+                    TextField("Type a message...", text: $text, axis: .vertical)
+                        .font(settings.scaledFont(.body))
+                        .foregroundColor(CLITheme.primaryText(for: colorScheme))
+                        .focused($isFocused)
+                        .disabled(isProcessing)
+                        .lineLimit(1...8)
+                        .textFieldStyle(.plain)
+                        .submitLabel(.send)
+                        .onSubmit {
+                            if !isProcessing && (!text.isEmpty || selectedImage != nil) {
+                                onSend()
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(CLITheme.secondaryBackground(for: colorScheme))
+                        .cornerRadius(20)
+
+                    // Send button
+                    sendButton
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(CLITheme.background(for: colorScheme))
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(CLITheme.background(for: colorScheme))
+
+            // Ideas FAB - positioned above the status bar
+            IdeasFAB(
+                ideaCount: ideaCount,
+                onTap: onIdeasTap,
+                onLongPress: onIdeasLongPress
+            )
+            .padding(.trailing, 12)
+            .offset(y: -96)
         }
         // iPad keyboard shortcuts
         .background(keyboardShortcuts)
