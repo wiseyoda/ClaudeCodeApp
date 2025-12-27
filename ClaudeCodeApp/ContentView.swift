@@ -271,6 +271,7 @@ struct ContentView: View {
                 gitStatus: gitStatuses[project.path] ?? .unknown,
                 isSelected: selectedProject?.id == project.id
             )
+            .tag(project)  // Required for List selection to work properly
             .listRowBackground(
                 selectedProject?.id == project.id
                     ? CLITheme.blue(for: colorScheme).opacity(0.2)
@@ -298,7 +299,7 @@ struct ContentView: View {
                 }
             }
         }
-        .listStyle(.plain)
+        .listStyle(.sidebar)  // Use sidebar style for proper selection behavior
         .scrollContentBackground(.hidden)
         .refreshable {
             await loadProjects()

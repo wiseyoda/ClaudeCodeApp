@@ -98,7 +98,8 @@ class APIClient: ObservableObject {
         var request = URLRequest(url: url)
         // Prefer API Key if available, otherwise use JWT token
         if !settings.apiKey.isEmpty {
-            request.setValue(settings.apiKey, forHTTPHeaderField: "X-API-Key")
+            // API key is used as Bearer token for claudecodeui
+            request.setValue("Bearer \(settings.apiKey)", forHTTPHeaderField: "Authorization")
         } else if !settings.authToken.isEmpty {
             request.setValue("Bearer \(settings.authToken)", forHTTPHeaderField: "Authorization")
         }
