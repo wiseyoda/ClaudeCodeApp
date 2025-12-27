@@ -57,4 +57,15 @@ final class BookmarkStoreTests: XCTestCase {
         XCTAssertTrue(store.isBookmarked(messageId: message2.id))
         XCTAssertEqual(store.bookmarks.count, 1)
     }
+
+    func testLoadInvalidFile_returnsEmptyBookmarks() throws {
+        let (dir, fileURL) = try makeTempFileURL()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        try Data("not-json".utf8).write(to: fileURL)
+
+        let store = BookmarkStore(bookmarksFile: fileURL)
+
+        XCTAssertTrue(store.bookmarks.isEmpty)
+    }
 }

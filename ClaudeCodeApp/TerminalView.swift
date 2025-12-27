@@ -573,6 +573,12 @@ struct SSHConnectionSheet: View {
             username = settings.sshUsername
             tempPassword = settings.sshPassword
         }
+        .onDisappear {
+            // Clean up SSH connection when leaving terminal
+            if sshManager.isConnected {
+                sshManager.disconnect()
+            }
+        }
     }
 
     private var canConnect: Bool {

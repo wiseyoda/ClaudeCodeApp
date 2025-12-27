@@ -6,7 +6,7 @@ struct NewProjectSheet: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
-    @StateObject private var sshManager = SSHManager()
+    @ObservedObject private var sshManager = SSHManager.shared
 
     @State private var projectName = ""
     @State private var initializeClaude = true

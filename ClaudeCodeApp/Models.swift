@@ -240,6 +240,8 @@ struct ChatMessage: Identifiable, Equatable, Codable {
     let timestamp: Date
     var isStreaming: Bool = false
     var imageData: Data?  // Optional image attachment
+    var executionTime: TimeInterval?  // Time taken for this response (in seconds)
+    var tokenCount: Int?  // Token count for this message
 
     enum Role: String, Codable {
         case user
@@ -252,13 +254,15 @@ struct ChatMessage: Identifiable, Equatable, Codable {
         case thinking  // For reasoning/thinking blocks
     }
 
-    init(role: Role, content: String, timestamp: Date = Date(), isStreaming: Bool = false, imageData: Data? = nil) {
+    init(role: Role, content: String, timestamp: Date = Date(), isStreaming: Bool = false, imageData: Data? = nil, executionTime: TimeInterval? = nil, tokenCount: Int? = nil) {
         self.id = UUID()
         self.role = role
         self.content = content
         self.timestamp = timestamp
         self.isStreaming = isStreaming
         self.imageData = imageData
+        self.executionTime = executionTime
+        self.tokenCount = tokenCount
     }
 
     static func == (lhs: ChatMessage, rhs: ChatMessage) -> Bool {
@@ -275,6 +279,8 @@ private struct ChatMessageDTO: Codable {
     let content: String
     let timestamp: Date
     let imageFilename: String?  // Reference to image file, not inline data
+    let executionTime: TimeInterval?
+    let tokenCount: Int?
 
     init(from message: ChatMessage, imageFilename: String?) {
         self.id = message.id
@@ -282,6 +288,8 @@ private struct ChatMessageDTO: Codable {
         self.content = message.content
         self.timestamp = message.timestamp
         self.imageFilename = imageFilename
+        self.executionTime = message.executionTime
+        self.tokenCount = message.tokenCount
     }
 
     func toChatMessage(imageData: Data?) -> ChatMessage {
@@ -289,7 +297,9 @@ private struct ChatMessageDTO: Codable {
             role: ChatMessage.Role(rawValue: role) ?? .system,
             content: content,
             timestamp: timestamp,
-            imageData: imageData
+            imageData: imageData,
+            executionTime: executionTime,
+            tokenCount: tokenCount
         )
     }
 }
@@ -526,6 +536,7 @@ class MessageStore {
 // MARK: - Archived Projects Store
 
 /// Stores archived project paths
+@MainActor
 class ArchivedProjectsStore: ObservableObject {
     static let shared = ArchivedProjectsStore()
 

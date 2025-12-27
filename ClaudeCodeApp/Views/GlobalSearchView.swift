@@ -16,7 +16,7 @@ struct GlobalSearchResult: Identifiable {
 struct GlobalSearchView: View {
     let projects: [Project]
     @EnvironmentObject var settings: AppSettings
-    @StateObject private var sshManager = SSHManager()
+    @ObservedObject private var sshManager = SSHManager.shared
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.dismiss) var dismiss
 
@@ -25,6 +25,8 @@ struct GlobalSearchView: View {
     @State private var results: [GlobalSearchResult] = []
     @State private var searchError: String?
     @State private var hasSearched = false
+    @State private var searchTask: Task<Void, Never>?
+    @State private var connectTask: Task<Void, Never>?
 
     var body: some View {
         NavigationStack {
@@ -61,6 +63,11 @@ struct GlobalSearchView: View {
         }
         .onAppear {
             connectSSH()
+        }
+        .onDisappear {
+            // Cancel any pending tasks to prevent hangs
+            searchTask?.cancel()
+            connectTask?.cancel()
         }
     }
 
@@ -211,10 +218,12 @@ struct GlobalSearchView: View {
 
     private func connectSSH() {
         searchError = nil
-        Task {
+        connectTask?.cancel()
+        connectTask = Task {
             do {
                 try await sshManager.autoConnect(settings: settings)
             } catch {
+                guard !Task.isCancelled else { return }
                 await MainActor.run {
                     searchError = "Failed to connect: \(error.localizedDescription)"
                 }
@@ -231,14 +240,20 @@ struct GlobalSearchView: View {
             return
         }
 
+        // Cancel any previous search
+        searchTask?.cancel()
+
         isSearching = true
         searchError = nil
         results = []
 
-        Task {
+        searchTask = Task {
             var allResults: [GlobalSearchResult] = []
 
             for project in projects {
+                // Check for cancellation between projects
+                guard !Task.isCancelled else { return }
+
                 // Encode project path for Claude session directory
                 let encodedPath = project.path
                     .replacingOccurrences(of: "/", with: "-")
@@ -249,6 +264,9 @@ struct GlobalSearchView: View {
                     let files = output.components(separatedBy: .newlines).filter { !$0.isEmpty }
 
                     for file in files.prefix(20) { // Limit to 20 sessions per project
+                        // Check for cancellation between files
+                        guard !Task.isCancelled else { return }
+
                         // Extract session ID from filename
                         let sessionId = URL(fileURLWithPath: file).deletingPathExtension().lastPathComponent
 
@@ -273,6 +291,9 @@ struct GlobalSearchView: View {
                     }
                 }
             }
+
+            // Only update UI if not cancelled
+            guard !Task.isCancelled else { return }
 
             await MainActor.run {
                 // Sort by timestamp, newest first

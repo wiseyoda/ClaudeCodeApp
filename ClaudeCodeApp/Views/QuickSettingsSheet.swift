@@ -5,10 +5,12 @@ import SwiftUI
 /// A compact settings sheet for frequently-changed session settings
 struct QuickSettingsSheet: View {
     @EnvironmentObject var settings: AppSettings
+    @ObservedObject var debugStore = DebugLogStore.shared
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.dismiss) var dismiss
 
     let tokenUsage: (current: Int, max: Int)?
+    @State private var showDebugLog = false
 
     var body: some View {
         NavigationStack {
@@ -78,6 +80,44 @@ struct QuickSettingsSheet: View {
                 } header: {
                     Text("Display")
                 }
+
+                // Debug Section
+                Section {
+                    Toggle(isOn: Binding(
+                        get: { debugStore.isEnabled },
+                        set: { newValue in
+                            debugStore.isEnabled = newValue
+                            settings.debugLoggingEnabled = newValue
+                        }
+                    )) {
+                        Label("Debug Logging", systemImage: "ladybug")
+                    }
+
+                    Button {
+                        showDebugLog = true
+                    } label: {
+                        HStack {
+                            Label("View Debug Log", systemImage: "doc.text.magnifyingglass")
+                            Spacer()
+                            if debugStore.entries.count > 0 {
+                                Text("\(debugStore.entries.count)")
+                                    .font(.caption)
+                                    .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 2)
+                                    .background(CLITheme.mutedText(for: colorScheme).opacity(0.2))
+                                    .cornerRadius(8)
+                            }
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                        }
+                    }
+                } header: {
+                    Text("Developer")
+                } footer: {
+                    Text("Debug logging captures raw WebSocket messages for troubleshooting.")
+                }
             }
             .listStyle(.insetGrouped)
             .navigationTitle("Settings")
@@ -92,6 +132,9 @@ struct QuickSettingsSheet: View {
         }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        .sheet(isPresented: $showDebugLog) {
+            DebugLogView()
+        }
     }
 
     private func thinkingModeDescription(_ mode: ThinkingMode) -> String {

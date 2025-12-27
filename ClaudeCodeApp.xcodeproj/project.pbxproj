@@ -7,13 +7,11 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		F651E84643F2460D8BA6DFB9 /* IdeasFAB.swift in Sources */ = {isa = PBXBuildFile; fileRef = D406B32A88A3423899A037FB /* IdeasFAB.swift */; };
+		1597F6A073B1490D948C46FE /* QuickCaptureSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F4D52190DB54B75A6081DAA /* QuickCaptureSheet.swift */; };
+		1D727765964448C0BF0B34A9 /* IdeasStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4676361593D14ED18823954D /* IdeasStore.swift */; };
 		6649DD89AF7741A49571016E /* IdeasDrawerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55A0D1D2E7D841C39956EF33 /* IdeasDrawerSheet.swift */; };
 		730BCCA17F1640EF98105BAB /* IdeaRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 829A5F0CE0184E598DD8CC00 /* IdeaRowView.swift */; };
 		8D08C46693BF46478325D485 /* IdeaEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B423E7C7AA924BD1BA2E2418 /* IdeaEditorSheet.swift */; };
-		1597F6A073B1490D948C46FE /* QuickCaptureSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F4D52190DB54B75A6081DAA /* QuickCaptureSheet.swift */; };
-		F52215AB5E74451A8C111231 /* TagsFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CE0280C4CD14A61A45D94D0 /* TagsFlowView.swift */; };
-		1D727765964448C0BF0B34A9 /* IdeasStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4676361593D14ED18823954D /* IdeasStore.swift */; };
 		A1000001 /* ClaudeCodeAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001 /* ClaudeCodeAppApp.swift */; };
 		A1000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000002 /* ContentView.swift */; };
 		A1000003 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000003 /* ChatView.swift */; };
@@ -40,6 +38,7 @@
 		A1000024 /* CLIMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000023 /* CLIMessageView.swift */; };
 		A1000025 /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000024 /* Logger.swift */; };
 		A1000026 /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000025 /* AppError.swift */; };
+		SS000048 /* ScrollStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = SS000049 /* ScrollStateManager.swift */; };
 		A1000027 /* FilePickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000026 /* FilePickerSheet.swift */; };
 		A1000028 /* CloneProjectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000027 /* CloneProjectSheet.swift */; };
 		A1000029 /* NewProjectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000028 /* NewProjectSheet.swift */; };
@@ -53,6 +52,12 @@
 		A1000037 /* CommandStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000036 /* CommandStore.swift */; };
 		A1000038 /* CommandsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000037 /* CommandsView.swift */; };
 		A1000039 /* CommandPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000038 /* CommandPickerSheet.swift */; };
+		AA000040 /* MessageActionBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000041 /* MessageActionBar.swift */; };
+		DB000042 /* DebugLogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB000043 /* DebugLogStore.swift */; };
+		DB000044 /* DebugLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB000045 /* DebugLogView.swift */; };
+		F52215AB5E74451A8C111231 /* TagsFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CE0280C4CD14A61A45D94D0 /* TagsFlowView.swift */; };
+		F651E84643F2460D8BA6DFB9 /* IdeasFAB.swift in Sources */ = {isa = PBXBuildFile; fileRef = D406B32A88A3423899A037FB /* IdeasFAB.swift */; };
+		PS000046 /* ProjectSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = PS000047 /* ProjectSettingsStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -66,14 +71,12 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		D406B32A88A3423899A037FB /* IdeasFAB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeasFAB.swift; sourceTree = "<group>"; };
-		55A0D1D2E7D841C39956EF33 /* IdeasDrawerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeasDrawerSheet.swift; sourceTree = "<group>"; };
-		829A5F0CE0184E598DD8CC00 /* IdeaRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeaRowView.swift; sourceTree = "<group>"; };
-		B423E7C7AA924BD1BA2E2418 /* IdeaEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeaEditorSheet.swift; sourceTree = "<group>"; };
 		1F4D52190DB54B75A6081DAA /* QuickCaptureSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickCaptureSheet.swift; sourceTree = "<group>"; };
+		2509F4FB2EFF976200EAFBFE /* ClaudeCodeAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClaudeCodeAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2CE0280C4CD14A61A45D94D0 /* TagsFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagsFlowView.swift; sourceTree = "<group>"; };
 		4676361593D14ED18823954D /* IdeasStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeasStore.swift; sourceTree = "<group>"; };
-		2509F4FB2EFF976200EAFBFE /* ClaudeCodeAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClaudeCodeAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		55A0D1D2E7D841C39956EF33 /* IdeasDrawerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeasDrawerSheet.swift; sourceTree = "<group>"; };
+		829A5F0CE0184E598DD8CC00 /* IdeaRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeaRowView.swift; sourceTree = "<group>"; };
 		A2000001 /* ClaudeCodeAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeCodeAppApp.swift; sourceTree = "<group>"; };
 		A2000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		A2000003 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
@@ -99,6 +102,7 @@
 		A2000023 /* CLIMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIMessageView.swift; sourceTree = "<group>"; };
 		A2000024 /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
 		A2000025 /* AppError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppError.swift; sourceTree = "<group>"; };
+		SS000049 /* ScrollStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollStateManager.swift; sourceTree = "<group>"; };
 		A2000026 /* FilePickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePickerSheet.swift; sourceTree = "<group>"; };
 		A2000027 /* CloneProjectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloneProjectSheet.swift; sourceTree = "<group>"; };
 		A2000028 /* NewProjectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewProjectSheet.swift; sourceTree = "<group>"; };
@@ -113,6 +117,12 @@
 		A2000037 /* CommandsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandsView.swift; sourceTree = "<group>"; };
 		A2000038 /* CommandPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPickerSheet.swift; sourceTree = "<group>"; };
 		A3000001 /* ClaudeCodeApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClaudeCodeApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA000041 /* MessageActionBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageActionBar.swift; sourceTree = "<group>"; };
+		B423E7C7AA924BD1BA2E2418 /* IdeaEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeaEditorSheet.swift; sourceTree = "<group>"; };
+		D406B32A88A3423899A037FB /* IdeasFAB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeasFAB.swift; sourceTree = "<group>"; };
+		DB000043 /* DebugLogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogStore.swift; sourceTree = "<group>"; };
+		DB000045 /* DebugLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogView.swift; sourceTree = "<group>"; };
+		PS000047 /* ProjectSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSettingsStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -158,6 +168,8 @@
 				A2000006 /* AppSettings.swift */,
 				A2000033 /* ClaudeHelper.swift */,
 				A2000036 /* CommandStore.swift */,
+				DB000043 /* DebugLogStore.swift */,
+				PS000047 /* ProjectSettingsStore.swift */,
 				4676361593D14ED18823954D /* IdeasStore.swift */,
 				A2000008 /* Theme.swift */,
 				A2000009 /* TerminalView.swift */,
@@ -188,6 +200,7 @@
 				A2000014 /* ImageUtilities.swift */,
 				A2000024 /* Logger.swift */,
 				A2000025 /* AppError.swift */,
+				SS000049 /* ScrollStateManager.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -228,6 +241,8 @@
 				B423E7C7AA924BD1BA2E2418 /* IdeaEditorSheet.swift */,
 				1F4D52190DB54B75A6081DAA /* QuickCaptureSheet.swift */,
 				2CE0280C4CD14A61A45D94D0 /* TagsFlowView.swift */,
+				AA000041 /* MessageActionBar.swift */,
+				DB000045 /* DebugLogView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -373,6 +388,7 @@
 				A1000024 /* CLIMessageView.swift in Sources */,
 				A1000025 /* Logger.swift in Sources */,
 				A1000026 /* AppError.swift in Sources */,
+				SS000048 /* ScrollStateManager.swift in Sources */,
 				A1000027 /* FilePickerSheet.swift in Sources */,
 				A1000028 /* CloneProjectSheet.swift in Sources */,
 				A1000029 /* NewProjectSheet.swift in Sources */,
@@ -393,6 +409,10 @@
 				1D727765964448C0BF0B34A9 /* IdeasStore.swift in Sources */,
 				A1000038 /* CommandsView.swift in Sources */,
 				A1000039 /* CommandPickerSheet.swift in Sources */,
+				AA000040 /* MessageActionBar.swift in Sources */,
+				DB000042 /* DebugLogStore.swift in Sources */,
+				PS000046 /* ProjectSettingsStore.swift in Sources */,
+				DB000044 /* DebugLogView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

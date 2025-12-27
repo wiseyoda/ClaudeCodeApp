@@ -9,6 +9,12 @@ class ClaudeHelper: ObservableObject {
     private var responseBuffer = ""
     private var completion: ((Result<String, Error>) -> Void)?
 
+    /// Debug logging
+    private var debugLog: DebugLogStore { DebugLogStore.shared }
+
+    /// Dedicated session ID for helper queries - reuses the same session to avoid polluting the UI
+    private var helperSessionId: String?
+
     @Published var isLoading = false
     @Published var suggestedActions: [SuggestedAction] = []
     @Published var suggestedFiles: [String] = []
@@ -301,6 +307,72 @@ class ClaudeHelper: ObservableObject {
         enhancedIdea = nil
     }
 
+    // MARK: - Message Analysis
+
+    /// Analyze a message and generate follow-up suggestions
+    /// This uses Haiku for fast, cheap analysis
+    func analyzeMessage(
+        _ message: ChatMessage,
+        recentMessages: [ChatMessage],
+        projectPath: String
+    ) async {
+        // Build context from the message and a few recent messages
+        let context = recentMessages.suffix(3).map { msg -> String in
+            let role = msg.role == .user ? "User" : "Assistant"
+            return "\(role): \(String(msg.content.prefix(200)))"
+        }.joined(separator: "\n")
+
+        let messageToAnalyze = String(message.content.prefix(1000))
+
+        let prompt = """
+        Analyze this Claude Code response and suggest 3 helpful follow-up actions.
+
+        Recent context:
+        \(context)
+
+        Response to analyze:
+        \(messageToAnalyze)
+
+        Return ONLY a JSON array with exactly 3 objects, each with:
+        - "label": 3-5 word action description
+        - "prompt": the full message to send to Claude
+        - "icon": SF Symbol name (like "play.circle", "doc.text", "checkmark.circle")
+
+        Focus on practical next steps: testing, fixing issues, expanding functionality, or documentation.
+
+        Respond with ONLY the JSON array, no other text.
+        """
+
+        await MainActor.run {
+            isLoading = true
+            suggestedActions = []
+        }
+
+        do {
+            let response = try await sendQuickQuery(prompt: prompt, projectPath: projectPath)
+            let actions = parseSuggestedActions(from: response)
+            await MainActor.run {
+                suggestedActions = actions
+                isLoading = false
+            }
+        } catch {
+            log.error("Failed to analyze message: \(error)")
+            await MainActor.run {
+                suggestedActions = analyzeDefaultSuggestions()
+                isLoading = false
+            }
+        }
+    }
+
+    /// Default suggestions for analysis when AI fails
+    private func analyzeDefaultSuggestions() -> [SuggestedAction] {
+        [
+            SuggestedAction(label: "Run tests", prompt: "Run the test suite and show any failures", icon: "play.circle"),
+            SuggestedAction(label: "Explain more", prompt: "Explain what you just did in more detail", icon: "questionmark.circle"),
+            SuggestedAction(label: "Improve this", prompt: "How can we improve this implementation?", icon: "arrow.up.circle")
+        ]
+    }
+
     // MARK: - WebSocket Communication
 
     /// Send a quick query, defaults to Haiku for speed but can use other models
@@ -323,19 +395,28 @@ class ClaudeHelper: ObservableObject {
         responseBuffer = ""
         self.completion = completion
 
+        // Generate or reuse a dedicated helper session ID for this project
+        // This prevents creating a new session for every helper query
+        if helperSessionId == nil {
+            let pathHash = projectPath.data(using: .utf8)?.base64EncodedString().prefix(8) ?? "default"
+            helperSessionId = "claude-helper-\(pathHash)"
+        }
+
         let session = URLSession(configuration: .default)
         webSocket = session.webSocketTask(with: url)
         webSocket?.resume()
 
+        debugLog.logConnection("ClaudeHelper connecting to \(url.host ?? "unknown")")
+
         // Start receiving messages
         receiveMessage()
 
-        // Send the query with specified model
+        // Send the query with specified model and dedicated helper session
         let command = WSClaudeCommand(
             command: prompt,
             options: WSCommandOptions(
                 cwd: projectPath,
-                sessionId: nil,
+                sessionId: helperSessionId,  // Reuse same session for all helper queries
                 model: model,  // Use specified model (haiku for suggestions, sonnet for enhancement)
                 permissionMode: nil,
                 images: nil
@@ -362,6 +443,7 @@ class ClaudeHelper: ObservableObject {
             try? await Task.sleep(nanoseconds: 15_000_000_000)  // 15 second timeout
             await MainActor.run {
                 if self.completion != nil {
+                    debugLog.logError("ClaudeHelper timeout after 15s")
                     self.completion?(.failure(ClaudeHelperError.timeout))
                     self.cleanup()
                 }
@@ -378,6 +460,7 @@ class ClaudeHelper: ObservableObject {
                     self?.receiveMessage()  // Continue listening
 
                 case .failure(let error):
+                    self?.debugLog.logError("ClaudeHelper receive error: \(error.localizedDescription)")
                     self?.completion?(.failure(error))
                     self?.cleanup()
                 }
@@ -430,6 +513,7 @@ class ClaudeHelper: ObservableObject {
 
         case "claude-error":
             let errorMsg = msg.error ?? "Unknown error"
+            debugLog.logError("ClaudeHelper server error: \(errorMsg)")
             completion?(.failure(ClaudeHelperError.serverError(errorMsg)))
             cleanup()
 

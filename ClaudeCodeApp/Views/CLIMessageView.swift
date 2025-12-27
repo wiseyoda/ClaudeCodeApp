@@ -6,16 +6,19 @@ struct CLIMessageView: View {
     let message: ChatMessage
     let projectPath: String?
     let projectTitle: String?
+    let onAnalyze: ((ChatMessage) -> Void)?  // Callback for analyze action
     @State private var isExpanded: Bool
     @State private var showCopied = false
+    @State private var showActionBar = false  // Track whether to show action bar
     @ObservedObject private var bookmarkStore = BookmarkStore.shared
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
 
-    init(message: ChatMessage, projectPath: String? = nil, projectTitle: String? = nil) {
+    init(message: ChatMessage, projectPath: String? = nil, projectTitle: String? = nil, onAnalyze: ((ChatMessage) -> Void)? = nil) {
         self.message = message
         self.projectPath = projectPath
         self.projectTitle = projectTitle
+        self.onAnalyze = onAnalyze
         // Collapse result messages, Grep/Glob tool uses, and thinking blocks by default
         let shouldStartCollapsed = message.role == .resultSuccess ||
             message.role == .toolResult ||
@@ -56,10 +59,10 @@ struct CLIMessageView: View {
                     if !isExpanded, let badge = resultCountBadge {
                         Text(badge)
                             .font(settings.scaledFont(.small))
-                            .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                            .foregroundColor(badgeColor)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(CLITheme.mutedText(for: colorScheme).opacity(0.15))
+                            .background(badgeColor.opacity(0.15))
                             .cornerRadius(4)
                     }
                 }
@@ -71,22 +74,20 @@ struct CLIMessageView: View {
                     quickActionButtons
                 }
 
-                // Copy button for assistant messages
+                // Show action bar toggle for assistant messages (instead of just copy button)
                 if message.role == .assistant && !message.content.isEmpty {
                     Button {
-                        UIPasteboard.general.string = message.content
-                        showCopied = true
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                            showCopied = false
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            showActionBar.toggle()
                         }
                     } label: {
-                        Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                        Image(systemName: showActionBar ? "chevron.up" : "ellipsis")
                             .font(.system(size: 12))
-                            .foregroundColor(showCopied ? CLITheme.green(for: colorScheme) : CLITheme.mutedText(for: colorScheme))
+                            .foregroundColor(CLITheme.mutedText(for: colorScheme))
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(showCopied ? "Copied" : "Copy message")
-                    .accessibilityHint("Copy Claude's response to clipboard")
+                    .accessibilityLabel(showActionBar ? "Hide actions" : "Show actions")
+                    .accessibilityHint("Toggle action bar with copy and analyze options")
                 }
             }
             .contentShape(Rectangle())
@@ -106,6 +107,11 @@ struct CLIMessageView: View {
             if isExpanded || !isCollapsible {
                 contentView
                     .padding(.leading, 16)
+            }
+
+            // Action bar for assistant messages
+            if message.role == .assistant && showActionBar && !message.content.isEmpty {
+                messageActionBarView
             }
         }
         .padding(.vertical, 4)
@@ -245,11 +251,16 @@ struct CLIMessageView: View {
                 return "\(displayName): \(pattern)"
             }
         case .task:
-            // Show description: Agent: Explore codebase
-            if let desc = extractParam(from: content, key: "description") {
-                let shortDesc = desc.count > 35 ? String(desc.prefix(35)) + "..." : desc
-                return "\(displayName): \(shortDesc)"
+            // Show agent type and description: Agent (Explore): Explore codebase
+            var header = displayName
+            if let agentType = extractParam(from: content, key: "subagent_type") {
+                header += " (\(agentType))"
             }
+            if let desc = extractParam(from: content, key: "description") {
+                let shortDesc = desc.count > 30 ? String(desc.prefix(30)) + "..." : desc
+                header += ": \(shortDesc)"
+            }
+            return header
         case .todoWrite:
             return displayName
         case .webFetch:
@@ -265,6 +276,20 @@ struct CLIMessageView: View {
             }
         case .askUser:
             return displayName
+        case .lsp:
+            // Show operation: LSP: documentSymbol in file.swift
+            if let operation = extractParam(from: content, key: "operation"),
+               let path = extractParam(from: content, key: "filePath") {
+                return "\(displayName): \(operation) in \(shortenPath(path))"
+            } else if let operation = extractParam(from: content, key: "operation") {
+                return "\(displayName): \(operation)"
+            }
+        case .taskOutput:
+            // Show task ID: Output: b63f11a
+            if let taskId = extractParam(from: content, key: "task_id") {
+                let shortId = taskId.count > 10 ? String(taskId.prefix(10)) : taskId
+                return "\(displayName): \(shortId)"
+            }
         case .other:
             break
         }
@@ -324,6 +349,22 @@ struct CLIMessageView: View {
         return url.count > 30 ? String(url.prefix(30)) + "..." : url
     }
 
+    /// Message action bar for assistant messages
+    private var messageActionBarView: some View {
+        MessageActionBar(
+            message: message,
+            projectPath: projectPath ?? "",
+            onCopy: {
+                UIPasteboard.general.string = message.content
+            },
+            onAnalyze: {
+                onAnalyze?(message)
+            }
+        )
+        .padding(.leading, 16)
+        .transition(AnyTransition.opacity.combined(with: .move(edge: .top)))
+    }
+
     /// Quick action buttons for tools (copy path, copy command)
     @ViewBuilder
     private var quickActionButtons: some View {
@@ -366,18 +407,64 @@ struct CLIMessageView: View {
                     )
                 }
             case .webFetch:
-                // Copy URL
+                // Copy URL and Open in Safari
                 if let url = extractParam(from: message.content, key: "url") {
                     QuickActionButton(
                         icon: "doc.on.doc",
                         label: "Copy URL",
                         action: { UIPasteboard.general.string = url }
                     )
+                    QuickActionButton(
+                        icon: "safari",
+                        label: "Open in Safari",
+                        action: {
+                            if let urlObj = URL(string: url) {
+                                UIApplication.shared.open(urlObj)
+                            }
+                        }
+                    )
+                }
+            case .webSearch:
+                // Copy query
+                if let query = extractParam(from: message.content, key: "query") {
+                    QuickActionButton(
+                        icon: "doc.on.doc",
+                        label: "Copy query",
+                        action: { UIPasteboard.general.string = query }
+                    )
                 }
             default:
                 EmptyView()
             }
         }
+    }
+
+    /// Extract exit code from bash tool result content
+    /// Format: "Exit code 128\nfatal: not a git repository..."
+    private func extractBashExitCode(from content: String) -> Int? {
+        guard content.hasPrefix("Exit code ") else { return nil }
+        let scanner = Scanner(string: content)
+        _ = scanner.scanString("Exit code ")
+        var exitCode: Int = 0
+        if scanner.scanInt(&exitCode) {
+            return exitCode
+        }
+        return nil
+    }
+
+    /// Color for the result count badge - green for success, red for errors
+    private var badgeColor: Color {
+        let content = message.content
+        if message.role == .toolResult {
+            // Check for exit code in bash results
+            if let exitCode = extractBashExitCode(from: content) {
+                return exitCode == 0
+                    ? CLITheme.green(for: colorScheme)
+                    : CLITheme.red(for: colorScheme)
+            }
+        }
+        // Default muted color for other badges
+        return CLITheme.mutedText(for: colorScheme)
     }
 
     /// Generate a count badge for collapsed tool outputs
@@ -403,6 +490,19 @@ struct CLIMessageView: View {
                 return nil
             }
         case .toolResult:
+            // Show exit code for bash results
+            if let exitCode = extractBashExitCode(from: content) {
+                return exitCode == 0 ? "✓" : "Exit \(exitCode)"
+            }
+            // Count file paths for grep/glob results (lines that look like paths)
+            let pathLines = content.components(separatedBy: "\n")
+                .filter { line in
+                    let trimmed = line.trimmingCharacters(in: .whitespaces)
+                    return !trimmed.isEmpty && (trimmed.hasPrefix("/") || trimmed.contains("."))
+                }
+            if pathLines.count > 3 {
+                return "\(pathLines.count) files"
+            }
             // Show line count for results
             if lineCount > 1 {
                 return "\(lineCount) lines"

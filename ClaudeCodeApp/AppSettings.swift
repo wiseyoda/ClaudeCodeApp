@@ -190,6 +190,9 @@ class AppSettings: ObservableObject {
     @AppStorage("showThinkingBlocks") var showThinkingBlocks: Bool = true
     @AppStorage("autoScrollEnabled") var autoScrollEnabled: Bool = true
 
+    // Debug Settings
+    @AppStorage("debugLoggingEnabled") var debugLoggingEnabled: Bool = false
+
     // Project List Settings
     @AppStorage("projectSortOrder") private var projectSortOrderRaw: String = ProjectSortOrder.name.rawValue
 

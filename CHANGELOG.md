@@ -8,11 +8,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+*No unreleased changes*
+
+---
+
+## [0.4.0] - 2025-12-27
+
 ### Added
-- Test coverage for stores: `CommandStoreTests`, `IdeasStoreTests`, `BookmarkStoreTests`
-- Test coverage for models: `ModelEnumTests`, `IdeaTests`, `AppErrorTests`
-- Test coverage for helpers: `ClaudeHelperTests`
-- TEST-COVERAGE.md documenting current test state and roadmap
+- **Message Action Bar**: Bottom bar on assistant messages with execution time, token count, copy button, and analyze button
+- **Quick-Access Mode Toggles**: Restored mode and thinking chips to status bar for faster access
+- **Auto-Refresh Git Status**: Periodic 30-second refresh plus auto-refresh after task completion
+- **Quick Commit & Push**: Button in pending changes banner to commit and push via Claude
+- **Debug Log Viewer**: Real-time WebSocket traffic debugging
+  - `DebugLogStore` - Captures sent/received messages, errors, and connection events
+  - `DebugLogView` - Filterable log viewer with JSON pretty-printing
+  - Export logs as text for troubleshooting
+- **Project Settings Override**: Per-project permission mode settings
+  - `ProjectSettingsStore` - Override global settings per project
+  - Settings persist in Documents directory
+- **Scroll State Manager**: Improved chat scroll behavior
+  - Debounced scroll requests prevent jitter during streaming
+  - Tracks user intent to allow manual scrolling
+  - Smooth animations with configurable timing
+- **Session Management Improvements**: Enhanced session picker
+  - Session sorting by last activity (most recent first)
+  - Filters out placeholder sessions
+  - Processing indicator for active sessions
+  - Context menu for quick delete
+- **Comprehensive Test Suite**: 36 new test cases bringing total from 181 to 216
+  - `MessageStoreTests.swift` - Message persistence tests
+  - `LoggerTests.swift` - Logging utility tests
+  - `DebugLogStoreTests.swift` - Debug logging tests
+  - `ProjectSettingsStoreTests.swift` - Project settings tests
+  - `ScrollStateManagerTests.swift` - Scroll behavior tests
+  - Extended coverage for stores, models, and helpers
+
+### Fixed
+- **WebSocket State Race**: Connection state now set only after first successful receive
+- **Missing @MainActor**: Added to `APIClient.swift` and `BookmarkStore` for thread safety
+- **SpeechManager Resource Leak**: Added proper `deinit` with resource cleanup
+- **SSH Password Storage**: Migrated from UserDefaults to Keychain via `KeychainHelper`
+- **Command Injection**: Added `shellEscape()` function used in all SSH path-handling functions
+- **SSHManager Connection Leak**: Refactored to singleton pattern (`SSHManager.shared`) to prevent orphaned SSH processes
+  - Added proper `deinit` that closes SSH connections
+  - Updated 6 views to use shared instance instead of creating new managers
+  - Added `onDisappear` cleanup in `TerminalView`
 
 ---
 
@@ -198,4 +238,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | 0.3.0 | Project/session management, git sync, model selection |
 | 0.3.1 | iPad support, SSH keys, connection indicator |
 | 0.3.2 | Search, thinking mode, command library, UI redesign |
-| 0.3.3 | Ideas Drawer, task abort (current) |
+| 0.3.3 | Ideas Drawer, task abort |
+| 0.4.0 | Message action bar, critical bug fixes, test suite (current) |

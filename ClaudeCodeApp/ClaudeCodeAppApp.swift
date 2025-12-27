@@ -13,6 +13,12 @@ struct ClaudeCodeAppApp: App {
                 print("[App] Notification permission granted")
             }
         }
+
+        // Initialize debug logging state from settings
+        let debugEnabled = UserDefaults.standard.bool(forKey: "debugLoggingEnabled")
+        Task { @MainActor in
+            DebugLogStore.shared.isEnabled = debugEnabled
+        }
     }
 
     var body: some Scene {

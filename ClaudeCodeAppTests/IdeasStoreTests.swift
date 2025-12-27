@@ -129,4 +129,54 @@ final class IdeasStoreTests: XCTestCase {
         XCTAssertNil(cleared?.expandedPrompt)
         XCTAssertNil(cleared?.suggestedFollowups)
     }
+
+    func testPersistence_roundTripsIdeas() throws {
+        let dir = try makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let store = IdeasStore(projectPath: "/tmp/project", baseDirectory: dir)
+        let idea = Idea(text: "Persist me", title: "Persisted")
+        store.add(idea)
+
+        let reloaded = IdeasStore(projectPath: "/tmp/project", baseDirectory: dir)
+
+        XCTAssertEqual(reloaded.ideas.count, 1)
+        XCTAssertEqual(reloaded.ideas.first?.text, "Persist me")
+        XCTAssertEqual(reloaded.ideas.first?.title, "Persisted")
+    }
+
+    func testLoadInvalidFile_returnsEmptyIdeas() throws {
+        let dir = try makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let projectPath = "/tmp/project"
+        let ideasDir = dir.appendingPathComponent("ideas", isDirectory: true)
+        try FileManager.default.createDirectory(at: ideasDir, withIntermediateDirectories: true)
+        let encodedPath = projectPath.replacingOccurrences(of: "/", with: "-")
+        let fileURL = ideasDir.appendingPathComponent("\(encodedPath).json")
+        try Data("not-json".utf8).write(to: fileURL)
+
+        let store = IdeasStore(projectPath: projectPath, baseDirectory: dir)
+
+        XCTAssertTrue(store.ideas.isEmpty)
+    }
+
+    func testFilterBySearchText_matchesTitleAndTags() throws {
+        let dir = try makeTempDirectory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let date1 = Date(timeIntervalSince1970: 1_600_000_000)
+        let date2 = Date(timeIntervalSince1970: 1_700_000_000)
+        let store = IdeasStore(projectPath: "/tmp/project", baseDirectory: dir)
+        store.ideas = [
+            Idea(text: "Alpha text", title: "First Idea", tags: ["ios"], createdAt: date1, updatedAt: date1),
+            Idea(text: "Beta text", title: "Second", tags: ["SwiftUI"], createdAt: date2, updatedAt: date2)
+        ]
+
+        let titleMatches = store.filter(by: "first")
+        XCTAssertEqual(titleMatches.map(\.title), ["First Idea"])
+
+        let tagMatches = store.filter(by: "swift")
+        XCTAssertEqual(tagMatches.map(\.title), ["Second"])
+    }
 }

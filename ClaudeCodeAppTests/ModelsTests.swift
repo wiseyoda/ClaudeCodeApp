@@ -198,6 +198,18 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(result[0].content, "file1.txt\nfile2.txt")
     }
 
+    func testParseToolResultMessageWithStdoutDict() {
+        let jsonl = """
+        {"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"123"}]},"toolUseResult":{"stdout":"ok"},"timestamp":"2024-01-15T10:30:03.000Z"}
+        """
+
+        let result = SessionHistoryLoader.parseSessionHistory(jsonl)
+
+        XCTAssertEqual(result.count, 1)
+        XCTAssertEqual(result[0].role, .toolResult)
+        XCTAssertEqual(result[0].content, "ok")
+    }
+
     func testParseMultipleMessages() {
         let jsonl = """
         {"type":"user","message":{"content":[{"type":"text","text":"First"}]},"timestamp":"2024-01-15T10:30:00.000Z"}
@@ -237,6 +249,18 @@ final class ModelsTests: XCTestCase {
 
         // Should parse valid lines and skip invalid
         XCTAssertEqual(result.count, 2)
+    }
+
+    func testParseSkipsMissingTimestamp() {
+        let jsonl = """
+        {"type":"user","message":{"content":[{"type":"text","text":"Missing timestamp"}]}}
+        {"type":"assistant","message":{"content":[{"type":"text","text":"Valid"}]},"timestamp":"2024-01-15T10:30:01.000Z"}
+        """
+
+        let result = SessionHistoryLoader.parseSessionHistory(jsonl)
+
+        XCTAssertEqual(result.count, 1)
+        XCTAssertEqual(result[0].content, "Valid")
     }
 
     func testParseTimestampWithoutFractionalSeconds() {

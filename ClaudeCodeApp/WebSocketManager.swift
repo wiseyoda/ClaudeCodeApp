@@ -1,6 +1,12 @@
 import Foundation
 import UserNotifications
 
+// MARK: - Debug Log Helper
+
+/// Helper to access debug log store on MainActor
+/// Note: This is only used within @MainActor context in WebSocketManager
+@MainActor private var debugLog: DebugLogStore { DebugLogStore.shared }
+
 // MARK: - Connection State
 
 /// Represents the current state of the WebSocket connection
@@ -83,6 +89,7 @@ class WebSocketManager: ObservableObject {
     // Processing timeout - reset if no response for 30 seconds
     private var processingTimeoutTask: Task<Void, Never>?
     private var lastResponseTime: Date?
+    private var lastActiveToolName: String?  // Track last tool for timeout diagnostics
 
     struct TokenUsage {
         let used: Int
@@ -153,8 +160,12 @@ class WebSocketManager: ObservableObject {
                     // Check if we haven't received any response for 30+ seconds
                     if let lastResponse = self.lastResponseTime,
                        Date().timeIntervalSince(lastResponse) >= 30 {
-                        log.warning("Processing timeout - no response for 30s, resetting state")
+                        let toolInfo = self.lastActiveToolName ?? "unknown"
+                        let errorMsg = "Processing timeout - no response for 30s (last tool: \(toolInfo))"
+                        log.warning(errorMsg)
+                        debugLog.logError(errorMsg, details: "Last response: \(lastResponse), Session: \(self.sessionId ?? "none"), Tool: \(toolInfo)")
                         self.isProcessing = false
+                        self.lastActiveToolName = nil
                         self.lastError = "Request timed out - no response from server"
                         self.onError?("Request timed out")
                         return false
@@ -209,6 +220,7 @@ class WebSocketManager: ObservableObject {
         guard let url = settings.webSocketURL else {
             lastError = "Invalid WebSocket URL"
             connectionState = .disconnected
+            debugLog.logError("Invalid WebSocket URL")
             return
         }
 
@@ -223,21 +235,39 @@ class WebSocketManager: ObservableObject {
         // Set connecting state (preserve reconnect attempt for UI if reconnecting)
         if case .reconnecting(let attempt) = connectionState {
             log.info("Reconnecting to: \(url) (attempt \(attempt))")
+            debugLog.logConnection("Reconnecting to \(url) (attempt \(attempt))")
         } else {
             connectionState = .connecting
             log.info("Connecting to: \(url)")
+            debugLog.logConnection("Connecting to \(url)")
         }
 
         let session = URLSession(configuration: .default)
         webSocket = session.webSocketTask(with: url)
         webSocket?.resume()
 
-        // Don't set .connected immediately - wait for first successful receive
-        // The receive handler will set .connected on first successful message
         lastError = nil
 
-        // Reset reconnection counter on successful connect
-        reconnectAttempt = 0
+        // Send a ping to quickly confirm connection is alive
+        webSocket?.sendPing { [weak self] error in
+            Task { @MainActor in
+                guard let self = self else { return }
+                if let error = error {
+                    log.debug("Ping failed: \(error.localizedDescription)")
+                    // Don't treat ping failure as connection failure - wait for receive
+                } else {
+                    // Ping succeeded - connection is confirmed
+                    if self.connectionState != .connected {
+                        self.connectionState = .connected
+                        self.reconnectAttempt = 0
+                        log.info("WebSocket connected (confirmed by ping)")
+                        debugLog.logConnection("Connected (confirmed by ping)")
+                    }
+                }
+            }
+        }
+
+        // Note: reconnectAttempt is also reset in receiveMessage success as backup
 
         receiveMessage()
     }
@@ -254,6 +284,7 @@ class WebSocketManager: ObservableObject {
         webSocket = nil
         connectionState = .disconnected
         isProcessing = false
+        debugLog.logConnection("Disconnected")
     }
 
     /// Schedule a reconnection with exponential backoff
@@ -361,24 +392,28 @@ class WebSocketManager: ObservableObject {
             let data = try JSONEncoder().encode(command)
             if let jsonString = String(data: data, encoding: .utf8) {
                 log.debug("Sending (attempt \(pending.attempts + 1)): \(jsonString.prefix(300))")
+                debugLog.logSent(jsonString)
                 webSocket?.send(.string(jsonString)) { [weak self] error in
                     if let error = error {
                         Task { @MainActor in
+                            debugLog.logError("Send failed: \(error.localizedDescription)")
                             self?.handleSendFailure(AppError.messageFailed(error.localizedDescription))
                         }
                     } else {
                         // Success - remove from queue and process next
                         Task { @MainActor in
-                            if !self!.messageQueue.isEmpty {
-                                self?.messageQueue.removeFirst()
+                            guard let self = self else { return }
+                            if !self.messageQueue.isEmpty {
+                                self.messageQueue.removeFirst()
                             }
-                            self?.retryTask?.cancel()
+                            self.retryTask?.cancel()
                             // Note: Don't automatically send next - wait for response completion
                         }
                     }
                 }
             }
         } catch {
+            debugLog.logError("Encode failed: \(error.localizedDescription)")
             handleSendFailure(AppError.messageFailed(error.localizedDescription))
         }
     }
@@ -397,7 +432,9 @@ class WebSocketManager: ObservableObject {
 
         if pending.attempts >= maxRetries {
             // Give up after max retries - remove from queue
-            log.error("Message failed after \(maxRetries) attempts: \(error.localizedDescription)")
+            let errorMsg = "Message failed after \(maxRetries) attempts: \(error.localizedDescription)"
+            log.error(errorMsg)
+            debugLog.logError(errorMsg, details: "Message: \(pending.message.prefix(200))")
             lastError = "Message failed after \(maxRetries) attempts"
             isProcessing = false
             messageQueue.removeFirst()
@@ -510,6 +547,7 @@ class WebSocketManager: ObservableObject {
         isAborting = false
         currentText = ""
         isSwitchingModel = false
+        lastActiveToolName = nil
         cancelProcessingTimeout()
         cancelPendingRetry()
         abortTimeoutTask?.cancel()
@@ -637,13 +675,16 @@ class WebSocketManager: ObservableObject {
                     // Mark as connected on first successful receive
                     if self?.connectionState != .connected {
                         self?.connectionState = .connected
+                        self?.reconnectAttempt = 0  // Reset counter only on confirmed connection
                         log.info("WebSocket connected (confirmed by first message)")
+                        debugLog.logConnection("Connected (confirmed)")
                     }
                     self?.handleMessage(message)
                     self?.receiveMessage()  // Continue listening
 
                 case .failure(let error):
                     log.error("Receive error: \(error)")
+                    debugLog.logError("Receive error: \(error.localizedDescription)")
                     self?.isConnected = false
                     self?.isProcessing = false  // Reset processing state on disconnect
                     self?.cancelProcessingTimeout()
@@ -674,6 +715,7 @@ class WebSocketManager: ObservableObject {
 
     private func parseMessage(_ text: String) {
         log.debug("Received: \(text.prefix(300))")
+        debugLog.logReceived(text)
 
         // Reset timeout on any received message
         resetProcessingTimeout()
@@ -719,6 +761,7 @@ class WebSocketManager: ObservableObject {
 
             case "claude-complete":
                 isProcessing = false
+                lastActiveToolName = nil
                 cancelProcessingTimeout()
                 if let sid = msg.sessionId {
                     sessionId = sid
@@ -747,10 +790,12 @@ class WebSocketManager: ObservableObject {
 
             case "claude-error":
                 isProcessing = false
+                lastActiveToolName = nil
                 isSwitchingModel = false  // Reset on error
                 cancelProcessingTimeout()
                 let errorMsg = msg.error ?? "Unknown error"
                 lastError = errorMsg
+                debugLog.logError("Claude error: \(errorMsg)")
                 onError?(errorMsg)
 
             case "session-aborted":
@@ -768,6 +813,7 @@ class WebSocketManager: ObservableObject {
 
         } catch {
             log.error("Parse error: \(error), text: \(text.prefix(200))")
+            debugLog.logError("Parse error: \(error.localizedDescription)", details: text)
             // Notify UI of parse errors (but don't stop processing - could be non-critical)
             lastError = "Message parse error: \(error.localizedDescription)"
         }
@@ -890,6 +936,9 @@ class WebSocketManager: ObservableObject {
                     }
                     let name = part["name"] as? String ?? "tool"
                     let input = part["input"] as? [String: Any]
+
+                    // Track tool name for timeout diagnostics
+                    self.lastActiveToolName = name
 
                     // Check for AskUserQuestion tool - needs special handling
                     if name == "AskUserQuestion", let input = input,

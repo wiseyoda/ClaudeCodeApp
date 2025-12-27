@@ -4,12 +4,14 @@ iOS client for [claudecodeui](https://github.com/siteboon/claudecodeui). SwiftUI
 
 ## Commands
 
+**IMPORTANT: Always use iPhone 17 Pro with iOS 26.1 - this is the current development target.**
+
 ```bash
 # Build
-xcodebuild -project ClaudeCodeApp.xcodeproj -scheme ClaudeCodeApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+xcodebuild -project ClaudeCodeApp.xcodeproj -scheme ClaudeCodeApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.1'
 
 # Test
-xcodebuild test -project ClaudeCodeApp.xcodeproj -scheme ClaudeCodeApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+xcodebuild test -project ClaudeCodeApp.xcodeproj -scheme ClaudeCodeApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.1'
 
 # Open in Xcode
 open ClaudeCodeApp.xcodeproj

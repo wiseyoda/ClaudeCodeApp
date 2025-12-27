@@ -148,7 +148,9 @@ class APIClient: ObservableObject {
         }
 
         // Build URL: /api/projects/:projectName/sessions/:sessionId/messages
-        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw APIError.invalidURL
+        }
         components.path = "/api/projects/\(projectName)/sessions/\(sessionId)/messages"
         components.queryItems = [
             URLQueryItem(name: "limit", value: String(limit)),
@@ -185,7 +187,9 @@ class APIClient: ObservableObject {
             throw APIError.invalidURL
         }
 
-        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw APIError.invalidURL
+        }
         components.path = "/api/projects/\(projectName)/sessions/\(sessionId)/token-usage"
 
         guard let url = components.url else {
@@ -211,7 +215,9 @@ class APIClient: ObservableObject {
             throw APIError.invalidURL
         }
 
-        var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+            throw APIError.invalidURL
+        }
         components.path = "/api/projects/\(projectName)/upload-images"
 
         guard let url = components.url else {
@@ -226,16 +232,16 @@ class APIClient: ObservableObject {
 
         var body = Data()
 
-        // Add image data
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"images\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
+        // Add image data using UTF-8 appends to avoid extra helpers
+        body.append(Data("--\(boundary)\r\n".utf8))
+        body.append(Data("Content-Disposition: form-data; name=\"images\"; filename=\"\(filename)\"\r\n".utf8))
 
         // Detect MIME type
         let mimeType = ImageUtilities.detectMediaType(from: imageData)
-        body.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
+        body.append(Data("Content-Type: \(mimeType)\r\n\r\n".utf8))
         body.append(imageData)
-        body.append("\r\n".data(using: .utf8)!)
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        body.append(Data("\r\n".utf8))
+        body.append(Data("--\(boundary)--\r\n".utf8))
 
         request.httpBody = body
 

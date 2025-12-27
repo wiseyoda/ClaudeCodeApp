@@ -1,37 +1,78 @@
 import SwiftUI
+import Combine
 
 // MARK: - Unified Status Bar (New Design)
 
 /// A clean, unified status bar combining connection, model, modes, and settings
 struct UnifiedStatusBar: View {
     let isProcessing: Bool
-    let isConnected: Bool
+    let connectionState: ConnectionState
     let tokenUsage: WebSocketManager.TokenUsage?
+    let effectiveSkipPermissions: Bool
+    let projectPath: String?
     @Binding var showQuickSettings: Bool
     @EnvironmentObject var settings: AppSettings
+    @ObservedObject private var projectSettingsStore = ProjectSettingsStore.shared
     @Environment(\.colorScheme) var colorScheme
+
+    /// Legacy initializer for backward compatibility
+    init(isProcessing: Bool, isConnected: Bool, tokenUsage: WebSocketManager.TokenUsage?, showQuickSettings: Binding<Bool>) {
+        self.isProcessing = isProcessing
+        self.connectionState = isConnected ? .connected : .disconnected
+        self.tokenUsage = tokenUsage
+        self.effectiveSkipPermissions = false
+        self.projectPath = nil
+        self._showQuickSettings = showQuickSettings
+    }
+
+    /// New initializer with full connection state
+    init(isProcessing: Bool, connectionState: ConnectionState, tokenUsage: WebSocketManager.TokenUsage?, showQuickSettings: Binding<Bool>) {
+        self.isProcessing = isProcessing
+        self.connectionState = connectionState
+        self.tokenUsage = tokenUsage
+        self.effectiveSkipPermissions = false
+        self.projectPath = nil
+        self._showQuickSettings = showQuickSettings
+    }
+
+    /// Full initializer with per-project permission support
+    init(isProcessing: Bool, connectionState: ConnectionState, tokenUsage: WebSocketManager.TokenUsage?, effectiveSkipPermissions: Bool, projectPath: String, showQuickSettings: Binding<Bool>) {
+        self.isProcessing = isProcessing
+        self.connectionState = connectionState
+        self.tokenUsage = tokenUsage
+        self.effectiveSkipPermissions = effectiveSkipPermissions
+        self.projectPath = projectPath
+        self._showQuickSettings = showQuickSettings
+    }
 
     var body: some View {
         HStack(spacing: 12) {
             // Connection status dot + Model name
             HStack(spacing: 6) {
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 8, height: 8)
+                ZStack {
+                    // Static base circle (always present for stable layout)
+                    Circle()
+                        .fill(statusColor)
+                        .frame(width: 8, height: 8)
 
-                if isProcessing {
-                    // Show animated processing indicator
-                    ProcessingIndicator()
-                } else {
-                    // Show model name (tappable)
-                    Button {
-                        showQuickSettings = true
-                    } label: {
-                        Text(settings.defaultModel.shortName)
-                            .font(settings.scaledFont(.body))
-                            .fontWeight(.medium)
-                            .foregroundColor(CLITheme.primaryText(for: colorScheme))
+                    // Pulsing overlay when processing/connecting
+                    if connectionState.isConnecting || isProcessing {
+                        Circle()
+                            .fill(statusColor)
+                            .frame(width: 8, height: 8)
+                            .modifier(PulsingOpacity())
                     }
+                }
+                .frame(width: 8, height: 8)  // Fixed frame prevents layout shifts
+
+                // Show model name (tappable) - always visible for consistent layout
+                Button {
+                    showQuickSettings = true
+                } label: {
+                    Text(settings.defaultModel.shortName)
+                        .font(settings.scaledFont(.body))
+                        .fontWeight(.medium)
+                        .foregroundColor(CLITheme.primaryText(for: colorScheme))
                 }
             }
 
@@ -66,14 +107,34 @@ struct UnifiedStatusBar: View {
             .accessibilityLabel("Thinking: \(settings.thinkingMode.displayName)")
             .accessibilityHint("Tap to switch to \(settings.thinkingMode.next().displayName)")
 
-            // Skip permissions indicator (only when enabled)
-            if settings.skipPermissions {
-                ModePill(
-                    icon: "exclamationmark.shield",
-                    text: "Bypass",
-                    color: CLITheme.red(for: colorScheme),
-                    isActive: true
-                )
+            // Skip permissions indicator (tappable to toggle per-project)
+            if effectiveSkipPermissions {
+                Button {
+                    toggleProjectBypass()
+                } label: {
+                    ModePill(
+                        icon: hasProjectOverride ? "exclamationmark.shield.fill" : "exclamationmark.shield",
+                        text: hasProjectOverride ? "Bypass*" : "Bypass",
+                        color: CLITheme.red(for: colorScheme),
+                        isActive: true
+                    )
+                }
+                .accessibilityLabel("Permissions bypass enabled" + (hasProjectOverride ? " for this project" : " globally"))
+                .accessibilityHint("Tap to toggle for this project")
+            } else if let path = projectPath, projectSettingsStore.skipPermissionsOverride(for: path) == false {
+                // Show when project explicitly disables bypass (overriding global)
+                Button {
+                    toggleProjectBypass()
+                } label: {
+                    ModePill(
+                        icon: "shield.checkered",
+                        text: "Safe*",
+                        color: CLITheme.green(for: colorScheme),
+                        isActive: true
+                    )
+                }
+                .accessibilityLabel("Permissions required for this project")
+                .accessibilityHint("Tap to toggle for this project")
             }
 
             Spacer()
@@ -103,13 +164,64 @@ struct UnifiedStatusBar: View {
     }
 
     private var statusColor: Color {
-        if !isConnected {
+        switch connectionState {
+        case .disconnected:
             return CLITheme.red(for: colorScheme)
-        } else if isProcessing {
+        case .connecting, .reconnecting:
+            // Yellow for connecting/reconnecting - pulsing animation shows activity
             return CLITheme.yellow(for: colorScheme)
-        } else {
-            return CLITheme.green(for: colorScheme)
+        case .connected:
+            if isProcessing {
+                return CLITheme.yellow(for: colorScheme)
+            } else {
+                return CLITheme.green(for: colorScheme)
+            }
         }
+    }
+
+    /// Whether this project has a specific override (vs using global setting)
+    private var hasProjectOverride: Bool {
+        guard let path = projectPath else { return false }
+        return projectSettingsStore.skipPermissionsOverride(for: path) != nil
+    }
+
+    /// Toggle the per-project bypass setting
+    /// Cycles through: use global -> force on -> force off -> use global
+    private func toggleProjectBypass() {
+        guard let path = projectPath else { return }
+
+        let currentOverride = projectSettingsStore.skipPermissionsOverride(for: path)
+
+        switch currentOverride {
+        case nil:
+            // Using global, switch to opposite of global
+            projectSettingsStore.setSkipPermissionsOverride(for: path, override: !settings.skipPermissions)
+        case true:
+            // Was forced on, switch to forced off
+            projectSettingsStore.setSkipPermissionsOverride(for: path, override: false)
+        case false:
+            // Was forced off, clear override to use global
+            projectSettingsStore.setSkipPermissionsOverride(for: path, override: nil)
+        }
+    }
+}
+
+// MARK: - Pulsing Opacity Animation
+
+private struct PulsingOpacity: ViewModifier {
+    @State private var isPulsing = false
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(isPulsing ? 0.3 : 1.0)
+            .animation(
+                .easeInOut(duration: 0.8)
+                .repeatForever(autoreverses: true),
+                value: isPulsing
+            )
+            .onAppear {
+                isPulsing = true
+            }
     }
 }
 
@@ -144,17 +256,25 @@ private struct ProcessingIndicator: View {
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
     @State private var wordIndex = 0
-    let timer = Timer.publish(every: 2, on: .main, in: .common).autoconnect()
+    @State private var timerCancellable: AnyCancellable?
     private let words = ["thinking", "working", "analyzing"]
 
     var body: some View {
         Text(words[wordIndex])
             .font(settings.scaledFont(.body))
             .foregroundColor(CLITheme.yellow(for: colorScheme))
-            .onReceive(timer) { _ in
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    wordIndex = (wordIndex + 1) % words.count
-                }
+            .onAppear {
+                timerCancellable = Timer.publish(every: 2, on: .main, in: .common)
+                    .autoconnect()
+                    .sink { _ in
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            wordIndex = (wordIndex + 1) % words.count
+                        }
+                    }
+            }
+            .onDisappear {
+                timerCancellable?.cancel()
+                timerCancellable = nil
             }
     }
 }

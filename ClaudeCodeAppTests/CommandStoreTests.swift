@@ -103,4 +103,27 @@ final class CommandStoreTests: XCTestCase {
         XCTAssertEqual(store.commands.first?.name, "New")
         XCTAssertEqual(store.commands.first?.content, "Updated content")
     }
+
+    func testInitWithoutFile_createsDefaultCommands() throws {
+        let (dir, fileURL) = try makeTempFileURL()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        let store = CommandStore(fileURL: fileURL)
+
+        XCTAssertFalse(store.commands.isEmpty)
+        XCTAssertTrue(store.commands.contains { $0.name == "Commit changes" })
+        XCTAssertTrue(store.commands.contains { $0.name == "Run tests" })
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fileURL.path))
+    }
+
+    func testInitWithInvalidFile_returnsEmptyCommands() throws {
+        let (dir, fileURL) = try makeTempFileURL()
+        defer { try? FileManager.default.removeItem(at: dir) }
+
+        try Data("not-json".utf8).write(to: fileURL)
+
+        let store = CommandStore(fileURL: fileURL)
+
+        XCTAssertTrue(store.commands.isEmpty)
+    }
 }

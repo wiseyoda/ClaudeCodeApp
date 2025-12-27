@@ -90,6 +90,8 @@ enum CLITheme {
         case webFetch = "WebFetch"
         case webSearch = "WebSearch"
         case askUser = "AskUserQuestion"
+        case lsp = "LSP"
+        case taskOutput = "TaskOutput"
         case other = ""
 
         static func from(_ content: String) -> ToolType {
@@ -117,6 +119,8 @@ enum CLITheme {
             case .webFetch: return "globe"
             case .webSearch: return "globe.badge.chevron.backward"
             case .askUser: return "questionmark.circle"
+            case .lsp: return "chevron.left.forwardslash.chevron.right"
+            case .taskOutput: return "arrow.down.doc"
             case .other: return "wrench"
             }
         }
@@ -135,6 +139,8 @@ enum CLITheme {
             case .webFetch: return "Fetch"
             case .webSearch: return "Web"
             case .askUser: return "Ask"
+            case .lsp: return "LSP"
+            case .taskOutput: return "Output"
             case .other: return "Tool"
             }
         }
@@ -182,6 +188,14 @@ enum CLITheme {
             return scheme == .dark
                 ? Color(red: 0.9, green: 0.7, blue: 0.3)   // Gold
                 : Color(red: 0.7, green: 0.5, blue: 0.1)
+        case .lsp:
+            return scheme == .dark
+                ? Color(red: 0.6, green: 0.8, blue: 1.0)   // Sky blue
+                : Color(red: 0.3, green: 0.5, blue: 0.8)
+        case .taskOutput:
+            return scheme == .dark
+                ? Color(red: 0.7, green: 0.9, blue: 0.6)   // Light green
+                : Color(red: 0.4, green: 0.65, blue: 0.3)
         case .other:
             return scheme == .dark
                 ? Color(red: 0.6, green: 0.6, blue: 0.6)   // Gray

@@ -14,8 +14,47 @@ struct TodoListView: View {
         let status: String  // "pending", "in_progress", "completed"
     }
 
+    private var completedCount: Int {
+        todos.filter { $0.status == "completed" }.count
+    }
+
+    private var progress: Double {
+        guard !todos.isEmpty else { return 0 }
+        return Double(completedCount) / Double(todos.count)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
+            // Progress bar header
+            if todos.count > 1 {
+                HStack(spacing: 8) {
+                    // Progress bar
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            // Background track
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(CLITheme.mutedText(for: colorScheme).opacity(0.2))
+                                .frame(height: 6)
+
+                            // Progress fill
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(progress >= 1.0
+                                    ? CLITheme.green(for: colorScheme)
+                                    : CLITheme.cyan(for: colorScheme))
+                                .frame(width: geometry.size.width * progress, height: 6)
+                        }
+                    }
+                    .frame(height: 6)
+
+                    // Count label
+                    Text("\(completedCount)/\(todos.count)")
+                        .font(settings.scaledFont(.small))
+                        .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                        .monospacedDigit()
+                }
+                .padding(.bottom, 4)
+            }
+
             ForEach(Array(todos.enumerated()), id: \.offset) { index, todo in
                 HStack(alignment: .top, spacing: 8) {
                     // Status indicator

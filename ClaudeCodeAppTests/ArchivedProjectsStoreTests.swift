@@ -1,6 +1,7 @@
 import XCTest
 @testable import ClaudeCodeApp
 
+@MainActor
 final class ArchivedProjectsStoreTests: XCTestCase {
     /// Unique UserDefaults key for test isolation
     private var testStorageKey: String!

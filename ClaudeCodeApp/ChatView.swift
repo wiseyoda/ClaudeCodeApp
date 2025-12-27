@@ -6,6 +6,7 @@ struct ChatView: View {
     let project: Project
     let apiClient: APIClient
     let initialGitStatus: GitStatus
+    var onSessionsChanged: (() -> Void)?  // Callback when sessions are added/deleted
     @EnvironmentObject var settings: AppSettings
     @StateObject private var wsManager: WebSocketManager
     @StateObject private var claudeHelper: ClaudeHelper
@@ -36,7 +37,8 @@ struct ChatView: View {
     @State private var searchText = ""
     @State private var messageFilter: MessageFilter = .all
     @State private var localSessions: [ProjectSession]?  // Local copy for session management
-    @StateObject private var sshManager = SSHManager()  // For session deletion
+    @ObservedObject private var sshManager = SSHManager.shared  // For session deletion
+    @ObservedObject private var projectSettingsStore = ProjectSettingsStore.shared
     @FocusState private var isInputFocused: Bool
 
     // Git sync state
@@ -44,6 +46,7 @@ struct ChatView: View {
     @State private var isAutoPulling = false
     @State private var showGitBanner = true
     @State private var hasPromptedCleanup = false
+    @State private var gitRefreshTimer: Timer?
 
     // Model selection state
     @State private var showingModelPicker = false
@@ -53,14 +56,19 @@ struct ChatView: View {
     // Quick settings sheet
     @State private var showQuickSettings = false
 
-    // Scroll position preservation for rotation
+    // Scroll state management
+    @StateObject private var scrollManager = ScrollStateManager()
     @State private var visibleMessageIds: Set<String> = []
     @State private var savedScrollPosition: String?
 
-    init(project: Project, apiClient: APIClient, initialGitStatus: GitStatus = .unknown) {
+    // Delayed disconnect to handle NavigationSplitView layout recreations
+    @State private var disconnectTask: Task<Void, Never>?
+
+    init(project: Project, apiClient: APIClient, initialGitStatus: GitStatus = .unknown, onSessionsChanged: (() -> Void)? = nil) {
         self.project = project
         self.apiClient = apiClient
         self.initialGitStatus = initialGitStatus
+        self.onSessionsChanged = onSessionsChanged
         // Initialize WebSocketManager without settings - will be configured in onAppear
         _wsManager = StateObject(wrappedValue: WebSocketManager())
         _claudeHelper = StateObject(wrappedValue: ClaudeHelper(settings: AppSettings()))
@@ -130,11 +138,7 @@ struct ChatView: View {
                     // More options menu
                     Menu {
                         Button {
-                            messages = []
-                            wsManager.sessionId = nil
-                            selectedSession = nil
-                            MessageStore.clearMessages(for: project.path)
-                            MessageStore.clearSessionId(for: project.path)
+                            startNewSession()
                         } label: {
                             Label("New Chat", systemImage: "plus")
                         }
@@ -162,6 +166,10 @@ struct ChatView: View {
             }
         }
         .onAppear {
+            // Cancel any pending disconnect (handles NavigationSplitView recreations)
+            disconnectTask?.cancel()
+            disconnectTask = nil
+
             // Update managers with actual EnvironmentObject settings
             wsManager.updateSettings(settings)
             claudeHelper.updateSettings(settings)
@@ -202,11 +210,31 @@ struct ChatView: View {
 
             // Initialize model state
             customModelId = settings.customModelId
+
+            // Start periodic git status refresh timer (every 30 seconds)
+            gitRefreshTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
+                Task { @MainActor in
+                    refreshGitStatus()
+                }
+            }
         }
         .onDisappear {
-            wsManager.disconnect()
             // Save messages when leaving
             MessageStore.saveMessages(messages, for: project.path)
+
+            // Invalidate git refresh timer
+            gitRefreshTimer?.invalidate()
+            gitRefreshTimer = nil
+
+            // Delay disconnect to handle NavigationSplitView layout recreations
+            // If onAppear is called again quickly, the disconnect will be cancelled
+            disconnectTask = Task {
+                try? await Task.sleep(nanoseconds: 500_000_000)  // 500ms delay
+                guard !Task.isCancelled else { return }
+                await MainActor.run {
+                    wsManager.disconnect()
+                }
+            }
         }
         .onChange(of: messages) { _, newMessages in
             // Save messages whenever they change (debounced by iOS)
@@ -403,7 +431,7 @@ struct ChatView: View {
             answer,
             projectPath: project.path,
             resumeSessionId: sessionToResume,
-            permissionMode: settings.effectivePermissionMode,
+            permissionMode: effectivePermissionMode,
             model: effectiveModelId
         )
         processingStartTime = Date()
@@ -418,15 +446,54 @@ struct ChatView: View {
 
     // MARK: - View Components (extracted to help Swift compiler)
 
+    /// Combined sessions list (local updates + original project sessions)
+    private var sessions: [ProjectSession] {
+        localSessions ?? project.sessions ?? []
+    }
+
     @ViewBuilder
     private var sessionPickerView: some View {
-        if let sessions = project.sessions, !sessions.isEmpty {
-            SessionPicker(sessions: sessions, selected: $selectedSession, isLoading: isLoadingHistory) { session in
-                wsManager.sessionId = session.id
-                MessageStore.saveSessionId(session.id, for: project.path)
-                loadSessionHistory(session)
-            }
+        if !sessions.isEmpty {
+            SessionPicker(
+                sessions: sessions,
+                project: project,
+                selected: $selectedSession,
+                isLoading: isLoadingHistory,
+                isProcessing: wsManager.isProcessing,
+                activeSessionId: wsManager.sessionId,
+                onSelect: { session in
+                    wsManager.sessionId = session.id
+                    MessageStore.saveSessionId(session.id, for: project.path)
+                    loadSessionHistory(session)
+                },
+                onNew: {
+                    startNewSession()
+                },
+                onDelete: { session in
+                    Task {
+                        await deleteSession(session)
+                    }
+                }
+            )
         }
+    }
+
+    /// Start a completely new session - clears messages and resets session ID
+    private func startNewSession() {
+        messages = []
+        wsManager.sessionId = nil
+        selectedSession = nil
+        scrollManager.reset()  // Reset scroll state for fresh session
+        MessageStore.clearMessages(for: project.path)
+        MessageStore.clearSessionId(for: project.path)
+
+        // Add welcome message for new session
+        let welcomeMessage = ChatMessage(
+            role: .system,
+            content: "New session started. How can I help you?",
+            timestamp: Date()
+        )
+        messages.append(welcomeMessage)
     }
 
     @ViewBuilder
@@ -480,61 +547,101 @@ struct ChatView: View {
 
     private var messagesScrollView: some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                messagesListView
-            }
-            .background(CLITheme.background(for: colorScheme))
-            .onChange(of: messages.count) { _, _ in
-                guard settings.autoScrollEnabled else { return }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    withAnimation {
-                        proxy.scrollTo("bottomAnchor", anchor: .bottom)
-                    }
-                }
-            }
-            .onChange(of: wsManager.currentText) { _, _ in
-                guard settings.autoScrollEnabled else { return }
-                proxy.scrollTo("bottomAnchor", anchor: .bottom)
-            }
-            .onChange(of: wsManager.isProcessing) { _, _ in
-                guard settings.autoScrollEnabled else { return }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                    withAnimation {
-                        proxy.scrollTo("bottomAnchor", anchor: .bottom)
-                    }
-                }
-            }
-            .onChange(of: scrollToBottomTrigger) { _, shouldScroll in
-                // Always honor explicit scroll triggers (e.g., loading history)
-                if shouldScroll {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        proxy.scrollTo("bottomAnchor", anchor: .bottom)
-                        scrollToBottomTrigger = false
-                    }
-                }
-            }
-            .onAppear {
-                // Always scroll to bottom on initial appear
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    proxy.scrollTo("bottomAnchor", anchor: .bottom)
-                }
-            }
-            .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
-                // Find the first visible message to restore scroll position after rotation
-                if let firstVisibleId = visibleMessageIds.first,
-                   let messageUUID = UUID(uuidString: firstVisibleId),
-                   displayMessages.contains(where: { $0.id == messageUUID }) {
-                    savedScrollPosition = firstVisibleId
-                    // Restore scroll position after layout updates
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                        if let positionId = savedScrollPosition {
-                            withAnimation(.easeInOut(duration: 0.1)) {
-                                proxy.scrollTo(UUID(uuidString: positionId), anchor: .top)
+            GeometryReader { outerGeometry in
+                ScrollView {
+                    messagesListView
+                        .background(
+                            GeometryReader { contentGeometry in
+                                Color.clear
+                                    .preference(
+                                        key: ContentSizePreferenceKey.self,
+                                        value: contentGeometry.size
+                                    )
                             }
-                            savedScrollPosition = nil
+                        )
+                }
+                .coordinateSpace(name: "chatScroll")
+                .background(CLITheme.background(for: colorScheme))
+                // Track scroll position to detect user scrolling up
+                .onPreferenceChange(ContentSizePreferenceKey.self) { contentSize in
+                    // Only track when content is larger than viewport
+                    if contentSize.height > outerGeometry.size.height {
+                        // Content size changed - request scroll if auto-scroll is enabled
+                        if settings.autoScrollEnabled {
+                            scrollManager.requestScrollToBottom()
                         }
                     }
                 }
+                // Unified scroll trigger - responds to scrollManager.shouldScroll
+                .onChange(of: scrollManager.shouldScroll) { _, shouldScroll in
+                    if shouldScroll {
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            proxy.scrollTo("bottomAnchor", anchor: .bottom)
+                        }
+                    }
+                }
+                // Trigger scroll on new messages (debounced via scrollManager)
+                .onChange(of: messages.count) { _, _ in
+                    guard settings.autoScrollEnabled else { return }
+                    scrollManager.requestScrollToBottom()
+                }
+                // Trigger scroll on streaming text (debounced - prevents jitter)
+                .onChange(of: wsManager.currentText.count) { oldCount, newCount in
+                    guard settings.autoScrollEnabled else { return }
+                    // Only scroll on significant changes (every 100 chars or so)
+                    // This prevents scroll jitter during rapid streaming
+                    if newCount == 0 || abs(newCount - oldCount) > 100 {
+                        scrollManager.requestScrollToBottom(animated: false)
+                    }
+                }
+                // Trigger scroll when processing state changes
+                .onChange(of: wsManager.isProcessing) { _, isProcessing in
+                    guard settings.autoScrollEnabled else { return }
+                    // Scroll when starting or ending processing
+                    scrollManager.requestScrollToBottom()
+                }
+                // Handle explicit scroll trigger (loading history, etc.)
+                .onChange(of: scrollToBottomTrigger) { _, shouldScroll in
+                    if shouldScroll {
+                        // Force scroll bypasses user intent tracking
+                        scrollManager.forceScrollToBottom()
+                        scrollToBottomTrigger = false
+                    }
+                }
+                .onAppear {
+                    // Scroll to bottom on initial appear
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        scrollManager.forceScrollToBottom()
+                    }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+                    // Find the first visible message to restore scroll position after rotation
+                    if let firstVisibleId = visibleMessageIds.first,
+                       let messageUUID = UUID(uuidString: firstVisibleId),
+                       displayMessages.contains(where: { $0.id == messageUUID }) {
+                        savedScrollPosition = firstVisibleId
+                        // Restore scroll position after layout updates
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                            if let positionId = savedScrollPosition {
+                                withAnimation(.easeInOut(duration: 0.1)) {
+                                    proxy.scrollTo(UUID(uuidString: positionId), anchor: .top)
+                                }
+                                savedScrollPosition = nil
+                            }
+                        }
+                    }
+                }
+                // Detect user scroll gesture to disable auto-scroll when scrolled up
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 5)
+                        .onChanged { value in
+                            // User is scrolling up (negative translation = scrolling up in content)
+                            if value.translation.height > 0 {
+                                // Scrolling up (finger moving down) - might want to disable auto-scroll
+                                // We'll let the scroll position tracker handle the actual logic
+                            }
+                        }
+                )
             }
         }
     }
@@ -569,7 +676,17 @@ struct ChatView: View {
                 CLIMessageView(
                     message: message,
                     projectPath: project.path,
-                    projectTitle: project.title
+                    projectTitle: project.title,
+                    onAnalyze: { msg in
+                        // Use ClaudeHelper to analyze the message
+                        Task {
+                            await claudeHelper.analyzeMessage(
+                                msg,
+                                recentMessages: messages,
+                                projectPath: project.path
+                            )
+                        }
+                    }
                 )
                 .id(message.id)
                 .onAppear {
@@ -584,8 +701,9 @@ struct ChatView: View {
                 streamingIndicatorView
             }
 
-            // Invisible bottom anchor for reliable scrolling
-            Color.clear
+            // Bottom anchor - use Spacer with explicit frame to ensure it's always rendered
+            // Color.clear can be skipped by LazyVStack, causing scroll failures
+            Spacer()
                 .frame(height: 1)
                 .id("bottomAnchor")
         }
@@ -627,8 +745,10 @@ struct ChatView: View {
             // Unified status bar with quick settings access
             UnifiedStatusBar(
                 isProcessing: wsManager.isProcessing,
-                isConnected: wsManager.isConnected,
+                connectionState: wsManager.connectionState,
                 tokenUsage: wsManager.tokenUsage,
+                effectiveSkipPermissions: effectiveSkipPermissions,
+                projectPath: project.path,
                 showQuickSettings: $showQuickSettings
             )
 
@@ -714,16 +834,27 @@ struct ChatView: View {
         }
 
         wsManager.onComplete = { _ in
-            // Add final assistant message
+            // Add final assistant message with execution time and token count
             if !wsManager.currentText.isEmpty {
+                // Calculate execution time
+                let executionTime: TimeInterval? = processingStartTime.map { Date().timeIntervalSince($0) }
+
+                // Get token count from current usage
+                let tokenCount = wsManager.tokenUsage?.used
+
                 let assistantMessage = ChatMessage(
                     role: .assistant,
                     content: wsManager.currentText,
-                    timestamp: Date()
+                    timestamp: Date(),
+                    executionTime: executionTime,
+                    tokenCount: tokenCount
                 )
                 messages.append(assistantMessage)
             }
             processingStartTime = nil
+
+            // Refresh git status after task completion
+            refreshGitStatus()
 
             // Generate AI-powered suggestions for next actions
             Task {
@@ -748,13 +879,28 @@ struct ChatView: View {
             // Save session ID for continuity when returning to this project
             MessageStore.saveSessionId(sessionId, for: project.path)
 
-            // Session created notification
-            let systemMsg = ChatMessage(
-                role: .system,
-                content: "Session: \(sessionId.prefix(8))...",
-                timestamp: Date()
+            // Create a new session entry and add to local list
+            // Use the first user message as the summary if available
+            let summary = messages.first { $0.role == .user }?.content.prefix(50).description
+
+            let newSession = ProjectSession(
+                id: sessionId,
+                summary: summary,
+                messageCount: 1,
+                lastActivity: ISO8601DateFormatter().string(from: Date()),
+                lastUserMessage: summary,
+                lastAssistantMessage: nil
             )
-            messages.append(systemMsg)
+
+            // Initialize localSessions if needed and add the new session
+            if localSessions == nil {
+                localSessions = project.sessions ?? []
+            }
+            // Insert at beginning (most recent)
+            localSessions?.insert(newSession, at: 0)
+
+            // Select the new session in the picker
+            selectedSession = newSession
         }
 
         wsManager.onAskUserQuestion = { questionData in
@@ -818,7 +964,7 @@ struct ChatView: View {
                 text.isEmpty ? "What is this image?" : messageToSend,
                 projectPath: project.path,
                 resumeSessionId: sessionToResume,
-                permissionMode: settings.effectivePermissionMode,
+                permissionMode: effectivePermissionMode,
                 imageData: imageData,
                 model: effectiveModelId
             )
@@ -828,7 +974,7 @@ struct ChatView: View {
                 messageToSend,
                 projectPath: project.path,
                 resumeSessionId: sessionToResume,
-                permissionMode: settings.effectivePermissionMode,
+                permissionMode: effectivePermissionMode,
                 model: effectiveModelId
             )
         }
@@ -899,6 +1045,7 @@ struct ChatView: View {
         messages.removeAll()
         wsManager.sessionId = nil
         selectedSession = nil
+        scrollManager.reset()  // Reset scroll state for fresh session
         addSystemMessage("Conversation cleared. Starting fresh.")
         MessageStore.clearMessages(for: project.path)
         MessageStore.clearSessionId(for: project.path)
@@ -909,6 +1056,7 @@ struct ChatView: View {
         messages.removeAll()
         wsManager.sessionId = nil
         selectedSession = nil
+        scrollManager.reset()  // Reset scroll state for fresh session
         addSystemMessage("New session started.")
         MessageStore.clearMessages(for: project.path)
         MessageStore.clearSessionId(for: project.path)
@@ -946,6 +1094,7 @@ struct ChatView: View {
     private func loadSessionHistory(_ session: ProjectSession) {
         messages = []  // Clear current messages
         isLoadingHistory = true
+        scrollManager.reset()  // Reset scroll state for new history
 
         Task {
             do {
@@ -1012,6 +1161,9 @@ struct ChatView: View {
                     wsManager.sessionId = nil
                     MessageStore.clearSessionId(for: project.path)
                 }
+
+                // Notify parent to refresh project list
+                onSessionsChanged?()
             }
         } catch {
             print("[ChatView] Failed to delete session: \(error)")
@@ -1144,7 +1296,7 @@ struct ChatView: View {
             cleanupPrompt,
             projectPath: project.path,
             resumeSessionId: sessionToResume,
-            permissionMode: settings.effectivePermissionMode,
+            permissionMode: effectivePermissionMode,
             model: effectiveModelId
         )
         processingStartTime = Date()
@@ -1174,7 +1326,7 @@ struct ChatView: View {
             commitPrompt,
             projectPath: project.path,
             resumeSessionId: sessionToResume,
-            permissionMode: settings.effectivePermissionMode,
+            permissionMode: effectivePermissionMode,
             model: effectiveModelId
         )
         processingStartTime = Date()
@@ -1204,7 +1356,7 @@ struct ChatView: View {
             pushPrompt,
             projectPath: project.path,
             resumeSessionId: sessionToResume,
-            permissionMode: settings.effectivePermissionMode,
+            permissionMode: effectivePermissionMode,
             model: effectiveModelId
         )
         processingStartTime = Date()
@@ -1239,6 +1391,19 @@ struct ChatView: View {
         case .custom:
             return customModelId.isEmpty ? nil : customModelId
         }
+    }
+
+    /// Whether to skip permissions for this project (considers per-project override)
+    private var effectiveSkipPermissions: Bool {
+        projectSettingsStore.effectiveSkipPermissions(
+            for: project.path,
+            globalSetting: settings.skipPermissions
+        )
+    }
+
+    /// The effective permission mode to send to server for this project
+    private var effectivePermissionMode: String? {
+        effectiveSkipPermissions ? "bypassPermissions" : settings.claudeMode.serverValue
     }
 }
 
@@ -1650,6 +1815,16 @@ extension View {
             placeholder().opacity(shouldShow ? 1 : 0)
             self
         }
+    }
+}
+
+// MARK: - Preference Keys
+
+/// Preference key for tracking content size
+struct ContentSizePreferenceKey: PreferenceKey {
+    static var defaultValue: CGSize = .zero
+    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+        value = nextValue()
     }
 }
 

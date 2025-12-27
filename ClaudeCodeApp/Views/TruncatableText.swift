@@ -120,8 +120,40 @@ struct TruncatableText: View {
 // MARK: - Content-Aware Line Limits
 
 extension TruncatableText {
+    /// Detect verbose help output that should be more aggressively collapsed
+    static func isVerboseHelpOutput(_ content: String) -> Bool {
+        // Git help/usage pattern
+        if content.contains("usage: git") && content.contains("--") {
+            return true
+        }
+        // npm help pattern
+        if content.contains("npm help") || content.contains("Usage: npm") {
+            return true
+        }
+        // Generic help pattern - many option lines starting with dashes
+        let optionLines = content.components(separatedBy: "\n")
+            .filter { line in
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                return trimmed.hasPrefix("-") || trimmed.hasPrefix("--")
+            }
+        if optionLines.count > 10 {
+            return true
+        }
+        // Man page style output with section headers
+        if content.contains("SYNOPSIS") || content.contains("DESCRIPTION") ||
+           content.contains("OPTIONS:") || content.contains("COMMANDS:") {
+            return true
+        }
+        return false
+    }
+
     /// Determines appropriate line limit based on content type
     static func lineLimit(for content: String, toolName: String? = nil) -> Int {
+        // More aggressive collapse for verbose help text
+        if isVerboseHelpOutput(content) {
+            return 5
+        }
+
         // Check for stack traces
         if content.contains("Error") || content.contains("Exception") ||
            content.contains("at line") || content.contains("Traceback") {

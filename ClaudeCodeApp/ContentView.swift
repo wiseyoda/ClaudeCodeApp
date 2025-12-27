@@ -16,7 +16,7 @@ struct ContentView: View {
     @State private var projectToDelete: Project?
     @State private var showGlobalSearch = false
     @State private var showCommands = false
-    @StateObject private var sshManager = SSHManager()
+    @ObservedObject private var sshManager = SSHManager.shared
     @StateObject private var commandStore = CommandStore.shared
     @ObservedObject private var archivedStore = ArchivedProjectsStore.shared
 
@@ -120,7 +120,10 @@ struct ContentView: View {
                 ChatView(
                     project: project,
                     apiClient: apiClient,
-                    initialGitStatus: gitStatuses[project.path] ?? .unknown
+                    initialGitStatus: gitStatuses[project.path] ?? .unknown,
+                    onSessionsChanged: {
+                        Task { await loadProjects() }
+                    }
                 )
             } else {
                 noProjectSelectedView

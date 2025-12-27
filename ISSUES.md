@@ -14,63 +14,57 @@ When reporting a bug, include:
 
 ## Open Issues
 
+### #16: Phantom "New Session" entries created on app open (Investigating)
+- **What happened**: Empty sessions with summary "New Session" appear in session picker without user sending any message
+- **Expected**: Sessions should only be created when user sends first message
+- **Location**: Backend/Claude Agent SDK
+- **Investigation findings**:
+  - iOS app `startNewSession()` correctly only clears local state (doesn't create backend session)
+  - Session files contain only `queue-operation: dequeue` entry with no user message
+  - Associated `agent-*.jsonl` files have "Warmup" messages from Claude Agent SDK
+  - Agent timestamps precede main session entry, suggesting SDK internal initialization
+  - Root cause appears to be in Claude Agent SDK warmup mechanism, not iOS app
+- **Workaround applied**: Filter out sessions with `summary == "New Session"` in `SessionPickerViews.swift`
+- **Status**: Monitoring - workaround in place, will investigate further if issues persist
+
+### #17: Timeout errors not appearing in debug logs (Fixed December 27, 2025)
+- **What happened**: "Request timed out" errors shown to user but not captured in debug log viewer
+- **Expected**: All errors should appear in debug logs for troubleshooting
+- **Fix applied**: Added `debugLog.logError()` calls to timeout handling and error cases in `WebSocketManager.swift`. Also added `lastActiveToolName` tracking to show which tool was running when timeout occurred.
+
 ### Feature Requests
 
-#### #4: Message action bar at bottom of messages
-- **Type**: Feature request
-- **Priority**: Medium
-- **Current behavior**: Copy button is at the top of the message
-- **Requested behavior**: Add an action bar at the bottom of each message with:
-  - Copy all button (moved from top)
-  - Execution time for the task
-  - Token usage for that task
-  - "Analyze" button - uses Haiku to generate a follow-up prompt with output context
-- **Related files**: Message view components in `Views/`
-
-#### #7: Verbose output log for debugging
-- **Type**: Feature request
-- **Priority**: Medium
-- **What**: Access to raw/verbose session logs for debugging issues
-- **Details**:
-  - Server likely has raw output vs parsed output
-  - Would help debug parsing issues and other problems
-  - Could be a developer/debug mode toggle or separate log viewer
-- **Related files**: `WebSocketManager.swift`, backend API
-
-#### #8: Restore quick-access mode and thinking toggles
-- **Type**: Feature request / UX regression
-- **Priority**: Low
-- **What happened**: New UI hides mode and thinking settings under status bar settings menu
-- **Problem**: Adds extra click, harder to quickly cycle through options
-- **Requested changes**:
-  - Bring back chips in status bar for mode (normal/plan/bypass permissions)
-  - Bring back chips for thinking level toggle
-  - Add "dangerously bypass permissions" option in settings (Claude CLI feature)
-- **Note**: Need to research how bypass permissions is implemented in Claude CLI
-- **Related files**: Status bar view, `AppSettings.swift`
-
-#### #11: Auto-refresh git status in active project
-- **Type**: Feature request
-- **Priority**: Low
-- **Current behavior**: Git status only updates manually or when reloading the project
-- **Requested behavior**: Automatically refresh git status:
-  - Periodically on a time interval while in a project
-  - After task completion (when Claude makes changes)
-- **Related files**: Git sync components, `SSHManager.swift`, `ChatView.swift`
-
-#### #12: Quick commit & push button in pending changes banner
-- **Type**: Feature request
-- **Priority**: Low
-- **Context**: Git banner already shows when there are pending changes
-- **Requested behavior**: Add a button that sends a command to Claude to commit and push all changes
-- **Similar to**: The existing "Pull" button in the pull request banner
-- **Related files**: Git sync banner components, `ChatView.swift`, `WebSocketManager.swift`
+*No open feature requests at this time.*
 
 ---
 
 ## Resolved Issues
 
 Issues that have been fixed are listed below. See CHANGELOG.md for full details.
+
+### #7: Verbose output log for debugging (Fixed December 27, 2025)
+- **Resolution**: Added `DebugLogStore` and `DebugLogView` for viewing raw WebSocket messages. Developer section in QuickSettingsSheet with toggle and log viewer access.
+
+### #13: Git refresh error alert on app launch (Fixed December 27, 2025)
+- **Resolution**: Modified `SSHManager.checkGitStatusWithAutoConnect()` to silently return `.unknown` for SSH connection failures instead of showing an error alert.
+
+### #14: Claude status indicator stuck red (Fixed December 27, 2025)
+- **Resolution**: Updated `UnifiedStatusBar` to accept full `ConnectionState`. Added yellow color and pulsing animation for connecting/reconnecting states.
+
+### #15: Per-project permissions toggle (Fixed December 27, 2025)
+- **Resolution**: Added `ProjectSettingsStore` for per-project settings. Status bar bypass indicator is now tappable to toggle per-project override (cycles through: use global -> force on -> force off -> use global).
+
+### #4: Message action bar at bottom of messages (Fixed in v0.4.0)
+- **Resolution**: Added `MessageActionBar.swift` with execution time, token count, copy, and analyze buttons
+
+### #8: Restore quick-access mode and thinking toggles (Fixed in v0.4.0)
+- **Resolution**: Restored mode and thinking chips to status bar for faster access
+
+### #11: Auto-refresh git status in active project (Fixed in v0.4.0)
+- **Resolution**: Added 30-second periodic refresh plus auto-refresh after task completion
+
+### #12: Quick commit & push button in pending changes banner (Fixed in v0.4.0)
+- **Resolution**: Added button in pending changes banner to commit and push via Claude
 
 ### #1: App crashes periodically during use (Fixed in v1.3.0)
 - **Root cause**: Thread safety issues in WebSocketManager - race conditions and message queue overwrites

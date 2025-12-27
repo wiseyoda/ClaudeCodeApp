@@ -28,56 +28,169 @@ class SessionNamesStore {
 
 struct SessionPicker: View {
     let sessions: [ProjectSession]
+    let project: Project
     @Binding var selected: ProjectSession?
     var isLoading: Bool = false
+    var isProcessing: Bool = false
+    var activeSessionId: String?  // Currently active session (may be processing)
     let onSelect: (ProjectSession) -> Void
+    let onNew: () -> Void
+    let onDelete: ((ProjectSession) -> Void)?
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
+    @State private var showAllSessions = false
+
+    /// Determines if a session should be shown as selected
+    private func isSessionSelected(_ session: ProjectSession) -> Bool {
+        if let selected = selected {
+            return selected.id == session.id
+        }
+        return activeSessionId == session.id
+    }
+
+    /// "New" is selected only when there's no active session at all
+    private var isNewSelected: Bool {
+        selected == nil && activeSessionId == nil
+    }
+
+    /// Sessions sorted by last activity (most recent first), excluding placeholder sessions
+    private var sortedSessions: [ProjectSession] {
+        sessions
+            .filter { session in
+                // Filter out placeholder sessions - backend initializes with summary="New Session"
+                // These are sessions created but not yet used (no real user message sent)
+                session.summary != nil && session.summary != "New Session"
+            }
+            .sorted { s1, s2 in
+                let date1 = parseDate(s1.lastActivity)
+                let date2 = parseDate(s2.lastActivity)
+                return date1 > date2
+            }
+    }
+
+    /// Number of sessions not shown in the bar (based on filtered sessions)
+    private var hiddenSessionCount: Int {
+        max(0, sortedSessions.count - 5)
+    }
+
+    private func parseDate(_ isoString: String?) -> Date {
+        guard let isoString = isoString else { return .distantPast }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: isoString) {
+            return date
+        }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: isoString) ?? .distantPast
+    }
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
+                // New button
                 Button {
-                    selected = nil
+                    onNew()
                 } label: {
                     Text("New")
                         .font(settings.scaledFont(.small))
-                        .foregroundColor(selected == nil ? CLITheme.background(for: colorScheme) : CLITheme.cyan(for: colorScheme))
+                        .foregroundColor(isNewSelected ? CLITheme.background(for: colorScheme) : CLITheme.cyan(for: colorScheme))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
-                        .background(selected == nil ? CLITheme.cyan(for: colorScheme) : CLITheme.secondaryBackground(for: colorScheme))
+                        .background(isNewSelected ? CLITheme.cyan(for: colorScheme) : CLITheme.secondaryBackground(for: colorScheme))
                         .cornerRadius(4)
                 }
 
-                ForEach(sessions.prefix(5)) { session in
-                    Button {
-                        selected = session
-                        onSelect(session)
-                    } label: {
-                        HStack(spacing: 4) {
-                            // Show loading indicator for selected session
-                            if isLoading && selected?.id == session.id {
-                                ProgressView()
-                                    .scaleEffect(0.6)
-                                    .frame(width: 12, height: 12)
-                            }
-                            Text(displayName(for: session))
-                                .font(settings.scaledFont(.small))
-                                .lineLimit(1)
-                        }
-                        .foregroundColor(selected?.id == session.id ? CLITheme.background(for: colorScheme) : CLITheme.primaryText(for: colorScheme))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(selected?.id == session.id ? CLITheme.cyan(for: colorScheme) : CLITheme.secondaryBackground(for: colorScheme))
-                        .cornerRadius(4)
-                    }
-                    .disabled(isLoading)
+                // Recent sessions (up to 5)
+                ForEach(sortedSessions.prefix(5)) { session in
+                    sessionButton(for: session)
                 }
+
+                // Always show "all sessions" button (with count if > 5)
+                Button {
+                    showAllSessions = true
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "list.bullet")
+                            .font(.system(size: 11))
+                        if hiddenSessionCount > 0 {
+                            Text("+\(hiddenSessionCount)")
+                                .font(settings.scaledFont(.small))
+                        }
+                    }
+                    .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(CLITheme.secondaryBackground(for: colorScheme))
+                    .cornerRadius(4)
+                }
+                .accessibilityLabel("All sessions")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
         }
         .background(CLITheme.background(for: colorScheme))
+        .sheet(isPresented: $showAllSessions) {
+            SessionPickerSheet(
+                project: project,
+                sessions: sessions,
+                onSelect: { session in
+                    showAllSessions = false
+                    selected = session
+                    onSelect(session)
+                },
+                onCancel: {
+                    showAllSessions = false
+                },
+                onDelete: onDelete
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func sessionButton(for session: ProjectSession) -> some View {
+        Button {
+            selected = session
+            onSelect(session)
+        } label: {
+            HStack(spacing: 4) {
+                // Show processing indicator for active session
+                if isProcessing && activeSessionId == session.id {
+                    Circle()
+                        .fill(CLITheme.yellow(for: colorScheme))
+                        .frame(width: 6, height: 6)
+                }
+                // Show loading indicator when fetching history
+                if isLoading && selected?.id == session.id {
+                    ProgressView()
+                        .scaleEffect(0.6)
+                        .frame(width: 12, height: 12)
+                }
+                Text(displayName(for: session))
+                    .font(settings.scaledFont(.small))
+                    .lineLimit(1)
+            }
+            .foregroundColor(isSessionSelected(session) ? CLITheme.background(for: colorScheme) : CLITheme.primaryText(for: colorScheme))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(isSessionSelected(session) ? CLITheme.cyan(for: colorScheme) : CLITheme.secondaryBackground(for: colorScheme))
+            .cornerRadius(4)
+        }
+        .disabled(isLoading)
+        .contextMenu {
+            Button {
+                showAllSessions = true
+            } label: {
+                Label("All Sessions", systemImage: "list.bullet")
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                onDelete?(session)
+            } label: {
+                Label("Delete Session", systemImage: "trash")
+            }
+        }
     }
 
     private func displayName(for session: ProjectSession) -> String {
@@ -106,10 +219,36 @@ struct SessionPickerSheet: View {
     @State private var exportedMarkdown: String?
     @State private var showExportSheet = false
 
+    /// Sessions sorted by last activity (most recent first), excluding placeholder sessions
+    private var sortedSessions: [ProjectSession] {
+        sessions
+            .filter { session in
+                // Filter out placeholder sessions - backend initializes with summary="New Session"
+                // These are sessions created but not yet used (no real user message sent)
+                session.summary != nil && session.summary != "New Session"
+            }
+            .sorted { s1, s2 in
+                let date1 = parseDate(s1.lastActivity)
+                let date2 = parseDate(s2.lastActivity)
+                return date1 > date2
+            }
+    }
+
+    private func parseDate(_ isoString: String?) -> Date {
+        guard let isoString = isoString else { return .distantPast }
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = formatter.date(from: isoString) {
+            return date
+        }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: isoString) ?? .distantPast
+    }
+
     var body: some View {
         NavigationStack {
             Group {
-                if sessions.isEmpty {
+                if sortedSessions.isEmpty {
                     VStack(spacing: 16) {
                         Image(systemName: "clock.arrow.circlepath")
                             .font(.system(size: 48))
@@ -126,7 +265,7 @@ struct SessionPickerSheet: View {
                     }
                     .padding()
                 } else {
-                    List(sessions) { session in
+                    List(sortedSessions) { session in
                         Button {
                             onSelect(session)
                         } label: {

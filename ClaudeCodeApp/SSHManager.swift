@@ -355,6 +355,9 @@ struct SSHConfigEntry {
 
 @MainActor
 class SSHManager: ObservableObject {
+    /// Shared singleton instance - use this instead of creating new instances
+    static let shared = SSHManager()
+
     @Published var isConnected = false
     @Published var isConnecting = false
     @Published var output: String = ""
@@ -374,8 +377,16 @@ class SSHManager: ObservableObject {
     }
 
     deinit {
-        // Cancel any pending disconnect task and clean up
+        // Cancel any pending disconnect task
         disconnectTask?.cancel()
+
+        // Synchronously close the SSH connection to prevent orphaned server processes
+        // We need to capture client before it's deallocated and close it in a detached task
+        if let clientToClose = client {
+            Task.detached {
+                try? await clientToClose.close()
+            }
+        }
     }
 
     // Get the real home directory (works around iOS Simulator sandboxing)
@@ -759,8 +770,13 @@ class SSHManager: ObservableObject {
 
         log.debug("Starting upload of \(imageData.count) bytes to \(remotePath)")
 
+        // Escape paths for safe shell command execution
+        let escapedRemoteDir = shellEscape(remoteDir)
+        let escapedRemotePath = shellEscape(remotePath)
+        let escapedRemotePathB64 = shellEscape("\(remotePath).b64")
+
         // Ensure the directory exists
-        _ = try? await client.executeCommand("mkdir -p \(remoteDir)")
+        _ = try? await client.executeCommand("mkdir -p \(escapedRemoteDir)")
 
         // Convert image to base64 (no line wrapping)
         let base64String = imageData.base64EncodedString()
@@ -768,6 +784,7 @@ class SSHManager: ObservableObject {
 
         // Use printf with chunks to avoid command line limits
         // printf '%s' doesn't add newlines and handles base64 chars safely
+        // Note: base64 output only contains [A-Za-z0-9+/=] so chunk doesn't need escaping
         let chunkSize = 30000  // Conservative chunk size
         var offset = 0
         var isFirst = true
@@ -781,7 +798,7 @@ class SSHManager: ObservableObject {
             // Use printf '%s' to avoid newline issues
             // Redirect: > for first chunk, >> for subsequent
             let redirect = isFirst ? ">" : ">>"
-            let cmd = "printf '%s' '\(chunk)' \(redirect) \(remotePath).b64"
+            let cmd = "printf '%s' '\(chunk)' \(redirect) \(escapedRemotePathB64)"
 
             _ = try await client.executeCommand(cmd)
             offset = endOffset
@@ -790,11 +807,11 @@ class SSHManager: ObservableObject {
 
         // Decode the base64 file to the actual image
         // Use -d for standard base64 decode
-        let decodeCmd = "base64 -d \(remotePath).b64 > \(remotePath) && rm \(remotePath).b64"
+        let decodeCmd = "base64 -d \(escapedRemotePathB64) > \(escapedRemotePath) && rm \(escapedRemotePathB64)"
         _ = try await client.executeCommand(decodeCmd)
 
         // Verify the file was created and has content
-        let verifyCmd = "stat -c '%s' \(remotePath) 2>/dev/null || stat -f '%z' \(remotePath) 2>/dev/null"
+        let verifyCmd = "stat -c '%s' \(escapedRemotePath) 2>/dev/null || stat -f '%z' \(escapedRemotePath) 2>/dev/null"
         let verifyResult = try await client.executeCommand(verifyCmd)
         let fileSize = String(buffer: verifyResult).trimmingCharacters(in: .whitespacesAndNewlines)
         log.debug("Uploaded image to: \(remotePath) (\(fileSize) bytes)")
@@ -951,8 +968,9 @@ class SSHManager: ObservableObject {
         }
 
         // First check if it's a git repo
+        // Use `|| echo "false"` to ensure command succeeds even if not a git repo
         let escapedPath = shellEscape(path)
-        let isGitCmd = "cd \(escapedPath) && git rev-parse --is-inside-work-tree 2>/dev/null"
+        let isGitCmd = "cd \(escapedPath) && git rev-parse --is-inside-work-tree 2>/dev/null || echo 'false'"
         let isGitResult = try await client.executeCommand(isGitCmd)
         let isGit = String(buffer: isGitResult).trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -961,17 +979,18 @@ class SSHManager: ObservableObject {
         }
 
         // Check for uncommitted changes (including untracked files)
-        let statusCmd = "cd \(escapedPath) && git status --porcelain 2>/dev/null"
+        // Use `|| true` to ensure command succeeds even on git errors
+        let statusCmd = "cd \(escapedPath) && git status --porcelain 2>/dev/null || true"
         let statusResult = try await client.executeCommand(statusCmd)
         let statusOutput = String(buffer: statusResult).trimmingCharacters(in: .whitespacesAndNewlines)
         let hasUncommittedChanges = !statusOutput.isEmpty
 
         // Fetch remote to get accurate ahead/behind (non-blocking, with timeout)
-        // Use --dry-run to just check without actually fetching
-        _ = try? await client.executeCommand("cd \(escapedPath) && timeout 5s git fetch --quiet 2>/dev/null")
+        _ = try? await client.executeCommand("cd \(escapedPath) && timeout 5s git fetch --quiet 2>/dev/null || true")
 
         // Check ahead/behind status relative to upstream
-        let revListCmd = "cd \(escapedPath) && git rev-list --left-right --count HEAD...@{upstream} 2>/dev/null"
+        // Use `|| echo ""` to handle repos without upstream configured (returns empty string)
+        let revListCmd = "cd \(escapedPath) && git rev-list --left-right --count HEAD...@{upstream} 2>/dev/null || echo ''"
         let revListResult = try await client.executeCommand(revListCmd)
         let revListOutput = String(buffer: revListResult).trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -1009,13 +1028,26 @@ class SSHManager: ObservableObject {
     }
 
     /// Check git status with auto-connect
+    /// Returns .unknown for connection failures (SSH not configured) to avoid showing errors
+    /// Returns .error only for actual git command failures after successful connection
     func checkGitStatusWithAutoConnect(_ path: String, settings: AppSettings) async -> GitStatus {
-        do {
-            if !isConnected {
+        // Try to connect if not already connected
+        if !isConnected {
+            do {
                 try await autoConnect(settings: settings)
+            } catch {
+                // Connection failure is expected when SSH is not configured (e.g., iOS Simulator)
+                // Silently return .unknown instead of showing an error
+                log.debug("SSH connection not available for git status check: \(error.localizedDescription)")
+                return .unknown
             }
+        }
+
+        // Now try to check git status (we have a connection)
+        do {
             return try await checkGitStatus(path)
         } catch {
+            // This is an actual git command failure, report it
             log.error("Failed to check git status for \(path): \(error)")
             return .error(error.localizedDescription)
         }
