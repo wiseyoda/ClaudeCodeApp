@@ -27,6 +27,11 @@
 │  │  │ AppSettings │  │CommandStore │  │   Logger    │  │SessionNames   │  │  │
 │  │  │ (Config)    │  │ (Prompts)   │  │  (Logging)  │  │Store (Names)  │  │  │
 │  │  └─────────────┘  └─────────────┘  └─────────────┘  └───────────────┘  │  │
+│  │                          │                                              │  │
+│  │                   ┌──────┴──────┐                                       │  │
+│  │                   │ IdeasStore  │                                       │  │
+│  │                   │ (Ideas)     │                                       │  │
+│  │                   └─────────────┘                                       │  │
 │  └────────────────────────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────────────────────────┘
                               │
@@ -122,6 +127,7 @@ Key computed properties:
 | `BookmarkStore` | Documents/bookmarks.json | Cross-session bookmarks |
 | `SessionNamesStore` | UserDefaults | Custom session names |
 | `SessionHistoryLoader` | SSH/JSONL | Load session from server |
+| `IdeasStore` | Documents/ideas-{path}.json | Per-project idea persistence |
 
 #### WebSocketManager.swift
 
@@ -183,6 +189,13 @@ Key computed properties:
 - Category management
 - Last-used tracking and sorting
 - Default commands for Git, Code Review, Testing, Docs
+
+#### IdeasStore.swift
+- Per-project persistence (Documents/ideas-{encoded-path}.json)
+- `Idea` struct with text, title, tags, timestamps
+- AI enhancement fields (expandedPrompt, suggestedFollowups)
+- Archive/restore functionality
+- Search and filter by tag
 
 #### ClaudeHelper.swift
 - Haiku-powered meta-AI service
@@ -263,6 +276,12 @@ Core chat UI with responsibilities:
 | `SearchFilterViews.swift` | 232 | Message filters and search bar |
 | `SuggestionChipsView.swift` | 202 | AI suggestion chips |
 | `QuickSettingsSheet.swift` | 270 | Fast settings access |
+| `IdeasDrawerSheet.swift` | 375 | Ideas drawer management |
+| `IdeaEditorSheet.swift` | 260 | Individual idea editing |
+| `IdeaRowView.swift` | 320 | Idea list item display |
+| `IdeasFAB.swift` | 95 | Floating action button for ideas |
+| `QuickCaptureSheet.swift` | 88 | Quick idea capture |
+| `TagsFlowView.swift` | 113 | Tag flow layout for ideas |
 
 ## Data Flow
 
@@ -383,6 +402,19 @@ Global Search:
 3. On message change: MessageStore.saveMessages(messages, projectPath)
 4. On new chat: MessageStore.clearMessages(projectPath)
 5. Draft auto-saved via onChange(of: inputText)
+```
+
+### Ideas Flow
+```
+1. User long-presses IdeasFAB -> QuickCaptureSheet opens
+2. User enters idea text and taps Save
+3. IdeasStore.addIdea() creates new Idea
+4. Ideas saved to Documents/ideas-{encoded-path}.json
+5. User taps FAB to open IdeasDrawerSheet
+6. User can search, filter by tag, archive ideas
+7. User taps idea -> IdeaEditorSheet opens
+8. User edits title, content, tags
+9. Changes saved via IdeasStore.updateIdea()
 ```
 
 ## Security Model

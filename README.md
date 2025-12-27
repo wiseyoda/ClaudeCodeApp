@@ -25,6 +25,7 @@ A native iOS client for [claudecodeui](https://github.com/siteboon/claudecodeui)
 | **@ File References** | Reference project files directly in prompts |
 | **Command Library** | Save and reuse frequent prompts with categories |
 | **AI Suggestions** | Context-aware action chips after responses (Haiku-powered) |
+| **Ideas Drawer** | Capture ideas during long-running operations with FAB |
 
 ### Model Selection
 | Model | Description |
@@ -175,6 +176,7 @@ On first launch, configure in Settings (gear icon):
 | `SSHManager` | Terminal, file browser, git operations |
 | `SpeechManager` | Voice input with iOS Speech framework |
 | `CommandStore` | Saved prompts with categories |
+| `IdeasStore` | Per-project idea capture and persistence |
 | `ClaudeHelper` | AI suggestions via Haiku |
 | `MessageStore` | File-based message persistence |
 | `BookmarkStore` | Cross-session bookmarks |
@@ -192,6 +194,7 @@ On first launch, configure in Settings (gear icon):
 | `FilePickerSheet` | File browser for @ references |
 | `BookmarksView` | Saved bookmarks list |
 | `GlobalSearchView` | Cross-session search |
+| `IdeasDrawerSheet` | Ideas management with FAB |
 
 ## WebSocket Protocol
 

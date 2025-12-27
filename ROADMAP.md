@@ -34,6 +34,7 @@
 | **AI Suggest** | Suggestion chips, AI file recommendations (POC) | Dec 27 |
 | **Commands** | Command library, [+] menu picker, categories | Dec 27 |
 | **UI Redesign** | Unified status bar, multi-line input, QuickSettings sheet | Dec 27 |
+| **Ideas Drawer** | Idea capture FAB, per-project persistence, tags, archive | Dec 27 |
 
 ---
 
@@ -316,6 +317,17 @@ Phase 4: Platform (P4)
 - Multi-line text input with word wrap
 - [+] button menu (commands, files, images, voice)
 - Removed redundant header icons
+
+### Ideas Drawer
+- IdeasStore for per-project persistence (JSON in Documents)
+- Idea struct with text, title, tags, timestamps
+- IdeasFAB (floating action button) with count badge
+- QuickCaptureSheet for rapid idea capture via long-press
+- IdeasDrawerSheet for full idea management
+- IdeaEditorSheet for editing with AI enhancement fields
+- TagsFlowView for tag UI
+- Archive/restore functionality
+- Search and filter by tag
 
 </details>
 

@@ -129,13 +129,23 @@ The [claudecodeui](https://github.com/siteboon/claudecodeui) project provides a 
 - Suggested files in file picker
 - Tappable chips that auto-send prompts
 
-#### 15. iPad Experience
+#### 15. Ideas Drawer
+- Capture ideas during long-running Claude operations
+- Floating action button (FAB) with count badge
+- Quick capture via long-press on FAB
+- Full idea editor with title, content, and tags
+- Per-project idea persistence (IdeasStore)
+- Archive/restore functionality
+- Search and filter by tag
+- AI enhancement support (expanded prompt, suggested follow-ups)
+
+#### 16. iPad Experience
 - NavigationSplitView with sidebar for projects
 - Keyboard shortcuts (Cmd+Return, Cmd+K, Cmd+N, etc.)
 - Split-view multitasking support
 - Landscape orientation optimization
 
-#### 16. Configuration
+#### 17. Configuration
 | Setting | Options |
 |---------|---------|
 | Server URL | Backend address |
@@ -149,7 +159,7 @@ The [claudecodeui](https://github.com/siteboon/claudecodeui) project provides a 
 | Display | Show thinking, auto-scroll |
 | Sort | By name / By date |
 
-#### 17. Notifications
+#### 18. Notifications
 - Local notifications when tasks complete (background only)
 - Request notification permissions on launch
 
@@ -206,6 +216,7 @@ The [claudecodeui](https://github.com/siteboon/claudecodeui) project provides a 
 - Global search via SSH
 - Command library with categories
 - AI suggestions (Haiku-powered)
+- Ideas Drawer with FAB, tags, and archive
 - iPad sidebar navigation
 - Keyboard shortcuts
 - Git status with auto-pull

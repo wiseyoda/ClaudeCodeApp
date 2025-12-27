@@ -41,6 +41,27 @@ Auto-attach relevant files to every message.
 - Token usage meter
 - Proactive suggestions in chat
 
+### Ideas Drawer
+Capture ideas during long-running Claude operations.
+
+**Status:** Implemented Dec 27, 2025
+
+**What's Working:**
+- `IdeasStore` for per-project idea persistence (JSON in Documents)
+- `Idea` struct with text, title, tags, timestamps, AI enhancement fields
+- `IdeasFAB` floating action button with count badge
+- `QuickCaptureSheet` for rapid idea capture via long-press on FAB
+- `IdeasDrawerSheet` for full idea management
+- `IdeaEditorSheet` for editing with title, content, tags
+- `TagsFlowView` for tag UI
+- Archive/restore functionality
+- Search and filter by tag
+
+**Future Enhancements:**
+- AI enhancement integration (expand prompt, suggest follow-ups)
+- Convert ideas to prompts with one tap
+- Idea templates for common patterns
+
 ---
 
 ## Priority Ideas
