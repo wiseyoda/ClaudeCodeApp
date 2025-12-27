@@ -4,39 +4,58 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Native iOS client for [claude-code-webui](https://github.com/sugyan/claude-code-webui), enabling Claude Code access from iPhone/iPad. The app connects to a backend server (typically running on a NAS via Tailscale) via WebSocket and provides real-time streaming chat with tool visibility. Includes a built-in SSH terminal for direct server access.
+Native iOS client for [claude-code-webui](https://github.com/sugyan/claude-code-webui), enabling Claude Code access from iPhone/iPad. The app connects to a backend server (typically running on a NAS via Tailscale) via WebSocket and provides real-time streaming chat with tool visibility. Includes a built-in SSH terminal for direct server access, file browser, and project management.
 
 ## Build & Run
 
 Open `ClaudeCodeApp.xcodeproj` in Xcode 15+ and press Cmd+R. Target iOS 17.0+.
 
-**Dependencies:** Citadel (via Swift Package Manager) - pure Swift SSH library for terminal functionality.
+**Dependencies:** Citadel (via Swift Package Manager) - pure Swift SSH library for terminal and file operations.
+
+**Testing:**
+```bash
+xcodebuild test -project ClaudeCodeApp.xcodeproj -scheme ClaudeCodeApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+```
 
 ## Architecture
 
 ```
 ClaudeCodeApp/
-├── ClaudeCodeAppApp.swift  # App entry, notification permissions, injects AppSettings
-├── AppSettings.swift       # @AppStorage for server URL, SSH, font size, mode
-├── Models.swift            # Project, ChatMessage, MessageStore, WS message types
-├── APIClient.swift         # HTTP client for project listing
-├── WebSocketManager.swift  # WebSocket connection, message parsing, reconnection
-├── SpeechManager.swift     # Voice input using iOS Speech framework
-├── ContentView.swift       # Project list + Settings sheet
-├── ChatView.swift          # Message list, streaming, markdown, voice, images
-├── TerminalView.swift      # SSH terminal with CLI theme
-├── SSHManager.swift        # SSH connection handling via Citadel
-└── Theme.swift             # CLI-inspired dark theme colors
+├── ClaudeCodeAppApp.swift    # App entry, notification permissions, injects AppSettings
+├── AppSettings.swift         # @AppStorage for server URL, SSH, font size, mode
+├── Models.swift              # Project, ChatMessage, MessageStore, WS message types
+├── APIClient.swift           # HTTP client for project listing
+├── WebSocketManager.swift    # WebSocket connection, message parsing, reconnection
+├── SpeechManager.swift       # Voice input using iOS Speech framework
+├── SSHManager.swift          # SSH connection handling via Citadel
+├── Theme.swift               # CLI-inspired theme colors (light/dark aware)
+├── Logger.swift              # Structured logging utility
+├── AppError.swift            # Unified error handling
+├── ImageUtilities.swift      # MIME type detection for images
+│
+├── ContentView.swift         # Project list, settings, new project actions
+├── ChatView.swift            # Message list, streaming, slash commands
+├── TerminalView.swift        # SSH terminal with CLI theme
+│
+└── Views/
+    ├── MarkdownText.swift        # Full markdown rendering component
+    ├── CLIInputView.swift        # Input field with send, voice, image, @ buttons
+    ├── CLIMessageView.swift      # Message bubble with role-based styling
+    ├── SessionPickerViews.swift  # Session list, rename, delete, export
+    ├── FilePickerSheet.swift     # File browser with breadcrumb navigation
+    ├── CloneProjectSheet.swift   # Clone from GitHub URL
+    └── NewProjectSheet.swift     # Create empty project
 ```
 
 ### Data Flow
 
 1. **AppSettings** stores server URL, SSH credentials, font size, mode preferences
 2. **WebSocketManager** handles real-time communication with claudecodeui backend
-3. **ContentView** fetches projects via APIClient, navigates to ChatView or TerminalView
+3. **ContentView** fetches projects via APIClient, manages project creation/deletion
 4. **ChatView** manages session state, streams responses via WebSocket callbacks
-5. **MessageStore** persists last 50 messages per project to UserDefaults
-6. **TerminalView** provides interactive SSH shell via SSHManager
+5. **MessageStore** persists last 50 messages per project to Documents directory (file-based)
+6. **SSHManager** provides SSH terminal, file listing, and remote command execution
+7. **SessionNamesStore** persists custom session names via UserDefaults
 
 ### WebSocket Communication
 
@@ -52,11 +71,45 @@ The app uses WebSocket for real-time chat with the backend:
 - Tool use visualization (collapsible, Grep/Glob collapsed by default)
 - Diff viewer for Edit tool with red/green highlighting
 - Thinking/reasoning blocks (collapsible with purple styling)
-- Markdown rendering (tables, headers, code blocks, lists)
-- Copy-to-clipboard button on code blocks
-- Message history persistence (50 messages per project)
+- TodoWrite visual checklist with status colors (pending/in_progress/completed)
+- AskUserQuestion interactive selection UI
+- Markdown rendering (tables, headers, code blocks, lists, math)
+- Copy-to-clipboard button on code blocks and messages
+- Long-press context menu with copy/share options
+- Message history persistence (50 messages per project, file-based)
 - Draft input auto-save
 - Local notifications on task completion (when backgrounded)
+
+### Slash Commands
+| Command | Description |
+|---------|-------------|
+| `/clear` | Clear conversation and start fresh |
+| `/new` | Start a new session |
+| `/init` | Pass to Claude to create/modify CLAUDE.md |
+| `/resume` | Open session picker to resume previous session |
+| `/compact` | Compact conversation to save context |
+| `/status` | Show connection and session info |
+| `/exit` | Close chat and return to projects |
+| `/help` | Show command reference sheet |
+
+### Project Management
+- Clone from GitHub URL with SSH-based git clone
+- Create new empty projects in ~/workspace/
+- Delete projects from list (removes Claude registration, keeps files)
+- Project registration via session files with `cwd` field
+
+### Session Management
+- Full-screen session picker with summaries and timestamps
+- Rename sessions with custom names (persisted via SessionNamesStore)
+- Delete sessions with swipe-to-delete and confirmation
+- Export sessions as markdown with share sheet integration
+- Session rows show message count, last user message preview, relative time
+
+### File Browser & @ References
+- Browse project files via SSH with `ls -laF`
+- Breadcrumb navigation for directory traversal
+- Search/filter files by name
+- @ button in input to insert file references into prompts
 
 ### Voice Input
 - Microphone button for voice-to-text
@@ -79,16 +132,24 @@ The app uses WebSocket for real-time chat with the backend:
 ### Settings
 - Server URL configuration
 - Font size (XS/S/M/L/XL)
+- Theme (System/Dark/Light)
 - SSH host/port/username/password
 - Claude mode selector (normal/plan/bypass permissions)
+- Skip permission prompts toggle
+- Show thinking blocks toggle
+- Auto-scroll toggle
+- Project sort order (name/date)
 
 ## Key Patterns
 
 - **@StateObject** for WebSocketManager, SpeechManager, SSHManager (owns instances)
 - **@EnvironmentObject** for AppSettings (shared across views)
 - **WebSocket callbacks** for streaming events (onText, onToolUse, onComplete, etc.)
-- **MessageStore** for persistence using UserDefaults with JSON encoding
-- **CLITheme** provides consistent dark mode styling with diff colors
+- **MessageStore** for file-based persistence in Documents directory
+- **SessionNamesStore** for custom session name persistence via UserDefaults
+- **CLITheme** provides colorScheme-aware styling (dark and light modes)
+- **Logger** for structured debug/info/error logging
+- **AppError** for unified error handling with user-friendly messages
 - ATS disabled in Info.plist for local/Tailscale HTTP connections
 
 ## Permissions Required
@@ -158,3 +219,26 @@ Key message types:
 - `type: "assistant"` with `content[0].type: "thinking"` = reasoning block
 
 The `SessionHistoryLoader` class in `Models.swift` handles parsing this format.
+
+### Project Registration
+
+Projects appear in the app's list when they have session files in `~/.claude/projects/`. To register a project:
+
+1. Create the encoded path directory: `mkdir -p ~/.claude/projects/-path-to-project`
+2. Create a session file with `cwd` field: `echo '{"type":"init","cwd":"/path/to/project"}' > ~/.claude/projects/-path-to-project/init.jsonl`
+
+The app handles this automatically when cloning or creating new projects.
+
+## Testing
+
+The app includes 28+ unit tests covering:
+- Markdown parsing and HTML entity decoding
+- Diff view parsing for Edit tool
+- TodoWrite JSON parsing
+- Image MIME type detection
+- WebSocket message type handling
+
+Run tests:
+```bash
+xcodebuild test -project ClaudeCodeApp.xcodeproj -scheme ClaudeCodeApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -only-testing:ClaudeCodeAppTests
+```
