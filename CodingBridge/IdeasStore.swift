@@ -91,7 +91,7 @@ class IdeasStore: ObservableObject {
     private let loadSynchronously: Bool
 
     /// Background queue for file I/O to avoid blocking main thread
-    private static let fileQueue = DispatchQueue(label: "com.claudecodeapp.ideasstore", qos: .userInitiated)
+    private static let fileQueue = DispatchQueue(label: "com.codingbridge.ideasstore", qos: .userInitiated)
 
     private var fileURL: URL {
         let ideasDirURL = baseDirectory.appendingPathComponent(ideasDirectory)

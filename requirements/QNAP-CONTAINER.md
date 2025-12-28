@@ -63,17 +63,77 @@
 | `iproute2` | Networking (ip command) |
 | `python3`, `build-essential` | npm native module compilation |
 
+## Custom claudecodeui Fork
+
+We use a fork of [siteboon/claudecodeui](https://github.com/siteboon/claudecodeui) with custom modifications for interactive permission approval.
+
+**Fork Repository:** https://github.com/wiseyoda/claudecodeui
+
+### Location
+
+| Path | Description |
+|------|-------------|
+| `/home/dev/workspace/claudecodeui/` | Local fork source code |
+| `/home/dev/workspace/claudecodeui/server/` | Backend server code |
+| `/home/dev/workspace/claudecodeui/dist/` | Built frontend |
+
+### Git Remotes
+
+| Remote | URL | Purpose |
+|--------|-----|---------|
+| `origin` | `git@github.com:wiseyoda/claudecodeui.git` | Your fork (push changes here) |
+| `upstream` | `git@github.com:siteboon/claudecodeui.git` | Original repo (pull updates) |
+
+### Custom Modifications
+
+**Permission Approval System** (added 2025-12-28):
+- `server/claude-sdk.js`: Added `canUseTool` callback for interactive permission requests
+- `server/index.js`: Added WebSocket handler for `permission-response` messages
+- Enables iOS app to show approval banner instead of error messages when bypass permissions is OFF
+
+### Updating from Upstream
+
+```bash
+# SSH into container
+ssh claude-dev
+cd ~/workspace/claudecodeui
+
+# Fetch and merge upstream changes
+git fetch upstream
+git merge upstream/main
+
+# Resolve any conflicts (our changes are in server/claude-sdk.js and server/index.js)
+# Reinstall dependencies if package.json changed
+npm install
+
+# Rebuild frontend
+npm run build
+
+# Restart PM2
+pm2 restart claude-ui
+
+# Push merged changes to your fork
+git push origin main
+```
+
+### Re-applying Custom Changes After Merge
+
+After merging upstream changes, re-apply custom modifications if they were overwritten. Check the git diff and ensure:
+1. `handlePermissionResponse` is exported from `server/claude-sdk.js`
+2. `canUseTool` callback is added to the SDK query options
+3. `permission-response` handler exists in `server/index.js`
+
 ## Services
 
 ### PM2 Managed Process
 
 ```
-claude-ui (cloudcli) → port 8080
+claude-ui (local fork) → port 8080
 ```
 
-**Critical**: PM2 must be started with these environment variables:
+**Critical**: PM2 must be started with these environment variables and the local fork path:
 ```bash
-DATABASE_PATH=/home/dev/.cloudcli-data/auth.db PORT=8080 pm2 start cloudcli --name claude-ui
+DATABASE_PATH=/home/dev/.cloudcli-data/auth.db PORT=8080 pm2 start /home/dev/workspace/claudecodeui/server/cli.js --name claude-ui
 ```
 
 PM2 auto-restarts on crash and persists across container restarts via `dump.pm2`.
@@ -119,7 +179,8 @@ environment:
 
 ```bash
 # entrypoint.sh - PM2 must explicitly get DATABASE_PATH
-DATABASE_PATH=/home/dev/.cloudcli-data/auth.db PORT=8080 pm2 start cloudcli --name claude-ui
+# Note: Uses local fork instead of global npm package
+DATABASE_PATH=/home/dev/.cloudcli-data/auth.db PORT=8080 pm2 start /home/dev/workspace/claudecodeui/server/cli.js --name claude-ui
 ```
 
 ### Issue: PM2 Not Getting Environment Variables
@@ -130,7 +191,7 @@ DATABASE_PATH=/home/dev/.cloudcli-data/auth.db PORT=8080 pm2 start cloudcli --na
 
 **Fix**: Pass env vars explicitly in the pm2 start command:
 ```bash
-su - dev -c "DATABASE_PATH=/home/dev/.cloudcli-data/auth.db PORT=8080 pm2 start cloudcli --name claude-ui"
+su - dev -c "DATABASE_PATH=/home/dev/.cloudcli-data/auth.db PORT=8080 pm2 start /home/dev/workspace/claudecodeui/server/cli.js --name claude-ui"
 ```
 
 **Verify**: Check PM2 environment:
@@ -250,7 +311,7 @@ ssh -o StrictHostKeyChecking=accept-new claude-dev "echo 'SSH works'"
 $DOCKER exec -u dev claude-dev pm2 env 0 | grep DATABASE_PATH
 
 # If missing, restart PM2 with correct env:
-$DOCKER exec -u dev claude-dev bash -c 'pm2 delete claude-ui; DATABASE_PATH=/home/dev/.cloudcli-data/auth.db PORT=8080 pm2 start cloudcli --name claude-ui; pm2 save'
+$DOCKER exec -u dev claude-dev bash -c 'pm2 delete claude-ui; DATABASE_PATH=/home/dev/.cloudcli-data/auth.db PORT=8080 pm2 start /home/dev/workspace/claudecodeui/server/cli.js --name claude-ui; pm2 save'
 
 # Remove any duplicate database
 $DOCKER exec claude-dev rm -f /usr/local/lib/node_modules/@siteboon/claude-code-ui/server/database/auth.db
@@ -477,7 +538,8 @@ echo "[entrypoint] Starting Claude WebUI via PM2..."
 su - dev -c "pm2 delete claude-ui" 2>/dev/null || true
 
 # Start with both PORT and DATABASE_PATH - CRITICAL for persistence
-su - dev -c "DATABASE_PATH=/home/dev/.cloudcli-data/auth.db PORT=8080 pm2 start cloudcli --name claude-ui" 2>/dev/null || \
+# Note: Uses local fork instead of global npm package for custom permission approval feature
+su - dev -c "DATABASE_PATH=/home/dev/.cloudcli-data/auth.db PORT=8080 pm2 start /home/dev/workspace/claudecodeui/server/cli.js --name claude-ui" 2>/dev/null || \
     echo "[entrypoint] Warning: PM2 start returned non-zero"
 echo "[entrypoint] ✓ PM2 started claude-ui"
 
@@ -539,7 +601,7 @@ $DOCKER exec claude-dev ls -la /home/dev/.claude.json
 
 3. Fix by restarting PM2 with correct env:
    ```bash
-   $DOCKER exec -u dev claude-dev bash -c 'pm2 delete claude-ui; DATABASE_PATH=/home/dev/.cloudcli-data/auth.db PORT=8080 pm2 start cloudcli --name claude-ui; pm2 save'
+   $DOCKER exec -u dev claude-dev bash -c 'pm2 delete claude-ui; DATABASE_PATH=/home/dev/.cloudcli-data/auth.db PORT=8080 pm2 start /home/dev/workspace/claudecodeui/server/cli.js --name claude-ui; pm2 save'
    ```
 
 ### SSH Host Key Changed Warning
@@ -570,5 +632,6 @@ $DOCKER exec claude-dev sqlite3 /home/dev/.cloudcli-data/auth.db 'SELECT id, use
 
 | Date | Change |
 |------|--------|
+| 2025-12-28 | Switched to local claudecodeui fork for custom permission approval feature. PM2 now starts from `/home/dev/workspace/claudecodeui/server/cli.js` instead of global npm package. |
 | 2025-12-27 | Fixed EBUSY error, added auth.db persistence, npm cache persistence, fixed PM2 env vars |
 | 2025-12-26 | Initial container setup |

@@ -1038,6 +1038,22 @@ struct ChatView: View {
                 showQuickSettings: $showQuickSettings
             )
 
+            // Permission approval banner (shown when bypass permissions is OFF and approval needed)
+            if let approval = wsManager.pendingApproval {
+                ApprovalBannerView(
+                    request: approval,
+                    onApprove: {
+                        wsManager.approvePendingRequest(alwaysAllow: false)
+                    },
+                    onAlwaysAllow: {
+                        wsManager.approvePendingRequest(alwaysAllow: true)
+                    },
+                    onDeny: {
+                        wsManager.denyPendingRequest()
+                    }
+                )
+            }
+
             // AI-powered suggestion chips (shown when enabled, not processing, and not typing)
             if settings.autoSuggestionsEnabled && !wsManager.isProcessing && inputText.isEmpty && !claudeHelper.suggestedActions.isEmpty {
                 SuggestionChipsView(

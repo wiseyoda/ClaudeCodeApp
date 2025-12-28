@@ -1,4 +1,4 @@
-# Claude Code iOS App
+# Coding Bridge
 
 A native iOS client for [claudecodeui](https://github.com/siteboon/claudecodeui), enabling full Claude Code access from your iPhone or iPad.
 
@@ -150,7 +150,7 @@ cd claudecodeui && npm install && npm run build && npm start
 
 ### Building the App
 
-1. Open `ClaudeCodeApp.xcodeproj` in Xcode
+1. Open `CodingBridge.xcodeproj` in Xcode
 2. Select your target device (simulator or physical iPhone/iPad)
 3. Press Cmd+R to build and run
 
@@ -224,7 +224,7 @@ On first launch, configure in Settings (gear icon):
 300+ unit tests covering parsers and utilities:
 
 ```bash
-xcodebuild test -project ClaudeCodeApp.xcodeproj -scheme ClaudeCodeApp \
+xcodebuild test -project CodingBridge.xcodeproj -scheme CodingBridge \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'
 ```
 

@@ -56,7 +56,7 @@ class WebSocketManager: ObservableObject {
     private let parseSynchronously: Bool
 
     /// Background queue for JSON parsing to avoid blocking main thread during streaming
-    private static let parsingQueue = DispatchQueue(label: "com.claudecodeapp.websocket.parsing", qos: .userInitiated)
+    private static let parsingQueue = DispatchQueue(label: "com.codingbridge.websocket.parsing", qos: .userInitiated)
 
     /// Unique ID for the current connection - used to detect stale receive callbacks
     private var connectionId: UUID = UUID()
@@ -144,6 +144,10 @@ class WebSocketManager: ObservableObject {
     var onAborted: (() -> Void)?  // Called when session is aborted
     var onSessionRecovered: (() -> Void)?  // Called when invalid session was cleared and new session started
     var onSessionAttached: (() -> Void)?  // Called when successfully attached to an active session
+    var onApprovalRequest: ((ApprovalRequest) -> Void)?  // For permission approval requests
+
+    /// Current pending approval request (only one at a time)
+    @Published var pendingApproval: ApprovalRequest?
 
     /// Track if we're attempting to reattach to an active session
     @Published var isReattaching = false
@@ -693,6 +697,61 @@ class WebSocketManager: ObservableObject {
         }
     }
 
+    // MARK: - Permission Approval
+
+    /// Send a response to a pending permission request
+    /// - Parameters:
+    ///   - requestId: The request ID from the permission request
+    ///   - allow: Whether to allow the tool use
+    ///   - alwaysAllow: Whether to remember this decision for the session
+    func sendApprovalResponse(requestId: String, allow: Bool, alwaysAllow: Bool = false) {
+        let response = ApprovalResponse(
+            requestId: requestId,
+            allow: allow,
+            alwaysAllow: alwaysAllow
+        )
+
+        do {
+            let data = try JSONEncoder().encode(response)
+            if let jsonString = String(data: data, encoding: .utf8) {
+                log.info("Sending permission response: \(allow ? "allow" : "deny") for request \(requestId)")
+                debugLog.logSent(jsonString)
+
+                webSocket?.send(.string(jsonString)) { [weak self] error in
+                    Task { @MainActor in
+                        if let error = error {
+                            log.error("Failed to send permission response: \(error)")
+                            self?.lastError = "Failed to send permission response"
+                        }
+                        // Clear pending approval regardless of send result
+                        self?.pendingApproval = nil
+                    }
+                }
+            }
+        } catch {
+            log.error("Failed to encode permission response: \(error)")
+            pendingApproval = nil
+        }
+    }
+
+    /// Convenience method to approve the current pending request
+    func approvePendingRequest(alwaysAllow: Bool = false) {
+        guard let request = pendingApproval else {
+            log.warning("No pending approval request to approve")
+            return
+        }
+        sendApprovalResponse(requestId: request.id, allow: true, alwaysAllow: alwaysAllow)
+    }
+
+    /// Convenience method to deny the current pending request
+    func denyPendingRequest() {
+        guard let request = pendingApproval else {
+            log.warning("No pending approval request to deny")
+            return
+        }
+        sendApprovalResponse(requestId: request.id, allow: false, alwaysAllow: false)
+    }
+
     /// Reset all processing-related state
     private func resetProcessingState() {
         isProcessing = false
@@ -703,6 +762,7 @@ class WebSocketManager: ObservableObject {
         lastActiveToolName = nil
         cancelProcessingTimeout()
         cancelPendingRetry()
+        pendingApproval = nil  // Clear any pending approval
         abortTimeoutTask?.cancel()
         abortTimeoutTask = nil
         lastError = nil
@@ -1020,7 +1080,7 @@ class WebSocketManager: ObservableObject {
                 // Send notification when task completes (only if backgrounded)
                 let preview = currentText.prefix(100)
                 sendLocalNotification(
-                    title: "Claude Code",
+                    title: "Coding Bridge",
                     body: preview.isEmpty ? "Task completed" : String(preview)
                 )
                 onComplete?(msg.sessionId)
@@ -1063,6 +1123,19 @@ class WebSocketManager: ObservableObject {
             case "projects_updated":
                 // Project list changed, could notify UI to refresh
                 break
+
+            case "permission-request":
+                // Backend is requesting permission for a tool use
+                // Only sent when bypass permissions mode is OFF
+                if let dataDict = msg.data?.value as? [String: Any],
+                   let request = ApprovalRequest.from(dataDict) {
+                    log.info("Permission request received for tool: \(request.toolName)")
+                    debugLog.log("Permission request: \(request.toolName) - \(request.displayDescription)", type: .info)
+                    pendingApproval = request
+                    onApprovalRequest?(request)
+                } else {
+                    log.warning("Failed to parse permission-request message")
+                }
 
         default:
             log.debug("Unknown message type: \(msg.type)")

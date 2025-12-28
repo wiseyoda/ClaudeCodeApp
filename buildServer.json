@@ -12,8 +12,8 @@
 	"argv": [
 		"/opt/homebrew/bin/xcode-build-server"
 	],
-	"workspace": "/Users/ppatterson/dev/ClaudeCodeApp/ClaudeCodeApp.xcodeproj/project.xcworkspace",
-	"build_root": "/Users/ppatterson/Library/Developer/Xcode/DerivedData/ClaudeCodeApp-ezpmvwfqiuxuqubvehsoxuavglhv",
-	"scheme": "ClaudeCodeApp",
+	"workspace": "/Users/ppatterson/dev/ClaudeCodeApp/CodingBridge.xcodeproj/project.xcworkspace",
+	"build_root": "/Users/ppatterson/Library/Developer/Xcode/DerivedData/CodingBridge-ezpmvwfqiuxuqubvehsoxuavglhv",
+	"scheme": "CodingBridge",
 	"kind": "xcode"
 }

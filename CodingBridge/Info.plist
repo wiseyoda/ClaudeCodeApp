@@ -8,10 +8,10 @@
 		<true/>
 	</dict>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Claude Code needs microphone access to transcribe your voice messages.</string>
+	<string>Coding Bridge needs microphone access to transcribe your voice messages.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>Claude Code uses speech recognition to convert your voice to text.</string>
+	<string>Coding Bridge uses speech recognition to convert your voice to text.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Claude Code needs photo library access to attach images to messages.</string>
+	<string>Coding Bridge needs photo library access to attach images to messages.</string>
 </dict>
 </plist>

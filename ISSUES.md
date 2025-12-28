@@ -42,6 +42,21 @@ When reporting a bug, include:
 
 ## Feature Requests
 
+### #22: Exit Plan Mode approval UI (Medium Priority)
+- **What**: Implement plan mode exit approval flow matching Claude Code CLI behavior
+- **Context**: Claude Code CLI shows approval options when exiting plan mode:
+  1. "Yes, and bypass permissions" - proceed without further approval
+  2. "Yes, and manually approve edits" - require approval for each change
+  3. "Type here to tell Claude what to change" - provide feedback on the plan
+- **Dependencies**: Extend non-bypass mode approval functionality (currently in progress)
+- **Implementation notes**:
+  - Detect when Claude sends `ExitPlanMode` tool call
+  - Show approval sheet with similar options to CLI
+  - Pass selected mode back to backend for execution
+  - May need backend support for plan mode state tracking
+- **Location**: `ChatView.swift`, `WebSocketManager.swift`
+- **Reference**: Screenshot shows CLI approval interface
+
 ### #18: Multi-repo/monorepo git status support (Low Priority)
 - **What**: Show aggregate git status across subrepos/workspaces
 - **Scope**: Affects projects with monorepo/multi-workspace structure

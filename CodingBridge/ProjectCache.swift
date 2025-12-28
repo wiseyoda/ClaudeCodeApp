@@ -16,7 +16,7 @@ class ProjectCache: ObservableObject {
         return docs.appendingPathComponent("project-cache.json")
     }()
 
-    private static let fileQueue = DispatchQueue(label: "com.claudecodeapp.projectcache", qos: .userInitiated)
+    private static let fileQueue = DispatchQueue(label: "com.codingbridge.projectcache", qos: .userInitiated)
 
     /// How long before cache is considered stale (5 minutes)
     private static let staleThreshold: TimeInterval = 300

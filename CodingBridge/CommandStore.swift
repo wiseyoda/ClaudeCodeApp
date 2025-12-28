@@ -41,7 +41,7 @@ class CommandStore: ObservableObject {
     private let loadSynchronously: Bool
 
     /// Background queue for file I/O to avoid blocking main thread
-    private static let fileQueue = DispatchQueue(label: "com.claudecodeapp.commandstore", qos: .userInitiated)
+    private static let fileQueue = DispatchQueue(label: "com.codingbridge.commandstore", qos: .userInitiated)
 
     private static var defaultFileURL: URL {
         FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]

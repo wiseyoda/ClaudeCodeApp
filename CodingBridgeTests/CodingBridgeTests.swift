@@ -1,13 +1,13 @@
 //
-//  ClaudeCodeAppTests.swift
-//  ClaudeCodeAppTests
+//  CodingBridgeTests.swift
+//  CodingBridgeTests
 //
 //  Created by Patrick Patterson on 12/26/25.
 //
 
 import Testing
 
-struct ClaudeCodeAppTests {
+struct CodingBridgeTests {
 
     @Test func example() async throws {
         // Write your test here and use APIs like `#expect(...)` to check expected conditions.

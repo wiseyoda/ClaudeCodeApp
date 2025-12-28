@@ -48,7 +48,7 @@ struct ContentView: View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             // Sidebar: Project list
             sidebarContent
-                .navigationTitle("Claude Code")
+                .navigationTitle("Coding Bridge")
                 // iOS 26+: Use Material for glass-compatible toolbar
                 .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
                 .toolbarBackground(.visible, for: .navigationBar)
@@ -505,7 +505,7 @@ struct ContentView: View {
                     Text("No projects found")
                         .font(CLITheme.monoFont)
                         .foregroundColor(CLITheme.secondaryText(for: colorScheme))
-                    Text("Open a project in Claude Code to see it here")
+                    Text("Open a project to see it here")
                         .font(CLITheme.monoSmall)
                         .foregroundColor(CLITheme.mutedText(for: colorScheme))
                 }

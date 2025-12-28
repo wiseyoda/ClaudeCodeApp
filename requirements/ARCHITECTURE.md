@@ -6,7 +6,7 @@
 ┌──────────────────────────────────────────────────────────────────────────────┐
 │                              iOS Device                                       │
 │  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │                         ClaudeCodeApp                                   │  │
+│  │                         CodingBridge                                    │  │
 │  │                                                                         │  │
 │  │  ┌─────────────────┐  ┌─────────────────┐  ┌───────────────────────┐   │  │
 │  │  │   ContentView   │──│    ChatView     │──│   WebSocketManager    │   │  │
@@ -71,7 +71,7 @@
 
 ### Core Files
 
-#### ClaudeCodeAppApp.swift
+#### CodingBridgeApp.swift
 - App entry point
 - Creates shared AppSettings instance
 - Injects settings into environment
@@ -446,9 +446,9 @@ Global Search:
 
 Run tests:
 ```bash
-xcodebuild test -project ClaudeCodeApp.xcodeproj -scheme ClaudeCodeApp \
+xcodebuild test -project CodingBridge.xcodeproj -scheme CodingBridge \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
-  -only-testing:ClaudeCodeAppTests
+  -only-testing:CodingBridgeTests
 ```
 
 ## Known Issues

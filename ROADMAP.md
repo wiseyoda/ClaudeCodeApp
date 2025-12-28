@@ -1,4 +1,4 @@
-# ClaudeCodeApp Implementation Plan
+# CodingBridge Implementation Plan
 
 > Comprehensive plan for fixing all identified issues in the iOS Claude Code client.
 >
@@ -383,8 +383,8 @@ enum Timeouts {
 
 ### Run Tests
 ```bash
-xcodebuild test -project ClaudeCodeApp.xcodeproj \
-  -scheme ClaudeCodeApp \
+xcodebuild test -project CodingBridge.xcodeproj \
+  -scheme CodingBridge \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'
 ```
 

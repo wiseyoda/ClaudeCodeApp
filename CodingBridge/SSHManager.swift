@@ -30,8 +30,9 @@ private func escapeCommandForBash(_ command: String) -> String {
 class KeychainHelper {
     static let shared = KeychainHelper()
 
-    // Keychain service identifier
-    private let service = "com.claudecodeapp.sshkeys"
+    // Keychain service identifiers
+    private let service = "com.codingbridge.sshkeys"
+    private let legacyService = "com.claudecodeapp.sshkeys"
 
     // Account keys for different stored items
     private enum Account: String {
@@ -47,7 +48,74 @@ class KeychainHelper {
         case hostKeyPrefix = "ssh_hostkey_"
     }
 
-    private init() {}
+    private init() {
+        // Migrate from legacy keychain service if needed
+        migrateFromLegacyServiceIfNeeded()
+    }
+
+    // MARK: - Migration
+
+    /// Migrate keychain items from legacy service identifier to new one
+    private func migrateFromLegacyServiceIfNeeded() {
+        // Check if migration already done
+        guard !UserDefaults.standard.bool(forKey: "keychainMigratedToCodingBridge") else { return }
+
+        // Migrate each account type
+        let accountsToMigrate: [Account] = [.privateKey, .passphrase, .sshPassword, .authPassword, .authToken, .apiKey]
+
+        for account in accountsToMigrate {
+            if let data = retrieveData(account: account.rawValue, fromService: legacyService) {
+                // Store in new service
+                storeData(data, account: account.rawValue, inService: service)
+                // Delete from legacy service
+                deleteData(account: account.rawValue, fromService: legacyService)
+                log.info("Migrated keychain item: \(account.rawValue)")
+            }
+        }
+
+        UserDefaults.standard.set(true, forKey: "keychainMigratedToCodingBridge")
+        log.info("Keychain migration completed")
+    }
+
+    /// Generic retrieve from specific service
+    private func retrieveData(account: String, fromService: String) -> Data? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: fromService,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        return status == errSecSuccess ? result as? Data : nil
+    }
+
+    /// Generic store to specific service
+    @discardableResult
+    private func storeData(_ data: Data, account: String, inService: String) -> Bool {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: inService,
+            kSecAttrAccount as String: account,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        ]
+        let status = SecItemAdd(query as CFDictionary, nil)
+        return status == errSecSuccess
+    }
+
+    /// Generic delete from specific service
+    @discardableResult
+    private func deleteData(account: String, fromService: String) -> Bool {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: fromService,
+            kSecAttrAccount as String: account
+        ]
+        let status = SecItemDelete(query as CFDictionary)
+        return status == errSecSuccess || status == errSecItemNotFound
+    }
 
     // MARK: - SSH Private Key
 

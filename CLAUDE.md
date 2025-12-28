@@ -8,13 +8,13 @@ iOS client for [claudecodeui](https://github.com/siteboon/claudecodeui). SwiftUI
 
 ```bash
 # Build
-xcodebuild -project ClaudeCodeApp.xcodeproj -scheme ClaudeCodeApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'
+xcodebuild -project CodingBridge.xcodeproj -scheme CodingBridge -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'
 
 # Test
-xcodebuild test -project ClaudeCodeApp.xcodeproj -scheme ClaudeCodeApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'
+xcodebuild test -project CodingBridge.xcodeproj -scheme CodingBridge -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'
 
 # Open in Xcode
-open ClaudeCodeApp.xcodeproj
+open CodingBridge.xcodeproj
 ```
 
 ## Key Files
@@ -128,7 +128,7 @@ See `ROADMAP.md` Priority 1 for full list with line numbers.
 
 ## Testing
 
-300+ unit tests covering parsers and utilities. Test files in `ClaudeCodeAppTests/`.
+300+ unit tests covering parsers and utilities. Test files in `CodingBridgeTests/`.
 
 ## iOS Platform Quirks
 

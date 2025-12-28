@@ -17,7 +17,7 @@
                BlueprintIdentifier = "A6000001"
                BuildableName = "CodingBridge.app"
                BlueprintName = "CodingBridge"
-               ReferencedContainer = "container:ClaudeCodeApp.xcodeproj">
+               ReferencedContainer = "container:CodingBridge.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -35,9 +35,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "2509F4FA2EFF976200EAFBFE"
-               BuildableName = "CodingBridgeAppTests.xctest"
-               BlueprintName = "CodingBridgeAppTests"
-               ReferencedContainer = "container:ClaudeCodeApp.xcodeproj">
+               BuildableName = "CodingBridgeTests.xctest"
+               BlueprintName = "CodingBridgeTests"
+               ReferencedContainer = "container:CodingBridge.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -59,7 +59,7 @@
             BlueprintIdentifier = "A6000001"
             BuildableName = "CodingBridge.app"
             BlueprintName = "CodingBridge"
-            ReferencedContainer = "container:ClaudeCodeApp.xcodeproj">
+            ReferencedContainer = "container:CodingBridge.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -76,7 +76,7 @@
             BlueprintIdentifier = "A6000001"
             BuildableName = "CodingBridge.app"
             BlueprintName = "CodingBridge"
-            ReferencedContainer = "container:ClaudeCodeApp.xcodeproj">
+            ReferencedContainer = "container:CodingBridge.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

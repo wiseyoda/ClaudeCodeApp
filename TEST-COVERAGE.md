@@ -7,49 +7,49 @@
 - **Estimated Coverage**: ~50% (models, stores, utilities, persistence, session filtering; managers partially covered)
 
 ## Current Coverage
-Most tests are unit tests in `ClaudeCodeAppTests/` using XCTest. Coverage spans parsing, enums, and store logic:
-- `ClaudeCodeAppTests/StringMarkdownTests.swift`: Markdown/string helpers (code fences, HTML decode, usage limit formatting, math escapes).
-- `ClaudeCodeAppTests/DiffViewTests.swift`: `DiffView.parseEditContent` parsing for Edit tool payloads.
-- `ClaudeCodeAppTests/TodoListViewTests.swift`: TodoWrite parsing and status handling.
-- `ClaudeCodeAppTests/ImageUtilitiesTests.swift`: MIME type detection via magic bytes and fallback behavior.
-- `ClaudeCodeAppTests/ModelsTests.swift`: core models and JSONL parsing (`Project`, `ChatMessage`, `SessionHistoryLoader`, `WSImage`, `AnyCodable`, `UserQuestion`/`AskUserQuestionData`, `ProjectSession`) including tool result dicts and missing timestamp handling.
-- `ClaudeCodeAppTests/ModelEnumTests.swift`: `ClaudeModel` and `GitStatus` computed properties.
-- `ClaudeCodeAppTests/AppErrorTests.swift`: `AppError` strings, retryability, and `ErrorAlert` titles.
-- `ClaudeCodeAppTests/ClaudeHelperTests.swift`: JSON parsing for suggestions, file list filtering, and idea enhancement.
-- `ClaudeCodeAppTests/ClaudeHelperSessionIdTests.swift`: helper session ID determinism and UUID format checks.
-- `ClaudeCodeAppTests/CommandStoreTests.swift`: categories, sorting, CRUD, `markUsed`, default command creation, and invalid-file handling using temp files.
-- `ClaudeCodeAppTests/IdeasStoreTests.swift`: quick add, filters, tags, archive counts, enhancements, persistence round-trip, and invalid-file handling using temp files.
-- `ClaudeCodeAppTests/BookmarkStoreTests.swift`: toggle, search, removal, and invalid-file handling using temp files.
-- `ClaudeCodeAppTests/IdeaTests.swift`: idea prompt formatting.
-- `ClaudeCodeAppTests/SSHKeyDetectionTests.swift`: SSH key format detection and `SSHError` descriptions.
-- `ClaudeCodeAppTests/AppSettingsTests.swift`: `ThinkingMode`, `ClaudeMode`, `AppTheme`, `ProjectSortOrder`, `FontSizePreset`, `SSHAuthType` enums; `AppSettings` URL construction, effective SSH host, permission modes, thinking mode application (38 tests).
-- `ClaudeCodeAppTests/ArchivedProjectsStoreTests.swift`: archive/unarchive/toggle logic, path edge cases (11 tests).
-- `ClaudeCodeAppTests/FileEntryTests.swift`: `FileEntry.parse` handling for files, directories, symlinks, dot entries, icon mapping, and size formatting.
-- `ClaudeCodeAppTests/NamesStoreTests.swift`: Project/Session custom name persistence and clear behavior.
-- `ClaudeCodeAppTests/ProjectSessionFilterTests.swift`: session filtering/sorting for display and project display sessions.
-- `ClaudeCodeAppTests/TruncatableTextTests.swift`: `TruncatableText.lineLimit` behavior for stack traces, JSON, tool names, and defaults.
-- `ClaudeCodeAppTests/CLIThemeToolTypeTests.swift`: `CLITheme.ToolType` parsing plus display name and icon mapping.
-- `ClaudeCodeAppTests/SpecialKeyTests.swift`: `SpecialKey.sequence` control and arrow key mappings.
-- `ClaudeCodeAppTests/ConnectionStateTests.swift`: `ConnectionState` flags, display text, and accessibility labels.
-- `ClaudeCodeAppTests/MessageStoreTests.swift`: `MessageStore` load/save/clear operations for messages, drafts, and session IDs; UserDefaults migration; image persistence/cleanup; multi-project isolation; path encoding with special characters (26 tests).
-- `ClaudeCodeAppTests/LoggerTests.swift`: `LogLevel` enum properties; `Logger` singleton access; logging methods handle empty, long, unicode, and special character messages (14 tests).
-- `ClaudeCodeAppTests/DebugLogStoreTests.swift`: Debug log types, entry formatting, logging behavior, filtering, and export formatting (9 tests).
-- `ClaudeCodeAppTests/APIClientModelsTests.swift`: `SessionMessage` conversions, `AnyCodableValue` string extraction, `UploadedImage` parsing, and `APIError` descriptions (18 tests).
-- `ClaudeCodeAppTests/SearchFilterViewsTests.swift`: `MessageFilter` icon/matching logic and `String.searchRanges` behavior (10 tests).
-- `ClaudeCodeAppTests/ProjectSettingsStoreTests.swift`: per-project override persistence, effective setting resolution, and storage key encoding (9 tests).
-- `ClaudeCodeAppTests/SessionManagerTests.swift`: session insertion, display filtering/sorting, active session persistence, and deletion counts.
-- `ClaudeCodeAppTests/WebSocketModelsTests.swift`: WebSocket message encoding/decoding and `AnyCodable` array/double handling (10 tests).
-- `ClaudeCodeAppTests/WebSocketManagerSessionIdTests.swift`: session ID validation logic.
-- `ClaudeCodeAppTests/WebSocketManagerParsingTests.swift`: WebSocketManager parsing for session events, token budgets, assistant/tool content, model switch confirmations, and session recovery (7 tests).
-- `ClaudeCodeAppTests/ScrollStateManagerTests.swift`: scroll debouncing, reset behavior, and auto-scroll flags (4 tests).
-- `ClaudeCodeAppTests/SSHManagerTests.swift`: SSH config parsing, command building for `cd`, and ANSI stripping (6 tests).
-- `ClaudeCodeAppTests/SpeechManagerTests.swift`: authorization gating, availability, and recording toggles (3 tests).
-- `ClaudeCodeAppTests/ClaudeCodeAppTests.swift`: Swift Testing stub; currently no assertions.
+Most tests are unit tests in `CodingBridgeTests/` using XCTest. Coverage spans parsing, enums, and store logic:
+- `CodingBridgeTests/StringMarkdownTests.swift`: Markdown/string helpers (code fences, HTML decode, usage limit formatting, math escapes).
+- `CodingBridgeTests/DiffViewTests.swift`: `DiffView.parseEditContent` parsing for Edit tool payloads.
+- `CodingBridgeTests/TodoListViewTests.swift`: TodoWrite parsing and status handling.
+- `CodingBridgeTests/ImageUtilitiesTests.swift`: MIME type detection via magic bytes and fallback behavior.
+- `CodingBridgeTests/ModelsTests.swift`: core models and JSONL parsing (`Project`, `ChatMessage`, `SessionHistoryLoader`, `WSImage`, `AnyCodable`, `UserQuestion`/`AskUserQuestionData`, `ProjectSession`) including tool result dicts and missing timestamp handling.
+- `CodingBridgeTests/ModelEnumTests.swift`: `ClaudeModel` and `GitStatus` computed properties.
+- `CodingBridgeTests/AppErrorTests.swift`: `AppError` strings, retryability, and `ErrorAlert` titles.
+- `CodingBridgeTests/ClaudeHelperTests.swift`: JSON parsing for suggestions, file list filtering, and idea enhancement.
+- `CodingBridgeTests/ClaudeHelperSessionIdTests.swift`: helper session ID determinism and UUID format checks.
+- `CodingBridgeTests/CommandStoreTests.swift`: categories, sorting, CRUD, `markUsed`, default command creation, and invalid-file handling using temp files.
+- `CodingBridgeTests/IdeasStoreTests.swift`: quick add, filters, tags, archive counts, enhancements, persistence round-trip, and invalid-file handling using temp files.
+- `CodingBridgeTests/BookmarkStoreTests.swift`: toggle, search, removal, and invalid-file handling using temp files.
+- `CodingBridgeTests/IdeaTests.swift`: idea prompt formatting.
+- `CodingBridgeTests/SSHKeyDetectionTests.swift`: SSH key format detection and `SSHError` descriptions.
+- `CodingBridgeTests/AppSettingsTests.swift`: `ThinkingMode`, `ClaudeMode`, `AppTheme`, `ProjectSortOrder`, `FontSizePreset`, `SSHAuthType` enums; `AppSettings` URL construction, effective SSH host, permission modes, thinking mode application (38 tests).
+- `CodingBridgeTests/ArchivedProjectsStoreTests.swift`: archive/unarchive/toggle logic, path edge cases (11 tests).
+- `CodingBridgeTests/FileEntryTests.swift`: `FileEntry.parse` handling for files, directories, symlinks, dot entries, icon mapping, and size formatting.
+- `CodingBridgeTests/NamesStoreTests.swift`: Project/Session custom name persistence and clear behavior.
+- `CodingBridgeTests/ProjectSessionFilterTests.swift`: session filtering/sorting for display and project display sessions.
+- `CodingBridgeTests/TruncatableTextTests.swift`: `TruncatableText.lineLimit` behavior for stack traces, JSON, tool names, and defaults.
+- `CodingBridgeTests/CLIThemeToolTypeTests.swift`: `CLITheme.ToolType` parsing plus display name and icon mapping.
+- `CodingBridgeTests/SpecialKeyTests.swift`: `SpecialKey.sequence` control and arrow key mappings.
+- `CodingBridgeTests/ConnectionStateTests.swift`: `ConnectionState` flags, display text, and accessibility labels.
+- `CodingBridgeTests/MessageStoreTests.swift`: `MessageStore` load/save/clear operations for messages, drafts, and session IDs; UserDefaults migration; image persistence/cleanup; multi-project isolation; path encoding with special characters (26 tests).
+- `CodingBridgeTests/LoggerTests.swift`: `LogLevel` enum properties; `Logger` singleton access; logging methods handle empty, long, unicode, and special character messages (14 tests).
+- `CodingBridgeTests/DebugLogStoreTests.swift`: Debug log types, entry formatting, logging behavior, filtering, and export formatting (9 tests).
+- `CodingBridgeTests/APIClientModelsTests.swift`: `SessionMessage` conversions, `AnyCodableValue` string extraction, `UploadedImage` parsing, and `APIError` descriptions (18 tests).
+- `CodingBridgeTests/SearchFilterViewsTests.swift`: `MessageFilter` icon/matching logic and `String.searchRanges` behavior (10 tests).
+- `CodingBridgeTests/ProjectSettingsStoreTests.swift`: per-project override persistence, effective setting resolution, and storage key encoding (9 tests).
+- `CodingBridgeTests/SessionManagerTests.swift`: session insertion, display filtering/sorting, active session persistence, and deletion counts.
+- `CodingBridgeTests/WebSocketModelsTests.swift`: WebSocket message encoding/decoding and `AnyCodable` array/double handling (10 tests).
+- `CodingBridgeTests/WebSocketManagerSessionIdTests.swift`: session ID validation logic.
+- `CodingBridgeTests/WebSocketManagerParsingTests.swift`: WebSocketManager parsing for session events, token budgets, assistant/tool content, model switch confirmations, and session recovery (7 tests).
+- `CodingBridgeTests/ScrollStateManagerTests.swift`: scroll debouncing, reset behavior, and auto-scroll flags (4 tests).
+- `CodingBridgeTests/SSHManagerTests.swift`: SSH config parsing, command building for `cd`, and ANSI stripping (6 tests).
+- `CodingBridgeTests/SpeechManagerTests.swift`: authorization gating, availability, and recording toggles (3 tests).
+- `CodingBridgeTests/CodingBridgeTests.swift`: Swift Testing stub; currently no assertions.
 
 No UI tests, integration tests, or automated coverage reporting are configured.
 
 ## Running Tests
-- `xcodebuild test -project ClaudeCodeApp.xcodeproj -scheme ClaudeCodeApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.1'`
+- `xcodebuild test -project CodingBridge.xcodeproj -scheme CodingBridge -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'`
 - For coverage metrics, enable in Xcode or pass `-enableCodeCoverage YES` to `xcodebuild`.
 
 ## Roadmap for Future Tests
@@ -111,5 +111,5 @@ Priority additions to improve coverage and regression safety:
 - **ArchivedProjectsStoreTests.swift**: 11 tests covering archive/unarchive/toggle operations and edge cases (special characters, empty paths, trailing slashes).
 
 ## Test Conventions
-- Keep new tests in `ClaudeCodeAppTests/` and name files `*Tests.swift`.
+- Keep new tests in `CodingBridgeTests/` and name files `*Tests.swift`.
 - Prefer small, deterministic units; use fixtures for JSONL, tool payloads, and SSH outputs.

@@ -25,7 +25,7 @@ class ProjectSettingsStore: ObservableObject {
     private let loadSynchronously: Bool
 
     /// Background queue for file I/O to avoid blocking main thread
-    private static let fileQueue = DispatchQueue(label: "com.claudecodeapp.projectsettingsstore", qos: .userInitiated)
+    private static let fileQueue = DispatchQueue(label: "com.codingbridge.projectsettingsstore", qos: .userInitiated)
 
     private var fileURL: URL {
         let settingsDirURL = baseDirectory.appendingPathComponent(settingsDirectory)

@@ -635,7 +635,7 @@ class MessageStore {
     /// Default message limit (used when no limit is specified)
     static let defaultMaxMessages = 50
     /// Serial queue for synchronized file access to prevent race conditions
-    private static let fileQueue = DispatchQueue(label: "com.claudecodeapp.messagestore", qos: .userInitiated)
+    private static let fileQueue = DispatchQueue(label: "com.codingbridge.messagestore", qos: .userInitiated)
 
     // MARK: - Directory Setup
 
@@ -996,7 +996,7 @@ class BookmarkStore: ObservableObject {
     }
 
     /// Background queue for file I/O to avoid blocking main thread
-    private static let fileQueue = DispatchQueue(label: "com.claudecodeapp.bookmarkstore", qos: .userInitiated)
+    private static let fileQueue = DispatchQueue(label: "com.codingbridge.bookmarkstore", qos: .userInitiated)
 
     private let bookmarksFile: URL
 
@@ -1439,5 +1439,110 @@ struct AskUserQuestionData: Identifiable {
         }
 
         return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+}
+
+// MARK: - Permission Approval Types
+
+/// Represents a pending permission request from Claude CLI
+/// When bypass permissions mode is OFF, Claude CLI sends these requests
+/// for user approval before executing certain tools
+struct ApprovalRequest: Identifiable, Equatable {
+    let id: String  // requestId from server
+    let toolName: String
+    let input: [String: Any]
+    let receivedAt: Date
+
+    // MARK: - Display Properties
+
+    /// Icon for the tool type
+    var toolIcon: String {
+        switch toolName.lowercased() {
+        case "bash":
+            return "terminal"
+        case "read":
+            return "doc.text"
+        case "write":
+            return "doc.badge.plus"
+        case "edit":
+            return "pencil"
+        case "glob", "grep":
+            return "magnifyingglass"
+        case "task":
+            return "arrow.triangle.branch"
+        default:
+            return "wrench"
+        }
+    }
+
+    /// Short display title for the banner
+    var displayTitle: String {
+        toolName
+    }
+
+    /// Description extracted from input for display
+    var displayDescription: String {
+        // Try to extract meaningful preview from input
+        if let command = input["command"] as? String {
+            // For Bash - show the command
+            return command.prefix(80).description + (command.count > 80 ? "..." : "")
+        }
+        if let filePath = input["file_path"] as? String {
+            // For Read/Write/Edit - show the file path
+            return filePath
+        }
+        if let pattern = input["pattern"] as? String {
+            // For Glob/Grep - show the pattern
+            return pattern
+        }
+        if let description = input["description"] as? String {
+            // Fallback to description if available
+            return description
+        }
+        // Last resort - just show tool name
+        return "Requesting permission..."
+    }
+
+    // MARK: - Equatable
+
+    static func == (lhs: ApprovalRequest, rhs: ApprovalRequest) -> Bool {
+        lhs.id == rhs.id
+    }
+
+    // MARK: - Parsing
+
+    /// Parse from WebSocket message data
+    static func from(_ data: [String: Any]) -> ApprovalRequest? {
+        guard let requestId = data["requestId"] as? String,
+              let toolName = data["toolName"] as? String else {
+            return nil
+        }
+
+        let input = data["input"] as? [String: Any] ?? [:]
+
+        return ApprovalRequest(
+            id: requestId,
+            toolName: toolName,
+            input: input,
+            receivedAt: Date()
+        )
+    }
+}
+
+/// Response to send back to server for a permission request
+struct ApprovalResponse: Encodable {
+    let type: String = "permission-response"
+    let requestId: String
+    let decision: String  // "allow", "deny", "allow-session", "allow-always"
+
+    init(requestId: String, allow: Bool, alwaysAllow: Bool = false) {
+        self.requestId = requestId
+        if !allow {
+            self.decision = "deny"
+        } else if alwaysAllow {
+            self.decision = "allow-session"  // Remember for this session
+        } else {
+            self.decision = "allow"
+        }
     }
 }

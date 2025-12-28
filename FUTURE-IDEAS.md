@@ -1,12 +1,12 @@
 # Future Ideas
 
-> Strategic feature proposals for ClaudeCodeApp. These ideas represent the longer-term vision for transforming mobile AI-assisted development. For committed work, see [ROADMAP.md](ROADMAP.md).
+> Strategic feature proposals for Coding Bridge. These ideas represent the longer-term vision for transforming mobile AI-assisted development. For committed work, see [ROADMAP.md](ROADMAP.md).
 
 ---
 
 ## Product Vision
 
-**ClaudeCodeApp is the only native mobile client for AI-assisted development.** While desktop tools require sitting at a computer, ClaudeCodeApp meets developers where they are: commuting, walking, reviewing code between meetings, or capturing ideas before they slip away.
+**Coding Bridge is the only native mobile client for AI-assisted development.** While desktop tools require sitting at a computer, Coding Bridge meets developers where they are: commuting, walking, reviewing code between meetings, or capturing ideas before they slip away.
 
 Our mission: **Make mobile the best place for AI-assisted development planning, review, and monitoring.**
 
@@ -46,7 +46,7 @@ Integrate with the tools developers already use: GitHub, Shortcuts, automation w
 **Theme:** Voice-First Development
 
 **Problem Statement:**
-Developers cannot use ClaudeCodeApp during activities where hands are occupied (commuting, walking, exercising). The current voice input captures speech but requires looking at the screen to read responses, limiting mobile utility.
+Developers cannot use Coding Bridge during activities where hands are occupied (commuting, walking, exercising). The current voice input captures speech but requires looking at the screen to read responses, limiting mobile utility.
 
 **User Stories:**
 - As a developer commuting on a train, I want to have a voice conversation with Claude so that I can review code or plan features without looking at my phone
@@ -190,7 +190,7 @@ Sports apps and ride-sharing use Live Activities effectively. No development too
 **Theme:** Platform-Native Intelligence
 
 **Problem Statement:**
-Users cannot trigger Claude actions via Siri or integrate ClaudeCodeApp into iOS Shortcuts automations. This limits voice-only scenarios and automation possibilities.
+Users cannot trigger Claude actions via Siri or integrate Coding Bridge into iOS Shortcuts automations. This limits voice-only scenarios and automation possibilities.
 
 **User Stories:**
 - As a developer, I want to say "Hey Siri, check my build status" so that I can get updates hands-free
@@ -198,7 +198,7 @@ Users cannot trigger Claude actions via Siri or integrate ClaudeCodeApp into iOS
 - As a power user, I want to chain Claude commands with other Shortcuts so that I can build custom workflows
 
 **Proposed Solution:**
-Expose core ClaudeCodeApp actions as App Intents for Siri and Shortcuts.
+Expose core Coding Bridge actions as App Intents for Siri and Shortcuts.
 
 **Key Functionality:**
 - [ ] Intent: Send message to Claude (with project selection)
