@@ -841,6 +841,8 @@ enum SSHError: LocalizedError {
     case keyNotFound(String)
     case unsupportedKeyType(String)
     case keyParseError(String)
+    case timeout
+    case connectionReset
 
     var errorDescription: String? {
         switch self {
@@ -850,6 +852,22 @@ enum SSHError: LocalizedError {
         case .keyNotFound(let path): return "SSH key not found: \(path)"
         case .unsupportedKeyType(let type): return "Unsupported key type: \(type)"
         case .keyParseError(let reason): return "Failed to parse key: \(reason)"
+        case .timeout: return "Connection timed out"
+        case .connectionReset: return "Connection was reset"
+        }
+    }
+
+    /// Whether this error is transient and the operation can be retried
+    var isTransient: Bool {
+        switch self {
+        case .connectionFailed(let reason):
+            // Check for transient connection issues
+            let transientPatterns = ["reset", "timed out", "timeout", "temporarily", "try again", "ECONNRESET"]
+            return transientPatterns.contains { reason.lowercased().contains($0.lowercased()) }
+        case .notConnected, .timeout, .connectionReset:
+            return true
+        case .authenticationFailed, .keyNotFound, .unsupportedKeyType, .keyParseError:
+            return false
         }
     }
 }
@@ -1422,6 +1440,68 @@ class SSHManager: ObservableObject {
             try await autoConnect(settings: settings)
         }
         return try await executeCommand(command)
+    }
+
+    /// Execute a command with automatic retry for transient failures
+    /// - Parameters:
+    ///   - command: The command to execute
+    ///   - settings: App settings for auto-connect
+    ///   - maxRetries: Maximum number of retry attempts (default: 3)
+    ///   - retryDelay: Delay between retries in seconds (default: 1.0)
+    /// - Returns: The command output as a string
+    func executeCommandWithRetry(
+        _ command: String,
+        settings: AppSettings,
+        maxRetries: Int = 3,
+        retryDelay: TimeInterval = 1.0
+    ) async throws -> String {
+        var lastError: Error?
+        var attemptCount = 0
+
+        while attemptCount < maxRetries {
+            attemptCount += 1
+
+            do {
+                // Ensure connected before each attempt
+                if !isConnected {
+                    try await autoConnect(settings: settings)
+                }
+
+                return try await executeCommand(command)
+            } catch let error as SSHError where error.isTransient {
+                lastError = error
+                log.warning("SSH transient error (attempt \(attemptCount)/\(maxRetries)): \(error.localizedDescription)")
+
+                // Disconnect and wait before retry
+                await disconnect()
+
+                if attemptCount < maxRetries {
+                    try await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
+                }
+            } catch let error as NIOSSHError {
+                // Check if NIO SSH error is transient
+                let errorStr = String(describing: error)
+                let isTransient = errorStr.contains("reset") ||
+                                  errorStr.contains("closed") ||
+                                  errorStr.contains("timeout")
+
+                if isTransient && attemptCount < maxRetries {
+                    lastError = error
+                    log.warning("NIO SSH transient error (attempt \(attemptCount)/\(maxRetries)): \(errorStr.prefix(100))")
+                    await disconnect()
+                    try await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
+                } else {
+                    throw error
+                }
+            } catch {
+                // Non-transient error, don't retry
+                throw error
+            }
+        }
+
+        // All retries exhausted
+        log.error("SSH command failed after \(maxRetries) attempts")
+        throw lastError ?? SSHError.connectionFailed("Max retries exceeded")
     }
 
     /// Auto-connect using the best available authentication method

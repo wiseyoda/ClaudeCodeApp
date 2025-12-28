@@ -6,6 +6,7 @@ struct IdeasDrawerSheet: View {
     @ObservedObject var ideasStore: IdeasStore
     @ObservedObject var claudeHelper: ClaudeHelper
     let projectPath: String
+    let currentSessionId: String?
     let onSendIdea: (Idea) -> Void
 
     @State private var searchText = ""
@@ -302,7 +303,7 @@ struct IdeasDrawerSheet: View {
         enhancingIdeaId = idea.id
 
         Task {
-            await claudeHelper.enhanceIdea(idea.text, projectPath: projectPath)
+            await claudeHelper.enhanceIdea(idea.text, projectPath: projectPath, sessionId: currentSessionId)
 
             await MainActor.run {
                 if let enhanced = claudeHelper.enhancedIdea {
@@ -347,7 +348,8 @@ struct IdeasDrawerSheet: View {
                         isPresented: $isPresented,
                         ideasStore: ideasStore,
                         claudeHelper: claudeHelper,
-                        projectPath: "/preview/project"
+                        projectPath: "/preview/project",
+                        currentSessionId: nil
                     ) { idea in
                         print("Send: \(idea.text)")
                     }
@@ -388,7 +390,8 @@ struct IdeasDrawerSheet: View {
                         isPresented: $isPresented,
                         ideasStore: ideasStore,
                         claudeHelper: claudeHelper,
-                        projectPath: "/empty/project"
+                        projectPath: "/empty/project",
+                        currentSessionId: nil
                     ) { _ in }
                 }
         }

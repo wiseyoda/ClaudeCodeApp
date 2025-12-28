@@ -29,13 +29,24 @@ struct DiffView: View {
     @Environment(\.colorScheme) var colorScheme
     @State private var expandedSections: Set<UUID> = []
 
+    /// Cached diff lines - computed once on appear/input change to avoid recalculation on every render
+    @State private var cachedDiffLines: [DiffLine] = []
+    /// Track input hash to detect when diff needs recomputation
+    @State private var inputHash: Int = 0
+
     private let contextLines = 2  // Lines of context around changes
 
-    var body: some View {
-        let diffLines = computeDiff()
+    /// Compute stable hash of inputs to detect changes
+    private var currentInputHash: Int {
+        var hasher = Hasher()
+        hasher.combine(oldString)
+        hasher.combine(newString)
+        return hasher.finalize()
+    }
 
+    var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(diffLines) { line in
+            ForEach(cachedDiffLines) { line in
                 DiffLineView(
                     line: line,
                     isExpanded: expandedSections.contains(line.id),
@@ -56,6 +67,22 @@ struct DiffView: View {
             RoundedRectangle(cornerRadius: 6)
                 .stroke(CLITheme.mutedText(for: colorScheme).opacity(0.2), lineWidth: 1)
         )
+        .onAppear {
+            // Compute diff once on appear
+            if inputHash != currentInputHash {
+                cachedDiffLines = computeDiff()
+                inputHash = currentInputHash
+            }
+        }
+        .onChange(of: oldString) { _, _ in
+            // Recompute if inputs change (rare case)
+            cachedDiffLines = computeDiff()
+            inputHash = currentInputHash
+        }
+        .onChange(of: newString) { _, _ in
+            cachedDiffLines = computeDiff()
+            inputHash = currentInputHash
+        }
     }
 
     /// Compute line-by-line diff using simple LCS-based approach
@@ -214,7 +241,30 @@ struct DiffView: View {
             return nil
         }
 
+        // Clean any AnyCodableValue wrappers from cached/corrupted content
+        oldString = cleanAnyCodableWrapper(oldString)
+        newString = cleanAnyCodableWrapper(newString)
+
         return (oldString, newString)
+    }
+
+    /// Remove AnyCodableValue(value: "...") wrapper if present
+    private static func cleanAnyCodableWrapper(_ text: String) -> String {
+        var result = text.trimmingCharacters(in: .whitespaces)
+
+        // Check for AnyCodableValue(value: "...") pattern
+        if result.hasPrefix("AnyCodableValue(value: ") && result.hasSuffix(")") {
+            // Remove prefix
+            result = String(result.dropFirst("AnyCodableValue(value: ".count))
+            // Remove trailing )
+            result = String(result.dropLast())
+            // Remove surrounding quotes if present
+            if result.hasPrefix("\"") && result.hasSuffix("\"") && result.count >= 2 {
+                result = String(result.dropFirst().dropLast())
+            }
+        }
+
+        return result
     }
 }
 

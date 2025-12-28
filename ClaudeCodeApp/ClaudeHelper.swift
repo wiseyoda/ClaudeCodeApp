@@ -322,7 +322,7 @@ class ClaudeHelper: ObservableObject {
     }
 
     /// Enhance an idea into a detailed prompt using Sonnet for higher quality
-    func enhanceIdea(_ ideaText: String, projectPath: String) async {
+    func enhanceIdea(_ ideaText: String, projectPath: String, sessionId: String? = nil) async {
         await MainActor.run {
             isEnhancingIdea = true
             enhancedIdea = nil
@@ -345,7 +345,8 @@ class ClaudeHelper: ObservableObject {
 
         do {
             // Use Sonnet model for higher quality expansions
-            let response = try await sendQuickQuery(prompt: prompt, projectPath: projectPath, model: "sonnet")
+            // Pass session ID to reuse existing session instead of creating new ones
+            let response = try await sendQuickQuery(prompt: prompt, projectPath: projectPath, model: .sonnet, sessionId: sessionId)
             let enhanced = parseEnhancedIdea(from: response)
             await MainActor.run {
                 enhancedIdea = enhanced
@@ -467,9 +468,9 @@ class ClaudeHelper: ObservableObject {
     /// - Parameters:
     ///   - prompt: The query prompt
     ///   - projectPath: The project path for context
-    ///   - model: The model to use (default: haiku)
+    ///   - model: The model to use (default: .haiku). Uses full model ID for backend compatibility.
     ///   - sessionId: Optional session ID to use. If nil, uses a helper session ID.
-    private func sendQuickQuery(prompt: String, projectPath: String, model: String = "haiku", sessionId: String? = nil) async throws -> String {
+    private func sendQuickQuery(prompt: String, projectPath: String, model: ClaudeModel = .haiku, sessionId: String? = nil) async throws -> String {
         try await withCheckedThrowingContinuation { continuation in
             sendQueryViaWebSocket(prompt: prompt, projectPath: projectPath, model: model, sessionId: sessionId) { result in
                 continuation.resume(with: result)
@@ -477,21 +478,24 @@ class ClaudeHelper: ObservableObject {
         }
     }
 
-    private func sendQueryViaWebSocket(prompt: String, projectPath: String, model: String = "haiku", sessionId: String? = nil, completion: @escaping (Result<String, Error>) -> Void) {
+    private func sendQueryViaWebSocket(prompt: String, projectPath: String, model: ClaudeModel = .haiku, sessionId: String? = nil, completion: @escaping (Result<String, Error>) -> Void) {
         guard let url = settings.webSocketURL else {
             completion(.failure(ClaudeHelperError.invalidURL))
             return
         }
 
         // Clean up any existing connection
+        if webSocket != nil {
+            debugLog.log("ClaudeHelper: Cancelling existing WebSocket", type: .info)
+        }
         webSocket?.cancel()
         responseBuffer = ""
         self.completion = completion
 
-        // Use provided session ID if available, otherwise use helper session ID.
-        // Using the current session ID gives the AI full conversation context,
-        // but the query will appear in that session's history.
-        let effectiveSessionId = sessionId ?? helperSessionId(for: projectPath)
+        // Use provided session ID if available.
+        // If nil, let the backend create a new session (don't use helperSessionId
+        // as it may reference a non-existent session causing CLI errors).
+        let effectiveSessionId = sessionId
 
         let session = URLSession(configuration: .default)
         webSocket = session.webSocketTask(with: url)
@@ -508,15 +512,18 @@ class ClaudeHelper: ObservableObject {
             options: WSCommandOptions(
                 cwd: projectPath,
                 sessionId: effectiveSessionId,
-                model: model,  // Use specified model (haiku for suggestions, sonnet for enhancement)
+                model: model.modelId,  // Full model ID (e.g., "claude-sonnet-4-5-20250929")
                 permissionMode: nil,
                 images: nil
             )
         )
 
+        debugLog.log("ClaudeHelper sending query (model: \(model.modelId ?? "default"))", type: .info)
+
         do {
             let data = try JSONEncoder().encode(command)
             if let jsonString = String(data: data, encoding: .utf8) {
+                debugLog.logSent("ClaudeHelper sending: \(jsonString)")
                 webSocket?.send(.string(jsonString)) { [weak self] error in
                     if let error = error {
                         Task { @MainActor [weak self] in
@@ -532,12 +539,13 @@ class ClaudeHelper: ObservableObject {
         }
 
         // Set timeout - store task so it can be cancelled on success
+        // 30 second timeout to allow for model switching which can take time
         timeoutTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 15_000_000_000)  // 15 second timeout
+            try? await Task.sleep(nanoseconds: 30_000_000_000)  // 30 second timeout
             guard !Task.isCancelled else { return }
             await MainActor.run { [weak self] in
                 guard let self = self, self.completion != nil else { return }
-                self.debugLog.logError("ClaudeHelper timeout after 15s")
+                self.debugLog.logError("ClaudeHelper timeout after 30s - buffer so far: \(self.responseBuffer.prefix(200))")
                 self.completion?(.failure(ClaudeHelperError.timeout))
                 self.cleanup()
             }

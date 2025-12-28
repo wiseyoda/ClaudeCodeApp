@@ -14,11 +14,27 @@ struct CLIMessageView: View {
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
 
+    // MARK: - Cached Computed Values (computed once in init to avoid recomputation during scrolling)
+    private let cachedToolType: CLITheme.ToolType
+    private let cachedToolHeaderText: String
+    private let cachedResultCountBadge: String?
+    private let cachedToolErrorInfo: ToolErrorInfo?
+
     init(message: ChatMessage, projectPath: String? = nil, projectTitle: String? = nil, onAnalyze: ((ChatMessage) -> Void)? = nil) {
         self.message = message
         self.projectPath = projectPath
         self.projectTitle = projectTitle
         self.onAnalyze = onAnalyze
+
+        // Pre-compute expensive values once during init
+        let toolType = CLITheme.ToolType.from(message.content)
+        self.cachedToolType = toolType
+        self.cachedToolHeaderText = Self.computeToolHeaderText(for: message, toolType: toolType)
+        self.cachedResultCountBadge = Self.computeResultCountBadge(for: message, toolType: toolType)
+        self.cachedToolErrorInfo = message.role == .toolResult
+            ? ToolResultParser.parse(message.content, toolName: nil)
+            : nil
+
         // Collapse result messages, Grep/Glob tool uses, and thinking blocks by default
         let shouldStartCollapsed = message.role == .resultSuccess ||
             message.role == .toolResult ||
@@ -55,14 +71,20 @@ struct CLIMessageView: View {
                         .foregroundColor(CLITheme.mutedText(for: colorScheme))
                         .font(settings.scaledFont(.small))
 
-                    // Show count badge when collapsed (iOS 26+ glass-ready)
+                    // Show status text when collapsed - simple italicized text
                     if !isExpanded, let badge = resultCountBadge {
                         Text(badge)
+                            .font(.system(size: 12, weight: .medium).italic())
+                            .foregroundColor(badgeTextColor)
+                    }
+
+                    // Show error summary when collapsed and is an error
+                    if !isExpanded, let info = toolErrorInfo, info.category != .success {
+                        Text(info.errorSummary)
                             .font(settings.scaledFont(.small))
-                            .foregroundColor(badgeColor)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .glassBackground(tint: glassTintForBadge, cornerRadius: 4)
+                            .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                     }
                 }
 
@@ -179,8 +201,9 @@ struct CLIMessageView: View {
         }
     }
 
+    /// Tool type - uses cached value computed in init
     private var toolType: CLITheme.ToolType {
-        CLITheme.ToolType.from(message.content)
+        cachedToolType
     }
 
     private var bulletColor: Color {
@@ -189,7 +212,7 @@ struct CLIMessageView: View {
         case .assistant: return CLITheme.primaryText(for: colorScheme)
         case .system: return CLITheme.cyan(for: colorScheme)
         case .error: return CLITheme.red(for: colorScheme)
-        case .toolUse: return CLITheme.toolColor(for: toolType, scheme: colorScheme)
+        case .toolUse: return CLITheme.toolColor(for: cachedToolType, scheme: colorScheme)
         case .toolResult: return CLITheme.mutedText(for: colorScheme)
         case .resultSuccess: return CLITheme.green(for: colorScheme)
         case .thinking: return CLITheme.purple(for: colorScheme)
@@ -203,7 +226,7 @@ struct CLIMessageView: View {
         case .system: return "System (init)"
         case .error: return "Error"
         case .toolUse:
-            return toolHeaderText
+            return cachedToolHeaderText  // Use cached value
         case .toolResult: return "Result"
         case .resultSuccess: return "Done"
         case .thinking: return "Thinking"
@@ -211,93 +234,14 @@ struct CLIMessageView: View {
     }
 
     /// Extract tool name + key param for richer headers
+    /// Note: This is kept for backward compatibility but the cached version is preferred
     private var toolHeaderText: String {
-        let content = message.content
-        let displayName = toolType.displayName
-
-        // Extract key param based on tool type
-        switch toolType {
-        case .bash:
-            // Show command: Terminal: $ ls -la
-            if let command = extractParam(from: content, key: "command") {
-                let shortCmd = command.count > 40 ? String(command.prefix(40)) + "..." : command
-                return "\(displayName): $ \(shortCmd)"
-            }
-        case .read:
-            // Show file path: Read: src/index.ts
-            if let path = extractParam(from: content, key: "file_path") {
-                return "\(displayName): \(shortenPath(path))"
-            }
-        case .write:
-            // Show file path: Write: src/new.ts
-            if let path = extractParam(from: content, key: "file_path") {
-                return "\(displayName): \(shortenPath(path))"
-            }
-        case .edit:
-            // Show file path: Edit: src/file.ts
-            if let path = extractParam(from: content, key: "file_path") {
-                return "\(displayName): \(shortenPath(path))"
-            }
-        case .grep:
-            // Show pattern: Search: "pattern"
-            if let pattern = extractParam(from: content, key: "pattern") {
-                let shortPattern = pattern.count > 30 ? String(pattern.prefix(30)) + "..." : pattern
-                return "\(displayName): \"\(shortPattern)\""
-            }
-        case .glob:
-            // Show pattern: Find: **/*.ts
-            if let pattern = extractParam(from: content, key: "pattern") {
-                return "\(displayName): \(pattern)"
-            }
-        case .task:
-            // Show agent type and description: Agent (Explore): Explore codebase
-            var header = displayName
-            if let agentType = extractParam(from: content, key: "subagent_type") {
-                header += " (\(agentType))"
-            }
-            if let desc = extractParam(from: content, key: "description") {
-                let shortDesc = desc.count > 30 ? String(desc.prefix(30)) + "..." : desc
-                header += ": \(shortDesc)"
-            }
-            return header
-        case .todoWrite:
-            return displayName
-        case .webFetch:
-            // Show URL: Fetch: example.com
-            if let url = extractParam(from: content, key: "url") {
-                return "\(displayName): \(shortenURL(url))"
-            }
-        case .webSearch:
-            // Show query: Web: "query"
-            if let query = extractParam(from: content, key: "query") {
-                let shortQuery = query.count > 30 ? String(query.prefix(30)) + "..." : query
-                return "\(displayName): \"\(shortQuery)\""
-            }
-        case .askUser:
-            return displayName
-        case .lsp:
-            // Show operation: LSP: documentSymbol in file.swift
-            if let operation = extractParam(from: content, key: "operation"),
-               let path = extractParam(from: content, key: "filePath") {
-                return "\(displayName): \(operation) in \(shortenPath(path))"
-            } else if let operation = extractParam(from: content, key: "operation") {
-                return "\(displayName): \(operation)"
-            }
-        case .taskOutput:
-            // Show task ID: Output: b63f11a
-            if let taskId = extractParam(from: content, key: "task_id") {
-                let shortId = taskId.count > 10 ? String(taskId.prefix(10)) : taskId
-                return "\(displayName): \(shortId)"
-            }
-        case .other:
-            break
-        }
-
-        return displayName
+        // Use cached value from init
+        cachedToolHeaderText
     }
 
     /// Extract a parameter value from tool content like "Tool(key: value, ...)"
-    private func extractParam(from content: String, key: String) -> String? {
+    private static func extractParam(from content: String, key: String) -> String? {
         // Look for "key: value" pattern
         let searchKey = "\(key): "
         guard let keyRange = content.range(of: searchKey) else { return nil }
@@ -327,11 +271,22 @@ struct CLIMessageView: View {
             value.append(char)
         }
 
-        return value.trimmingCharacters(in: .whitespaces)
+        var result = value.trimmingCharacters(in: .whitespaces)
+
+        // Clean AnyCodableValue wrapper if present (migration fix for corrupted content)
+        if result.hasPrefix("AnyCodableValue(value: ") && result.hasSuffix(")") {
+            result = String(result.dropFirst("AnyCodableValue(value: ".count).dropLast())
+            // Remove surrounding quotes if present
+            if result.hasPrefix("\"") && result.hasSuffix("\"") && result.count >= 2 {
+                result = String(result.dropFirst().dropLast())
+            }
+        }
+
+        return result
     }
 
     /// Shorten a file path to just filename or last 2 components
-    private func shortenPath(_ path: String) -> String {
+    private static func shortenPath(_ path: String) -> String {
         let components = path.split(separator: "/")
         if components.count <= 2 {
             return path
@@ -340,12 +295,149 @@ struct CLIMessageView: View {
     }
 
     /// Shorten a URL to just the domain
-    private func shortenURL(_ url: String) -> String {
+    private static func shortenURL(_ url: String) -> String {
         if let urlObj = URL(string: url), let host = urlObj.host {
             return host
         }
         // Fallback: just show first 30 chars
         return url.count > 30 ? String(url.prefix(30)) + "..." : url
+    }
+
+    // MARK: - Static Computation Methods (called once during init)
+
+    /// Compute tool header text - called once during init to avoid recomputation
+    private static func computeToolHeaderText(for message: ChatMessage, toolType: CLITheme.ToolType) -> String {
+        guard message.role == .toolUse else { return "" }
+
+        let content = message.content
+        let displayName = toolType.displayName
+
+        switch toolType {
+        case .bash:
+            if let command = extractParam(from: content, key: "command") {
+                let shortCmd = command.count > 40 ? String(command.prefix(40)) + "..." : command
+                return "\(displayName): $ \(shortCmd)"
+            }
+        case .read:
+            if let path = extractParam(from: content, key: "file_path") {
+                return "\(displayName): \(shortenPath(path))"
+            }
+        case .write:
+            if let path = extractParam(from: content, key: "file_path") {
+                return "\(displayName): \(shortenPath(path))"
+            }
+        case .edit:
+            if let path = extractParam(from: content, key: "file_path") {
+                return "\(displayName): \(shortenPath(path))"
+            }
+        case .grep:
+            if let pattern = extractParam(from: content, key: "pattern") {
+                let shortPattern = pattern.count > 30 ? String(pattern.prefix(30)) + "..." : pattern
+                return "\(displayName): \"\(shortPattern)\""
+            }
+        case .glob:
+            if let pattern = extractParam(from: content, key: "pattern") {
+                return "\(displayName): \(pattern)"
+            }
+        case .task:
+            var header = displayName
+            if let agentType = extractParam(from: content, key: "subagent_type") {
+                header += " (\(agentType))"
+            }
+            if let desc = extractParam(from: content, key: "description") {
+                let shortDesc = desc.count > 30 ? String(desc.prefix(30)) + "..." : desc
+                header += ": \(shortDesc)"
+            }
+            return header
+        case .todoWrite:
+            return displayName
+        case .webFetch:
+            if let url = extractParam(from: content, key: "url") {
+                return "\(displayName): \(shortenURL(url))"
+            }
+        case .webSearch:
+            if let query = extractParam(from: content, key: "query") {
+                let shortQuery = query.count > 30 ? String(query.prefix(30)) + "..." : query
+                return "\(displayName): \"\(shortQuery)\""
+            }
+        case .askUser:
+            return displayName
+        case .lsp:
+            if let operation = extractParam(from: content, key: "operation"),
+               let path = extractParam(from: content, key: "filePath") {
+                return "\(displayName): \(operation) in \(shortenPath(path))"
+            } else if let operation = extractParam(from: content, key: "operation") {
+                return "\(displayName): \(operation)"
+            }
+        case .taskOutput:
+            if let taskId = extractParam(from: content, key: "task_id") {
+                let shortId = taskId.count > 10 ? String(taskId.prefix(10)) : taskId
+                return "\(displayName): \(shortId)"
+            }
+        case .other:
+            break
+        }
+
+        return displayName
+    }
+
+    /// Compute result count badge - called once during init to avoid recomputation
+    private static func computeResultCountBadge(for message: ChatMessage, toolType: CLITheme.ToolType) -> String? {
+        let content = message.content
+        let lineCount = content.components(separatedBy: "\n").count
+
+        switch message.role {
+        case .toolUse:
+            switch toolType {
+            case .grep, .glob:
+                return nil
+            case .todoWrite:
+                if let todos = TodoListView.parseTodoContent(content) {
+                    let completed = todos.filter { $0.status == "completed" }.count
+                    return "\(completed)/\(todos.count)"
+                }
+                return nil
+            default:
+                return nil
+            }
+        case .toolResult:
+            // Parse error info for this computation
+            let info = ToolResultParser.parse(content, toolName: nil)
+            switch info.category {
+            case .success:
+                // For success, show additional info about content
+                if let exitCode = extractBashExitCode(from: content), exitCode == 0 {
+                    return "✓"
+                }
+                // Count file paths for grep/glob results
+                let pathLines = content.components(separatedBy: "\n")
+                    .filter { line in
+                        let trimmed = line.trimmingCharacters(in: .whitespaces)
+                        return !trimmed.isEmpty && (trimmed.hasPrefix("/") || trimmed.contains("."))
+                    }
+                if pathLines.count > 3 {
+                    return "\(pathLines.count) files"
+                }
+                if lineCount > 1 {
+                    return "\(lineCount) lines"
+                } else if content.count > 100 {
+                    return "\(content.count) chars"
+                }
+                return "✓"
+            case .gitError, .commandFailed, .sshError, .invalidArgs,
+                 .commandNotFound, .fileConflict, .fileNotFound,
+                 .approvalRequired, .timeout, .permissionDenied, .unknown:
+                return info.category.shortLabel
+            }
+        case .thinking:
+            let wordCount = content.split(separator: " ").count
+            if wordCount > 10 {
+                return "\(wordCount) words"
+            }
+            return nil
+        default:
+            return nil
+        }
     }
 
     /// Message action bar for assistant messages
@@ -368,10 +460,10 @@ struct CLIMessageView: View {
     @ViewBuilder
     private var quickActionButtons: some View {
         HStack(spacing: 8) {
-            switch toolType {
+            switch cachedToolType {
             case .bash:
                 // Copy command
-                if let cmd = extractParam(from: message.content, key: "command") {
+                if let cmd = Self.extractParam(from: message.content, key: "command") {
                     QuickActionButton(
                         icon: "doc.on.doc",
                         label: "Copy command",
@@ -380,7 +472,7 @@ struct CLIMessageView: View {
                 }
             case .read, .write, .edit:
                 // Copy file path
-                if let path = extractParam(from: message.content, key: "file_path") {
+                if let path = Self.extractParam(from: message.content, key: "file_path") {
                     QuickActionButton(
                         icon: "doc.on.doc",
                         label: "Copy path",
@@ -389,7 +481,7 @@ struct CLIMessageView: View {
                 }
             case .grep:
                 // Copy pattern
-                if let pattern = extractParam(from: message.content, key: "pattern") {
+                if let pattern = Self.extractParam(from: message.content, key: "pattern") {
                     QuickActionButton(
                         icon: "doc.on.doc",
                         label: "Copy pattern",
@@ -398,7 +490,7 @@ struct CLIMessageView: View {
                 }
             case .glob:
                 // Copy glob pattern
-                if let pattern = extractParam(from: message.content, key: "pattern") {
+                if let pattern = Self.extractParam(from: message.content, key: "pattern") {
                     QuickActionButton(
                         icon: "doc.on.doc",
                         label: "Copy pattern",
@@ -407,7 +499,7 @@ struct CLIMessageView: View {
                 }
             case .webFetch:
                 // Copy URL and Open in Safari
-                if let url = extractParam(from: message.content, key: "url") {
+                if let url = Self.extractParam(from: message.content, key: "url") {
                     QuickActionButton(
                         icon: "doc.on.doc",
                         label: "Copy URL",
@@ -425,7 +517,7 @@ struct CLIMessageView: View {
                 }
             case .webSearch:
                 // Copy query
-                if let query = extractParam(from: message.content, key: "query") {
+                if let query = Self.extractParam(from: message.content, key: "query") {
                     QuickActionButton(
                         icon: "doc.on.doc",
                         label: "Copy query",
@@ -440,7 +532,7 @@ struct CLIMessageView: View {
 
     /// Extract exit code from bash tool result content
     /// Format: "Exit code 128\nfatal: not a git repository..."
-    private func extractBashExitCode(from content: String) -> Int? {
+    private static func extractBashExitCode(from content: String) -> Int? {
         guard content.hasPrefix("Exit code ") else { return nil }
         let scanner = Scanner(string: content)
         _ = scanner.scanString("Exit code ")
@@ -451,12 +543,26 @@ struct CLIMessageView: View {
         return nil
     }
 
-    /// Color for the result count badge - green for success, red for errors
+    /// Parse tool result content into structured error info - uses cached value
+    private var toolErrorInfo: ToolErrorInfo? {
+        cachedToolErrorInfo
+    }
+
+    /// Whether this tool result represents an error
+    private var isErrorResult: Bool {
+        guard let info = cachedToolErrorInfo else { return false }
+        return info.category != .success
+    }
+
+    /// Color for the result count badge - green for success, category-specific for errors
     private var badgeColor: Color {
-        let content = message.content
         if message.role == .toolResult {
-            // Check for exit code in bash results
-            if let exitCode = extractBashExitCode(from: content) {
+            // Use cached structured error info for accurate coloring
+            if let info = cachedToolErrorInfo {
+                return info.category.color(for: colorScheme)
+            }
+            // Fallback to exit code parsing
+            if let exitCode = Self.extractBashExitCode(from: message.content) {
                 return exitCode == 0
                     ? CLITheme.green(for: colorScheme)
                     : CLITheme.red(for: colorScheme)
@@ -466,70 +572,62 @@ struct CLIMessageView: View {
         return CLITheme.mutedText(for: colorScheme)
     }
 
+    /// Text color for status labels - semantic colors optimized for readability
+    private var badgeTextColor: Color {
+        guard let tint = glassTintForBadge else {
+            return CLITheme.mutedText(for: colorScheme)
+        }
+
+        switch tint {
+        case .success:
+            // Dark green in light mode, softer green in dark mode
+            return colorScheme == .dark
+                ? Color(red: 0.4, green: 0.75, blue: 0.45)
+                : Color(red: 0.15, green: 0.5, blue: 0.2)
+        case .warning:
+            // Dark amber in light mode, softer amber in dark mode
+            return colorScheme == .dark
+                ? Color(red: 0.9, green: 0.7, blue: 0.35)
+                : Color(red: 0.65, green: 0.45, blue: 0.0)
+        case .error:
+            // Dark red in light mode, softer red in dark mode
+            return colorScheme == .dark
+                ? Color(red: 0.9, green: 0.45, blue: 0.45)
+                : Color(red: 0.7, green: 0.2, blue: 0.2)
+        case .info:
+            // Dark cyan in light mode, softer cyan in dark mode
+            return colorScheme == .dark
+                ? Color(red: 0.4, green: 0.75, blue: 0.85)
+                : Color(red: 0.0, green: 0.45, blue: 0.55)
+        case .neutral, .primary, .accent:
+            return CLITheme.mutedText(for: colorScheme)
+        }
+    }
+
     /// Glass tint for the result count badge (iOS 26+ Liquid Glass)
     private var glassTintForBadge: CLITheme.GlassTint? {
-        let content = message.content
         if message.role == .toolResult {
-            if let exitCode = extractBashExitCode(from: content) {
+            if let info = cachedToolErrorInfo {
+                switch info.category {
+                case .success: return .success
+                case .gitError, .commandFailed, .sshError, .permissionDenied: return .error
+                case .invalidArgs, .commandNotFound, .timeout: return .warning
+                case .fileConflict, .approvalRequired: return .info
+                case .fileNotFound: return .neutral
+                case .unknown: return .error
+                }
+            }
+            // Fallback
+            if let exitCode = Self.extractBashExitCode(from: message.content) {
                 return exitCode == 0 ? .success : .error
             }
         }
         return .neutral
     }
 
-    /// Generate a count badge for collapsed tool outputs
+    /// Generate a count badge for collapsed tool outputs - uses cached value
     private var resultCountBadge: String? {
-        let content = message.content
-        let lineCount = content.components(separatedBy: "\n").count
-
-        switch message.role {
-        case .toolUse:
-            switch toolType {
-            case .grep, .glob:
-                // Count matching files in output (look for file paths in result)
-                // For tool use, we don't have the result yet, so show nothing
-                return nil
-            case .todoWrite:
-                // Count todos
-                if let todos = TodoListView.parseTodoContent(content) {
-                    let completed = todos.filter { $0.status == "completed" }.count
-                    return "\(completed)/\(todos.count)"
-                }
-                return nil
-            default:
-                return nil
-            }
-        case .toolResult:
-            // Show exit code for bash results
-            if let exitCode = extractBashExitCode(from: content) {
-                return exitCode == 0 ? "✓" : "Exit \(exitCode)"
-            }
-            // Count file paths for grep/glob results (lines that look like paths)
-            let pathLines = content.components(separatedBy: "\n")
-                .filter { line in
-                    let trimmed = line.trimmingCharacters(in: .whitespaces)
-                    return !trimmed.isEmpty && (trimmed.hasPrefix("/") || trimmed.contains("."))
-                }
-            if pathLines.count > 3 {
-                return "\(pathLines.count) files"
-            }
-            // Show line count for results
-            if lineCount > 1 {
-                return "\(lineCount) lines"
-            } else if content.count > 100 {
-                return "\(content.count) chars"
-            }
-            return nil
-        case .thinking:
-            // Show word count for thinking blocks
-            let wordCount = content.split(separator: " ").count
-            if wordCount > 10 {
-                return "\(wordCount) words"
-            }
-            return nil
-        default:
-            return nil
-        }
+        cachedResultCountBadge
     }
 
     private var headerColor: Color {
@@ -634,9 +732,9 @@ struct CLIProcessingView: View {
     var body: some View {
         HStack(spacing: 6) {
             Text("+")
-                .foregroundColor(CLITheme.yellow(for: colorScheme))
+                .foregroundColor(CLITheme.primaryText(for: colorScheme))
             Text("Thinking" + String(repeating: ".", count: dotCount))
-                .foregroundColor(CLITheme.yellow(for: colorScheme))
+                .foregroundColor(CLITheme.primaryText(for: colorScheme))
             Spacer()
         }
         .font(settings.scaledFont(.body))
@@ -678,7 +776,7 @@ struct QuickActionButton: View {
                 .font(.system(size: 11))
                 .foregroundColor(
                     showConfirmation
-                        ? CLITheme.green(for: colorScheme)
+                        ? CLITheme.primaryText(for: colorScheme)  // Visible against green glass
                         : CLITheme.mutedText(for: colorScheme)
                 )
                 .frame(width: 24, height: 24)

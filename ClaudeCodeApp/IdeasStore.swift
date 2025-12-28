@@ -89,6 +89,9 @@ class IdeasStore: ObservableObject {
     private let baseDirectory: URL
     private let fileManager: FileManager
 
+    /// Background queue for file I/O to avoid blocking main thread
+    private static let fileQueue = DispatchQueue(label: "com.claudecodeapp.ideasstore", qos: .userInitiated)
+
     private var fileURL: URL {
         let ideasDirURL = baseDirectory.appendingPathComponent(ideasDirectory)
 
@@ -256,26 +259,47 @@ class IdeasStore: ObservableObject {
     // MARK: - Persistence
 
     private func load() {
-        guard FileManager.default.fileExists(atPath: fileURL.path) else {
-            ideas = []
-            return
-        }
+        let url = fileURL
+        let path = projectPath
 
-        do {
-            let data = try Data(contentsOf: fileURL)
-            ideas = try JSONDecoder().decode([Idea].self, from: data)
-        } catch {
-            log.error("Failed to load ideas for \(projectPath): \(error)")
-            ideas = []
+        // Perform file I/O on background queue to avoid blocking main thread
+        IdeasStore.fileQueue.async { [weak self] in
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                Task { @MainActor [weak self] in
+                    self?.ideas = []
+                }
+                return
+            }
+
+            do {
+                let data = try Data(contentsOf: url)
+                let loadedIdeas = try JSONDecoder().decode([Idea].self, from: data)
+                Task { @MainActor [weak self] in
+                    self?.ideas = loadedIdeas
+                }
+            } catch {
+                log.error("Failed to load ideas for \(path): \(error)")
+                Task { @MainActor [weak self] in
+                    self?.ideas = []
+                }
+            }
         }
     }
 
     private func save() {
-        do {
-            let data = try JSONEncoder().encode(ideas)
-            try data.write(to: fileURL, options: .atomic)
-        } catch {
-            log.error("Failed to save ideas for \(projectPath): \(error)")
+        // Capture data needed for background save
+        let ideasToSave = ideas
+        let url = fileURL
+        let path = projectPath
+
+        // Perform file I/O on background queue to avoid blocking main thread
+        IdeasStore.fileQueue.async {
+            do {
+                let data = try JSONEncoder().encode(ideasToSave)
+                try data.write(to: url, options: .atomic)
+            } catch {
+                log.error("Failed to save ideas for \(path): \(error)")
+            }
         }
     }
 }

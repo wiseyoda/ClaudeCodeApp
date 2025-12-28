@@ -7,10 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1205495BA2434BF79B906228 /* ErrorAnalyticsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 603895DCE0554062BCEC87F7 /* ErrorAnalyticsStore.swift */; };
 		1597F6A073B1490D948C46FE /* QuickCaptureSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F4D52190DB54B75A6081DAA /* QuickCaptureSheet.swift */; };
 		1D727765964448C0BF0B34A9 /* IdeasStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4676361593D14ED18823954D /* IdeasStore.swift */; };
+		25B4D8D62F010A1100538809 /* xcode-suggestions.md in Resources */ = {isa = PBXBuildFile; fileRef = 25B4D8D52F010A1100538809 /* xcode-suggestions.md */; };
 		6649DD89AF7741A49571016E /* IdeasDrawerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55A0D1D2E7D841C39956EF33 /* IdeasDrawerSheet.swift */; };
 		730BCCA17F1640EF98105BAB /* IdeaRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 829A5F0CE0184E598DD8CC00 /* IdeaRowView.swift */; };
+		7C37B73A99654D65838AC5B5 /* ToolErrorClassification.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7280E348A6154DEB85D30D3D /* ToolErrorClassification.swift */; };
 		8D08C46693BF46478325D485 /* IdeaEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B423E7C7AA924BD1BA2E2418 /* IdeaEditorSheet.swift */; };
 		A1000001 /* ClaudeCodeAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001 /* ClaudeCodeAppApp.swift */; };
 		A1000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000002 /* ContentView.swift */; };
@@ -52,6 +55,7 @@
 		A1000038 /* CommandsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000037 /* CommandsView.swift */; };
 		A1000039 /* CommandPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000038 /* CommandPickerSheet.swift */; };
 		AA000040 /* MessageActionBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000041 /* MessageActionBar.swift */; };
+		CCA13BBABC8E4725947D1011 /* ErrorInsightsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2CB9D357C2E4C4791DA828F /* ErrorInsightsView.swift */; };
 		DB000042 /* DebugLogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB000043 /* DebugLogStore.swift */; };
 		DB000044 /* DebugLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB000045 /* DebugLogView.swift */; };
 		EB000052 /* ErrorBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB000053 /* ErrorBanner.swift */; };
@@ -59,7 +63,9 @@
 		F52215AB5E74451A8C111231 /* TagsFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CE0280C4CD14A61A45D94D0 /* TagsFlowView.swift */; };
 		F651E84643F2460D8BA6DFB9 /* IdeasFAB.swift in Sources */ = {isa = PBXBuildFile; fileRef = D406B32A88A3423899A037FB /* IdeasFAB.swift */; };
 		ODL75VT1JDWVUKM5HVUEOJP8 /* ProjectNamesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39UUJ7I96JL1A5K32KNO0PXO /* ProjectNamesStore.swift */; };
+		PC000001 /* ProjectCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = PC000002 /* ProjectCache.swift */; };
 		PS000046 /* ProjectSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = PS000047 /* ProjectSettingsStore.swift */; };
+		SK000001 /* SkeletonView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SK000002 /* SkeletonView.swift */; };
 		SM000040 /* SessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000039 /* SessionManager.swift */; };
 		SS000048 /* ScrollStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = SS000049 /* ScrollStateManager.swift */; };
 /* End PBXBuildFile section */
@@ -76,11 +82,14 @@
 
 /* Begin PBXFileReference section */
 		1F4D52190DB54B75A6081DAA /* QuickCaptureSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickCaptureSheet.swift; sourceTree = "<group>"; };
-		2509F4FB2EFF976200EAFBFE /* ClaudeCodeAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClaudeCodeAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		2509F4FB2EFF976200EAFBFE /* CodingBridgeAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CodingBridgeAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		25B4D8D52F010A1100538809 /* xcode-suggestions.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "xcode-suggestions.md"; sourceTree = "<group>"; };
 		2CE0280C4CD14A61A45D94D0 /* TagsFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagsFlowView.swift; sourceTree = "<group>"; };
 		39UUJ7I96JL1A5K32KNO0PXO /* ProjectNamesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectNamesStore.swift; sourceTree = "<group>"; };
 		4676361593D14ED18823954D /* IdeasStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeasStore.swift; sourceTree = "<group>"; };
 		55A0D1D2E7D841C39956EF33 /* IdeasDrawerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeasDrawerSheet.swift; sourceTree = "<group>"; };
+		603895DCE0554062BCEC87F7 /* ErrorAnalyticsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorAnalyticsStore.swift; sourceTree = "<group>"; };
+		7280E348A6154DEB85D30D3D /* ToolErrorClassification.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolErrorClassification.swift; sourceTree = "<group>"; };
 		829A5F0CE0184E598DD8CC00 /* IdeaRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeaRowView.swift; sourceTree = "<group>"; };
 		A2000001 /* ClaudeCodeAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeCodeAppApp.swift; sourceTree = "<group>"; };
 		A2000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -121,7 +130,7 @@
 		A2000037 /* CommandsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandsView.swift; sourceTree = "<group>"; };
 		A2000038 /* CommandPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPickerSheet.swift; sourceTree = "<group>"; };
 		A2000039 /* SessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionManager.swift; sourceTree = "<group>"; };
-		A3000001 /* ClaudeCodeApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClaudeCodeApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A3000001 /* CodingBridge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CodingBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA000041 /* MessageActionBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageActionBar.swift; sourceTree = "<group>"; };
 		B423E7C7AA924BD1BA2E2418 /* IdeaEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeaEditorSheet.swift; sourceTree = "<group>"; };
 		D406B32A88A3423899A037FB /* IdeasFAB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeasFAB.swift; sourceTree = "<group>"; };
@@ -129,7 +138,10 @@
 		DB000045 /* DebugLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogView.swift; sourceTree = "<group>"; };
 		EB000053 /* ErrorBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorBanner.swift; sourceTree = "<group>"; };
 		ER000051 /* ErrorStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorStore.swift; sourceTree = "<group>"; };
+		F2CB9D357C2E4C4791DA828F /* ErrorInsightsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorInsightsView.swift; sourceTree = "<group>"; };
+		PC000002 /* ProjectCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCache.swift; sourceTree = "<group>"; };
 		PS000047 /* ProjectSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSettingsStore.swift; sourceTree = "<group>"; };
+		SK000002 /* SkeletonView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkeletonView.swift; sourceTree = "<group>"; };
 		SS000049 /* ScrollStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollStateManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -162,6 +174,7 @@
 				A5000002 /* ClaudeCodeApp */,
 				2509F4FC2EFF976200EAFBFE /* ClaudeCodeAppTests */,
 				A5000003 /* Products */,
+				25B4D8D52F010A1100538809 /* xcode-suggestions.md */,
 			);
 			sourceTree = "<group>";
 		};
@@ -192,6 +205,9 @@
 				A5000005 /* Extensions */,
 				A5000006 /* Views */,
 				A2000007 /* Assets.xcassets */,
+				7280E348A6154DEB85D30D3D /* ToolErrorClassification.swift */,
+				603895DCE0554062BCEC87F7 /* ErrorAnalyticsStore.swift */,
+				PC000002 /* ProjectCache.swift */,
 			);
 			path = ClaudeCodeApp;
 			sourceTree = "<group>";
@@ -199,8 +215,8 @@
 		A5000003 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				A3000001 /* ClaudeCodeApp.app */,
-				2509F4FB2EFF976200EAFBFE /* ClaudeCodeAppTests.xctest */,
+				A3000001 /* CodingBridge.app */,
+				2509F4FB2EFF976200EAFBFE /* CodingBridgeAppTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -255,6 +271,8 @@
 				AA000041 /* MessageActionBar.swift */,
 				DB000045 /* DebugLogView.swift */,
 				EB000053 /* ErrorBanner.swift */,
+				F2CB9D357C2E4C4791DA828F /* ErrorInsightsView.swift */,
+				SK000002 /* SkeletonView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -262,9 +280,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		2509F4FA2EFF976200EAFBFE /* ClaudeCodeAppTests */ = {
+		2509F4FA2EFF976200EAFBFE /* CodingBridgeAppTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 2509F5032EFF976200EAFBFE /* Build configuration list for PBXNativeTarget "ClaudeCodeAppTests" */;
+			buildConfigurationList = 2509F5032EFF976200EAFBFE /* Build configuration list for PBXNativeTarget "CodingBridgeAppTests" */;
 			buildPhases = (
 				2509F4F72EFF976200EAFBFE /* Sources */,
 				2509F4F82EFF976200EAFBFE /* Frameworks */,
@@ -278,16 +296,16 @@
 			fileSystemSynchronizedGroups = (
 				2509F4FC2EFF976200EAFBFE /* ClaudeCodeAppTests */,
 			);
-			name = ClaudeCodeAppTests;
+			name = CodingBridgeAppTests;
 			packageProductDependencies = (
 			);
 			productName = ClaudeCodeAppTests;
-			productReference = 2509F4FB2EFF976200EAFBFE /* ClaudeCodeAppTests.xctest */;
+			productReference = 2509F4FB2EFF976200EAFBFE /* CodingBridgeAppTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		A6000001 /* ClaudeCodeApp */ = {
+		A6000001 /* CodingBridge */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = A7000003 /* Build configuration list for PBXNativeTarget "ClaudeCodeApp" */;
+			buildConfigurationList = A7000003 /* Build configuration list for PBXNativeTarget "CodingBridge" */;
 			buildPhases = (
 				A4000002 /* Sources */,
 				A4000001 /* Frameworks */,
@@ -297,12 +315,12 @@
 			);
 			dependencies = (
 			);
-			name = ClaudeCodeApp;
+			name = CodingBridge;
 			packageProductDependencies = (
 				A1100001 /* Citadel */,
 			);
 			productName = ClaudeCodeApp;
-			productReference = A3000001 /* ClaudeCodeApp.app */;
+			productReference = A3000001 /* CodingBridge.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
@@ -340,8 +358,8 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				A6000001 /* ClaudeCodeApp */,
-				2509F4FA2EFF976200EAFBFE /* ClaudeCodeAppTests */,
+				A6000001 /* CodingBridge */,
+				2509F4FA2EFF976200EAFBFE /* CodingBridgeAppTests */,
 			);
 		};
 /* End PBXProject section */
@@ -351,6 +369,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				25B4D8D62F010A1100538809 /* xcode-suggestions.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -376,6 +395,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7C37B73A99654D65838AC5B5 /* ToolErrorClassification.swift in Sources */,
+				1205495BA2434BF79B906228 /* ErrorAnalyticsStore.swift in Sources */,
+				CCA13BBABC8E4725947D1011 /* ErrorInsightsView.swift in Sources */,
 				A1000001 /* ClaudeCodeAppApp.swift in Sources */,
 				A1000002 /* ContentView.swift in Sources */,
 				A1000003 /* ChatView.swift in Sources */,
@@ -429,6 +451,8 @@
 				DB000044 /* DebugLogView.swift in Sources */,
 				ER000050 /* ErrorStore.swift in Sources */,
 				EB000052 /* ErrorBanner.swift in Sources */,
+				PC000001 /* ProjectCache.swift in Sources */,
+				SK000001 /* SkeletonView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -437,7 +461,7 @@
 /* Begin PBXTargetDependency section */
 		2509F5002EFF976200EAFBFE /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = A6000001 /* ClaudeCodeApp */;
+			target = A6000001 /* CodingBridge */;
 			targetProxy = 2509F4FF2EFF976200EAFBFE /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -615,6 +639,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 0.5.0;
+				DEVELOPMENT_TEAM = VPLAUT6646;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Coding Bridge";
@@ -634,7 +659,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.5.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.level.ClaudeCodeApp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.level.CodingBridgeApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -649,6 +674,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 0.5.0;
+				DEVELOPMENT_TEAM = VPLAUT6646;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Coding Bridge";
@@ -668,7 +694,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.5.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.level.ClaudeCodeApp;
+				PRODUCT_BUNDLE_IDENTIFIER = com.level.CodingBridgeApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -679,7 +705,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		2509F5032EFF976200EAFBFE /* Build configuration list for PBXNativeTarget "ClaudeCodeAppTests" */ = {
+		2509F5032EFF976200EAFBFE /* Build configuration list for PBXNativeTarget "CodingBridgeAppTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				2509F5012EFF976200EAFBFE /* Debug */,
@@ -697,7 +723,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		A7000003 /* Build configuration list for PBXNativeTarget "ClaudeCodeApp" */ = {
+		A7000003 /* Build configuration list for PBXNativeTarget "CodingBridge" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				A9000003 /* Debug */,

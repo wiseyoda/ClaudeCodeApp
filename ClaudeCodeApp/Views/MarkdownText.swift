@@ -7,6 +7,10 @@ struct MarkdownText: View {
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
 
+    // MARK: - Block Cache (prevents expensive reparsing on every render during streaming)
+    @State private var cachedBlocks: [Block] = []
+    @State private var contentHash: Int = 0
+
     init(_ content: String) {
         // Apply HTML entity decoding on initialization
         self.content = content.processedForDisplay
@@ -14,10 +18,24 @@ struct MarkdownText: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(parseBlocks().enumerated()), id: \.offset) { _, block in
+            ForEach(Array(cachedBlocks.enumerated()), id: \.offset) { _, block in
                 blockView(for: block)
             }
         }
+        .onAppear {
+            refreshBlocksIfNeeded()
+        }
+        .onChange(of: content) { _, _ in
+            refreshBlocksIfNeeded()
+        }
+    }
+
+    /// Only reparse blocks when content actually changes (prevents UI freeze during streaming)
+    private func refreshBlocksIfNeeded() {
+        let newHash = content.hashValue
+        guard newHash != contentHash else { return }
+        contentHash = newHash
+        cachedBlocks = parseBlocks()
     }
 
     private enum Block {

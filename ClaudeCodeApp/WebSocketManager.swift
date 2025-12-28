@@ -52,6 +52,9 @@ class WebSocketManager: ObservableObject {
     private var webSocket: URLSessionWebSocketTask?
     private var settings: AppSettings
 
+    /// Background queue for JSON parsing to avoid blocking main thread during streaming
+    private static let parsingQueue = DispatchQueue(label: "com.claudecodeapp.websocket.parsing", qos: .userInitiated)
+
     /// Unique ID for the current connection - used to detect stale receive callbacks
     private var connectionId: UUID = UUID()
 
@@ -74,6 +77,13 @@ class WebSocketManager: ObservableObject {
     @Published var isAborting = false  // True while waiting for abort confirmation
     @Published var currentText = ""
     @Published var lastError: String?
+
+    /// Buffer for accumulating streaming text before publishing (reduces view updates)
+    private var textBuffer = ""
+    /// Debounce task for flushing text buffer
+    private var textFlushTask: Task<Void, Never>?
+    /// Debounce delay for text updates (50ms balances responsiveness with performance)
+    private let textFlushDelay: UInt64 = 50_000_000  // nanoseconds
     @Published var sessionId: String?
     @Published var tokenUsage: TokenUsage?
     @Published var currentModel: ClaudeModel?
@@ -680,6 +690,7 @@ class WebSocketManager: ObservableObject {
         isProcessing = false
         isAborting = false
         currentText = ""
+        clearTextBuffer()  // Clear debounce buffer
         isSwitchingModel = false
         lastActiveToolName = nil
         cancelProcessingTimeout()
@@ -896,10 +907,24 @@ class WebSocketManager: ObservableObject {
 
         guard let data = text.data(using: .utf8) else { return }
 
-        do {
-            let msg = try JSONDecoder().decode(WSMessage.self, from: data)
+        // Decode JSON on background thread to avoid blocking main thread during rapid streaming
+        Task.detached(priority: .userInitiated) { [weak self] in
+            do {
+                let msg = try JSONDecoder().decode(WSMessage.self, from: data)
+                await self?.processDecodedMessage(msg, rawText: text)
+            } catch {
+                await MainActor.run { [weak self] in
+                    log.error("Parse error: \(error), text: \(text.prefix(200))")
+                    DebugLogStore.shared.logError("Parse error: \(error.localizedDescription)", details: text)
+                    self?.lastError = "Message parse error: \(error.localizedDescription)"
+                }
+            }
+        }
+    }
 
-            switch msg.type {
+    /// Process a decoded WebSocket message on the main actor
+    private func processDecodedMessage(_ msg: WSMessage, rawText: String) {
+        switch msg.type {
             case "session-created":
                 if let sid = msg.sessionId {
                     sessionId = sid
@@ -941,6 +966,9 @@ class WebSocketManager: ObservableObject {
                 }
 
             case "claude-complete":
+                // Flush any remaining buffered text before completing
+                flushTextBuffer()
+
                 // Check if we successfully reattached to an active session
                 if isReattaching {
                     isReattaching = false
@@ -981,6 +1009,7 @@ class WebSocketManager: ObservableObject {
                 isReattaching = false  // Reset on error
                 lastActiveToolName = nil
                 isSwitchingModel = false  // Reset on error
+                clearTextBuffer()  // Clear debounce buffer on error
                 cancelProcessingTimeout()
                 let errorMsg = msg.error ?? "Unknown error"
 
@@ -1014,15 +1043,8 @@ class WebSocketManager: ObservableObject {
                 // Project list changed, could notify UI to refresh
                 break
 
-            default:
-                log.debug("Unknown message type: \(msg.type)")
-            }
-
-        } catch {
-            log.error("Parse error: \(error), text: \(text.prefix(200))")
-            debugLog.logError("Parse error: \(error.localizedDescription)", details: text)
-            // Notify UI of parse errors (but don't stop processing - could be non-critical)
-            lastError = "Message parse error: \(error.localizedDescription)"
+        default:
+            log.debug("Unknown message type: \(msg.type)")
         }
     }
 
@@ -1114,6 +1136,39 @@ class WebSocketManager: ObservableObject {
         }
     }
 
+    // MARK: - Text Buffer Management (Debouncing)
+
+    /// Accumulate text into buffer and schedule debounced flush
+    private func appendToTextBuffer(_ text: String) {
+        textBuffer += text
+
+        // Cancel any pending flush
+        textFlushTask?.cancel()
+
+        // Schedule debounced flush
+        textFlushTask = Task { [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(nanoseconds: self.textFlushDelay)
+            guard !Task.isCancelled else { return }
+            self.flushTextBuffer()
+        }
+    }
+
+    /// Immediately flush buffer to currentText (called before tool use or on demand)
+    private func flushTextBuffer() {
+        textFlushTask?.cancel()
+        guard !textBuffer.isEmpty else { return }
+
+        currentText = textBuffer
+        onText?(currentText)
+    }
+
+    /// Clear buffer and currentText (called when processing ends)
+    private func clearTextBuffer() {
+        textFlushTask?.cancel()
+        textBuffer = ""
+    }
+
     /// Process content from a message (handles both array and string content)
     private func processContent(_ data: [String: Any]) {
         // Handle content array
@@ -1131,15 +1186,17 @@ class WebSocketManager: ObservableObject {
                             parseModelSwitchResponse(text)
                         }
 
-                        currentText += text
-                        onText?(currentText)
+                        // Accumulate text in buffer (debounced update to currentText)
+                        appendToTextBuffer(text)
                     }
 
                 case "tool_use":
-                    // Commit any accumulated text before the tool use
+                    // Flush buffer and commit text before tool use
+                    flushTextBuffer()
                     if !currentText.isEmpty {
                         onTextCommit?(currentText)
                         currentText = ""
+                        clearTextBuffer()
                     }
                     let name = part["name"] as? String ?? "tool"
                     let input = part["input"] as? [String: Any]
@@ -1154,8 +1211,9 @@ class WebSocketManager: ObservableObject {
                         onAskUserQuestion?(questionData)
                     } else {
                         // Regular tool use
+                        // Use stringifyAnyValue to avoid "AnyCodable(value: ...)" in output
                         let inputStr = input.map { dict in
-                            dict.map { "\($0.key): \($0.value)" }.joined(separator: ", ")
+                            dict.map { "\($0.key): \(stringifyAnyValue($0.value))" }.joined(separator: ", ")
                         } ?? ""
                         onToolUse?(name, inputStr)
                     }
@@ -1175,8 +1233,8 @@ class WebSocketManager: ObservableObject {
         // Handle string content
         else if let content = data["content"] as? String, !content.isEmpty {
             log.debug("Found string content: \(content.prefix(100))")
-            currentText += content
-            onText?(currentText)
+            // Accumulate text in buffer (debounced update to currentText)
+            appendToTextBuffer(content)
         }
         // Handle message.content nested structure
         else if let message = data["message"] as? [String: Any],

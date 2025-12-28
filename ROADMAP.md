@@ -79,31 +79,27 @@ Implemented Trust-On-First-Use (TOFU) with Keychain storage.
 
 > **Priority**: High
 
-### 2.1 Handle Linter Conflict Errors
+### 2.1 Handle Linter Conflict Errors - DONE
 
 Session analysis found 13 occurrences of "File has been modified since read, either by a linter" errors that confuse users.
 
-| Task | File | Action |
+| Task | File | Status |
 |------|------|--------|
-| Detect linter conflict | `CLIMessageView.swift` | Add `isLinterConflict` check for "modified since read" |
-| Special UI treatment | `CLIMessageView.swift` | Show yellow warning with explanation instead of generic error |
+| Tool error classification | `ToolErrorClassification.swift` | **Done** - ToolErrorCategory enum with 12 error types |
+| Error pattern detection | `ToolResultParser.swift` | **Done** - Pattern matching for file conflicts, timeouts, etc. |
+| Error analytics tracking | `ErrorAnalyticsStore.swift` | **Done** - Tracks errors over time with trend detection |
+| Error insights UI | `ErrorInsightsView.swift` | **Done** - Visual dashboard for error patterns |
+| Semantic error badges | `CLIMessageView.swift` | **Done** - Category-specific icons and colors |
 
-**Implementation**:
-```swift
-private var isLinterConflict: Bool {
-    message.content.contains("modified since read") ||
-    message.content.contains("by a linter")
-}
+**New Error Categories** (in `ToolErrorClassification.swift`):
+- `success`, `gitError`, `commandFailed`, `sshError`
+- `invalidArgs`, `commandNotFound`, `fileConflict`, `fileNotFound`
+- `approvalRequired`, `timeout`, `permissionDenied`, `unknown`
 
-// Show special styling for this common recoverable error
-if isLinterConflict {
-    HStack {
-        Image(systemName: "arrow.clockwise")
-        Text("Linter modified file - Claude will re-read")
-    }
-    .foregroundColor(CLITheme.yellow(for: colorScheme))
-}
-```
+Each category has:
+- Icon, color, short label, full description
+- Suggested action for user
+- `isTransient` flag for retry logic
 
 ### 2.2 Read Tool File Extension Labels
 
@@ -273,14 +269,39 @@ Multiple error patterns coexist; standardize on:
 
 ## Phase 5: Performance & Polish
 
-> **Priority**: Medium
+> **Priority**: Medium | **Status**: Partially Complete
 
 ### 5.1 Async File IO
 
-| Task | File | Lines | Action |
+| Task | File | Lines | Status |
 |------|------|-------|--------|
-| Async message loading | `Models.swift` | 546 | Move file read to background |
-| Lazy image loading | `Models.swift` | 569 | Load image data on-demand |
+| Async message loading | `Models.swift` | 546 | Pending |
+| Lazy image loading | `Models.swift` | 569 | Pending |
+| Background bookmark I/O | `Models.swift` | BookmarkStore | **Done** - Uses fileQueue |
+| Background command I/O | `CommandStore.swift` | load/save | **Done** - Uses fileQueue |
+| Background ideas I/O | `IdeasStore.swift` | load/save | **Done** - Uses fileQueue |
+| Background settings I/O | `ProjectSettingsStore.swift` | load/save | **Done** - Uses fileQueue |
+
+### 5.1.1 Streaming Performance (NEW)
+
+| Task | File | Status |
+|------|------|--------|
+| Debounced text buffer | `WebSocketManager.swift` | **Done** - 50ms debounce reduces view updates |
+| Background JSON decoding | `WebSocketManager.swift` | **Done** - Decode on background thread |
+| Cached display messages | `ChatView.swift` | **Done** - Avoids recomputation during scrolling |
+| Stable streaming message ID | `ChatView.swift` | **Done** - Prevents view thrashing |
+| Cached CLIMessageView values | `CLIMessageView.swift` | **Done** - Pre-compute in init |
+| Cached MarkdownText blocks | `MarkdownText.swift` | **Done** - Parse only when content changes |
+| Cached DiffView lines | `DiffView.swift` | **Done** - Compute once on appear |
+
+### 5.1.2 Startup Performance (NEW)
+
+| Task | File | Status |
+|------|------|--------|
+| Project cache for instant startup | `ProjectCache.swift` | **Done** - Cache-first loading |
+| Skeleton loading UI | `SkeletonView.swift` | **Done** - Shimmer placeholders |
+| Progressive git status loading | `ContentView.swift` | **Done** - Updates UI as each status arrives |
+| Debounced scroll handling | `ScrollStateManager.swift` | **Done** - Prevents UI freeze during scrolling |
 
 ### 5.2 Timeout Handling
 
@@ -424,4 +445,4 @@ Phase 7 (Tests)        ═══════════════════
 
 ---
 
-_Last updated: December 28, 2025_
+_Last updated: December 28, 2025 (v0.5.1 - Performance & Error Analytics)_

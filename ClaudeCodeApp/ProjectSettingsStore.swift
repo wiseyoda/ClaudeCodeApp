@@ -23,6 +23,9 @@ class ProjectSettingsStore: ObservableObject {
     private let baseDirectory: URL
     private let fileManager: FileManager
 
+    /// Background queue for file I/O to avoid blocking main thread
+    private static let fileQueue = DispatchQueue(label: "com.claudecodeapp.projectsettingsstore", qos: .userInitiated)
+
     private var fileURL: URL {
         let settingsDirURL = baseDirectory.appendingPathComponent(settingsDirectory)
 
@@ -96,26 +99,45 @@ class ProjectSettingsStore: ObservableObject {
     // MARK: - Persistence
 
     private func load() {
-        guard fileManager.fileExists(atPath: fileURL.path) else {
-            projectSettings = [:]
-            return
-        }
+        let url = fileURL
 
-        do {
-            let data = try Data(contentsOf: fileURL)
-            projectSettings = try JSONDecoder().decode([String: ProjectSettings].self, from: data)
-        } catch {
-            log.error("Failed to load project settings: \(error)")
-            projectSettings = [:]
+        // Perform file I/O on background queue to avoid blocking main thread
+        ProjectSettingsStore.fileQueue.async { [weak self] in
+            guard FileManager.default.fileExists(atPath: url.path) else {
+                Task { @MainActor [weak self] in
+                    self?.projectSettings = [:]
+                }
+                return
+            }
+
+            do {
+                let data = try Data(contentsOf: url)
+                let loadedSettings = try JSONDecoder().decode([String: ProjectSettings].self, from: data)
+                Task { @MainActor [weak self] in
+                    self?.projectSettings = loadedSettings
+                }
+            } catch {
+                log.error("Failed to load project settings: \(error)")
+                Task { @MainActor [weak self] in
+                    self?.projectSettings = [:]
+                }
+            }
         }
     }
 
     private func save() {
-        do {
-            let data = try JSONEncoder().encode(projectSettings)
-            try data.write(to: fileURL, options: .atomic)
-        } catch {
-            log.error("Failed to save project settings: \(error)")
+        // Capture data needed for background save
+        let settingsToSave = projectSettings
+        let url = fileURL
+
+        // Perform file I/O on background queue to avoid blocking main thread
+        ProjectSettingsStore.fileQueue.async {
+            do {
+                let data = try JSONEncoder().encode(settingsToSave)
+                try data.write(to: url, options: .atomic)
+            } catch {
+                log.error("Failed to save project settings: \(error)")
+            }
         }
     }
 }

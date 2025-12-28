@@ -8,6 +8,7 @@ struct ContentView: View {
     @StateObject private var apiClient = APIClient()
     @State private var projects: [Project] = []
     @State private var isLoading = true
+    @State private var isFetchingFresh = false  // True when fetching fresh data (but have cache)
     @State private var errorMessage: String?
     @State private var showSettings = false
     @State private var showTerminal = false
@@ -20,6 +21,7 @@ struct ContentView: View {
     @ObservedObject private var sessionManager = SessionManager.shared
     @StateObject private var commandStore = CommandStore.shared
     @ObservedObject private var archivedStore = ArchivedProjectsStore.shared
+    @ObservedObject private var projectCache = ProjectCache.shared
 
     // Project rename state
     @State private var projectToRename: Project?
@@ -38,6 +40,9 @@ struct ContentView: View {
     // Selected project for NavigationSplitView
     @State private var selectedProject: Project?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
+
+    // Progressive loading state
+    @State private var loadingStatus: String?
 
     var body: some View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
@@ -125,7 +130,7 @@ struct ContentView: View {
                 }
         } detail: {
             // Detail: Chat view or placeholder
-            if isLoading {
+            if isLoading && !projectCache.hasCachedData {
                 // Show loading in detail pane too (iPhone shows detail first)
                 loadingView
             } else if let project = selectedProject {
@@ -232,13 +237,48 @@ struct ContentView: View {
             apiClient.configure(with: settings)
         }
         .task {
-            await loadProjects()
-            if !projects.isEmpty {
-                await checkAllGitStatuses()
-                await discoverAllSubRepos()
-                await loadAllSessionCounts()
-            }
+            await loadProjectsWithCache()
         }
+    }
+
+    // MARK: - Cached Loading Flow
+
+    /// Load projects with cache-first strategy for instant startup
+    private func loadProjectsWithCache() async {
+        // Step 1: Immediately show cached data if available
+        if projectCache.hasCachedData {
+            projects = projectCache.cachedProjects
+            gitStatuses = projectCache.cachedGitStatuses
+            isLoading = false
+            isFetchingFresh = true
+            loadingStatus = "Updating..."
+            log.info("[Startup] Showing \(projects.count) cached projects instantly")
+        }
+
+        // Step 2: Fetch fresh project list from server
+        await loadProjects()
+
+        // Step 3: Defer heavy operations to after UI is shown
+        // Use a small delay to let the UI render first
+        if !projects.isEmpty {
+            // Start git checks in background (progressive loading)
+            loadingStatus = "Checking git..."
+            await checkAllGitStatusesProgressive()
+
+            // Discover sub-repos (lower priority)
+            loadingStatus = "Scanning repos..."
+            await discoverAllSubRepos()
+
+            // Load session counts last
+            loadingStatus = nil
+            await loadAllSessionCounts()
+
+            // Save to cache for next startup
+            projectCache.saveProjects(projects, gitStatuses: gitStatuses)
+        }
+
+        isFetchingFresh = false
+        loadingStatus = nil
     }
 
     // MARK: - Sidebar Content
@@ -246,12 +286,25 @@ struct ContentView: View {
     @ViewBuilder
     private var sidebarContent: some View {
         Group {
-            if isLoading {
-                loadingView
-            } else if let error = errorMessage {
+            if isLoading && !projectCache.hasCachedData {
+                // First launch with no cache - show skeleton
+                SkeletonProjectList()
+            } else if let error = errorMessage, projects.isEmpty {
+                // Error with no data to show
                 errorView(error)
             } else {
-                projectListView
+                // Show project list (cached or fresh)
+                ZStack(alignment: .top) {
+                    projectListView
+
+                    // Progressive loading banner
+                    if let status = loadingStatus {
+                        ProgressiveBanner(message: status)
+                            .padding(.top, 8)
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                }
+                .animation(.easeInOut(duration: 0.2), value: loadingStatus)
             }
         }
         .background(CLITheme.background(for: colorScheme))
@@ -542,12 +595,21 @@ struct ContentView: View {
     }
 
     private func loadProjects() async {
-        isLoading = true
+        // Only show full loading if we don't have cached data
+        if !projectCache.hasCachedData {
+            isLoading = true
+        }
         errorMessage = nil
 
         do {
-            projects = try await apiClient.fetchProjects()
+            let freshProjects = try await apiClient.fetchProjects()
+            projects = freshProjects
             isLoading = false
+
+            // If we were showing cached data, log the update
+            if isFetchingFresh {
+                log.info("[Startup] Updated to \(freshProjects.count) fresh projects")
+            }
         } catch APIError.authenticationFailed {
             if !settings.apiKey.isEmpty {
                 errorMessage = "API Key authentication failed.\n\nCheck your API key in Settings."
@@ -556,7 +618,13 @@ struct ContentView: View {
             }
             isLoading = false
         } catch {
-            errorMessage = "Failed to connect to server.\n\nCheck Tailscale and server at:\n\(settings.serverURL)"
+            // If we have cached data, show it with a warning instead of blocking
+            if projectCache.hasCachedData {
+                log.warning("[Startup] Using cached projects due to network error: \(error)")
+                // Keep showing cached projects, don't set error that would hide them
+            } else {
+                errorMessage = "Failed to connect to server.\n\nCheck Tailscale and server at:\n\(settings.serverURL)"
+            }
             isLoading = false
         }
     }
@@ -647,6 +715,52 @@ struct ContentView: View {
             }
             showGitRefreshError = true
         }
+    }
+
+    /// Check git status for all projects with progressive UI updates
+    /// Unlike checkAllGitStatuses, this updates the UI as each status comes in
+    private func checkAllGitStatusesProgressive() async {
+        guard !isCheckingGitStatus else { return }
+        isCheckingGitStatus = true
+
+        // Don't mark all as checking - let cached statuses show while we update
+        // This provides a smoother visual experience
+
+        // Pre-connect SSH once before parallel git checks
+        if !sshManager.isConnected {
+            do {
+                try await sshManager.autoConnect(settings: settings)
+            } catch {
+                isCheckingGitStatus = false
+                return
+            }
+        }
+
+        // Check each project's git status concurrently
+        // Update UI immediately as each result comes in (progressive loading)
+        await withTaskGroup(of: (String, GitStatus).self) { group in
+            for project in projects {
+                group.addTask {
+                    let status = await sshManager.checkGitStatusWithAutoConnect(
+                        project.path,
+                        settings: settings
+                    )
+                    return (project.path, status)
+                }
+            }
+
+            // Progressive update: update UI as each status comes in
+            for await (path, status) in group {
+                gitStatuses[path] = status
+                // Also update the cache progressively
+                projectCache.updateGitStatus(for: path, status: status)
+            }
+        }
+
+        isCheckingGitStatus = false
+
+        // Silent error handling for progressive loading
+        // Errors are shown in the UI via status indicators
     }
 
     /// Refresh git status for a single project

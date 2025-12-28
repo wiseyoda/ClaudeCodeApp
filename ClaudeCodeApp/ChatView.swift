@@ -39,6 +39,10 @@ struct ChatView: View {
     @State private var scrollToBottomTrigger = false
     @State private var pendingQuestions: AskUserQuestionData?
 
+    // MARK: - Streaming Message Cache (prevents view thrashing during streaming)
+    @State private var streamingMessageId = UUID()
+    @State private var streamingMessageTimestamp = Date()
+
     // MARK: - Search State
     @State private var isSearching = false
     @State private var searchText = ""
@@ -72,6 +76,11 @@ struct ChatView: View {
     // MARK: - Background Tasks
     @State private var disconnectTask: Task<Void, Never>?
     @State private var analyzeTask: Task<Void, Never>?
+    @State private var saveDebounceTask: Task<Void, Never>?
+
+    // MARK: - Display Messages Cache (prevents recomputation on every render)
+    @State private var cachedDisplayMessages: [ChatMessage] = []
+    @State private var displayMessagesInvalidationKey: Int = 0
 
     init(project: Project, apiClient: APIClient, initialGitStatus: GitStatus = .unknown, onSessionsChanged: (() -> Void)? = nil) {
         self.project = project
@@ -192,10 +201,15 @@ struct ChatView: View {
                 let savedMessages = await MessageStore.loadMessages(for: project.path)
                 if !savedMessages.isEmpty {
                     messages = savedMessages
+                    // Initialize display messages cache
+                    refreshDisplayMessagesCache()
                     // Trigger scroll to bottom after a short delay to allow SwiftUI to render
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                         scrollToBottomTrigger = true
                     }
+                } else {
+                    // Initialize empty cache
+                    refreshDisplayMessagesCache()
                 }
             }
 
@@ -282,7 +296,9 @@ struct ChatView: View {
             }
         }
         .onDisappear {
-            // Save messages when leaving
+            // Cancel debounce and save messages immediately when leaving
+            saveDebounceTask?.cancel()
+            saveDebounceTask = nil
             MessageStore.saveMessages(messages, for: project.path, maxMessages: settings.historyLimit.rawValue)
 
             // Cancel git refresh task
@@ -304,8 +320,26 @@ struct ChatView: View {
             }
         }
         .onChange(of: messages) { _, newMessages in
-            // Save messages whenever they change (debounced by iOS)
-            MessageStore.saveMessages(newMessages, for: project.path, maxMessages: settings.historyLimit.rawValue)
+            // Debounce save to avoid excessive file I/O during streaming
+            // UI cache refreshes immediately, but file save waits 500ms for batching
+            saveDebounceTask?.cancel()
+            let projectPath = project.path
+            let maxMessages = settings.historyLimit.rawValue
+            saveDebounceTask = Task {
+                try? await Task.sleep(nanoseconds: 500_000_000)  // 500ms debounce
+                guard !Task.isCancelled else { return }
+                MessageStore.saveMessages(newMessages, for: projectPath, maxMessages: maxMessages)
+            }
+            // Refresh display messages cache immediately for responsive UI
+            refreshDisplayMessagesCache()
+        }
+        .onChange(of: searchText) { _, _ in
+            // Refresh display messages cache when search changes
+            refreshDisplayMessagesCache()
+        }
+        .onChange(of: messageFilter) { _, _ in
+            // Refresh display messages cache when filter changes
+            refreshDisplayMessagesCache()
         }
         .onChange(of: inputText) { _, newText in
             // Auto-save draft input
@@ -316,9 +350,15 @@ struct ChatView: View {
                 claudeHelper.clearSuggestions()
             }
         }
-        .onChange(of: wsManager.isProcessing) { _, isProcessing in
+        .onChange(of: wsManager.isProcessing) { oldValue, isProcessing in
             // Save processing state for session recovery on app restart
             MessageStore.saveProcessingState(isProcessing, for: project.path)
+
+            // Reset streaming message cache when new streaming session starts
+            if isProcessing && !oldValue {
+                streamingMessageId = UUID()
+                streamingMessageTimestamp = Date()
+            }
 
             // Refocus input when processing completes
             if !isProcessing {
@@ -397,6 +437,7 @@ struct ChatView: View {
                 ideasStore: ideasStore,
                 claudeHelper: claudeHelper,
                 projectPath: project.path,
+                currentSessionId: wsManager.sessionId,
                 onSendIdea: { idea in
                     appendToInput(idea.formattedPrompt)
                 }
@@ -657,11 +698,21 @@ struct ChatView: View {
                                         key: ContentSizePreferenceKey.self,
                                         value: contentGeometry.size
                                     )
+                                    // Track scroll offset for user scroll detection
+                                    .preference(
+                                        key: ScrollOffsetPreferenceKey.self,
+                                        value: contentGeometry.frame(in: .named("chatScroll")).minY
+                                    )
                             }
                         )
                 }
                 .coordinateSpace(name: "chatScroll")
                 .background(CLITheme.background(for: colorScheme))
+                // Detect user scrolling - uses debounced handler to prevent UI freezes
+                .onPreferenceChange(ScrollOffsetPreferenceKey.self) { offset in
+                    // Use debounced handler to avoid rapid state updates during scrolling
+                    scrollManager.handleScrollOffset(offset)
+                }
                 // Track scroll position to detect user scrolling up
                 .onPreferenceChange(ContentSizePreferenceKey.self) { contentSize in
                     // Only track when content is larger than viewport
@@ -680,24 +731,15 @@ struct ChatView: View {
                         }
                     }
                 }
-                // Trigger scroll on new messages (debounced via scrollManager)
+                // Consolidated scroll triggers - all go through scrollManager for debouncing
+                // Removed currentText.count handler to prevent scroll jitter during streaming
                 .onChange(of: messages.count) { _, _ in
                     guard settings.autoScrollEnabled else { return }
                     scrollManager.requestScrollToBottom()
                 }
-                // Trigger scroll on streaming text (debounced - prevents jitter)
-                .onChange(of: wsManager.currentText.count) { oldCount, newCount in
-                    guard settings.autoScrollEnabled else { return }
-                    // Only scroll on significant changes (every 100 chars or so)
-                    // This prevents scroll jitter during rapid streaming
-                    if newCount == 0 || abs(newCount - oldCount) > 100 {
-                        scrollManager.requestScrollToBottom(animated: false)
-                    }
-                }
-                // Trigger scroll when processing state changes
                 .onChange(of: wsManager.isProcessing) { _, isProcessing in
                     guard settings.autoScrollEnabled else { return }
-                    // Scroll when starting or ending processing
+                    // Scroll when processing starts or ends
                     scrollManager.requestScrollToBottom()
                 }
                 // Handle explicit scroll trigger (loading history, etc.)
@@ -746,9 +788,40 @@ struct ChatView: View {
         }
     }
 
-    /// Messages filtered based on search, filter, and user settings
+    /// Messages filtered based on search, filter, and user settings.
+    /// Uses cached result to avoid recomputation on every render during scrolling.
     private var displayMessages: [ChatMessage] {
+        // Return cached value - cache is invalidated by onChange handlers
+        cachedDisplayMessages
+    }
+
+    /// Compute the current invalidation key based on filter dependencies.
+    /// When this changes, the cache needs to be refreshed.
+    private var currentDisplayMessagesKey: Int {
+        var hasher = Hasher()
+        hasher.combine(messages.count)
+        hasher.combine(messages.last?.id)
+        hasher.combine(messages.last?.content.count)  // Detect content updates
+        hasher.combine(searchText)
+        hasher.combine(messageFilter)
+        hasher.combine(settings.showThinkingBlocks)
+        return hasher.finalize()
+    }
+
+    /// Refresh the cached display messages when dependencies change.
+    private func refreshDisplayMessagesCache() {
+        let newKey = currentDisplayMessagesKey
+        guard newKey != displayMessagesInvalidationKey else { return }
+        displayMessagesInvalidationKey = newKey
+        cachedDisplayMessages = computeDisplayMessages()
+    }
+
+    /// Compute filtered messages (called only when cache is invalidated).
+    private func computeDisplayMessages() -> [ChatMessage] {
         var filtered = messages
+
+        // Filter out ClaudeHelper internal prompts (suggestions, file hints, idea enhancement)
+        filtered = filtered.filter { !isClaudeHelperPrompt($0.content) }
 
         // Apply thinking block visibility setting
         if !settings.showThinkingBlocks {
@@ -768,6 +841,49 @@ struct ChatView: View {
         }
 
         return filtered
+    }
+
+    /// Check if a message is a ClaudeHelper internal prompt or response that should be hidden
+    private func isClaudeHelperPrompt(_ content: String) -> Bool {
+        // User prompts from ClaudeHelper
+        let helperPrefixes = [
+            "Based on this conversation context, suggest",
+            "Based on this conversation, which files would be most relevant",
+            "You are helping a developer expand a quick idea into an actionable prompt",
+            "Analyze this Claude Code response and suggest"
+        ]
+        if helperPrefixes.contains(where: { content.hasPrefix($0) }) {
+            return true
+        }
+
+        // JSON responses from ClaudeHelper (suggestions array or enhanced idea object)
+        // Handle both compact and pretty-printed JSON, and markdown code blocks
+        var trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Strip markdown code fence if present (```json ... ```)
+        if trimmed.hasPrefix("```") {
+            // Remove opening fence (```json or ```)
+            if let firstNewline = trimmed.firstIndex(of: "\n") {
+                trimmed = String(trimmed[trimmed.index(after: firstNewline)...])
+            }
+            // Remove closing fence
+            if trimmed.hasSuffix("```") {
+                trimmed = String(trimmed.dropLast(3))
+            }
+            trimmed = trimmed.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        // Suggestions array: starts with [ and contains "label" and "prompt"
+        if trimmed.hasPrefix("[") && trimmed.contains("\"label\"") && trimmed.contains("\"prompt\"") {
+            return true
+        }
+
+        // Enhanced idea object: starts with { and contains "expandedPrompt"
+        if trimmed.hasPrefix("{") && trimmed.contains("\"expandedPrompt\"") {
+            return true
+        }
+
+        return false
     }
 
     private var messagesListView: some View {
@@ -841,17 +957,20 @@ struct ChatView: View {
             .padding(.vertical, 4)
             .id("streaming")
         } else {
+            // Use cached ID and timestamp to prevent view thrashing during streaming
+            // The message struct is still recreated, but with stable identity
             CLIMessageView(
                 message: ChatMessage(
+                    id: streamingMessageId,
                     role: .assistant,
                     content: wsManager.currentText,
-                    timestamp: Date(),
+                    timestamp: streamingMessageTimestamp,
                     isStreaming: true
                 ),
                 projectPath: project.path,
                 projectTitle: project.title
             )
-            .id("streaming")
+            .id(streamingMessageId)  // Stable ID prevents LazyVStack recalculation
         }
     }
 
@@ -1541,16 +1660,10 @@ struct ChatView: View {
     /// Get the model ID to pass in WebSocket messages
     private var effectiveModelId: String? {
         let model = currentModel ?? settings.defaultModel
-        switch model {
-        case .opus:
-            return "claude-opus-4-5-20251101"
-        case .sonnet:
-            return "claude-sonnet-4-5-20250929"
-        case .haiku:
-            return "claude-3-5-haiku-20241022"
-        case .custom:
+        if model == .custom {
             return customModelId.isEmpty ? nil : customModelId
         }
+        return model.modelId
     }
 
     /// Whether to skip permissions for this project (considers per-project override)
@@ -1958,6 +2071,14 @@ extension View {
 struct ContentSizePreferenceKey: PreferenceKey {
     static var defaultValue: CGSize = .zero
     static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
+        value = nextValue()
+    }
+}
+
+/// Preference key for tracking scroll offset within coordinate space
+struct ScrollOffsetPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
         value = nextValue()
     }
 }

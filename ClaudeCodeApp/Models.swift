@@ -1,6 +1,56 @@
 import Foundation
 import SwiftUI
 
+// MARK: - Global Utility Functions
+
+/// Convert Any value to a display string, handling nested types properly.
+/// This avoids showing type wrappers like "AnyCodable(value: ...)" in the UI.
+func stringifyAnyValue(_ value: Any) -> String {
+    // Handle String directly
+    if let str = value as? String {
+        return str
+    }
+    // Handle numbers and bools
+    if let num = value as? NSNumber {
+        return num.stringValue
+    }
+    // Handle AnyCodable wrapper (defined later in this file)
+    if let codable = value as? AnyCodable {
+        return codable.stringValue
+    }
+    // Handle dictionaries - convert to JSON or extract common fields
+    if let dict = value as? [String: Any] {
+        // Try to extract "stdout" for bash results
+        if let stdout = dict["stdout"] as? String {
+            return stdout
+        }
+        // Convert to JSON
+        if let data = try? JSONSerialization.data(withJSONObject: dict, options: []),
+           let str = String(data: data, encoding: .utf8) {
+            return str
+        }
+    }
+    // Handle arrays
+    if let array = value as? [Any] {
+        if let data = try? JSONSerialization.data(withJSONObject: array, options: []),
+           let str = String(data: data, encoding: .utf8) {
+            return str
+        }
+    }
+    // Fallback - use String(describing:) but avoid showing type names
+    let description = String(describing: value)
+    // Strip common wrapper patterns like "AnyCodable(value: ...)" or "Optional(...)"
+    if description.hasPrefix("AnyCodable(value: ") && description.hasSuffix(")") {
+        let inner = description.dropFirst("AnyCodable(value: ".count).dropLast()
+        return String(inner)
+    }
+    if description.hasPrefix("AnyCodableValue(value: ") && description.hasSuffix(")") {
+        let inner = description.dropFirst("AnyCodableValue(value: ".count).dropLast()
+        return String(inner)
+    }
+    return description
+}
+
 // MARK: - Claude Model Selection
 
 /// Available Claude models for the app
@@ -80,6 +130,16 @@ enum ClaudeModel: String, CaseIterable, Identifiable, Codable {
         case .opus: return "opus"
         case .sonnet: return "sonnet"
         case .haiku: return "haiku"
+        case .custom: return nil
+        }
+    }
+
+    /// The full model ID to pass in WebSocket message options (nil for custom)
+    var modelId: String? {
+        switch self {
+        case .opus: return "claude-opus-4-5-20251101"
+        case .sonnet: return "claude-sonnet-4-5-20250929"
+        case .haiku: return "claude-3-5-haiku-20241022"
         case .custom: return nil
         }
     }
@@ -468,6 +528,18 @@ struct ChatMessage: Identifiable, Equatable, Codable {
         self.tokenCount = tokenCount
     }
 
+    /// Initializer with explicit ID - used for streaming messages to maintain stable identity
+    init(id: UUID, role: Role, content: String, timestamp: Date = Date(), isStreaming: Bool = false, imageData: Data? = nil, executionTime: TimeInterval? = nil, tokenCount: Int? = nil) {
+        self.id = id
+        self.role = role
+        self.content = content
+        self.timestamp = timestamp
+        self.isStreaming = isStreaming
+        self.imageData = imageData
+        self.executionTime = executionTime
+        self.tokenCount = tokenCount
+    }
+
     static func == (lhs: ChatMessage, rhs: ChatMessage) -> Bool {
         lhs.id == rhs.id
     }
@@ -496,14 +568,66 @@ private struct ChatMessageDTO: Codable {
     }
 
     func toChatMessage(imageData: Data?) -> ChatMessage {
+        // Clean any corrupted content that has "AnyCodableValue(value: ...)" wrappers
+        let cleanedContent = Self.cleanAnyCodableWrappers(content)
         return ChatMessage(
             role: ChatMessage.Role(rawValue: role) ?? .system,
-            content: content,
+            content: cleanedContent,
             timestamp: timestamp,
             imageData: imageData,
             executionTime: executionTime,
             tokenCount: tokenCount
         )
+    }
+
+    /// Clean AnyCodableValue wrappers from cached content (migration fix)
+    private static func cleanAnyCodableWrappers(_ text: String) -> String {
+        var result = text
+
+        // Pattern: AnyCodableValue(value: "...") or AnyCodableValue(value: ...)
+        // Replace with just the inner value
+        while let range = result.range(of: "AnyCodableValue(value: ") {
+            // Find the matching closing paren
+            let startIndex = range.lowerBound
+            let afterPrefix = range.upperBound
+
+            // Check if value is quoted
+            if result[afterPrefix] == "\"" {
+                // Quoted string - find closing quote (handle escaped quotes)
+                var idx = result.index(after: afterPrefix)
+                var escaped = false
+                while idx < result.endIndex {
+                    let char = result[idx]
+                    if escaped {
+                        escaped = false
+                    } else if char == "\\" {
+                        escaped = true
+                    } else if char == "\"" {
+                        // Found closing quote, now expect )
+                        let afterQuote = result.index(after: idx)
+                        if afterQuote < result.endIndex && result[afterQuote] == ")" {
+                            // Extract inner value (without quotes)
+                            let innerValue = String(result[result.index(after: afterPrefix)..<idx])
+                            result.replaceSubrange(startIndex...afterQuote, with: innerValue)
+                            break
+                        }
+                    }
+                    idx = result.index(after: idx)
+                }
+                // If we couldn't parse it properly, break to avoid infinite loop
+                if idx >= result.endIndex { break }
+            } else {
+                // Unquoted - find closing paren (simple case, no nested parens)
+                if let closeParen = result[afterPrefix...].firstIndex(of: ")") {
+                    let innerValue = String(result[afterPrefix..<closeParen])
+                    result.replaceSubrange(startIndex...closeParen, with: innerValue)
+                } else {
+                    break // No closing paren found
+                }
+            }
+        }
+
+        return result
     }
 }
 
@@ -871,6 +995,9 @@ class BookmarkStore: ObservableObject {
         return docs.appendingPathComponent("bookmarks.json")
     }
 
+    /// Background queue for file I/O to avoid blocking main thread
+    private static let fileQueue = DispatchQueue(label: "com.claudecodeapp.bookmarkstore", qos: .userInitiated)
+
     private let bookmarksFile: URL
 
     init(bookmarksFile: URL? = nil) {
@@ -918,22 +1045,37 @@ class BookmarkStore: ObservableObject {
     }
 
     private func loadBookmarks() {
-        guard let data = try? Data(contentsOf: bookmarksFile) else { return }
-        do {
-            bookmarks = try JSONDecoder().decode([BookmarkedMessage].self, from: data)
-            log.debug("Loaded \(bookmarks.count) bookmarks")
-        } catch {
-            log.error("Failed to load bookmarks: \(error)")
+        let url = bookmarksFile
+
+        // Perform file I/O on background queue to avoid blocking main thread
+        BookmarkStore.fileQueue.async { [weak self] in
+            guard let data = try? Data(contentsOf: url) else { return }
+            do {
+                let loadedBookmarks = try JSONDecoder().decode([BookmarkedMessage].self, from: data)
+                Task { @MainActor [weak self] in
+                    self?.bookmarks = loadedBookmarks
+                    log.debug("Loaded \(loadedBookmarks.count) bookmarks")
+                }
+            } catch {
+                log.error("Failed to load bookmarks: \(error)")
+            }
         }
     }
 
     private func saveBookmarks() {
-        do {
-            let data = try JSONEncoder().encode(bookmarks)
-            try data.write(to: bookmarksFile, options: .atomic)
-            log.debug("Saved \(bookmarks.count) bookmarks")
-        } catch {
-            log.error("Failed to save bookmarks: \(error)")
+        // Capture data needed for background save
+        let bookmarksToSave = bookmarks
+        let url = bookmarksFile
+
+        // Perform file I/O on background queue to avoid blocking main thread
+        BookmarkStore.fileQueue.async {
+            do {
+                let data = try JSONEncoder().encode(bookmarksToSave)
+                try data.write(to: url, options: .atomic)
+                log.debug("Saved \(bookmarksToSave.count) bookmarks")
+            } catch {
+                log.error("Failed to save bookmarks: \(error)")
+            }
         }
     }
 }
@@ -1004,6 +1146,16 @@ class SessionHistoryLoader {
         }
     }
 
+    /// Convert Any value to string - delegates to global stringifyAnyValue
+    private static func stringifyValue(_ value: Any) -> String {
+        // Handle AnyCodable wrapper (specific to this context)
+        if let codable = value as? AnyCodable {
+            return codable.stringValue
+        }
+        // Use global helper for everything else
+        return stringifyAnyValue(value)
+    }
+
     private static func parseTimestamp(_ value: Any?) -> Date? {
         guard let timestampStr = value as? String else { return nil }
 
@@ -1068,7 +1220,7 @@ class SessionHistoryLoader {
                     if let name = item["name"] as? String {
                         var toolContent = name
                         if let input = item["input"] as? [String: Any] {
-                            let inputStr = input.map { "\($0.key): \($0.value)" }.joined(separator: ", ")
+                            let inputStr = input.map { "\($0.key): \(stringifyValue($0.value))" }.joined(separator: ", ")
                             toolContent = "\(name)(\(inputStr))"
                         }
                         return ChatMessage(role: .toolUse, content: toolContent, timestamp: timestamp)
@@ -1141,7 +1293,7 @@ struct WSMessage: Decodable {
 }
 
 // Helper for dynamic JSON
-struct AnyCodable: Decodable {
+struct AnyCodable: Decodable, CustomStringConvertible {
     let value: Any
 
     init(_ value: Any) {
@@ -1165,6 +1317,11 @@ struct AnyCodable: Decodable {
         } else {
             value = ""
         }
+    }
+
+    /// CustomStringConvertible - returns just the value for string interpolation
+    var description: String {
+        stringValue
     }
 
     var stringValue: String {

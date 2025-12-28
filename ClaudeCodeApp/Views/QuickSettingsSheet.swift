@@ -11,52 +11,42 @@ struct QuickSettingsSheet: View {
 
     let tokenUsage: (current: Int, max: Int)?
     @State private var showDebugLog = false
+    @State private var showErrorInsights = false
+    @ObservedObject private var errorAnalytics = ErrorAnalyticsStore.shared
 
     var body: some View {
         NavigationStack {
             List {
-                // Model Selection
+                // Model & Mode Selection (compact)
                 Section {
-                    ForEach(ClaudeModel.allCases, id: \.self) { model in
-                        ModelRow(model: model, isSelected: settings.defaultModel == model) {
-                            settings.defaultModel = model
+                    Picker(selection: $settings.defaultModel) {
+                        ForEach(ClaudeModel.allCases, id: \.self) { model in
+                            Label(model.shortName, systemImage: model.icon)
+                                .tag(model)
                         }
+                    } label: {
+                        Label("Model", systemImage: "cpu")
                     }
-                } header: {
-                    Text("Model")
-                }
 
-                // Claude Mode
-                Section {
-                    ForEach(ClaudeMode.allCases, id: \.self) { mode in
-                        ModeRow(
-                            title: mode.displayName,
-                            subtitle: mode.description,
-                            icon: mode.icon,
-                            isSelected: settings.claudeMode == mode
-                        ) {
-                            settings.claudeMode = mode
+                    Picker(selection: $settings.claudeMode) {
+                        ForEach(ClaudeMode.allCases, id: \.self) { mode in
+                            Label(mode.displayName, systemImage: mode.icon)
+                                .tag(mode)
                         }
+                    } label: {
+                        Label("Permission Mode", systemImage: "lock.shield")
                     }
-                } header: {
-                    Text("Permission Mode")
-                }
 
-                // Thinking Mode
-                Section {
-                    ForEach(ThinkingMode.allCases, id: \.self) { mode in
-                        ModeRow(
-                            title: mode.displayName,
-                            subtitle: thinkingModeDescription(mode),
-                            icon: mode.icon,
-                            isSelected: settings.thinkingMode == mode,
-                            tintColor: mode.color
-                        ) {
-                            settings.thinkingMode = mode
+                    Picker(selection: $settings.thinkingMode) {
+                        ForEach(ThinkingMode.allCases, id: \.self) { mode in
+                            Label(mode.displayName, systemImage: mode.icon)
+                                .tag(mode)
                         }
+                    } label: {
+                        Label("Thinking Mode", systemImage: "brain")
                     }
                 } header: {
-                    Text("Thinking Mode")
+                    Text("Claude")
                 }
 
                 // Token Usage
@@ -144,6 +134,27 @@ struct QuickSettingsSheet: View {
                                 .foregroundColor(CLITheme.mutedText(for: colorScheme))
                         }
                     }
+
+                    Button {
+                        showErrorInsights = true
+                    } label: {
+                        HStack {
+                            Label("Error Insights", systemImage: "exclamationmark.triangle")
+                            Spacer()
+                            if errorAnalytics.totalErrors > 0 {
+                                Text("\(errorAnalytics.totalErrors)")
+                                    .font(.caption)
+                                    .foregroundColor(CLITheme.red(for: colorScheme))
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 2)
+                                    .background(CLITheme.red(for: colorScheme).opacity(0.15))
+                                    .cornerRadius(8)
+                            }
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                        }
+                    }
                 } header: {
                     Text("Developer")
                 } footer: {
@@ -166,106 +177,11 @@ struct QuickSettingsSheet: View {
         .sheet(isPresented: $showDebugLog) {
             DebugLogView()
         }
-    }
-
-    private func thinkingModeDescription(_ mode: ThinkingMode) -> String {
-        switch mode {
-        case .normal: return "Standard responses"
-        case .think: return "Light reasoning"
-        case .thinkHard: return "Deeper analysis"
-        case .thinkHarder: return "Extended reasoning"
-        case .ultrathink: return "Maximum depth"
+        .sheet(isPresented: $showErrorInsights) {
+            ErrorInsightsView()
         }
     }
-}
 
-// MARK: - Model Row
-
-private struct ModelRow: View {
-    let model: ClaudeModel
-    let isSelected: Bool
-    let action: () -> Void
-    @Environment(\.colorScheme) var colorScheme
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: model.icon)
-                    .font(.system(size: 16))
-                    .foregroundColor(isSelected ? .white : CLITheme.blue(for: colorScheme))
-                    .frame(width: 32, height: 32)
-                    .background(isSelected ? CLITheme.blue(for: colorScheme) : CLITheme.blue(for: colorScheme).opacity(0.15))
-                    .cornerRadius(8)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(model.shortName)
-                        .font(.body)
-                        .foregroundColor(CLITheme.primaryText(for: colorScheme))
-
-                    Text(model.description)
-                        .font(.caption)
-                        .foregroundColor(CLITheme.secondaryText(for: colorScheme))
-                }
-
-                Spacer()
-
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(CLITheme.blue(for: colorScheme))
-                }
-            }
-        }
-        .listRowBackground(CLITheme.secondaryBackground(for: colorScheme))
-    }
-}
-
-// MARK: - Mode Row
-
-private struct ModeRow: View {
-    let title: String
-    let subtitle: String
-    let icon: String
-    let isSelected: Bool
-    var tintColor: Color? = nil
-    let action: () -> Void
-    @Environment(\.colorScheme) var colorScheme
-
-    private var effectiveTint: Color {
-        tintColor ?? CLITheme.blue(for: colorScheme)
-    }
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.system(size: 14))
-                    .foregroundColor(isSelected ? .white : effectiveTint)
-                    .frame(width: 28, height: 28)
-                    .background(isSelected ? effectiveTint : effectiveTint.opacity(0.15))
-                    .cornerRadius(6)
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title)
-                        .font(.body)
-                        .foregroundColor(CLITheme.primaryText(for: colorScheme))
-
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundColor(CLITheme.secondaryText(for: colorScheme))
-                }
-
-                Spacer()
-
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(effectiveTint)
-                }
-            }
-        }
-        .listRowBackground(CLITheme.secondaryBackground(for: colorScheme))
-    }
 }
 
 // MARK: - Quick Settings Token View

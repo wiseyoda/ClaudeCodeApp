@@ -358,7 +358,7 @@ struct SessionMessage: Codable {
                         if let name = item.name {
                             var toolContent = name
                             if let input = item.input {
-                                let inputStr = input.map { "\($0.key): \($0.value)" }.joined(separator: ", ")
+                                let inputStr = input.map { "\($0.key): \($0.value.stringValue)" }.joined(separator: ", ")
                                 toolContent = "\(name)(\(inputStr))"
                             }
                             return ChatMessage(role: .toolUse, content: toolContent, timestamp: date)
@@ -405,19 +405,18 @@ struct SessionContentItem: Codable {
 }
 
 /// Flexible value type for JSON parsing
-struct AnyCodableValue: Codable {
+struct AnyCodableValue: Codable, CustomStringConvertible {
     let value: Any
 
+    /// CustomStringConvertible - returns just the value for string interpolation
+    var description: String {
+        stringValue
+    }
+
     var stringValue: String {
-        if let s = value as? String { return s }
-        if let dict = value as? [String: Any] {
-            if let stdout = dict["stdout"] as? String { return stdout }
-            if let data = try? JSONSerialization.data(withJSONObject: dict),
-               let str = String(data: data, encoding: .utf8) {
-                return str
-            }
-        }
-        return String(describing: value)
+        // Use global stringifyAnyValue for proper type handling
+        // This avoids "AnyCodableValue(value: ...)" appearing in output
+        return stringifyAnyValue(value)
     }
 
     init(from decoder: Decoder) throws {
