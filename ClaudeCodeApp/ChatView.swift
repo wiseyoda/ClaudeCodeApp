@@ -1715,16 +1715,22 @@ struct GitSyncBanner: View {
         Button(action: action) {
             HStack(spacing: 3) {
                 Image(systemName: icon)
-                    .font(.system(size: 9, weight: .semibold))
+                    .font(.system(size: 9, weight: .bold))
                 Text(title)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 10, weight: .bold))
             }
+            // Dark mode: white text on colored background for high contrast
+            // Light mode: colored text on light colored background
             .foregroundColor(colorScheme == .dark ? .white : color)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
             .background(
                 Capsule()
-                    .fill(color.opacity(colorScheme == .dark ? 0.8 : 0.15))
+                    .fill(color.opacity(colorScheme == .dark ? 0.7 : 0.15))
+            )
+            .overlay(
+                Capsule()
+                    .strokeBorder(color.opacity(colorScheme == .dark ? 0.9 : 0.3), lineWidth: 0.5)
             )
         }
         .buttonStyle(.plain)
