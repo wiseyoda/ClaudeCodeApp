@@ -1,8 +1,20 @@
 import SwiftUI
 import UserNotifications
 
+// MARK: - App Delegate for Orientation Control
+
+class AppDelegate: NSObject, UIApplicationDelegate {
+    /// Controls which orientations are allowed. Updated by AppSettings.lockToPortrait
+    static var orientationLock: UIInterfaceOrientationMask = .portrait
+
+    func application(_ application: UIApplication, supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        return AppDelegate.orientationLock
+    }
+}
+
 @main
 struct ClaudeCodeAppApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var settings = AppSettings()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -19,6 +31,10 @@ struct ClaudeCodeAppApp: App {
         Task { @MainActor in
             DebugLogStore.shared.isEnabled = debugEnabled
         }
+
+        // Initialize orientation lock from settings
+        let lockToPortrait = UserDefaults.standard.object(forKey: "lockToPortrait") as? Bool ?? true
+        AppDelegate.orientationLock = lockToPortrait ? .portrait : .all
     }
 
     var body: some Scene {
@@ -31,6 +47,12 @@ struct ClaudeCodeAppApp: App {
                 ErrorBanner()
             }
             .preferredColorScheme(settings.appTheme.colorScheme)
+            // Update orientation lock when setting changes
+            .onChange(of: settings.lockToPortrait) { _, lockToPortrait in
+                AppDelegate.orientationLock = lockToPortrait ? .portrait : .all
+                // If unlocking, no action needed. If locking to portrait and currently in landscape,
+                // the user will need to rotate the device (iOS doesn't force rotation programmatically easily)
+            }
         }
     }
 }

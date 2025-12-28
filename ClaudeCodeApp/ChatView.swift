@@ -1038,8 +1038,8 @@ struct ChatView: View {
                 showQuickSettings: $showQuickSettings
             )
 
-            // AI-powered suggestion chips (shown when not processing and not typing)
-            if !wsManager.isProcessing && inputText.isEmpty && !claudeHelper.suggestedActions.isEmpty {
+            // AI-powered suggestion chips (shown when enabled, not processing, and not typing)
+            if settings.autoSuggestionsEnabled && !wsManager.isProcessing && inputText.isEmpty && !claudeHelper.suggestedActions.isEmpty {
                 SuggestionChipsView(
                     suggestions: claudeHelper.suggestedActions,
                     isLoading: claudeHelper.isLoading,
@@ -1141,12 +1141,14 @@ struct ChatView: View {
             refreshGitStatus()
 
             // Generate AI-powered suggestions for next actions using current session context
-            Task {
-                await claudeHelper.generateSuggestions(
-                    recentMessages: messages,
-                    projectPath: project.path,
-                    currentSessionId: wsManager.sessionId  // Use current session for full context
-                )
+            if settings.autoSuggestionsEnabled {
+                Task {
+                    await claudeHelper.generateSuggestions(
+                        recentMessages: messages,
+                        projectPath: project.path,
+                        currentSessionId: wsManager.sessionId  // Use current session for full context
+                    )
+                }
             }
         }
 

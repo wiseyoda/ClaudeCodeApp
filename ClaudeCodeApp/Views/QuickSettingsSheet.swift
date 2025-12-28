@@ -60,12 +60,20 @@ struct QuickSettingsSheet: View {
 
                 // Quick Toggles
                 Section {
+                    Toggle(isOn: $settings.lockToPortrait) {
+                        Label("Lock to Portrait", systemImage: "rectangle.portrait")
+                    }
+
                     Toggle(isOn: $settings.showThinkingBlocks) {
                         Label("Show Thinking Blocks", systemImage: "brain")
                     }
 
                     Toggle(isOn: $settings.autoScrollEnabled) {
                         Label("Auto-scroll", systemImage: "arrow.down.to.line")
+                    }
+
+                    Toggle(isOn: $settings.autoSuggestionsEnabled) {
+                        Label("Auto Suggestions", systemImage: "sparkles")
                     }
 
                     Picker(selection: Binding(
@@ -81,7 +89,7 @@ struct QuickSettingsSheet: View {
                 } header: {
                     Text("Display")
                 } footer: {
-                    Text("Messages saved per project. Higher limits use more storage.")
+                    Text("Auto suggestions uses AI to suggest next actions after each response.")
                 }
 
                 // Advanced Section

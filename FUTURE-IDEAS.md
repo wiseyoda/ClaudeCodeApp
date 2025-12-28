@@ -842,6 +842,46 @@ Add unit tests for helpers implemented from session analysis recommendations:
 
 ## Moonshots
 
+### M0: Persistent Todo Progress Drawer
+
+**Vision:** Extract Claude's TodoWrite tool output into a persistent, collapsible drawer that shows real-time task progress. As Claude works through tasks, users see checkboxes being completed in real-time—like watching an agent check off tasks as it works.
+
+**Why it matters:** The TodoWrite tool is one of Claude's most useful features for complex multi-step tasks, but its output currently scrolls by in the message stream. A dedicated drawer would make progress visible at a glance and persist until the user sends their next message.
+
+**Key Functionality:**
+- [ ] Detect TodoWrite tool calls in the message stream
+- [ ] Extract todo items and their status (pending, in_progress, completed)
+- [ ] Display in a collapsible drawer above the input area
+- [ ] Update in real-time as new TodoWrite messages arrive
+- [ ] Show progress indicator (e.g., "3/7 tasks complete")
+- [ ] Persist drawer until user sends next message
+- [ ] Collapse/expand toggle for minimal distraction
+- [ ] Optional: Animate checkbox completion for satisfying feedback
+
+**User Stories:**
+- As a developer watching Claude work, I want to see task progress at a glance so I know how much is done
+- As a developer, I want the todo list to persist after streaming so I can review what was accomplished
+- As a developer, I want to collapse the drawer when I don't need it so it doesn't take up space
+
+**Technical Considerations:**
+- Dependencies: TodoWrite tool parsing (needs research into exact JSON format)
+- Complexity: Medium
+- Data flow: WebSocket → parse TodoWrite → update drawer state → render
+- State management: Track current todos, update on each TodoWrite message
+- Edge cases: Multiple TodoWrite calls, empty todo list, rapid updates
+
+**Research Needed:**
+- Exact JSON structure of TodoWrite tool output in WebSocket stream
+- How to differentiate TodoWrite from other tool calls
+- Best UX for drawer animation and placement
+- Whether to show historical todos or only current session
+
+**Complexity:** Medium
+
+**Differentiation:** No other mobile AI client shows real-time task progress this way. This makes the "agent working for you" experience tangible and visible.
+
+---
+
 Ambitious features that could fundamentally change the product.
 
 ### M1: Split-View Code Editor (iPad)
