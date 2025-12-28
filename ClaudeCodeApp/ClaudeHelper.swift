@@ -587,25 +587,33 @@ class ClaudeHelper: ObservableObject {
 
         switch msg.type {
         case "claude-response":
-            // Extract text from response
-            if let responseData = msg.data?.dictValue,
-               let content = responseData["content"] as? [[String: Any]] {
-                for part in content {
-                    if let partText = part["text"] as? String {
-                        responseBuffer += partText
-                    }
-                }
-            } else if let responseData = msg.data?.dictValue,
-                      let messageData = responseData["message"] as? [String: Any],
-                      let content = messageData["content"] as? [[String: Any]] {
-                for part in content {
-                    if let partText = part["text"] as? String {
-                        responseBuffer += partText
-                    }
-                }
+            // Extract text from response - SDK sends different formats:
+            // 1. {type: "assistant", message: {role: "assistant", content: [...]}}
+            // 2. {content: [...]} - direct content
+            // 3. {message: {content: [...]}} - nested message
+            guard let responseData = msg.data?.dictValue else { break }
+
+            let outerType = responseData["type"] as? String
+            debugLog.log("ClaudeHelper response outer type: \(outerType ?? "nil")", type: .received)
+
+            // Case 1: Outer type is "assistant" with nested message.content
+            if outerType == "assistant",
+               let messageData = responseData["message"] as? [String: Any],
+               let content = messageData["content"] as? [[String: Any]] {
+                extractTextFromContent(content)
+            }
+            // Case 2: Direct content array at top level
+            else if let content = responseData["content"] as? [[String: Any]] {
+                extractTextFromContent(content)
+            }
+            // Case 3: Content nested in message (without outer type)
+            else if let messageData = responseData["message"] as? [String: Any],
+                    let content = messageData["content"] as? [[String: Any]] {
+                extractTextFromContent(content)
             }
 
         case "claude-complete":
+            debugLog.log("ClaudeHelper complete, buffer length: \(responseBuffer.count)", type: .received)
             completion?(.success(responseBuffer))
             cleanup()
 
@@ -617,6 +625,14 @@ class ClaudeHelper: ObservableObject {
 
         default:
             break
+        }
+    }
+
+    private func extractTextFromContent(_ content: [[String: Any]]) {
+        for part in content {
+            if let partText = part["text"] as? String {
+                responseBuffer += partText
+            }
         }
     }
 
