@@ -49,6 +49,27 @@ When reporting a bug, include:
 - **Location**: `server/index.js` in claudecodeui backend
 - **Source**: Session analysis 2025-12-28
 
+### #24: Token Usage Calculation Wildly Inaccurate (To Investigate)
+- **What happened**: Token counts displayed in the app are significantly wrong compared to actual usage
+- **Expected**: Token usage should reflect actual consumption accurately
+- **Location**: Token display UI, API response parsing
+- **Investigation needed**:
+  - Audit what the backend/API is actually sending for token counts
+  - Compare API-reported tokens vs actual message content size
+  - Determine if issue is API-side or client-side parsing
+  - Consider client-side token estimation as fallback/validation
+  - Check if streaming messages have different token reporting than complete messages
+- **Priority**: Medium - affects user's ability to monitor usage
+
+### #25: Voice Transcription Bar Text Unreadable in Dark Mode
+- **What happened**: Gray text on red background during voice-to-text makes transcription text very hard to read, especially in dark mode
+- **Expected**: Text should have sufficient contrast against the red recording indicator background
+- **Location**: Voice transcription status bar UI (likely `SpeechManager` related views)
+- **Fix needed**:
+  - Change text color to white or light color when on red background
+  - Ensure WCAG AA contrast ratio (4.5:1 minimum) for accessibility
+- **Priority**: Medium - affects usability of voice input feature
+
 ---
 
 ## Feature Requests

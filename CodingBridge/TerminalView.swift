@@ -108,6 +108,12 @@ struct TerminalView: View {
                 }
             )
         }
+        .onDisappear {
+            // Clean up SSH connection when leaving terminal
+            if sshManager.isConnected {
+                sshManager.disconnect()
+            }
+        }
     }
 
     private func connect(host: String, port: Int, username: String, password: String) async {
@@ -572,12 +578,6 @@ struct SSHConnectionSheet: View {
             port = String(settings.sshPort)
             username = settings.sshUsername
             tempPassword = settings.sshPassword
-        }
-        .onDisappear {
-            // Clean up SSH connection when leaving terminal
-            if sshManager.isConnected {
-                sshManager.disconnect()
-            }
         }
     }
 
