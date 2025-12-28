@@ -32,6 +32,7 @@ struct CLIInputView: View {
     @State private var showAttachmentMenu = false
     @State private var showFilePicker = false
     @State private var showCommandPicker = false
+    @State private var showPhotoPicker = false
     @State private var selectedItem: PhotosPickerItem?
 
     init(
@@ -215,16 +216,12 @@ struct CLIInputView: View {
                 }
             }
 
-            // Photo picker
-            PhotosPicker(selection: $selectedItem, matching: .images) {
+            // Photo picker - use Button to trigger separate PhotosPicker
+            // PhotosPicker inside Menu doesn't work properly on iPhone
+            Button {
+                showPhotoPicker = true
+            } label: {
                 Label("Attach Image", systemImage: "photo")
-            }
-            .onChange(of: selectedItem) { _, newItem in
-                Task {
-                    if let data = try? await newItem?.loadTransferable(type: Data.self) {
-                        selectedImage = data
-                    }
-                }
             }
 
             // Voice input
@@ -246,6 +243,17 @@ struct CLIInputView: View {
                 .foregroundColor(CLITheme.blue(for: colorScheme))
         }
         .accessibilityLabel("Add attachment")
+        // PhotosPicker must be outside Menu to work on iPhone
+        .photosPicker(isPresented: $showPhotoPicker, selection: $selectedItem, matching: .images)
+        .onChange(of: selectedItem) { _, newItem in
+            Task {
+                if let data = try? await newItem?.loadTransferable(type: Data.self) {
+                    await MainActor.run {
+                        selectedImage = data
+                    }
+                }
+            }
+        }
     }
 
     private var sendButton: some View {
