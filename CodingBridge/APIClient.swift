@@ -420,6 +420,31 @@ struct SessionMessage: Codable {
 struct SessionMessageContent: Codable {
     let role: String?
     let content: [SessionContentItem]?
+
+    enum CodingKeys: String, CodingKey {
+        case role, content
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        role = try container.decodeIfPresent(String.self, forKey: .role)
+
+        // Handle content as either array or string
+        if let contentArray = try? container.decodeIfPresent([SessionContentItem].self, forKey: .content) {
+            content = contentArray
+        } else if let contentString = try? container.decodeIfPresent(String.self, forKey: .content) {
+            // Convert string to array with single text item
+            content = [SessionContentItem(type: "text", text: contentString, thinking: nil, name: nil, input: nil, source: nil, toolUseId: nil, content: nil, isError: nil)]
+        } else {
+            content = nil
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(role, forKey: .role)
+        try container.encodeIfPresent(content, forKey: .content)
+    }
 }
 
 struct SessionContentItem: Codable {
@@ -437,6 +462,19 @@ struct SessionContentItem: Codable {
         case type, text, thinking, name, input, source, content
         case toolUseId = "tool_use_id"
         case isError = "is_error"
+    }
+
+    /// Manual initializer for creating items programmatically (e.g., when converting string content to array)
+    init(type: String, text: String?, thinking: String?, name: String?, input: [String: AnyCodableValue]?, source: ImageSource?, toolUseId: String?, content: AnyCodableValue?, isError: Bool?) {
+        self.type = type
+        self.text = text
+        self.thinking = thinking
+        self.name = name
+        self.input = input
+        self.source = source
+        self.toolUseId = toolUseId
+        self.content = content
+        self.isError = isError
     }
 }
 
