@@ -825,6 +825,19 @@ Show detected language badge in code block header (e.g., "Swift", "Python"). Hel
 
 Add pull-to-refresh gesture to reload session history and check for updates. Complements existing git status refresh.
 
+### QW6: Unit Tests for Session Analysis Helpers
+
+**Effort:** Low | **Impact:** Medium | **Source:** Session Analysis 2025-12-28
+
+Add unit tests for helpers implemented from session analysis recommendations:
+
+- [ ] Test `extractBashExitCode()` helper in CLIMessageView
+- [ ] Test `isVerboseHelpOutput()` detection in TruncatableText
+- [ ] Test file path counting logic in `resultCountBadge`
+- [ ] Test agent type extraction from Task tool
+
+**Files to create:** `CLIMessageViewTests.swift`, `TruncatableTextTests.swift`
+
 ---
 
 ## Moonshots
