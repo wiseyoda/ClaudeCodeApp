@@ -770,6 +770,39 @@ class MessageStore {
         let key = sessionIdKey(for: projectPath)
         UserDefaults.standard.removeObject(forKey: key)
     }
+
+    // MARK: - Processing State Persistence
+
+    private static let processingPrefix = "processing_state_"
+
+    private static func processingKey(for projectPath: String) -> String {
+        let safeKey = projectPath
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+        return processingPrefix + safeKey
+    }
+
+    /// Load whether processing was active when app last closed
+    static func loadProcessingState(for projectPath: String) -> Bool {
+        let key = processingKey(for: projectPath)
+        return UserDefaults.standard.bool(forKey: key)
+    }
+
+    /// Save processing state for a project
+    static func saveProcessingState(_ isProcessing: Bool, for projectPath: String) {
+        let key = processingKey(for: projectPath)
+        if isProcessing {
+            UserDefaults.standard.set(true, forKey: key)
+        } else {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
+    }
+
+    /// Clear processing state for a project
+    static func clearProcessingState(for projectPath: String) {
+        let key = processingKey(for: projectPath)
+        UserDefaults.standard.removeObject(forKey: key)
+    }
 }
 
 // MARK: - Archived Projects Store

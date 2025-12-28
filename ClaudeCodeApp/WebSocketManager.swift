@@ -130,6 +130,10 @@ class WebSocketManager: ObservableObject {
     var onModelChanged: ((ClaudeModel, String) -> Void)?  // (model enum, full model ID)
     var onAborted: (() -> Void)?  // Called when session is aborted
     var onSessionRecovered: (() -> Void)?  // Called when invalid session was cleared and new session started
+    var onSessionAttached: (() -> Void)?  // Called when successfully attached to an active session
+
+    /// Track if we're attempting to reattach to an active session
+    @Published var isReattaching = false
 
     /// Initialize with optional settings. Call updateSettings() in onAppear with the EnvironmentObject.
     init(settings: AppSettings? = nil) {
@@ -330,6 +334,63 @@ class WebSocketManager: ObservableObject {
         // Note: reconnectAttempt is also reset in receiveMessage success as backup
 
         receiveMessage(forConnection: currentConnectionId)
+    }
+
+    /// Attempt to reattach to an active session that was processing when the app closed.
+    /// This sends a lightweight "/status" command to the session which will trigger
+    /// any pending output to be streamed back.
+    func attachToSession(sessionId: String, projectPath: String) {
+        guard connectionState == .connected || connectionState == .connecting else {
+            log.warning("Cannot attach to session - not connected")
+            return
+        }
+
+        guard !sessionId.isEmpty else {
+            log.warning("Cannot attach to session - empty session ID")
+            return
+        }
+
+        log.info("Attempting to reattach to session: \(sessionId.prefix(8))...")
+        isReattaching = true
+        isProcessing = true
+        self.sessionId = sessionId
+        startProcessingTimeout()
+
+        // Send a /status command which is a no-op but will trigger the backend
+        // to send any pending output for this session
+        let command = WSClaudeCommand(
+            command: "/status",
+            options: WSCommandOptions(
+                cwd: projectPath,
+                sessionId: sessionId,
+                model: nil,
+                permissionMode: nil,
+                images: nil
+            )
+        )
+
+        do {
+            let data = try JSONEncoder().encode(command)
+            if let jsonString = String(data: data, encoding: .utf8) {
+                log.debug("Sending attach request: \(jsonString)")
+                debugLog.logSent(jsonString)
+                webSocket?.send(.string(jsonString)) { [weak self] error in
+                    Task { @MainActor in
+                        if let error = error {
+                            log.error("Attach request failed: \(error)")
+                            self?.isReattaching = false
+                            self?.isProcessing = false
+                            self?.cancelProcessingTimeout()
+                        }
+                    }
+                }
+            }
+        } catch {
+            log.error("Failed to encode attach request: \(error)")
+            isReattaching = false
+            isProcessing = false
+            cancelProcessingTimeout()
+        }
     }
 
     func disconnect() {
@@ -846,6 +907,13 @@ class WebSocketManager: ObservableObject {
                 }
 
             case "claude-response":
+                // If we're reattaching and receive actual content, we've successfully attached
+                if isReattaching {
+                    isReattaching = false
+                    log.info("Reattachment confirmed - receiving content")
+                    onSessionAttached?()
+                }
+
                 if let responseData = msg.data?.dictValue {
                     // SDK sends different message formats:
                     // 1. System init: {type: "system", subtype: "init", session_id: ...}
@@ -873,6 +941,13 @@ class WebSocketManager: ObservableObject {
                 }
 
             case "claude-complete":
+                // Check if we successfully reattached to an active session
+                if isReattaching {
+                    isReattaching = false
+                    log.info("Session reattachment complete")
+                    onSessionAttached?()
+                }
+
                 isProcessing = false
                 lastActiveToolName = nil
                 cancelProcessingTimeout()
@@ -903,6 +978,7 @@ class WebSocketManager: ObservableObject {
 
             case "claude-error":
                 isProcessing = false
+                isReattaching = false  // Reset on error
                 lastActiveToolName = nil
                 isSwitchingModel = false  // Reset on error
                 cancelProcessingTimeout()

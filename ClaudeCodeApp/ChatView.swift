@@ -198,6 +198,7 @@ struct ChatView: View {
             }
 
             // Restore last session ID for conversation continuity
+            let wasProcessing = MessageStore.loadProcessingState(for: project.path)
             if let savedSessionId = MessageStore.loadSessionId(for: project.path) {
                 print("[ChatView] Loaded saved session ID: \(savedSessionId.prefix(8))...")
                 wsManager.sessionId = savedSessionId
@@ -210,6 +211,28 @@ struct ChatView: View {
                         print("[ChatView] WARNING: Saved session not found in project.sessions (count: \(sessions.count))")
                     }
                 }
+
+                // Check if we need to reattach to an active session
+                if wasProcessing {
+                    print("[ChatView] Session was processing when app closed - attempting reattachment...")
+                    // Wait for WebSocket to connect, then attempt reattachment
+                    Task {
+                        // Wait for connection to be established
+                        var attempts = 0
+                        while !wsManager.connectionState.isConnected && attempts < 20 {
+                            try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms
+                            attempts += 1
+                        }
+
+                        if wsManager.connectionState.isConnected {
+                            wsManager.attachToSession(sessionId: savedSessionId, projectPath: project.path)
+                        } else {
+                            print("[ChatView] Could not reattach - WebSocket not connected after wait")
+                            // Clear the processing state since we couldn't reattach
+                            MessageStore.clearProcessingState(for: project.path)
+                        }
+                    }
+                }
             } else {
                 print("[ChatView] No saved session ID found for project")
                 // Auto-select the most recent session if available
@@ -220,6 +243,10 @@ struct ChatView: View {
                     wsManager.sessionId = mostRecent.id
                     selectedSession = mostRecent
                     MessageStore.saveSessionId(mostRecent.id, for: project.path)
+                }
+                // Clear any stale processing state if no session ID
+                if wasProcessing {
+                    MessageStore.clearProcessingState(for: project.path)
                 }
             }
 
@@ -288,6 +315,9 @@ struct ChatView: View {
             }
         }
         .onChange(of: wsManager.isProcessing) { _, isProcessing in
+            // Save processing state for session recovery on app restart
+            MessageStore.saveProcessingState(isProcessing, for: project.path)
+
             // Refocus input when processing completes
             if !isProcessing {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
@@ -784,7 +814,19 @@ struct ChatView: View {
 
     @ViewBuilder
     private var streamingIndicatorView: some View {
-        if wsManager.currentText.isEmpty {
+        if wsManager.isReattaching {
+            // Show reattaching indicator when reconnecting to active session
+            HStack(spacing: 6) {
+                ProgressView()
+                    .scaleEffect(0.7)
+                Text("Reconnecting to session...")
+                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                Spacer()
+            }
+            .font(settings.scaledFont(.body))
+            .padding(.vertical, 4)
+            .id("reattaching")
+        } else if wsManager.currentText.isEmpty {
             // Minimal waiting indicator - status bar already shows processing state
             HStack(spacing: 6) {
                 Text("+")
@@ -1011,6 +1053,17 @@ struct ChatView: View {
 
             // CRITICAL: Clear wsManager's sessionId so next message creates new session
             wsManager?.sessionId = nil
+        }
+
+        wsManager.onSessionAttached = {
+            // Show feedback that we successfully reattached to active session
+            let attachMsg = ChatMessage(
+                role: .system,
+                content: "🔄 Reconnected to active session",
+                timestamp: Date()
+            )
+            messages.append(attachMsg)
+            print("[ChatView] Successfully reattached to active session")
         }
     }
 
