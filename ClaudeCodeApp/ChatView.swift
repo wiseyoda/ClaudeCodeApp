@@ -187,12 +187,14 @@ struct ChatView: View {
             setupWebSocketCallbacks()
             wsManager.connect()
 
-            // Load persisted messages
-            let savedMessages = MessageStore.loadMessages(for: project.path)
-            if !savedMessages.isEmpty {
-                messages = savedMessages
-                // Trigger scroll to bottom after loading persisted messages
-                scrollToBottomTrigger = true
+            // Load persisted messages asynchronously to avoid blocking main thread
+            Task {
+                let savedMessages = await MessageStore.loadMessages(for: project.path)
+                if !savedMessages.isEmpty {
+                    messages = savedMessages
+                    // Trigger scroll to bottom after loading persisted messages
+                    scrollToBottomTrigger = true
+                }
             }
 
             // Restore last session ID for conversation continuity

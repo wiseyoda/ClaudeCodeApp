@@ -45,13 +45,13 @@ final class MessageStoreTests: XCTestCase {
 
     // MARK: - Load/Save Messages Tests
 
-    func test_loadMessages_emptyProject_returnsEmptyArray() {
-        let messages = MessageStore.loadMessages(for: testProjectPath)
+    func test_loadMessages_emptyProject_returnsEmptyArray() async {
+        let messages = await MessageStore.loadMessages(for: testProjectPath)
 
         XCTAssertEqual(messages.count, 0)
     }
 
-    func test_saveMessages_thenLoad_returnsSavedMessages() {
+    func test_saveMessages_thenLoad_returnsSavedMessages() async {
         // Given
         let message1 = ChatMessage(role: .user, content: "Hello")
         let message2 = ChatMessage(role: .assistant, content: "Hi there!")
@@ -63,7 +63,7 @@ final class MessageStoreTests: XCTestCase {
         waitForFileOperations(delay: 0.2)
 
         // Then
-        let loaded = MessageStore.loadMessages(for: testProjectPath)
+        let loaded = await MessageStore.loadMessages(for: testProjectPath)
 
         XCTAssertEqual(loaded.count, 2)
         XCTAssertEqual(loaded[0].content, "Hello")
@@ -72,7 +72,7 @@ final class MessageStoreTests: XCTestCase {
         XCTAssertEqual(loaded[1].role, .assistant)
     }
 
-    func test_saveMessages_excludesStreamingMessages() {
+    func test_saveMessages_excludesStreamingMessages() async {
         // Given
         let regularMessage = ChatMessage(role: .user, content: "Regular")
         let streamingMessage = ChatMessage(role: .assistant, content: "Streaming...", isStreaming: true)
@@ -84,13 +84,13 @@ final class MessageStoreTests: XCTestCase {
         waitForFileOperations(delay: 0.2)
 
         // Then
-        let loaded = MessageStore.loadMessages(for: testProjectPath)
+        let loaded = await MessageStore.loadMessages(for: testProjectPath)
 
         XCTAssertEqual(loaded.count, 1)
         XCTAssertEqual(loaded[0].content, "Regular")
     }
 
-    func test_saveMessages_limitsToMaxMessages() {
+    func test_saveMessages_limitsToMaxMessages() async {
         // Given - create more than 50 messages
         var messages: [ChatMessage] = []
         for i in 1...60 {
@@ -104,7 +104,7 @@ final class MessageStoreTests: XCTestCase {
         waitForFileOperations(delay: 0.3)
 
         // Then - should only keep last 50
-        let loaded = MessageStore.loadMessages(for: testProjectPath)
+        let loaded = await MessageStore.loadMessages(for: testProjectPath)
 
         XCTAssertEqual(loaded.count, 50)
         // First saved message should be "Message 11" (60-50+1=11)
@@ -113,7 +113,7 @@ final class MessageStoreTests: XCTestCase {
         XCTAssertEqual(loaded[49].content, "Message 60")
     }
 
-    func test_clearMessages_removesAllMessages() {
+    func test_clearMessages_removesAllMessages() async {
         // Given
         let message = ChatMessage(role: .user, content: "To be deleted")
         MessageStore.saveMessages([message], for: testProjectPath)
@@ -128,11 +128,11 @@ final class MessageStoreTests: XCTestCase {
         waitForFileOperations(delay: 0.2)
 
         // Then
-        let loaded = MessageStore.loadMessages(for: testProjectPath)
+        let loaded = await MessageStore.loadMessages(for: testProjectPath)
         XCTAssertEqual(loaded.count, 0)
     }
 
-    func test_saveMessages_preservesMessageRoles() {
+    func test_saveMessages_preservesMessageRoles() async {
         // Given - messages with different roles
         let roles: [ChatMessage.Role] = [.user, .assistant, .system, .error, .toolUse, .toolResult, .resultSuccess, .thinking]
         let messages = roles.map { ChatMessage(role: $0, content: "Role: \($0.rawValue)") }
@@ -144,7 +144,7 @@ final class MessageStoreTests: XCTestCase {
         waitForFileOperations(delay: 0.2)
 
         // Then
-        let loaded = MessageStore.loadMessages(for: testProjectPath)
+        let loaded = await MessageStore.loadMessages(for: testProjectPath)
 
         XCTAssertEqual(loaded.count, roles.count)
         for (index, role) in roles.enumerated() {
@@ -152,7 +152,7 @@ final class MessageStoreTests: XCTestCase {
         }
     }
 
-    func test_saveMessages_preservesTimestamps() {
+    func test_saveMessages_preservesTimestamps() async {
         // Given
         let timestamp = Date(timeIntervalSince1970: 1704067200) // 2024-01-01 00:00:00 UTC
         let message = ChatMessage(role: .user, content: "Timestamped", timestamp: timestamp)
@@ -164,7 +164,7 @@ final class MessageStoreTests: XCTestCase {
         waitForFileOperations(delay: 0.2)
 
         // Then
-        let loaded = MessageStore.loadMessages(for: testProjectPath)
+        let loaded = await MessageStore.loadMessages(for: testProjectPath)
 
         XCTAssertEqual(loaded.count, 1)
         XCTAssertEqual(loaded[0].timestamp, timestamp)
@@ -172,7 +172,7 @@ final class MessageStoreTests: XCTestCase {
 
     // MARK: - Image Persistence Tests
 
-    func test_saveMessages_withImageData_persistsAndLoadsImage() {
+    func test_saveMessages_withImageData_persistsAndLoadsImage() async {
         // Given
         let imageData = Data([0x00, 0x01, 0x02])
         let message = ChatMessage(role: .user, content: "With image", imageData: imageData)
@@ -184,7 +184,7 @@ final class MessageStoreTests: XCTestCase {
         waitForFileOperations(delay: 0.3)
 
         // Then
-        let loaded = MessageStore.loadMessages(for: testProjectPath)
+        let loaded = await MessageStore.loadMessages(for: testProjectPath)
 
         XCTAssertEqual(loaded.count, 1)
         XCTAssertEqual(loaded[0].imageData, imageData)
@@ -217,7 +217,7 @@ final class MessageStoreTests: XCTestCase {
 
     // MARK: - UserDefaults Migration Tests
 
-    func test_loadMessages_migratesFromUserDefaults() throws {
+    func test_loadMessages_migratesFromUserDefaults() async throws {
         // Given
         let safeKey = testProjectPath
             .replacingOccurrences(of: "/", with: "_")
@@ -230,7 +230,7 @@ final class MessageStoreTests: XCTestCase {
         UserDefaults.standard.set(data, forKey: oldKey)
 
         // When
-        let loaded = MessageStore.loadMessages(for: testProjectPath)
+        let loaded = await MessageStore.loadMessages(for: testProjectPath)
 
         // Then
         XCTAssertEqual(loaded.count, 2)
@@ -238,11 +238,11 @@ final class MessageStoreTests: XCTestCase {
         XCTAssertNil(UserDefaults.standard.data(forKey: oldKey))
 
         waitForFileOperations(delay: 0.3)
-        let reloaded = MessageStore.loadMessages(for: testProjectPath)
+        let reloaded = await MessageStore.loadMessages(for: testProjectPath)
         XCTAssertEqual(reloaded.count, 2)
     }
 
-    func test_loadMessages_invalidUserDefaultsData_returnsEmpty() {
+    func test_loadMessages_invalidUserDefaultsData_returnsEmpty() async {
         // Given
         let safeKey = testProjectPath
             .replacingOccurrences(of: "/", with: "_")
@@ -252,7 +252,7 @@ final class MessageStoreTests: XCTestCase {
         UserDefaults.standard.set(invalidData, forKey: oldKey)
 
         // When
-        let loaded = MessageStore.loadMessages(for: testProjectPath)
+        let loaded = await MessageStore.loadMessages(for: testProjectPath)
 
         // Then
         XCTAssertTrue(loaded.isEmpty)
@@ -263,7 +263,7 @@ final class MessageStoreTests: XCTestCase {
 
     // MARK: - Project Path Encoding Tests
 
-    func test_saveMessages_handlesPathWithSlashes() {
+    func test_saveMessages_handlesPathWithSlashes() async {
         // Given
         let pathWithSlashes = "/home/user/deep/nested/path"
         let message = ChatMessage(role: .user, content: "Deep nested")
@@ -275,7 +275,7 @@ final class MessageStoreTests: XCTestCase {
         waitForFileOperations(delay: 0.2)
 
         // Then
-        let loaded = MessageStore.loadMessages(for: pathWithSlashes)
+        let loaded = await MessageStore.loadMessages(for: pathWithSlashes)
 
         XCTAssertEqual(loaded.count, 1)
         XCTAssertEqual(loaded[0].content, "Deep nested")
@@ -284,7 +284,7 @@ final class MessageStoreTests: XCTestCase {
         MessageStore.clearMessages(for: pathWithSlashes)
     }
 
-    func test_saveMessages_handlesPathWithSpaces() {
+    func test_saveMessages_handlesPathWithSpaces() async {
         // Given
         let pathWithSpaces = "/home/user/my project/code"
         let message = ChatMessage(role: .user, content: "Spaced path")
@@ -296,7 +296,7 @@ final class MessageStoreTests: XCTestCase {
         waitForFileOperations(delay: 0.2)
 
         // Then
-        let loaded = MessageStore.loadMessages(for: pathWithSpaces)
+        let loaded = await MessageStore.loadMessages(for: pathWithSpaces)
 
         XCTAssertEqual(loaded.count, 1)
         XCTAssertEqual(loaded[0].content, "Spaced path")
@@ -426,7 +426,7 @@ final class MessageStoreTests: XCTestCase {
 
     // MARK: - Multi-Project Isolation Tests
 
-    func test_messages_isolatedBetweenProjects() {
+    func test_messages_isolatedBetweenProjects() async {
         // Given
         let project1 = "/project/one/\(UUID().uuidString)"
         let project2 = "/project/two/\(UUID().uuidString)"
@@ -442,8 +442,8 @@ final class MessageStoreTests: XCTestCase {
         waitForFileOperations(delay: 0.3)
 
         // Then
-        let loaded1 = MessageStore.loadMessages(for: project1)
-        let loaded2 = MessageStore.loadMessages(for: project2)
+        let loaded1 = await MessageStore.loadMessages(for: project1)
+        let loaded2 = await MessageStore.loadMessages(for: project2)
 
         XCTAssertEqual(loaded1.count, 1)
         XCTAssertEqual(loaded1[0].content, "Project 1 message")

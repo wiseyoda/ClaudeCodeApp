@@ -543,8 +543,20 @@ class MessageStore {
 
     // MARK: - Load/Save Messages
 
-    /// Load messages for a project
-    static func loadMessages(for projectPath: String) -> [ChatMessage] {
+    /// Load messages for a project (async to avoid blocking main thread)
+    static func loadMessages(for projectPath: String) async -> [ChatMessage] {
+        await withCheckedContinuation { continuation in
+            fileQueue.async {
+                let messages = loadMessagesUnsafe(for: projectPath)
+                continuation.resume(returning: messages)
+            }
+        }
+    }
+
+    /// Synchronous load for backward compatibility - DEPRECATED, use async version
+    /// This blocks the calling thread and should only be used where async is not possible
+    @available(*, deprecated, message: "Use async loadMessages(for:) instead to avoid blocking main thread")
+    static func loadMessagesSync(for projectPath: String) -> [ChatMessage] {
         fileQueue.sync {
             loadMessagesUnsafe(for: projectPath)
         }
