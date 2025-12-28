@@ -295,8 +295,16 @@ struct GlassEffectModifier: ViewModifier {
             return glass
         }()
 
+        // In dark mode, add a subtle border for better definition
+        let borderColor = colorScheme == .dark
+            ? Color.white.opacity(0.15)
+            : Color.black.opacity(0.08)
+
         return content
             .glassEffect(glassStyle, in: shape)
+            .overlay(
+                shape.stroke(borderColor, lineWidth: 0.5)
+            )
     }
 }
 
@@ -325,8 +333,16 @@ struct GlassCapsuleModifier: ViewModifier {
             return glass
         }()
 
+        // In dark mode, add a subtle border for better definition
+        let borderColor = colorScheme == .dark
+            ? Color.white.opacity(0.15)
+            : Color.black.opacity(0.08)
+
         return content
             .glassEffect(glassStyle, in: Capsule())
+            .overlay(
+                Capsule().stroke(borderColor, lineWidth: 0.5)
+            )
     }
 }
 

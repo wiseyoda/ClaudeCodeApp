@@ -21,6 +21,23 @@ When reporting a bug, include:
 - **Investigation**: Root cause appears to be Claude Agent SDK warmup mechanism, not iOS app
 - **Workaround**: Filter out sessions with `summary == "New Session"` in SessionPickerViews.swift
 
+### #20: SSH Timeout Errors (To Investigate)
+- **What happened**: Session analysis found 12 occurrences of exit code 254 (SSH timeout/connection issues)
+- **Expected**: SSH commands should complete or fail gracefully with clear error messaging
+- **Location**: `SSHManager.swift`
+- **Investigation needed**:
+  - Identify which commands trigger timeouts most frequently
+  - Check if Citadel SSH library has configurable timeout settings
+  - Consider retry logic for transient connection failures
+- **Source**: Session analysis 2025-12-28
+
+### #21: High Git Error Rate (Informational)
+- **What happened**: Session analysis found 62 exit code 128 errors (git not a repository)
+- **Expected**: N/A - Claude recovers by using `-C /path` flag
+- **Location**: Backend/Claude Code behavior
+- **Note**: Not a bug - documenting that Claude's git error recovery is working as expected
+- **Source**: Session analysis 2025-12-28
+
 ---
 
 ## Feature Requests

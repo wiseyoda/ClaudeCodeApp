@@ -2,6 +2,198 @@
 
 ---
 
+## Analysis Update: 2025-12-28 (Third Pass)
+
+**Analyzed By**: Claude Opus 4.5
+**Session Logs Location**: `~/.claude/projects/` (7 project directories)
+**Session Files Analyzed**: 568 JSONL files (up from 309)
+**Total Tool Calls**: 807 (up from 532)
+**Total Log Lines**: 3,039
+
+### Key Findings This Pass
+
+1. **Tool usage distribution shifted** - Read now dominates (40%) over Bash (27%), suggesting more code review workflows
+2. **New error pattern discovered** - "File modified since read" errors (13 occurrences) indicate linter conflicts
+3. **Grep usage significantly increased** - 94 calls (up from 11), 11.6% of total
+4. **TodoWrite heavily used** - 47 calls (5.8%), all Priority 1/2 recommendations implemented are working
+5. **No MCP, NotebookEdit, or Skill tools in logs** - Still not a concern
+
+### Tool Usage Statistics (807 tool calls)
+
+| Tool Name | Count | % of Total | Change | Priority |
+|-----------|-------|------------|--------|----------|
+| Read | 323 | 40.0% | +173 | Highest |
+| Bash | 220 | 27.3% | -54 | High |
+| Grep | 94 | 11.6% | +83 | Medium |
+| Edit | 82 | 10.2% | +42 | Medium |
+| TodoWrite | 47 | 5.8% | +32 | Medium |
+| WebFetch | 12 | 1.5% | +10 | Low |
+| Glob | 11 | 1.4% | -3 | Low |
+| WebSearch | 9 | 1.1% | +3 | Low |
+| AskUserQuestion | 6 | 0.7% | +2 | Low |
+| Task | 2 | 0.2% | -5 | Low |
+| Write | 1 | 0.1% | -6 | Low |
+
+### Error Pattern Analysis (106 errors)
+
+| Error Type | Count | Change | Notes |
+|------------|-------|--------|-------|
+| Exit code 128 (git errors) | 62 | -18 | Claude recovers with -C flag |
+| Exit code 1 (general errors) | 30 | NEW | Various command failures |
+| Exit code 254 (SSH issues) | 12 | NEW | SSH connection/timeout issues |
+| Exit code 129 (invalid args) | 10 | NEW | Command syntax errors |
+| File modified since read | 13 | NEW | Linter conflicts - needs handling |
+| File not found | 4 | +3 | Read tool on non-existent files |
+| Approval required | 5 | -4 | Bash commands needing approval |
+| Exit code 127 (cmd not found) | 4 | NEW | Missing command errors |
+
+### New Recommendations
+
+#### Priority 1: Handle "File Modified Since Read" Errors
+
+**Problem**: 13 occurrences of "File has been modified since read, either by the user or by a linter" errors
+
+**Current UX**: Shows generic tool error message with no explanation
+
+**Recommended Fix**:
+```swift
+// In CLIMessageView.swift, detect and explain linter conflicts
+private var isLinterConflict: Bool {
+    message.content.contains("modified since read") ||
+    message.content.contains("by a linter")
+}
+
+// Show special styling/explanation for this common recoverable error
+if isLinterConflict {
+    HStack {
+        Image(systemName: "arrow.clockwise")
+        Text("Linter modified file - Claude will re-read")
+    }
+    .foregroundColor(CLITheme.yellow(for: colorScheme))
+}
+```
+
+**Priority**: HIGH - Common error that confuses users
+
+#### Priority 2: Improve Read Tool Result Display
+
+**Problem**: Read now dominates usage (40%) but results lack:
+- Line count in header
+- Syntax highlighting hints based on file extension
+- Quick action to open file in editor
+
+**Real Example from Logs**:
+```json
+{
+  "name": "Read",
+  "input": {
+    "file_path": "/home/dev/workspace/ClaudeCodeApp/ROADMAP.md"
+  }
+}
+// Result: 104 lines of content with line numbers
+```
+
+**Recommended Improvements**:
+```swift
+// In toolHeaderText, add line count from result
+case .read:
+    if let path = extractParam(from: content, key: "file_path") {
+        var header = "\(displayName): \(shortenPath(path))"
+        // Add file extension indicator
+        if let ext = URL(fileURLWithPath: path).pathExtension.lowercased() {
+            let langName = fileExtensionName(ext)
+            if !langName.isEmpty {
+                header += " (\(langName))"
+            }
+        }
+        return header
+    }
+
+private func fileExtensionName(_ ext: String) -> String {
+    switch ext {
+    case "swift": return "Swift"
+    case "ts", "tsx": return "TypeScript"
+    case "js", "jsx": return "JavaScript"
+    case "py": return "Python"
+    case "md": return "Markdown"
+    case "json": return "JSON"
+    case "yaml", "yml": return "YAML"
+    default: return ""
+    }
+}
+```
+
+**Priority**: MEDIUM - High usage but incremental improvement
+
+#### Priority 3: Add Grep Result Copy Actions
+
+**Problem**: Grep now has 94 calls (11.6%) but results lack:
+- Individual file path copy actions
+- Pattern highlight in results
+- "Search Again" quick action
+
+**Real Example from Logs**:
+```json
+{
+  "name": "Grep",
+  "input": {
+    "pattern": "KeychainHelper",
+    "output_mode": "files_with_matches"
+  }
+}
+// Result: List of file paths
+```
+
+**Recommended Improvements**:
+- Add expandable file list with individual copy buttons
+- Show match count per file when available
+- Add "Copy All Paths" quick action
+
+**Priority**: MEDIUM - Growing usage, improved UX
+
+### Project Usage Distribution
+
+| Project | Log Lines | % of Total |
+|---------|-----------|------------|
+| ClaudeCodeApp | 2,299 | 75.7% |
+| level-agency-tools | 301 | 9.9% |
+| sight-words-game | 287 | 9.4% |
+| level-agency-summit-2026 | 88 | 2.9% |
+| workspace | 42 | 1.4% |
+| patrick-patterson-speaker | 16 | 0.5% |
+| home-dev | 6 | 0.2% |
+
+### Implementation Verification
+
+All previously recommended features confirmed working:
+
+| Feature | File | Lines | Status |
+|---------|------|-------|--------|
+| Exit code badges | CLIMessageView.swift | 444-467 | Working |
+| Colored exit code (green/red) | CLIMessageView.swift | 455-466 | Working |
+| Glass tint for badges | CLIMessageView.swift | 469-478 | Working |
+| File count badges | CLIMessageView.swift | 481-533 | Working |
+| Agent type headers | CLIMessageView.swift | 253-263 | Working |
+| Help text detection | TruncatableText.swift | 122-148 | Working |
+| Todo progress bar | TodoListView.swift | 17-56 | Working |
+| Safari quick action | CLIMessageView.swift | 409-426 | Working |
+| Thinking block styling | CLIMessageView.swift | 617-622 | Working |
+
+### Code Quality Notes
+
+1. **TruncatableText.swift** - Well-structured with good documentation
+2. **TodoListView.swift** - Robust parser handling edge cases
+3. **CLIMessageView.swift** - Growing complexity (692 lines), consider splitting
+
+### Next Steps
+
+1. Implement "File Modified Since Read" error handling (2 hours)
+2. Add file extension labels to Read headers (1 hour)
+3. Consider refactoring CLIMessageView into smaller components
+4. Add unit tests for new error detection helpers
+
+---
+
 ## Analysis Update: 2025-12-27 (Second Pass)
 
 **Analyzed By**: Claude Opus 4.5

@@ -789,6 +789,18 @@ Change hardcoded 50-message limit to user-configurable (25, 50, 100, 200). Requi
 
 **Note:** This is currently on ROADMAP.md Priority 2 for near-term implementation.
 
+### QW1.5: Enhanced Grep Result Actions
+
+**Effort:** Low | **Impact:** Medium | **Source:** Session Analysis 2025-12-28
+
+Session analysis shows Grep usage increased to 11.6% of tool calls (94 occurrences). Add enhanced copy functionality:
+
+- Individual file path copy buttons in expanded view
+- "Copy All Paths" quick action in header
+- Pattern highlight in results (optional)
+
+**Files to modify:** `CLIMessageView.swift` (consider extracting to `GrepResultView.swift` if complex)
+
 ### QW2: Haptic Feedback for Key Actions
 
 **Effort:** Low | **Impact:** Low
@@ -989,5 +1001,5 @@ These issues affect future features and require coordination with the backend te
 
 ---
 
-*Last updated: December 27, 2025*
+*Last updated: December 28, 2025*
 *Next review: January 2025*

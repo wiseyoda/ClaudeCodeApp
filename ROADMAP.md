@@ -8,77 +8,70 @@
 
 ## Overview
 
-| Phase | Focus | Priority | Est. Tasks |
-|-------|-------|----------|------------|
-| 1 | Security Hardening | Critical | 8 |
-| 2 | Data Correctness | High | 6 |
-| 3 | Stability & Thread Safety | High | 5 |
-| 4 | Architecture Refactoring | Medium | 7 |
-| 5 | Performance & Polish | Medium | 9 |
-| 6 | iOS 26 Adoption | Medium | 6 |
-| 7 | Test Coverage | Ongoing | 6 |
+| Phase | Focus | Priority | Status |
+|-------|-------|----------|--------|
+| 1 | Security Hardening | Critical | ✅ Complete |
+| 2 | Data Correctness | High | Pending |
+| 3 | Stability & Thread Safety | High | Pending |
+| 4 | Architecture Refactoring | Medium | Pending |
+| 5 | Performance & Polish | Medium | Pending |
+| 6 | iOS 26 Adoption | Medium | In Progress |
+| 7 | Test Coverage | Ongoing | Pending |
 
 ---
 
-## Phase 1: Security Hardening
+## Phase 1: Security Hardening ✅
 
-> **Priority**: Critical | **Do First**
+> **Priority**: Critical | **Status**: Complete (verified December 28, 2025)
 
-### 1.1 Command Injection Prevention
+### 1.1 Command Injection Prevention ✅
 
-Shell commands interpolate unescaped user inputs, enabling command injection.
+All shell commands now use `shellEscape()` for user inputs.
 
-| Task | File | Line | Action |
+| Task | File | Line | Status |
 |------|------|------|--------|
-| Escape git URL | `CloneProjectSheet.swift` | 167 | Wrap URL in `shellEscape()` |
-| Escape grep path | `SSHManager.swift` | 1468 | Use `shellEscape()` for project path |
-| Escape shell path | `ContentView.swift` | 573 | Use `shellEscape()` for path interpolation |
-| Fix bash -c expansion | `SSHManager.swift` | 1024 | Refactor `executeCommandWithTimeout` to avoid bash -c wrapper |
+| Escape git URL | `CloneProjectSheet.swift` | 167 | ✅ `shellEscape(gitURL)` |
+| Escape grep path | `SSHManager.swift` | 1850 | ✅ `shellEscape(encodedPath)` |
+| Escape shell path | `ContentView.swift` | 569 | ✅ `shellEscape(encodedPath)` |
+| Fix bash -c expansion | `SSHManager.swift` | 1402 | ✅ `escapeCommandForBash(command)` |
 
-**Implementation**:
+**Implementation** (in `SSHManager.swift`):
 ```swift
-// Ensure all SSH commands use the existing helper:
-private func shellEscape(_ string: String) -> String {
+func shellEscape(_ string: String) -> String {
     let escaped = string.replacingOccurrences(of: "'", with: "'\\''")
     return "'\(escaped)'"
 }
-```
 
-### 1.2 Credential Storage Migration
-
-Backend credentials stored in plain text UserDefaults; must migrate to Keychain.
-
-| Task | File | Line | Action |
-|------|------|------|--------|
-| Migrate authPassword | `AppSettings.swift` | 223 | Move to Keychain with migration |
-| Migrate authToken | `AppSettings.swift` | 224 | Move to Keychain with migration |
-| Migrate apiKey | `AppSettings.swift` | 225 | Move to Keychain with migration |
-| Redact JWT in logs | `APIClient.swift` | 112 | Replace token with `[REDACTED]` |
-
-**Implementation**: Follow the existing `sshPassword` migration pattern:
-```swift
-var authToken: String {
-    get { KeychainHelper.shared.retrieveAuthToken() ?? "" }
-    set { KeychainHelper.shared.storeAuthToken(newValue) }
-}
-
-func migrateCredentialsIfNeeded() {
-    // One-time migration from UserDefaults to Keychain
+private func escapeCommandForBash(_ command: String) -> String {
+    return command.replacingOccurrences(of: "'", with: "'\\''")
 }
 ```
 
-### 1.3 SSH Host Key Validation
+### 1.2 Credential Storage Migration ✅
 
-Host key verification disabled with `.acceptAnything()`, enabling MITM attacks.
+All credentials migrated from UserDefaults to Keychain with automatic migration.
 
-| Task | File | Lines | Action |
+| Task | File | Lines | Status |
 |------|------|-------|--------|
-| Add host key validation | `SSHManager.swift` | 780, 821 | Implement known-hosts or trust-on-first-use |
+| Migrate authPassword | `AppSettings.swift` | 322-335 | ✅ `KeychainHelper.shared` |
+| Migrate authToken | `AppSettings.swift` | 338-351 | ✅ `KeychainHelper.shared` |
+| Migrate apiKey | `AppSettings.swift` | 354-367 | ✅ `KeychainHelper.shared` |
+| Redact JWT in logs | `APIClient.swift` | 116-123 | ✅ `"Bearer [REDACTED]"` |
+| Migration function | `AppSettings.swift` | 370-397 | ✅ `migrateAuthCredentialsIfNeeded()` |
 
-**Implementation Options**:
-1. **Trust-on-first-use (TOFU)**: Store fingerprint in Keychain on first connect, verify on subsequent
-2. **Known hosts file**: Read/write `~/.ssh/known_hosts` format
-3. **User prompt**: Show fingerprint dialog on first connect
+### 1.3 SSH Host Key Validation ✅
+
+Implemented Trust-On-First-Use (TOFU) with Keychain storage.
+
+| Task | File | Lines | Status |
+|------|------|-------|--------|
+| TOFU Validator class | `SSHManager.swift` | 507-562 | ✅ `TOFUHostKeyValidator` |
+| Key auth uses TOFU | `SSHManager.swift` | 1159-1164 | ✅ Verified |
+| Password auth uses TOFU | `SSHManager.swift` | 1201-1206 | ✅ Verified |
+| Keychain fingerprint storage | `SSHManager.swift` | 420-486 | ✅ Store/retrieve/delete |
+| Mismatch detection | `SSHManager.swift` | 530-538 | ✅ `SSHHostKeyError.mismatch` |
+
+**Implementation**: TOFU stores SHA-256 fingerprint on first connect, verifies on subsequent connections. Mismatch throws error to prevent MITM attacks.
 
 ---
 
@@ -86,7 +79,57 @@ Host key verification disabled with `.acceptAnything()`, enabling MITM attacks.
 
 > **Priority**: High
 
-### 2.1 API URL Encoding
+### 2.1 Handle Linter Conflict Errors
+
+Session analysis found 13 occurrences of "File has been modified since read, either by a linter" errors that confuse users.
+
+| Task | File | Action |
+|------|------|--------|
+| Detect linter conflict | `CLIMessageView.swift` | Add `isLinterConflict` check for "modified since read" |
+| Special UI treatment | `CLIMessageView.swift` | Show yellow warning with explanation instead of generic error |
+
+**Implementation**:
+```swift
+private var isLinterConflict: Bool {
+    message.content.contains("modified since read") ||
+    message.content.contains("by a linter")
+}
+
+// Show special styling for this common recoverable error
+if isLinterConflict {
+    HStack {
+        Image(systemName: "arrow.clockwise")
+        Text("Linter modified file - Claude will re-read")
+    }
+    .foregroundColor(CLITheme.yellow(for: colorScheme))
+}
+```
+
+### 2.2 Read Tool File Extension Labels
+
+Session analysis shows Read dominates at 40% of tool usage. Add file extension context to headers.
+
+| Task | File | Action |
+|------|------|--------|
+| Add extension labels | `CLIMessageView.swift` | Show language name in Read header (Swift, TypeScript, etc.) |
+
+**Implementation**:
+```swift
+private func fileExtensionName(_ ext: String) -> String {
+    switch ext {
+    case "swift": return "Swift"
+    case "ts", "tsx": return "TypeScript"
+    case "js", "jsx": return "JavaScript"
+    case "py": return "Python"
+    case "md": return "Markdown"
+    case "json": return "JSON"
+    case "yaml", "yml": return "YAML"
+    default: return ""
+    }
+}
+```
+
+### 2.3 API URL Encoding
 
 API paths built with raw strings fail for project names with spaces/special characters.
 
@@ -102,7 +145,7 @@ let encodedSession = sessionId.addingPercentEncoding(withAllowedCharacters: .url
 components.path = "/api/projects/\(encodedProject)/sessions/\(encodedSession)/messages"
 ```
 
-### 2.2 Session History Completeness
+### 2.4 Session History Completeness
 
 Session history parsing returns on first content item, dropping multi-part messages.
 
@@ -111,7 +154,7 @@ Session history parsing returns on first content item, dropping multi-part messa
 | Aggregate content parts | `APIClient.swift` | 334, 338 | Collect all text/tool_use items instead of returning on first |
 | Handle tool_use in history | `APIClient.swift` | 350-354 | Emit separate ChatMessage for each tool_use |
 
-### 2.3 Session History Fallback
+### 2.5 Session History Fallback
 
 When API fails, no fallback to SSH-based history loading.
 
@@ -120,7 +163,7 @@ When API fails, no fallback to SSH-based history loading.
 | Add SSH fallback | `ChatView.swift` | 1196, 1228 | Try SSH history load when API returns error |
 | Surface error state | `ChatView.swift` | - | Show clear error when both methods fail |
 
-### 2.4 Auth Retry Handling
+### 2.6 Auth Retry Handling
 
 Recursive `fetchProjects()` after `login()` with no retry cap risks infinite loops.
 
@@ -207,9 +250,12 @@ ChatView has 25+ @State properties and ~1968 lines.
 
 | Task | File | Lines | Extract To |
 |------|------|-------|------------|
+| Split CLIMessageView | `CLIMessageView.swift` | 692 | ToolUseView, ToolResultView, MessageActionBar |
 | Split ContentView | `ContentView.swift` | 1558 | ProjectListView, SearchCoordinator |
 | Split SSHManager | `SSHManager.swift` | 1593 | FileOperations, GitOperations |
 | Split WebSocketManager | `WebSocketManager.swift` | 1112 | MessageParser, ConnectionManager |
+
+**Note**: Session analysis identified CLIMessageView as growing complex at 692 lines. Consider extracting specialized views for different tool types.
 
 ### 4.3 Error Handling Standardization
 
@@ -354,27 +400,28 @@ xcodebuild test -project ClaudeCodeApp.xcodeproj \
 
 ### File Hotspots (by issue count)
 
-| File | Issues | Primary Concerns |
-|------|--------|------------------|
-| `AppSettings.swift` | 4 | Credential storage, @MainActor |
-| `SSHManager.swift` | 4 | Shell escaping, host validation, bash -c |
-| `APIClient.swift` | 4 | URL encoding, history parsing, retry loop, log redaction |
-| `ChatView.swift` | 3 | @State sprawl, size, SSH fallback |
-| `WebSocketManager.swift` | 3 | State races, parsing, force unwrap |
-| `Models.swift` | 2 | @MainActor, sync IO |
+| File | Issues | Primary Concerns | Security Status |
+|------|--------|------------------|-----------------|
+| `CLIMessageView.swift` | 3 | Linter errors, extension labels, size (692 lines) | - |
+| `AppSettings.swift` | 1 | @MainActor | ✅ Credentials secured |
+| `SSHManager.swift` | 0 | - | ✅ All security issues fixed |
+| `APIClient.swift` | 3 | URL encoding, history parsing, retry loop | ✅ Log redaction done |
+| `ChatView.swift` | 3 | @State sprawl, size, SSH fallback | - |
+| `WebSocketManager.swift` | 3 | State races, parsing, force unwrap | - |
+| `Models.swift` | 2 | @MainActor, sync IO | - |
 
 ### Implementation Order
 
 ```
-Phase 1 (Security)     ━━━━━━━━━━━━━━━━━►
+Phase 1 (Security)     ████████████████████ COMPLETE ✅
 Phase 2 (Data)              ━━━━━━━━━━━━━━►
 Phase 3 (Stability)              ━━━━━━━━━━►
 Phase 4 (Architecture)                ━━━━━━━━━━━━━━━━━━►
 Phase 5 (Polish)                           ━━━━━━━━━━━━━━━━━►
-Phase 6 (iOS 26)                                ━━━━━━━━━━━━━►
+Phase 6 (iOS 26)                                ▓▓▓▓━━━━━━━━━►
 Phase 7 (Tests)        ════════════════════════════════════════════►
 ```
 
 ---
 
-_Last updated: December 27, 2025_
+_Last updated: December 28, 2025_

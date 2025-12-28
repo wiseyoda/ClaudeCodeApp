@@ -504,7 +504,7 @@ enum SSHHostKeyError: Error, LocalizedError {
 /// Trust On First Use (TOFU) host key validator
 /// On first connection: stores the host's key fingerprint
 /// On subsequent connections: verifies the fingerprint matches
-struct TOFUHostKeyValidator {
+final class TOFUHostKeyValidator: NIOSSHClientServerAuthenticationDelegate, @unchecked Sendable {
     let host: String
     let port: Int
 
@@ -516,29 +516,32 @@ struct TOFUHostKeyValidator {
 
     /// Create an SSHHostKeyValidator using TOFU strategy
     func validator() -> SSHHostKeyValidator {
-        return .custom { publicKey in
-            // Compute fingerprint from the public key
-            let fingerprint = computeFingerprint(from: publicKey)
+        return .custom(self)
+    }
 
-            // Check if we have a stored fingerprint for this host
-            if let storedFingerprint = KeychainHelper.shared.retrieveHostKeyFingerprint(host: host, port: port) {
-                // Verify the fingerprint matches
-                if storedFingerprint == fingerprint {
-                    log.debug("SSH host key verified for \(host):\(port)")
-                    return  // Success - fingerprint matches
-                } else {
-                    // CRITICAL: Fingerprint mismatch - possible MITM attack
-                    log.error("SSH host key mismatch for \(host):\(port)!")
-                    log.error("Expected: \(storedFingerprint)")
-                    log.error("Received: \(fingerprint)")
-                    throw SSHHostKeyError.mismatch(expected: storedFingerprint, received: fingerprint)
-                }
+    /// Validate host key using TOFU strategy (NIOSSHClientServerAuthenticationDelegate)
+    func validateHostKey(hostKey: NIOSSHPublicKey, validationCompletePromise: EventLoopPromise<Void>) {
+        // Compute fingerprint from the public key
+        let fingerprint = computeFingerprint(from: hostKey)
+
+        // Check if we have a stored fingerprint for this host
+        if let storedFingerprint = KeychainHelper.shared.retrieveHostKeyFingerprint(host: host, port: port) {
+            // Verify the fingerprint matches
+            if storedFingerprint == fingerprint {
+                log.debug("SSH host key verified for \(host):\(port)")
+                validationCompletePromise.succeed(())  // Success - fingerprint matches
             } else {
-                // First connection - trust and store the fingerprint
-                log.info("First SSH connection to \(host):\(port) - storing host key fingerprint")
-                KeychainHelper.shared.storeHostKeyFingerprint(fingerprint, host: host, port: port)
-                return  // Success - trusted on first use
+                // CRITICAL: Fingerprint mismatch - possible MITM attack
+                log.error("SSH host key mismatch for \(host):\(port)!")
+                log.error("Expected: \(storedFingerprint)")
+                log.error("Received: \(fingerprint)")
+                validationCompletePromise.fail(SSHHostKeyError.mismatch(expected: storedFingerprint, received: fingerprint))
             }
+        } else {
+            // First connection - trust and store the fingerprint
+            log.info("First SSH connection to \(host):\(port) - storing host key fingerprint")
+            KeychainHelper.shared.storeHostKeyFingerprint(fingerprint, host: host, port: port)
+            validationCompletePromise.succeed(())  // Success - trusted on first use
         }
     }
 

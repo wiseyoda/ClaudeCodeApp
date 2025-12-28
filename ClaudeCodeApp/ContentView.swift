@@ -1,15 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-// MARK: - Shell Escaping
-
-/// Escape a string for safe use in shell commands as a literal argument
-/// Uses single-quote escaping: wrap in single quotes and escape any internal single quotes
-private func shellEscape(_ string: String) -> String {
-    let escaped = string.replacingOccurrences(of: "'", with: "'\\''")
-    return "'\(escaped)'"
-}
-
 struct ContentView: View {
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
