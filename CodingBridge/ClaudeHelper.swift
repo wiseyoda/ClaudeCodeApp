@@ -81,14 +81,43 @@ class ClaudeHelper: ObservableObject {
         return "\(part1)-\(part2)-\(part3)-\(part4)-\(part5)"
     }
 
-    /// Check if a session ID is a helper session (for filtering)
-    static func isHelperSession(_ sessionId: String) -> Bool {
-        // Helper sessions have a specific pattern based on our hash
-        // We can identify them by checking if they match the UUID format
-        // and were created by our hash function
-        // For now, we'll store known helper session IDs and check against them
-        // This is handled by storing them in helperSessionIds dictionary
-        return false  // Not used for now - filtering is done differently
+    /// Helper prompt prefixes used to identify helper-generated sessions.
+    /// These are the opening phrases of prompts sent to ClaudeHelper functions.
+    private static let helperPromptPrefixes = [
+        "Based on this conversation context, suggest",
+        "Based on this conversation, which files",
+        "You are helping a developer expand a quick idea",
+        "Analyze this Claude Code response and suggest"
+    ]
+
+    /// Check if a message content looks like a ClaudeHelper prompt.
+    /// Used to filter out orphan helper sessions from the session list.
+    nonisolated static func isHelperPrompt(_ content: String?) -> Bool {
+        guard let content = content, !content.isEmpty else { return false }
+        return helperPromptPrefixes.contains { content.hasPrefix($0) }
+    }
+
+    /// Check if a session ID is an agent sub-session (Task tool spawned agents).
+    /// These have IDs like "agent-acfbed8" and shouldn't appear in the session picker.
+    nonisolated static func isAgentSession(_ sessionId: String) -> Bool {
+        sessionId.hasPrefix("agent-")
+    }
+
+    /// Check if a session should be hidden from the session picker.
+    /// Only filters:
+    /// - Deterministic helper session ID (orphan sessions from before fix)
+    /// - Agent sub-sessions (Task tool spawned agents)
+    ///
+    /// Note: We don't filter by lastUserMessage content because ClaudeHelper
+    /// now correctly reuses the existing session - so a real session may have
+    /// a helper prompt as its last message.
+    nonisolated static func isHelperSession(sessionId: String, lastUserMessage: String?, projectPath: String) -> Bool {
+        // Check if ID matches the deterministic helper session ID
+        if sessionId == createHelperSessionId(for: projectPath) {
+            return true
+        }
+        // Check if this is an agent sub-session (Task tool)
+        return isAgentSession(sessionId)
     }
 
     @Published var isLoading = false

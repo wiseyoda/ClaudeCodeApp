@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **Permission Approval Banner**: Interactive approval UI when bypass permissions is OFF
+  - `ApprovalBannerView` - Compact banner with Approve/Always Allow/Deny buttons
+  - `ApprovalRequest` and `ApprovalResponse` models for WebSocket protocol
+  - Real-time permission request handling in WebSocketManager
+  - Backend fork (wiseyoda/claudecodeui) with `canUseTool` callback support
+  - Enables non-bypass permission mode for security-conscious workflows
 - **iOS Platform Quirks Documentation**: Documented workarounds for TextEditor paste truncation, Smart Punctuation, and text hyphenation issues in CLAUDE.md
 - **SessionManager**: Centralized session management with filtering and sorting
   - Excludes AI helper sessions (agent-*.jsonl) from session list

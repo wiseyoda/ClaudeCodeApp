@@ -1124,6 +1124,22 @@ class WebSocketManager: ObservableObject {
                 // Project list changed, could notify UI to refresh
                 break
 
+            case "sessions-updated":
+                // Session list changed for a project - notify SessionStore
+                if let dataDict = msg.data?.value as? [String: Any],
+                   let projectName = dataDict["projectName"] as? String,
+                   let sessionId = dataDict["sessionId"] as? String,
+                   let action = dataDict["action"] as? String {
+                    log.debug("Sessions updated: \(projectName) - \(action) - \(sessionId.prefix(8))...")
+                    Task {
+                        await SessionStore.shared.handleSessionsUpdated(
+                            projectName: projectName,
+                            sessionId: sessionId,
+                            action: action
+                        )
+                    }
+                }
+
             case "permission-request":
                 // Backend is requesting permission for a tool use
                 // Only sent when bypass permissions mode is OFF

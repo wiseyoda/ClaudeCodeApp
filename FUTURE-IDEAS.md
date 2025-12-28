@@ -234,9 +234,15 @@ GitHub Mobile has basic Shortcuts. No AI assistant has deep Shortcuts integratio
 
 ### 5. Approval Queue and Push Notifications
 
-**Status:** [ ] Approved for Roadmap
+**Status:** [ ] Approved for Roadmap | **Foundation:** ✅ Basic approval UI complete
 
 **Theme:** Proactive Assistance
+
+**Foundation Implemented (December 2025):**
+- `ApprovalBannerView` - Real-time approval UI for tool permission requests
+- `ApprovalRequest/Response` models with WebSocket protocol
+- Backend `canUseTool` callback in wiseyoda/claudecodeui fork
+- This feature would extend the existing approval system with push notifications
 
 **Problem Statement:**
 When Claude needs permission to run a command, users only see the request if the app is open. Time-sensitive approvals (like deploying) may be delayed for hours.

@@ -68,7 +68,9 @@
 		PS000046 /* ProjectSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = PS000047 /* ProjectSettingsStore.swift */; };
 		SK000001 /* SkeletonView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SK000002 /* SkeletonView.swift */; };
 		SM000040 /* SessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000039 /* SessionManager.swift */; };
+		SR000050 /* SessionRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = SR000051 /* SessionRepository.swift */; };
 		SS000048 /* ScrollStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = SS000049 /* ScrollStateManager.swift */; };
+		SST00052 /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = SST00053 /* SessionStore.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -144,7 +146,9 @@
 		PC000002 /* ProjectCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCache.swift; sourceTree = "<group>"; };
 		PS000047 /* ProjectSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSettingsStore.swift; sourceTree = "<group>"; };
 		SK000002 /* SkeletonView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkeletonView.swift; sourceTree = "<group>"; };
+		SR000051 /* SessionRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionRepository.swift; sourceTree = "<group>"; };
 		SS000049 /* ScrollStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollStateManager.swift; sourceTree = "<group>"; };
+		SST00053 /* SessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -200,6 +204,8 @@
 				A2000009 /* TerminalView.swift */,
 				A2000010 /* SSHManager.swift */,
 				A2000039 /* SessionManager.swift */,
+				SR000051 /* SessionRepository.swift */,
+				SST00053 /* SessionStore.swift */,
 				A2000011 /* WebSocketManager.swift */,
 				A2000012 /* SpeechManager.swift */,
 				A2000013 /* UserQuestionsView.swift */,
@@ -283,9 +289,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		2509F4FA2EFF976200EAFBFE /* CodingBridgeAppTests */ = {
+		2509F4FA2EFF976200EAFBFE /* CodingBridgeTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 2509F5032EFF976200EAFBFE /* Build configuration list for PBXNativeTarget "CodingBridgeAppTests" */;
+			buildConfigurationList = 2509F5032EFF976200EAFBFE /* Build configuration list for PBXNativeTarget "CodingBridgeTests" */;
 			buildPhases = (
 				2509F4F72EFF976200EAFBFE /* Sources */,
 				2509F4F82EFF976200EAFBFE /* Frameworks */,
@@ -362,7 +368,7 @@
 			projectRoot = "";
 			targets = (
 				A6000001 /* CodingBridge */,
-				2509F4FA2EFF976200EAFBFE /* CodingBridgeAppTests */,
+				2509F4FA2EFF976200EAFBFE /* CodingBridgeTests */,
 			);
 		};
 /* End PBXProject section */
@@ -411,6 +417,8 @@
 				A1000009 /* TerminalView.swift in Sources */,
 				A1000010 /* SSHManager.swift in Sources */,
 				SM000040 /* SessionManager.swift in Sources */,
+				SR000050 /* SessionRepository.swift in Sources */,
+				SST00052 /* SessionStore.swift in Sources */,
 				A1000012 /* WebSocketManager.swift in Sources */,
 				A1000013 /* SpeechManager.swift in Sources */,
 				A1000014 /* UserQuestionsView.swift in Sources */,

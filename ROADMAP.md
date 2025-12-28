@@ -392,6 +392,18 @@ xcodebuild test -project CodingBridge.xcodeproj \
 
 ## Recently Fixed
 
+### Permission Approval Banner (December 28, 2025)
+
+| Task | File | Status |
+|------|------|--------|
+| ApprovalBannerView component | `Views/ApprovalBannerView.swift` | ✅ Complete |
+| ApprovalRequest/Response models | `Models.swift` | ✅ Complete |
+| WebSocket permission handling | `WebSocketManager.swift` | ✅ Complete |
+| ChatView banner integration | `ChatView.swift` | ✅ Complete |
+| Backend canUseTool callback | wiseyoda/claudecodeui fork | ✅ Complete |
+
+**Implementation**: When bypass permissions is OFF, the backend forwards tool approval requests via WebSocket. iOS shows a banner with Approve/Always Allow/Deny buttons. Responses route through the legacy `handlePermissionResponse` handler to complete tool execution.
+
 ### UI/UX Fixes (December 27, 2025)
 
 | Issue | File | Fix |

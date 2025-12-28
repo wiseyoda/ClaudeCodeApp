@@ -241,9 +241,22 @@ struct ChatView: View {
                 }
             }
 
-            // Restore last session ID for conversation continuity
+            // Load sessions and restore/auto-select session with full history
             let wasProcessing = MessageStore.loadProcessingState(for: project.path)
-            if let savedSessionId = MessageStore.loadSessionId(for: project.path) {
+            let savedSessionId = MessageStore.loadSessionId(for: project.path)
+
+            // Start loading sessions from API in background
+            Task {
+                await sessionManager.loadSessions(for: project.path, settings: settings)
+
+                // After sessions load, ensure we have the right session selected
+                await MainActor.run {
+                    autoSelectAndLoadSession(savedSessionId: savedSessionId, wasProcessing: wasProcessing)
+                }
+            }
+
+            // Initial session selection (before API load completes)
+            if let savedSessionId = savedSessionId {
                 print("[ChatView] Loaded saved session ID: \(savedSessionId.prefix(8))...")
                 wsManager.sessionId = savedSessionId
                 // Find matching session in project sessions for UI
@@ -251,6 +264,8 @@ struct ChatView: View {
                     selectedSession = sessions.first { $0.id == savedSessionId }
                     if selectedSession != nil {
                         print("[ChatView] Found matching session in project.sessions")
+                        // Load history for the saved session
+                        loadSessionHistory(selectedSession!)
                     } else {
                         print("[ChatView] WARNING: Saved session not found in project.sessions (count: \(sessions.count))")
                     }
@@ -259,35 +274,13 @@ struct ChatView: View {
                 // Check if we need to reattach to an active session
                 if wasProcessing {
                     print("[ChatView] Session was processing when app closed - attempting reattachment...")
-                    // Wait for WebSocket to connect, then attempt reattachment
-                    Task {
-                        // Wait for connection to be established
-                        var attempts = 0
-                        while !wsManager.connectionState.isConnected && attempts < 20 {
-                            try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms
-                            attempts += 1
-                        }
-
-                        if wsManager.connectionState.isConnected {
-                            wsManager.attachToSession(sessionId: savedSessionId, projectPath: project.path)
-                        } else {
-                            print("[ChatView] Could not reattach - WebSocket not connected after wait")
-                            // Clear the processing state since we couldn't reattach
-                            MessageStore.clearProcessingState(for: project.path)
-                        }
-                    }
+                    attemptSessionReattachment(sessionId: savedSessionId)
                 }
             } else {
                 print("[ChatView] No saved session ID found for project")
                 // Auto-select the most recent session if available
-                if let sessions = project.sessions,
-                   let mostRecent = sessions.sorted(by: { ($0.lastActivity ?? "") > ($1.lastActivity ?? "") }).first,
-                   (mostRecent.messageCount ?? 0) > 1 {
-                    print("[ChatView] Auto-selecting most recent session: \(mostRecent.id.prefix(8))...")
-                    wsManager.sessionId = mostRecent.id
-                    selectedSession = mostRecent
-                    MessageStore.saveSessionId(mostRecent.id, for: project.path)
-                }
+                autoSelectMostRecentSession()
+
                 // Clear any stale processing state if no session ID
                 if wasProcessing {
                     MessageStore.clearProcessingState(for: project.path)
@@ -477,18 +470,15 @@ struct ChatView: View {
             }
         }
         .onAppear {
-            // Initialize sessions via SessionManager - loads ALL via SSH (API only returns ~5)
-            // Only load if we haven't already loaded from SSH for this project
+            // Initialize sessions via API (SessionStore is single source of truth)
             if !sessionManager.hasLoaded(for: project.path) {
-                // Pre-populate with API sessions ONLY as temporary fallback while SSH loads
-                // This will be replaced once SSH load completes
-                // Note: SessionManager.addSession() rejects deleted sessions
+                // Pre-populate with project.sessions as temporary fallback while API loads
                 if localSessions.isEmpty {
                     for session in project.sessions ?? [] {
                         sessionManager.addSession(session, for: project.path)
                     }
                 }
-                // Load all sessions via SSH in background (this becomes the source of truth)
+                // Load all sessions via API in background
                 Task {
                     await sessionManager.loadSessions(for: project.path, settings: settings)
                 }
@@ -610,41 +600,42 @@ struct ChatView: View {
     }
 
     /// Combined sessions list - SessionManager as single source of truth
-    /// Only falls back to project.sessions before SSH has loaded
+    /// Only falls back to project.sessions before API has loaded
+    /// Returns filtered sessions (excludes helper sessions)
     private var sessions: [ProjectSession] {
-        // If we've loaded from SSH, always use SessionManager (even if empty = all deleted)
+        let activeId = wsManager.sessionId
+        // If we've loaded from API, always use SessionManager (even if empty = all deleted)
         if sessionManager.hasLoaded(for: project.path) {
-            return localSessions
+            return localSessions.filterForDisplay(projectPath: project.path, activeSessionId: activeId)
         }
-        // Before SSH loads, use API data as fallback
-        return localSessions.isEmpty ? (project.sessions ?? []) : localSessions
+        // Before API loads, use project data as fallback
+        let baseSessions = localSessions.isEmpty ? (project.sessions ?? []) : localSessions
+        return baseSessions.filterForDisplay(projectPath: project.path, activeSessionId: activeId)
     }
 
     @ViewBuilder
     private var sessionPickerView: some View {
-        if !sessions.isEmpty {
-            SessionPicker(
-                sessions: localSessionsBinding,
-                project: project,
-                selected: $selectedSession,
-                isLoading: isLoadingHistory,
-                isProcessing: wsManager.isProcessing,
-                activeSessionId: wsManager.sessionId,
-                onSelect: { session in
-                    wsManager.sessionId = session.id
-                    MessageStore.saveSessionId(session.id, for: project.path)
-                    loadSessionHistory(session)
-                },
-                onNew: {
-                    startNewSession()
-                },
-                onDelete: { session in
-                    Task {
-                        await deleteSession(session)
-                    }
+        SessionBar(
+            project: project,
+            sessions: localSessionsBinding,
+            selected: $selectedSession,
+            isLoading: isLoadingHistory,
+            isProcessing: wsManager.isProcessing,
+            activeSessionId: wsManager.sessionId,
+            onSelect: { session in
+                wsManager.sessionId = session.id
+                MessageStore.saveSessionId(session.id, for: project.path)
+                loadSessionHistory(session)
+            },
+            onNew: {
+                startNewSession()
+            },
+            onDelete: { session in
+                Task {
+                    await deleteSession(session)
                 }
-            )
-        }
+            }
+        )
     }
 
     /// Start a completely new session - clears messages and resets session ID
@@ -1432,11 +1423,93 @@ struct ChatView: View {
         }
     }
 
-    /// Load all sessions via SSH (backend API only returns ~5)
+    /// Load all sessions via API (SessionStore handles API-based loading)
     /// Delegates to SessionManager for centralized state management
-    private func loadAllSessionsViaSSH() {
+    private func loadAllSessions() {
         Task {
             await sessionManager.loadSessions(for: project.path, settings: settings)
+        }
+    }
+
+    // MARK: - Session Auto-Selection
+
+    /// Auto-select and load session after API sessions are loaded
+    private func autoSelectAndLoadSession(savedSessionId: String?, wasProcessing: Bool) {
+        let loadedSessions = sessionManager.displaySessions(for: project.path)
+
+        if let savedSessionId = savedSessionId {
+            // Try to find the saved session in loaded sessions
+            if let session = loadedSessions.first(where: { $0.id == savedSessionId }) {
+                if selectedSession?.id != session.id {
+                    selectedSession = session
+                    // Only load history if not already loaded
+                    if messages.isEmpty {
+                        loadSessionHistory(session)
+                    }
+                }
+            } else if !loadedSessions.isEmpty {
+                // Saved session not found, fall back to most recent
+                print("[ChatView] Saved session not in loaded sessions, selecting most recent")
+                selectMostRecentSession(from: loadedSessions)
+            }
+        } else if !loadedSessions.isEmpty {
+            // No saved session, auto-select most recent
+            selectMostRecentSession(from: loadedSessions)
+        }
+    }
+
+    /// Auto-select the most recent session from project.sessions (before API load)
+    private func autoSelectMostRecentSession() {
+        guard let sessions = project.sessions else { return }
+
+        let filteredSessions = sessions.filterAndSortForDisplay(projectPath: project.path, activeSessionId: nil)
+        guard let mostRecent = filteredSessions.first,
+              (mostRecent.messageCount ?? 0) > 0 else { return }
+
+        print("[ChatView] Auto-selecting most recent session: \(mostRecent.id.prefix(8))...")
+        wsManager.sessionId = mostRecent.id
+        selectedSession = mostRecent
+        MessageStore.saveSessionId(mostRecent.id, for: project.path)
+
+        // Load the session history
+        loadSessionHistory(mostRecent)
+    }
+
+    /// Select the most recent session from a list of sessions
+    private func selectMostRecentSession(from sessions: [ProjectSession]) {
+        guard let mostRecent = sessions.first else { return }
+
+        print("[ChatView] Selecting most recent session: \(mostRecent.id.prefix(8))...")
+        wsManager.sessionId = mostRecent.id
+        selectedSession = mostRecent
+        MessageStore.saveSessionId(mostRecent.id, for: project.path)
+
+        // Load the session history if not already loaded
+        if messages.isEmpty {
+            loadSessionHistory(mostRecent)
+        }
+    }
+
+    /// Attempt to reattach to an active/processing session
+    private func attemptSessionReattachment(sessionId: String) {
+        Task {
+            // Wait for WebSocket connection to be established
+            var attempts = 0
+            while !wsManager.connectionState.isConnected && attempts < 20 {
+                try? await Task.sleep(nanoseconds: 100_000_000)  // 100ms
+                attempts += 1
+            }
+
+            await MainActor.run {
+                if wsManager.connectionState.isConnected {
+                    print("[ChatView] Reattaching to session: \(sessionId.prefix(8))...")
+                    wsManager.attachToSession(sessionId: sessionId, projectPath: project.path)
+                } else {
+                    print("[ChatView] Could not reattach - WebSocket not connected after wait")
+                    // Clear the processing state since we couldn't reattach
+                    MessageStore.clearProcessingState(for: project.path)
+                }
+            }
         }
     }
 
@@ -2152,15 +2225,16 @@ struct ScrollOffsetPreferenceKey: PreferenceKey {
 }
 
 #Preview {
-    let settings = AppSettings()
-    return NavigationStack {
+    @Previewable @State var settings = AppSettings()
+    NavigationStack {
         ChatView(
             project: Project(
                 name: "test-project",
                 path: "/test/project",
                 displayName: "Test Project",
                 fullPath: "/test/project",
-                sessions: nil
+                sessions: nil,
+                sessionMeta: nil
             ),
             apiClient: APIClient(settings: settings)
         )

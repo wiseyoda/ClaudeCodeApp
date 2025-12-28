@@ -48,12 +48,13 @@ When reporting a bug, include:
   1. "Yes, and bypass permissions" - proceed without further approval
   2. "Yes, and manually approve edits" - require approval for each change
   3. "Type here to tell Claude what to change" - provide feedback on the plan
-- **Dependencies**: Extend non-bypass mode approval functionality (currently in progress)
+- **Dependencies**: ✅ Non-bypass mode approval functionality now complete (Permission Approval Banner)
 - **Implementation notes**:
   - Detect when Claude sends `ExitPlanMode` tool call
   - Show approval sheet with similar options to CLI
   - Pass selected mode back to backend for execution
   - May need backend support for plan mode state tracking
+  - Foundation in place: `ApprovalBannerView`, `ApprovalRequest/Response` models, WebSocket handling
 - **Location**: `ChatView.swift`, `WebSocketManager.swift`
 - **Reference**: Screenshot shows CLI approval interface
 

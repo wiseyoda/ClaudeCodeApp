@@ -409,6 +409,7 @@ struct Project: Codable, Identifiable, Hashable {
     let displayName: String?
     let fullPath: String?
     let sessions: [ProjectSession]?
+    let sessionMeta: ProjectSessionMeta?
 
     var id: String { path }
 
@@ -429,9 +430,25 @@ struct Project: Codable, Identifiable, Hashable {
         return name.replacingOccurrences(of: "-home-dev-workspace-", with: "")
     }
 
-    enum CodingKeys: String, CodingKey {
-        case name, path, displayName, fullPath, sessions
+    /// Total session count (from API metadata or bundled sessions count)
+    var totalSessionCount: Int {
+        sessionMeta?.total ?? sessions?.count ?? 0
     }
+
+    /// Whether more sessions are available via pagination
+    var hasMoreSessions: Bool {
+        sessionMeta?.hasMore ?? false
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case name, path, displayName, fullPath, sessions, sessionMeta
+    }
+}
+
+/// Metadata about sessions for a project (included in API response)
+struct ProjectSessionMeta: Codable, Hashable {
+    let hasMore: Bool
+    let total: Int
 }
 
 struct ProjectSession: Codable, Identifiable {
@@ -449,18 +466,22 @@ extension Array where Element == ProjectSession {
     /// Filter sessions to show only user conversation sessions.
     /// Excludes:
     /// - ClaudeHelper sessions (used for suggestions, not user conversations)
+    ///   - By ID: sessions matching the deterministic helper session ID
+    ///   - By content: sessions whose lastUserMessage starts with helper prompts
     /// - Empty sessions (messageCount == 0, never had any messages)
     /// - Always includes the activeSessionId if provided (current session)
     func filterForDisplay(projectPath: String, activeSessionId: String? = nil) -> [ProjectSession] {
-        let helperSessionId = ClaudeHelper.createHelperSessionId(for: projectPath)
-
         return self.filter { session in
             // Always include the active/current session (even if it's new with few messages)
             if let activeId = activeSessionId, session.id == activeId {
                 return true
             }
-            // Filter out ClaudeHelper sessions
-            if session.id == helperSessionId {
+            // Filter out ClaudeHelper sessions (by ID or by content)
+            if ClaudeHelper.isHelperSession(
+                sessionId: session.id,
+                lastUserMessage: session.lastUserMessage,
+                projectPath: projectPath
+            ) {
                 return false
             }
             // Filter out truly empty sessions (messageCount == 0)

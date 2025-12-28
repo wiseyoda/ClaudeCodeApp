@@ -521,7 +521,7 @@ struct ContentView: View {
         ProjectRow(
             project: project,
             gitStatus: gitStatuses[project.path] ?? .unknown,
-            sessionCount: sessionManager.sessionCount(for: project.path),
+            sessionCount: sessionManager.displaySessionCount(for: project.path),
             isSelected: selectedProject?.id == project.id,
             isArchived: isArchived,
             multiRepoStatus: multiRepoStatus,

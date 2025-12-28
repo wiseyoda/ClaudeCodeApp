@@ -24,7 +24,137 @@ class SessionNamesStore {
     }
 }
 
-// MARK: - Session Picker
+// MARK: - Session Bar (Compact UI)
+
+/// Compact session bar showing current session name with action buttons.
+/// Layout: `| <session name> [+] [≡] |`
+struct SessionBar: View {
+    let project: Project
+    @Binding var sessions: [ProjectSession]
+    @Binding var selected: ProjectSession?
+    var isLoading: Bool = false
+    var isProcessing: Bool = false
+    var activeSessionId: String?
+    let onSelect: (ProjectSession) -> Void
+    let onNew: () -> Void
+    let onDelete: ((ProjectSession) -> Void)?
+
+    @EnvironmentObject var settings: AppSettings
+    @Environment(\.colorScheme) var colorScheme
+    @State private var showSessionSheet = false
+
+    /// Get display name for current session
+    private var currentSessionName: String {
+        // Priority: selected session -> active session -> "No Session"
+        if let session = selected ?? currentSession {
+            if let customName = SessionNamesStore.shared.getName(for: session.id) {
+                return customName
+            }
+            if let summary = session.summary, !summary.isEmpty {
+                return String(summary.prefix(40))
+            }
+            return "Session \(session.id.prefix(6))..."
+        }
+        return "No Session"
+    }
+
+    /// Get the current active session
+    private var currentSession: ProjectSession? {
+        guard let activeId = activeSessionId else { return nil }
+        return sessions.first { $0.id == activeId }
+    }
+
+    /// Check if we have an active session
+    private var hasActiveSession: Bool {
+        selected != nil || activeSessionId != nil
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            // Session name (tappable to open session manager)
+            Button {
+                showSessionSheet = true
+            } label: {
+                HStack(spacing: 6) {
+                    // Processing indicator
+                    if isProcessing {
+                        Circle()
+                            .fill(CLITheme.yellow(for: colorScheme))
+                            .frame(width: 6, height: 6)
+                    } else if isLoading {
+                        ProgressView()
+                            .scaleEffect(0.5)
+                            .frame(width: 10, height: 10)
+                    }
+
+                    Text(currentSessionName)
+                        .font(settings.scaledFont(.small))
+                        .foregroundColor(hasActiveSession ? CLITheme.primaryText(for: colorScheme) : CLITheme.mutedText(for: colorScheme))
+                        .lineLimit(1)
+
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(CLITheme.secondaryBackground(for: colorScheme))
+                .cornerRadius(4)
+            }
+            .accessibilityLabel("Current session: \(currentSessionName)")
+            .accessibilityHint("Tap to open session manager")
+
+            Spacer()
+
+            // New session button
+            Button {
+                onNew()
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(CLITheme.cyan(for: colorScheme))
+                    .frame(width: 32, height: 28)
+                    .background(CLITheme.secondaryBackground(for: colorScheme))
+                    .cornerRadius(4)
+            }
+            .accessibilityLabel("New session")
+
+            // Session manager button
+            Button {
+                showSessionSheet = true
+            } label: {
+                Image(systemName: "list.bullet")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+                    .frame(width: 32, height: 28)
+                    .background(CLITheme.secondaryBackground(for: colorScheme))
+                    .cornerRadius(4)
+            }
+            .accessibilityLabel("Session manager")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(CLITheme.background(for: colorScheme))
+        .sheet(isPresented: $showSessionSheet) {
+            SessionPickerSheet(
+                project: project,
+                sessions: $sessions,
+                activeSessionId: activeSessionId ?? selected?.id,
+                onSelect: { session in
+                    showSessionSheet = false
+                    selected = session
+                    onSelect(session)
+                },
+                onCancel: {
+                    showSessionSheet = false
+                },
+                onDelete: onDelete
+            )
+        }
+    }
+}
+
+// MARK: - Session Picker (Legacy horizontal scrolling - kept for reference)
 
 struct SessionPicker: View {
     @Binding var sessions: [ProjectSession]
@@ -227,17 +357,17 @@ struct SessionPickerSheet: View {
         }
     }
 
-    /// Sessions to display - use SessionManager as single source of truth
-    /// Only fall back to binding if SessionManager hasn't loaded yet
+    /// Sessions to display - use SessionStore as single source of truth
+    /// Only fall back to binding if API hasn't loaded yet
     private var displaySessions: [ProjectSession] {
         let managerSessions = sessionManager.sessions(for: project.path)
 
-        // If we've loaded from SSH, always use SessionManager (even if empty = all deleted)
+        // If we've loaded from API, always use SessionStore (even if empty = all deleted)
         if sessionManager.hasLoaded(for: project.path) {
             return managerSessions.filterAndSortForDisplay(projectPath: project.path, activeSessionId: activeSessionId)
         }
 
-        // Before SSH loads, use binding as fallback
+        // Before API loads, use binding as fallback
         let baseSessions = managerSessions.isEmpty ? Array(sessions) : managerSessions
         return baseSessions.filterAndSortForDisplay(projectPath: project.path, activeSessionId: activeSessionId)
     }
@@ -247,11 +377,22 @@ struct SessionPickerSheet: View {
         sessionManager.isLoadingSessions(for: project.path)
     }
 
-    /// Load all sessions via SessionManager (backend API limits to ~5)
-    /// Only loads if not already loaded from SSH
-    private func loadAllSessionsViaSSH() {
+    /// Whether more sessions are available to load (pagination)
+    private var hasMoreSessions: Bool {
+        SessionStore.shared.hasMore(for: project.path)
+    }
+
+    /// Load more sessions (pagination)
+    private func loadMoreSessions() {
+        Task {
+            await SessionStore.shared.loadMore(for: project.path)
+        }
+    }
+
+    /// Load all sessions via API (SessionStore handles API-based loading)
+    private func loadAllSessions() {
         guard !sessionManager.hasLoaded(for: project.path) else {
-            print("[SessionPickerSheet] Already loaded sessions for \(project.path), skipping reload")
+            log.debug("[SessionPickerSheet] Already loaded sessions for \(project.path), skipping reload")
             return
         }
         Task {
@@ -299,51 +440,77 @@ struct SessionPickerSheet: View {
                     }
                     .padding()
                 } else {
-                    List(displaySessions) { session in
-                        Button {
-                            onSelect(session)
-                        } label: {
-                            SessionRow(session: session)
-                        }
-                        .listRowBackground(CLITheme.secondaryBackground(for: colorScheme))
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button(role: .destructive) {
-                                sessionToDelete = session
-                            } label: {
-                                Label("Delete", systemImage: "trash")
-                            }
-                        }
-                        .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                    List {
+                        ForEach(displaySessions) { session in
                             Button {
-                                sessionToExport = session
-                                exportSession(session)
+                                onSelect(session)
                             } label: {
-                                Label("Export", systemImage: "square.and.arrow.up")
+                                SessionRow(session: session)
                             }
-                            .tint(CLITheme.cyan(for: colorScheme))
+                            .listRowBackground(CLITheme.secondaryBackground(for: colorScheme))
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) {
+                                    sessionToDelete = session
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                            .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                                Button {
+                                    sessionToExport = session
+                                    exportSession(session)
+                                } label: {
+                                    Label("Export", systemImage: "square.and.arrow.up")
+                                }
+                                .tint(CLITheme.cyan(for: colorScheme))
+                            }
+                            .contextMenu {
+                                Button {
+                                    sessionToRename = session
+                                    renameText = SessionNamesStore.shared.getName(for: session.id) ?? session.summary ?? ""
+                                } label: {
+                                    Label("Rename", systemImage: "pencil")
+                                }
+
+                                Button {
+                                    sessionToExport = session
+                                    exportSession(session)
+                                } label: {
+                                    Label("Export as Markdown", systemImage: "doc.text")
+                                }
+
+                                Divider()
+
+                                Button(role: .destructive) {
+                                    sessionToDelete = session
+                                } label: {
+                                    Label("Delete Session", systemImage: "trash")
+                                }
+                            }
                         }
-                        .contextMenu {
+
+                        // Load More button for pagination
+                        if hasMoreSessions {
                             Button {
-                                sessionToRename = session
-                                renameText = SessionNamesStore.shared.getName(for: session.id) ?? session.summary ?? ""
+                                loadMoreSessions()
                             } label: {
-                                Label("Rename", systemImage: "pencil")
+                                HStack {
+                                    Spacer()
+                                    if isLoadingAllSessions {
+                                        ProgressView()
+                                            .scaleEffect(0.8)
+                                        Text("Loading...")
+                                            .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+                                    } else {
+                                        Image(systemName: "arrow.down.circle")
+                                        Text("Load More Sessions")
+                                    }
+                                    Spacer()
+                                }
+                                .padding(.vertical, 12)
                             }
-
-                            Button {
-                                sessionToExport = session
-                                exportSession(session)
-                            } label: {
-                                Label("Export as Markdown", systemImage: "doc.text")
-                            }
-
-                            Divider()
-
-                            Button(role: .destructive) {
-                                sessionToDelete = session
-                            } label: {
-                                Label("Delete Session", systemImage: "trash")
-                            }
+                            .foregroundColor(CLITheme.cyan(for: colorScheme))
+                            .listRowBackground(CLITheme.secondaryBackground(for: colorScheme))
                         }
                     }
                     .listStyle(.plain)
@@ -352,8 +519,8 @@ struct SessionPickerSheet: View {
             }
             .background(CLITheme.background(for: colorScheme))
             .onAppear {
-                // Load all sessions via SSH (backend API limits to ~5)
-                loadAllSessionsViaSSH()
+                // Load sessions via API (SessionStore handles pagination)
+                loadAllSessions()
             }
             .navigationTitle(isLoadingAllSessions ? "Sessions (loading...)" : "Sessions (\(displaySessions.count))")
             .navigationBarTitleDisplayMode(.inline)

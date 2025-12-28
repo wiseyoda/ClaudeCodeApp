@@ -11,7 +11,8 @@ final class ModelsTests: XCTestCase {
             path: "/home/dev/workspace/MyProject",
             displayName: "My Project",
             fullPath: nil,
-            sessions: nil
+            sessions: nil,
+            sessionMeta: nil
         )
 
         XCTAssertEqual(project.title, "My Project")
@@ -23,7 +24,8 @@ final class ModelsTests: XCTestCase {
             path: "/home/dev/workspace/MyProject",
             displayName: nil,
             fullPath: nil,
-            sessions: nil
+            sessions: nil,
+            sessionMeta: nil
         )
 
         // Should strip the prefix
@@ -36,7 +38,8 @@ final class ModelsTests: XCTestCase {
             path: "/home/dev/workspace/TestApp",
             displayName: "",
             fullPath: nil,
-            sessions: nil
+            sessions: nil,
+            sessionMeta: nil
         )
 
         XCTAssertEqual(project.title, "TestApp")
@@ -48,7 +51,8 @@ final class ModelsTests: XCTestCase {
             path: "/tmp/StandaloneProject",
             displayName: nil,
             fullPath: nil,
-            sessions: nil
+            sessions: nil,
+            sessionMeta: nil
         )
 
         XCTAssertEqual(project.title, "StandaloneProject")
@@ -60,7 +64,8 @@ final class ModelsTests: XCTestCase {
             path: "/unique/path",
             displayName: nil,
             fullPath: nil,
-            sessions: nil
+            sessions: nil,
+            sessionMeta: nil
         )
 
         XCTAssertEqual(project.id, "/unique/path")
