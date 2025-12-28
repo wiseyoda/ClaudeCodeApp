@@ -76,7 +76,7 @@ struct UnifiedStatusBar: View {
                 }
             }
 
-            // Mode toggles (always visible, tappable)
+            // Mode toggles (icon-only to prevent word wrap when tokens visible)
             Button {
                 withAnimation(.easeInOut(duration: 0.15)) {
                     settings.claudeMode = settings.claudeMode.next()
@@ -86,7 +86,8 @@ struct UnifiedStatusBar: View {
                     icon: settings.claudeMode.icon,
                     text: settings.claudeMode.displayName,
                     color: settings.claudeMode.color,
-                    isActive: settings.claudeMode != .normal
+                    isActive: settings.claudeMode != .normal,
+                    iconOnly: true
                 )
             }
             .accessibilityLabel("Mode: \(settings.claudeMode.displayName)")
@@ -101,13 +102,14 @@ struct UnifiedStatusBar: View {
                     icon: settings.thinkingMode.icon,
                     text: settings.thinkingMode.shortDisplayName,
                     color: settings.thinkingMode.color,
-                    isActive: settings.thinkingMode != .normal
+                    isActive: settings.thinkingMode != .normal,
+                    iconOnly: true
                 )
             }
             .accessibilityLabel("Thinking: \(settings.thinkingMode.displayName)")
             .accessibilityHint("Tap to switch to \(settings.thinkingMode.next().displayName)")
 
-            // Skip permissions indicator (tappable to toggle per-project)
+            // Skip permissions indicator (icon-only, tappable to toggle per-project)
             if effectiveSkipPermissions {
                 Button {
                     toggleProjectBypass()
@@ -116,7 +118,8 @@ struct UnifiedStatusBar: View {
                         icon: hasProjectOverride ? "exclamationmark.shield.fill" : "exclamationmark.shield",
                         text: hasProjectOverride ? "Bypass*" : "Bypass",
                         color: CLITheme.red(for: colorScheme),
-                        isActive: true
+                        isActive: true,
+                        iconOnly: true
                     )
                 }
                 .accessibilityLabel("Permissions bypass enabled" + (hasProjectOverride ? " for this project" : " globally"))
@@ -130,7 +133,8 @@ struct UnifiedStatusBar: View {
                         icon: "shield.checkered",
                         text: "Safe*",
                         color: CLITheme.green(for: colorScheme),
-                        isActive: true
+                        isActive: true,
+                        iconOnly: true
                     )
                 }
                 .accessibilityLabel("Permissions required for this project")
@@ -232,19 +236,22 @@ private struct ModePill: View {
     let text: String
     let color: Color
     var isActive: Bool = true
+    var iconOnly: Bool = false
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: iconOnly ? 0 : 3) {
             Image(systemName: icon)
-                .font(.system(size: 10))
-            Text(text)
-                .font(settings.scaledFont(.small))
+                .font(.system(size: iconOnly ? 12 : 10))
+            if !iconOnly {
+                Text(text)
+                    .font(settings.scaledFont(.small))
+            }
         }
         .foregroundColor(isActive ? color : CLITheme.mutedText(for: colorScheme))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
+        .padding(.horizontal, iconOnly ? 6 : 8)
+        .padding(.vertical, iconOnly ? 5 : 3)
         .background(isActive ? color.opacity(0.15) : CLITheme.mutedText(for: colorScheme).opacity(0.1))
         .cornerRadius(10)
     }
