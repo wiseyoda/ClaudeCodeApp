@@ -13,8 +13,10 @@ Sessions are persistent conversation threads between a user and Claude. Each ses
 Sessions are stored in the Claude CLI's project directory structure:
 
 ```
-~/.claude/projects/{encoded-path}/{session-id}.jsonl
+$HOME/.claude/projects/{encoded-path}/{session-id}.jsonl
 ```
+
+> **Note**: Use `$HOME` instead of `~` in SSH commands. Tilde expansion doesn't work reliably inside quoted strings. See `.claude/rules/ssh-security.md` for details.
 
 **Path Encoding**: Project paths are encoded by replacing `/` with `-`:
 - `/home/dev/workspace/ClaudeCodeApp` → `-home-dev-workspace-ClaudeCodeApp`
@@ -198,9 +200,11 @@ extension Array where Element == ProjectSession {
 
 ## SSH Commands for Sessions
 
+> **Note**: When running these commands from Swift via SSH, use `$HOME` instead of `~` and double quotes. See `.claude/rules/ssh-security.md`.
+
 ### Count Sessions
 ```bash
-cd ~/.claude/projects/-home-dev-workspace-ClaudeCodeApp && \
+cd $HOME/.claude/projects/-home-dev-workspace-ClaudeCodeApp && \
 ls -1 *.jsonl 2>/dev/null | grep -v '^agent-' | while read f; do
     [ -s "$f" ] && echo "$f"
 done | wc -l
@@ -208,7 +212,7 @@ done | wc -l
 
 ### List Sessions with Metadata
 ```bash
-cd ~/.claude/projects/-home-dev-workspace-ClaudeCodeApp && \
+cd $HOME/.claude/projects/-home-dev-workspace-ClaudeCodeApp && \
 ls -1 *.jsonl 2>/dev/null | grep -v '^agent-' | while read f; do
     name=$(basename "$f" .jsonl)
     lines=$(wc -l < "$f" | tr -d ' ')
@@ -270,8 +274,8 @@ head -1 | head -c 80
 # SSH to server
 ssh claude-dev
 
-# Navigate to project sessions
-cd ~/.claude/projects/-home-dev-workspace-ClaudeCodeApp
+# Navigate to project sessions (use $HOME when called from Swift)
+cd $HOME/.claude/projects/-home-dev-workspace-ClaudeCodeApp
 
 # Count all sessions
 ls -1 *.jsonl | wc -l

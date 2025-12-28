@@ -258,8 +258,8 @@ struct GlobalSearchView: View {
                 let encodedPath = project.path
                     .replacingOccurrences(of: "/", with: "-")
 
-                // List session files
-                let sessionsPath = "~/.claude/projects/\(encodedPath)"
+                // List session files (use $HOME for consistent shell expansion)
+                let sessionsPath = "$HOME/.claude/projects/\(encodedPath)"
                 if let output = try? await sshManager.executeCommand("ls \(sessionsPath)/*.jsonl 2>/dev/null") {
                     let files = output.components(separatedBy: .newlines).filter { !$0.isEmpty }
 

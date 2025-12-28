@@ -104,13 +104,22 @@ class ClaudeHelper: ObservableObject {
     // MARK: - Suggestion Chips
 
     /// Generate action suggestions based on recent conversation context
+    /// - Parameters:
+    ///   - recentMessages: Recent chat messages for context summary
+    ///   - projectPath: The project path
+    ///   - currentSessionId: Optional current session ID to use for full conversation context.
+    ///     If provided, uses this session ID instead of the helper session ID.
     func generateSuggestions(
         recentMessages: [ChatMessage],
-        projectPath: String
+        projectPath: String,
+        currentSessionId: String? = nil
     ) async {
+        debugLog.log("generateSuggestions called with \(recentMessages.count) messages, session: \(currentSessionId?.prefix(8) ?? "helper")", type: .info)
+
         // Only use last 3-5 messages for context (keep it cheap)
         let context = recentMessages.suffix(5)
         guard !context.isEmpty else {
+            debugLog.log("generateSuggestions: No messages, clearing suggestions", type: .info)
             await MainActor.run { suggestedActions = [] }
             return
         }
@@ -139,14 +148,17 @@ class ClaudeHelper: ObservableObject {
         await MainActor.run { isLoading = true }
 
         do {
-            let response = try await sendQuickQuery(prompt: prompt, projectPath: projectPath)
+            debugLog.log("Sending suggestion query to backend...", type: .sent)
+            let response = try await sendQuickQuery(prompt: prompt, projectPath: projectPath, sessionId: currentSessionId)
+            debugLog.log("Received suggestion response: \(response.prefix(200))...", type: .received)
             let actions = parseSuggestedActions(from: response)
+            debugLog.log("Parsed \(actions.count) suggested actions", type: .info)
             await MainActor.run {
                 suggestedActions = actions
                 isLoading = false
             }
         } catch {
-            log.error("Failed to generate suggestions: \(error)")
+            debugLog.logError("Failed to generate suggestions: \(error)")
             await MainActor.run {
                 suggestedActions = defaultSuggestions()
                 isLoading = false
@@ -434,15 +446,20 @@ class ClaudeHelper: ObservableObject {
     // MARK: - WebSocket Communication
 
     /// Send a quick query, defaults to Haiku for speed but can use other models
-    private func sendQuickQuery(prompt: String, projectPath: String, model: String = "haiku") async throws -> String {
+    /// - Parameters:
+    ///   - prompt: The query prompt
+    ///   - projectPath: The project path for context
+    ///   - model: The model to use (default: haiku)
+    ///   - sessionId: Optional session ID to use. If nil, uses a helper session ID.
+    private func sendQuickQuery(prompt: String, projectPath: String, model: String = "haiku", sessionId: String? = nil) async throws -> String {
         try await withCheckedThrowingContinuation { continuation in
-            sendQueryViaWebSocket(prompt: prompt, projectPath: projectPath, model: model) { result in
+            sendQueryViaWebSocket(prompt: prompt, projectPath: projectPath, model: model, sessionId: sessionId) { result in
                 continuation.resume(with: result)
             }
         }
     }
 
-    private func sendQueryViaWebSocket(prompt: String, projectPath: String, model: String = "haiku", completion: @escaping (Result<String, Error>) -> Void) {
+    private func sendQueryViaWebSocket(prompt: String, projectPath: String, model: String = "haiku", sessionId: String? = nil, completion: @escaping (Result<String, Error>) -> Void) {
         guard let url = settings.webSocketURL else {
             completion(.failure(ClaudeHelperError.invalidURL))
             return
@@ -453,10 +470,10 @@ class ClaudeHelper: ObservableObject {
         responseBuffer = ""
         self.completion = completion
 
-        // Get or create a deterministic helper session ID for this project.
-        // This ensures all helper queries for the same project reuse the same session,
-        // preventing session pollution while maintaining conversation context if needed.
-        let sessionId = helperSessionId(for: projectPath)
+        // Use provided session ID if available, otherwise use helper session ID.
+        // Using the current session ID gives the AI full conversation context,
+        // but the query will appear in that session's history.
+        let effectiveSessionId = sessionId ?? helperSessionId(for: projectPath)
 
         let session = URLSession(configuration: .default)
         webSocket = session.webSocketTask(with: url)
@@ -467,12 +484,12 @@ class ClaudeHelper: ObservableObject {
         // Start receiving messages
         receiveMessage()
 
-        // Send the query with specified model and deterministic helper session ID
+        // Send the query with specified model and session ID
         let command = WSClaudeCommand(
             command: prompt,
             options: WSCommandOptions(
                 cwd: projectPath,
-                sessionId: sessionId,  // Reuse same helper session per project
+                sessionId: effectiveSessionId,
                 model: model,  // Use specified model (haiku for suggestions, sonnet for enhancement)
                 permissionMode: nil,
                 images: nil
@@ -538,10 +555,15 @@ class ClaudeHelper: ObservableObject {
     }
 
     private func parseMessage(_ text: String) {
+        debugLog.log("ClaudeHelper received message: \(text.prefix(200))...", type: .received)
+
         guard let data = text.data(using: .utf8),
               let msg = try? JSONDecoder().decode(WSMessage.self, from: data) else {
+            debugLog.logError("ClaudeHelper: Failed to decode message")
             return
         }
+
+        debugLog.log("ClaudeHelper message type: \(msg.type)", type: .received)
 
         switch msg.type {
         case "claude-response":

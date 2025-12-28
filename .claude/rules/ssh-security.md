@@ -1,5 +1,28 @@
 # SSH Security Rules
 
+## Shell Variable Expansion
+
+ALWAYS use `$HOME` instead of `~` and double quotes for paths:
+
+```swift
+// CORRECT: $HOME with double quotes allows shell expansion
+let sessionFile = "$HOME/.claude/projects/\(encodedPath)/\(sessionId).jsonl"
+let command = "rm -f \"\(sessionFile)\""
+
+// WRONG: ~ with single quotes - tilde won't expand!
+let sessionFile = "~/.claude/projects/\(encodedPath)/\(sessionId).jsonl"
+let command = "rm -f '\(sessionFile)'"  // File not found!
+
+// WRONG: $HOME with single quotes - variable won't expand!
+let command = "rm -f '$HOME/path/file'"  // Literally looks for "$HOME/path/file"
+```
+
+**Why this matters:**
+- `~` expansion only works in specific shell contexts (not inside quotes)
+- Single quotes (`'...'`) prevent ALL shell expansion including `$HOME`
+- Double quotes (`"..."`) allow variable expansion while still quoting the path
+- Failures are silent - commands succeed but operate on wrong paths
+
 ## Command Injection Prevention
 
 ALWAYS escape user-provided paths before passing to SSH commands:

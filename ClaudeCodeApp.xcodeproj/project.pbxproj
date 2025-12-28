@@ -23,6 +23,7 @@
 		A1000008 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000008 /* Theme.swift */; };
 		A1000009 /* TerminalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000009 /* TerminalView.swift */; };
 		A1000010 /* SSHManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000010 /* SSHManager.swift */; };
+		SM000040 /* SessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000039 /* SessionManager.swift */; };
 		A1000011 /* Citadel in Frameworks */ = {isa = PBXBuildFile; productRef = A1100001 /* Citadel */; };
 		A1000012 /* WebSocketManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000011 /* WebSocketManager.swift */; };
 		A1000013 /* SpeechManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000012 /* SpeechManager.swift */; };
@@ -89,6 +90,7 @@
 		A2000008 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		A2000009 /* TerminalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalView.swift; sourceTree = "<group>"; };
 		A2000010 /* SSHManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHManager.swift; sourceTree = "<group>"; };
+		A2000039 /* SessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionManager.swift; sourceTree = "<group>"; };
 		A2000011 /* WebSocketManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocketManager.swift; sourceTree = "<group>"; };
 		A2000012 /* SpeechManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechManager.swift; sourceTree = "<group>"; };
 		A2000013 /* UserQuestionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserQuestionsView.swift; sourceTree = "<group>"; };
@@ -177,6 +179,7 @@
 				A2000008 /* Theme.swift */,
 				A2000009 /* TerminalView.swift */,
 				A2000010 /* SSHManager.swift */,
+				A2000039 /* SessionManager.swift */,
 				A2000011 /* WebSocketManager.swift */,
 				A2000012 /* SpeechManager.swift */,
 				A2000013 /* UserQuestionsView.swift */,
@@ -376,6 +379,7 @@
 				A1000008 /* Theme.swift in Sources */,
 				A1000009 /* TerminalView.swift in Sources */,
 				A1000010 /* SSHManager.swift in Sources */,
+				SM000040 /* SessionManager.swift in Sources */,
 				A1000012 /* WebSocketManager.swift in Sources */,
 				A1000013 /* SpeechManager.swift in Sources */,
 				A1000014 /* UserQuestionsView.swift in Sources */,

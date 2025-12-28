@@ -194,13 +194,14 @@ struct CloneProjectSheet: View {
             // Create Claude project directory structure
             // Path encoding: /home/user/workspace/repo -> -home-user-workspace-repo
             let encodedPath = cleanPath.replacingOccurrences(of: "/", with: "-")
-            let claudeProjectDir = "~/.claude/projects/\(encodedPath)"
+            // Use $HOME with double quotes for proper shell expansion (single quotes prevent expansion)
+            let claudeProjectDir = "$HOME/.claude/projects/\(encodedPath)"
 
             // Create the project directory and a session file with cwd so it appears in the project list
             // The backend reads 'cwd' from session files to determine project paths
             let timestamp = ISO8601DateFormatter().string(from: Date())
             let sessionContent = "{\"type\":\"init\",\"cwd\":\"\(cleanPath)\",\"timestamp\":\"\(timestamp)\"}"
-            let setupCmd = "mkdir -p '\(claudeProjectDir)' && echo '\(sessionContent)' > '\(claudeProjectDir)/init.jsonl'"
+            let setupCmd = "mkdir -p \"\(claudeProjectDir)\" && echo '\(sessionContent)' > \"\(claudeProjectDir)/init.jsonl\""
             _ = try? await sshManager.executeCommand(setupCmd)
 
             progress = "Initializing Claude..."

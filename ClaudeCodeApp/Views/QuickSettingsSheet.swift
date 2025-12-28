@@ -81,6 +81,24 @@ struct QuickSettingsSheet: View {
                     Text("Display")
                 }
 
+                // Advanced Section
+                Section {
+                    Picker(selection: $settings.processingTimeout) {
+                        Text("30 seconds").tag(30)
+                        Text("1 minute").tag(60)
+                        Text("5 minutes").tag(300)
+                        Text("15 minutes").tag(900)
+                        Text("30 minutes").tag(1800)
+                        Text("1 hour").tag(3600)
+                    } label: {
+                        Label("Response Timeout", systemImage: "clock")
+                    }
+                } header: {
+                    Text("Advanced")
+                } footer: {
+                    Text("How long to wait for Claude to respond. Increase for long operations like code reviews.")
+                }
+
                 // Debug Section
                 Section {
                     Toggle(isOn: Binding(

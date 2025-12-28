@@ -86,7 +86,7 @@ class WebSocketManager: ObservableObject {
     private var reconnectTask: Task<Void, Never>?
     private let maxReconnectAttempt = 4  // 1s, 2s, 4s, 8s max
 
-    // Processing timeout - reset if no response for 30 seconds
+    // Processing timeout - configurable via settings.processingTimeout (default 5 mins)
     private var processingTimeoutTask: Task<Void, Never>?
     private var lastResponseTime: Date?
     private var lastActiveToolName: String?  // Track last tool for timeout diagnostics
@@ -202,14 +202,16 @@ class WebSocketManager: ObservableObject {
                     }
 
                     let elapsed = Date().timeIntervalSince(lastResponse)
-                    if elapsed >= 30 {
+                    let timeoutSeconds = Double(self.settings.processingTimeout)
+                    if elapsed >= timeoutSeconds {
                         let toolInfo = self.lastActiveToolName ?? "unknown"
-                        let errorMsg = "Processing timeout - no response for \(Int(elapsed))s (last tool: \(toolInfo))"
+                        let elapsedFormatted = elapsed >= 60 ? "\(Int(elapsed / 60))m \(Int(elapsed) % 60)s" : "\(Int(elapsed))s"
+                        let errorMsg = "Processing timeout - no response for \(elapsedFormatted) (last tool: \(toolInfo))"
                         log.warning(errorMsg)
-                        debugLog.logError(errorMsg, details: "Last response: \(lastResponse), Session: \(self.sessionId ?? "none"), Tool: \(toolInfo)")
+                        debugLog.logError(errorMsg, details: "Last response: \(lastResponse), Session: \(self.sessionId ?? "none"), Tool: \(toolInfo), Timeout: \(Int(timeoutSeconds))s")
                         self.isProcessing = false
                         self.lastActiveToolName = nil
-                        self.lastError = "Request timed out - no response from server"
+                        self.lastError = "Request timed out after \(elapsedFormatted) - no response from server. Long operations may need increased timeout in Settings."
                         self.onError?("Request timed out")
                         return false
                     }

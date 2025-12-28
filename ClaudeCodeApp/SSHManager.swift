@@ -1163,7 +1163,8 @@ class SSHManager: ObservableObject {
         // Encode project path for Claude session directory
         // /home/dev/workspace/ClaudeCodeApp → -home-dev-workspace-ClaudeCodeApp
         let encodedPath = projectPath.replacingOccurrences(of: "/", with: "-")
-        let sessionsDir = "~/.claude/projects/\(encodedPath)"
+        // Use $HOME for consistent shell expansion (~ doesn't expand in all contexts)
+        let sessionsDir = "$HOME/.claude/projects/\(encodedPath)"
 
         // Get session files with metadata and first REAL user message for summary
         // Uses jq for proper JSON parsing (handles both array and string content formats)
@@ -1211,6 +1212,13 @@ class SSHManager: ObservableObject {
                 }
             }
 
+            // Skip ClaudeHelper sessions (generated for AI suggestions)
+            // These have deterministic IDs based on project path hash
+            let helperSessionId = ClaudeHelper.createHelperSessionId(for: projectPath)
+            if sessionId == helperSessionId {
+                continue
+            }
+
             sessions.append(ProjectSession(
                 id: sessionId,
                 summary: summary,
@@ -1228,18 +1236,23 @@ class SSHManager: ObservableObject {
     }
 
     /// Count sessions for a project (fast - just counts files)
-    /// Returns count of non-empty, non-agent sessions
+    /// Returns count of non-empty, non-agent, non-helper sessions
     func countSessions(for projectPath: String, settings: AppSettings) async throws -> Int {
         if !isConnected {
             try await autoConnect(settings: settings)
         }
 
         let encodedPath = projectPath.replacingOccurrences(of: "/", with: "-")
-        let sessionsDir = "~/.claude/projects/\(encodedPath)"
+        // Use $HOME for consistent shell expansion (~ doesn't expand in all contexts)
+        let sessionsDir = "$HOME/.claude/projects/\(encodedPath)"
+
+        // Get the helper session ID to exclude it
+        let helperSessionId = ClaudeHelper.createHelperSessionId(for: projectPath)
 
         // Count non-agent session files that have content (at least 1 line)
+        // Also exclude helper sessions used for AI suggestions
         let command = """
-            cd \(sessionsDir) 2>/dev/null && ls -1 *.jsonl 2>/dev/null | grep -v '^agent-' | while read f; do
+            cd \(sessionsDir) 2>/dev/null && ls -1 *.jsonl 2>/dev/null | grep -v '^agent-' | grep -v '^\(helperSessionId).jsonl$' | while read f; do
                 [ -s "$f" ] && echo "$f"
             done | wc -l | tr -d ' '
             """
@@ -1249,6 +1262,7 @@ class SSHManager: ObservableObject {
     }
 
     /// Count sessions for multiple projects efficiently (single SSH connection)
+    /// Excludes agent sessions and helper sessions used for AI suggestions
     func countSessionsForProjects(_ projectPaths: [String], settings: AppSettings) async throws -> [String: Int] {
         if !isConnected {
             try await autoConnect(settings: settings)
@@ -1259,10 +1273,14 @@ class SSHManager: ObservableObject {
         // Process in batches to avoid command line length limits
         for path in projectPaths {
             let encodedPath = path.replacingOccurrences(of: "/", with: "-")
-            let sessionsDir = "~/.claude/projects/\(encodedPath)"
+            // Use $HOME for consistent shell expansion (~ doesn't expand in all contexts)
+            let sessionsDir = "$HOME/.claude/projects/\(encodedPath)"
+
+            // Get the helper session ID to exclude it
+            let helperSessionId = ClaudeHelper.createHelperSessionId(for: path)
 
             let command = """
-                cd \(sessionsDir) 2>/dev/null && ls -1 *.jsonl 2>/dev/null | grep -v '^agent-' | while read f; do
+                cd \(sessionsDir) 2>/dev/null && ls -1 *.jsonl 2>/dev/null | grep -v '^agent-' | grep -v '^\(helperSessionId).jsonl$' | while read f; do
                     [ -s "$f" ] && echo "$f"
                 done | wc -l | tr -d ' '
                 """

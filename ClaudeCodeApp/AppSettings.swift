@@ -193,6 +193,10 @@ class AppSettings: ObservableObject {
     // Debug Settings
     @AppStorage("debugLoggingEnabled") var debugLoggingEnabled: Bool = false
 
+    // Processing timeout in seconds (how long to wait for Claude response)
+    // Default 5 minutes - long-running operations like code review can take time
+    @AppStorage("processingTimeout") var processingTimeout: Int = 300
+
     // Project List Settings
     @AppStorage("projectSortOrder") private var projectSortOrderRaw: String = ProjectSortOrder.name.rawValue
 

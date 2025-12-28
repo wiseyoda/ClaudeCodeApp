@@ -280,7 +280,7 @@ final class ModelsTests: XCTestCase {
             sessionId: "abc123"
         )
 
-        XCTAssertEqual(path, "~/.claude/projects/-home-dev-workspace-MyProject/abc123.jsonl")
+        XCTAssertEqual(path, "$HOME/.claude/projects/-home-dev-workspace-MyProject/abc123.jsonl")
     }
 
     func testSessionFilePathWithTrailingSlash() {
@@ -290,7 +290,7 @@ final class ModelsTests: XCTestCase {
         )
 
         // Trailing slash becomes trailing dash, which should be trimmed
-        XCTAssertEqual(path, "~/.claude/projects/-home-dev-workspace-MyProject/abc123.jsonl")
+        XCTAssertEqual(path, "$HOME/.claude/projects/-home-dev-workspace-MyProject/abc123.jsonl")
     }
 
     // MARK: - WSImage Tests

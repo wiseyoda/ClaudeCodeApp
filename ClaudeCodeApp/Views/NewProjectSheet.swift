@@ -176,10 +176,11 @@ struct NewProjectSheet: View {
             // Register with Claude
             progress = "Registering project..."
             let encodedPath = cleanPath.replacingOccurrences(of: "/", with: "-")
-            let claudeProjectDir = "~/.claude/projects/\(encodedPath)"
+            // Use $HOME with double quotes for proper shell expansion (single quotes prevent expansion)
+            let claudeProjectDir = "$HOME/.claude/projects/\(encodedPath)"
             let timestamp = ISO8601DateFormatter().string(from: Date())
             let sessionContent = "{\"type\":\"init\",\"cwd\":\"\(cleanPath)\",\"timestamp\":\"\(timestamp)\"}"
-            let setupCmd = "mkdir -p '\(claudeProjectDir)' && echo '\(sessionContent)' > '\(claudeProjectDir)/init.jsonl'"
+            let setupCmd = "mkdir -p \"\(claudeProjectDir)\" && echo '\(sessionContent)' > \"\(claudeProjectDir)/init.jsonl\""
             _ = try? await sshManager.executeCommand(setupCmd)
 
             // Optionally initialize Claude

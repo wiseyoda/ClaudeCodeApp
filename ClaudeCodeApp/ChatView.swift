@@ -36,8 +36,10 @@ struct ChatView: View {
     @State private var isSearching = false
     @State private var searchText = ""
     @State private var messageFilter: MessageFilter = .all
-    @State private var localSessions: [ProjectSession] = []  // Local copy for session management
-    @ObservedObject private var sshManager = SSHManager.shared  // For session deletion
+
+    // Session management (centralized via SessionManager)
+    @ObservedObject private var sessionManager = SessionManager.shared
+    @ObservedObject private var sshManager = SSHManager.shared
     @ObservedObject private var projectSettingsStore = ProjectSettingsStore.shared
     @FocusState private var isInputFocused: Bool
 
@@ -308,7 +310,7 @@ struct ChatView: View {
         .sheet(isPresented: $showingSessionPicker) {
             SessionPickerSheet(
                 project: project,
-                sessions: $localSessions,
+                sessions: localSessionsBinding,
                 onSelect: { session in
                     showingSessionPicker = false
                     selectedSession = session
@@ -359,12 +361,21 @@ struct ChatView: View {
             }
         }
         .onAppear {
-            // Initialize local sessions - try to load ALL via SSH (API only returns ~5)
-            if localSessions.isEmpty {
-                // Start with API sessions as fallback
-                localSessions = project.sessions ?? []
-                // Load all sessions via SSH in background
-                loadAllSessionsViaSSH()
+            // Initialize sessions via SessionManager - loads ALL via SSH (API only returns ~5)
+            // Only load if we haven't already loaded from SSH for this project
+            if !sessionManager.hasLoaded(for: project.path) {
+                // Pre-populate with API sessions ONLY as temporary fallback while SSH loads
+                // This will be replaced once SSH load completes
+                // Note: SessionManager.addSession() rejects deleted sessions
+                if localSessions.isEmpty {
+                    for session in project.sessions ?? [] {
+                        sessionManager.addSession(session, for: project.path)
+                    }
+                }
+                // Load all sessions via SSH in background (this becomes the source of truth)
+                Task {
+                    await sessionManager.loadSessions(for: project.path, settings: settings)
+                }
             }
         }
         // MARK: - Keyboard Shortcuts (iPad)
@@ -470,16 +481,35 @@ struct ChatView: View {
 
     // MARK: - View Components (extracted to help Swift compiler)
 
-    /// Combined sessions list (local updates + original project sessions)
+    /// Sessions from SessionManager (single source of truth)
+    private var localSessions: [ProjectSession] {
+        sessionManager.sessions(for: project.path)
+    }
+
+    /// Binding for SessionPicker views
+    private var localSessionsBinding: Binding<[ProjectSession]> {
+        Binding(
+            get: { sessionManager.sessions(for: project.path) },
+            set: { _ in /* Updates go through SessionManager methods */ }
+        )
+    }
+
+    /// Combined sessions list - SessionManager as single source of truth
+    /// Only falls back to project.sessions before SSH has loaded
     private var sessions: [ProjectSession] {
-        localSessions.isEmpty ? (project.sessions ?? []) : localSessions
+        // If we've loaded from SSH, always use SessionManager (even if empty = all deleted)
+        if sessionManager.hasLoaded(for: project.path) {
+            return localSessions
+        }
+        // Before SSH loads, use API data as fallback
+        return localSessions.isEmpty ? (project.sessions ?? []) : localSessions
     }
 
     @ViewBuilder
     private var sessionPickerView: some View {
         if !sessions.isEmpty {
             SessionPicker(
-                sessions: $localSessions,
+                sessions: localSessionsBinding,
                 project: project,
                 selected: $selectedSession,
                 isLoading: isLoadingHistory,
@@ -880,11 +910,12 @@ struct ChatView: View {
             // Refresh git status after task completion
             refreshGitStatus()
 
-            // Generate AI-powered suggestions for next actions
+            // Generate AI-powered suggestions for next actions using current session context
             Task {
                 await claudeHelper.generateSuggestions(
                     recentMessages: messages,
-                    projectPath: project.path
+                    projectPath: project.path,
+                    currentSessionId: wsManager.sessionId  // Use current session for full context
                 )
             }
         }
@@ -919,12 +950,9 @@ struct ChatView: View {
                 lastAssistantMessage: nil
             )
 
-            // Initialize localSessions if needed and add the new session
-            if localSessions.isEmpty {
-                localSessions = project.sessions ?? []
-            }
-            // Insert at beginning (most recent)
-            localSessions.insert(newSession, at: 0)
+            // Add the new session to SessionManager
+            sessionManager.addSession(newSession, for: project.path)
+            sessionManager.setActiveSession(sessionId, for: project.path)
 
             // Select the new session in the picker
             selectedSession = newSession
@@ -947,7 +975,7 @@ struct ChatView: View {
             processingStartTime = nil
         }
 
-        wsManager.onSessionRecovered = {
+        wsManager.onSessionRecovered = { [weak wsManager] in
             // Show feedback that session was recovered
             let recoveryMsg = ChatMessage(
                 role: .system,
@@ -958,6 +986,9 @@ struct ChatView: View {
 
             // Clear the stored session ID for this project
             MessageStore.clearSessionId(for: project.path)
+
+            // CRITICAL: Clear wsManager's sessionId so next message creates new session
+            wsManager?.sessionId = nil
         }
     }
 
@@ -1138,28 +1169,10 @@ struct ChatView: View {
     }
 
     /// Load all sessions via SSH (backend API only returns ~5)
+    /// Delegates to SessionManager for centralized state management
     private func loadAllSessionsViaSSH() {
         Task {
-            do {
-                let sshSessions = try await sshManager.loadAllSessions(for: project.path, settings: settings)
-                await MainActor.run {
-                    // Merge with any locally created sessions not yet on server
-                    var merged = sshSessions
-                    for session in localSessions {
-                        if !merged.contains(where: { $0.id == session.id }) {
-                            merged.append(session)
-                        }
-                    }
-                    // Sort by last activity
-                    localSessions = merged.sorted { s1, s2 in
-                        (s1.lastActivity ?? "") > (s2.lastActivity ?? "")
-                    }
-                    print("[ChatView] Loaded \(localSessions.count) sessions via SSH")
-                }
-            } catch {
-                print("[ChatView] Failed to load sessions via SSH: \(error)")
-                // Keep using API sessions as fallback
-            }
+            await sessionManager.loadSessions(for: project.path, settings: settings)
         }
     }
 
@@ -1215,49 +1228,24 @@ struct ChatView: View {
 
     /// Delete a session from the server
     private func deleteSession(_ session: ProjectSession) async {
-        // Session files are stored at: ~/.claude/projects/{encoded-path}/{session-id}.jsonl
-        let encodedPath = project.path.replacingOccurrences(of: "/", with: "-")
-        let sessionFile = "~/.claude/projects/\(encodedPath)/\(session.id).jsonl"
-
         print("[ChatView] Deleting session: \(session.id)")
-        print("[ChatView] Session file path: \(sessionFile)")
 
-        do {
-            // First verify the file exists
-            let checkCmd = "ls -la '\(sessionFile)' 2>&1"
-            let checkResult = try await sshManager.executeCommandWithAutoConnect(checkCmd, settings: settings)
-            print("[ChatView] File check result: \(checkResult)")
+        // Use SessionManager for centralized delete
+        let success = await sessionManager.deleteSession(session, projectPath: project.path, settings: settings)
 
-            // Delete the file
-            let deleteCmd = "rm -f '\(sessionFile)'"
-            let deleteResult = try await sshManager.executeCommandWithAutoConnect(deleteCmd, settings: settings)
-            print("[ChatView] Delete result: \(deleteResult)")
-
-            // Verify deletion
-            let verifyCmd = "ls '\(sessionFile)' 2>&1 || echo 'FILE_DELETED'"
-            let verifyResult = try await sshManager.executeCommandWithAutoConnect(verifyCmd, settings: settings)
-            print("[ChatView] Verify deletion: \(verifyResult)")
-
-            // Remove from local list
-            await MainActor.run {
-                let countBefore = localSessions.count
-                localSessions.removeAll { $0.id == session.id }
-                let countAfter = localSessions.count
-                print("[ChatView] Local sessions: \(countBefore) -> \(countAfter)")
-
-                // If we deleted the currently selected session, clear it
-                if selectedSession?.id == session.id {
-                    selectedSession = nil
-                    messages.removeAll()
-                    wsManager.sessionId = nil
-                    MessageStore.clearSessionId(for: project.path)
-                }
-
-                // Notify parent to refresh project list (after local state is updated)
-                onSessionsChanged?()
+        if success {
+            // If we deleted the currently selected session, clear it
+            if selectedSession?.id == session.id {
+                selectedSession = nil
+                messages.removeAll()
+                wsManager.sessionId = nil
+                MessageStore.clearSessionId(for: project.path)
             }
-        } catch {
-            print("[ChatView] Failed to delete session: \(error)")
+
+            // Notify parent to refresh project list
+            onSessionsChanged?()
+        } else {
+            print("[ChatView] Failed to delete session: \(session.id)")
         }
     }
 

@@ -187,7 +187,7 @@ struct SessionPicker: View {
 
 struct SessionPickerSheet: View {
     let project: Project
-    @Binding var sessions: [ProjectSession]  // Changed to Binding to reflect parent updates
+    @Binding var sessions: [ProjectSession]  // Fallback for API sessions (before SessionManager loads)
     var activeSessionId: String?  // Currently active session (may be new with few messages)
     let onSelect: (ProjectSession) -> Void
     let onCancel: () -> Void
@@ -201,42 +201,39 @@ struct SessionPickerSheet: View {
     @State private var sessionToExport: ProjectSession?
     @State private var exportedMarkdown: String?
     @State private var showExportSheet = false
-    @State private var isLoadingAllSessions = false
-    @State private var allSessions: [ProjectSession] = []  // Full list from SSH
 
     @ObservedObject private var sshManager = SSHManager.shared
+    @ObservedObject private var sessionManager = SessionManager.shared
 
-    /// Sessions to display - use SSH-loaded sessions if available, otherwise fall back to API sessions
+    /// Sessions to display - use SessionManager as single source of truth
+    /// Only fall back to binding if SessionManager hasn't loaded yet
     private var displaySessions: [ProjectSession] {
-        let baseSessions = allSessions.isEmpty ? sessions : allSessions
+        let managerSessions = sessionManager.sessions(for: project.path)
+
+        // If we've loaded from SSH, always use SessionManager (even if empty = all deleted)
+        if sessionManager.hasLoaded(for: project.path) {
+            return managerSessions.filterAndSortForDisplay(projectPath: project.path, activeSessionId: activeSessionId)
+        }
+
+        // Before SSH loads, use binding as fallback
+        let baseSessions = managerSessions.isEmpty ? Array(sessions) : managerSessions
         return baseSessions.filterAndSortForDisplay(projectPath: project.path, activeSessionId: activeSessionId)
     }
 
-    /// Load all sessions via SSH (backend API limits to ~5)
-    private func loadAllSessionsViaSSH() {
-        guard !isLoadingAllSessions else { return }
-        isLoadingAllSessions = true
+    /// Whether sessions are currently loading
+    private var isLoadingAllSessions: Bool {
+        sessionManager.isLoadingSessions(for: project.path)
+    }
 
+    /// Load all sessions via SessionManager (backend API limits to ~5)
+    /// Only loads if not already loaded from SSH
+    private func loadAllSessionsViaSSH() {
+        guard !sessionManager.hasLoaded(for: project.path) else {
+            print("[SessionPickerSheet] Already loaded sessions for \(project.path), skipping reload")
+            return
+        }
         Task {
-            do {
-                let sshSessions = try await sshManager.loadAllSessions(for: project.path, settings: settings)
-                await MainActor.run {
-                    // Merge with any locally created sessions not yet on server
-                    var merged = sshSessions
-                    for session in sessions {
-                        if !merged.contains(where: { $0.id == session.id }) {
-                            merged.append(session)
-                        }
-                    }
-                    allSessions = merged
-                    isLoadingAllSessions = false
-                }
-            } catch {
-                print("[SessionPickerSheet] Failed to load sessions via SSH: \(error)")
-                await MainActor.run {
-                    isLoadingAllSessions = false
-                }
-            }
+            await sessionManager.loadSessions(for: project.path, settings: settings)
         }
     }
 
@@ -254,7 +251,7 @@ struct SessionPickerSheet: View {
     var body: some View {
         NavigationStack {
             Group {
-                if isLoadingAllSessions && allSessions.isEmpty {
+                if isLoadingAllSessions && displaySessions.isEmpty {
                     VStack(spacing: 16) {
                         ProgressView()
                             .scaleEffect(1.2)
@@ -355,6 +352,7 @@ struct SessionPickerSheet: View {
                 }
                 Button("Delete", role: .destructive) {
                     if let session = sessionToDelete {
+                        // Call parent's delete handler - SessionManager handles state updates
                         onDelete?(session)
                         sessionToDelete = nil
                     }

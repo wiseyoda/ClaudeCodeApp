@@ -871,7 +871,8 @@ class SessionHistoryLoader {
             ? String(encodedPath.dropLast())
             : encodedPath
 
-        return "~/.claude/projects/\(trimmedPath)/\(sessionId).jsonl"
+        // Use $HOME for consistent shell expansion (~ doesn't expand in all contexts)
+        return "$HOME/.claude/projects/\(trimmedPath)/\(sessionId).jsonl"
     }
 }
 

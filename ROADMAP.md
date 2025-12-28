@@ -63,6 +63,7 @@ Issues identified during comprehensive code review (December 27, 2025).
 
 | Issue | File | Lines | Description | Status |
 |-------|------|-------|-------------|--------|
+| WebSocket receive loop dies | `WebSocketManager.swift` | 739 | Receive callback terminates because self/webSocket is nil ~500ms after connect | To Do |
 | ClaudeHelper timeout race | `ClaudeHelper.swift` | 442-452 | Timeout task not stored/cancelled | **Fixed** |
 | **SSH command injection** | `SSHManager.swift` | 784, 793, 797 | Unescaped paths in uploadImage() | **Fixed** |
 | SSHManager disconnect race | `SSHManager.swift` | 614-627 | Task not awaited, client deallocated | **Fixed** (singleton + deinit) |
@@ -76,6 +77,7 @@ Issues identified during comprehensive code review (December 27, 2025).
 
 | Issue | File | Lines | Description | Status |
 |-------|------|-------|-------------|--------|
+| Session delete race condition | `SessionManager.swift` | - | Attempts to delete sessions that don't exist on server (stale UI state) | To Do |
 | Missing @MainActor | `Models.swift` | 539 | ArchivedProjectsStore not thread-safe | **Fixed** |
 | No periodic save | `Models.swift` | 590-666 | BookmarkStore may lose data on exit | To Do |
 | Non-atomic image save | `Models.swift` | 392-413 | Orphaned images if JSON save fails | To Do |
@@ -89,6 +91,7 @@ Issues identified during comprehensive code review (December 27, 2025).
 
 | Issue | File | Lines | Description | Fix |
 |-------|------|-------|-------------|-----|
+| Keyboard constraint conflicts | `ChatView.swift` | - | accessoryView.bottom vs inputView.top constraint conflicts during text input | Investigate input accessory view layout |
 | Uses print() not Logger | `SpeechManager.swift` | 107, 127 | Inconsistent logging | Replace with log.debug() |
 | Missing @MainActor | `DebugLogStore.swift` | 169 | copyToClipboard() UI operation | Add @MainActor annotation |
 | Excessive @State | `ChatView.swift` | 16-60 | 40+ scattered state variables | Group into ChatViewState struct |
@@ -176,7 +179,8 @@ Phase 1: Critical Code Review Fixes (6 items) - COMPLETE
 [x] Timer leak in ProcessingIndicator          [Low effort] DONE
 [x] Uncancelled SSH tasks (GlobalSearchView)   [Medium effort] DONE
 
-Phase 2: High Priority Fixes (8 items) - COMPLETE
+Phase 2: High Priority Fixes (9 items) - 8/9 DONE
++-- WebSocket receive loop dies                [Medium effort] (self/webSocket nil ~500ms after connect)
 [x] SSH command injection (SECURITY)           [Low effort] DONE
 [x] ClaudeHelper timeout race                  [Low effort] DONE
 +-- SSHManager disconnect race                 [Low effort] (already fixed as singleton + deinit)
@@ -191,8 +195,9 @@ Phase 3: Open Issues (3 items) - COMPLETE
 [x] #14 Status indicator stuck red             [Low effort] DONE
 [x] #15 Per-project permissions toggle         [Low effort] DONE
 
-Phase 4: Medium Priority Fixes (8 items) - 1/8 DONE
+Phase 4: Medium Priority Fixes (9 items) - 1/9 DONE
 [x] ArchivedProjectsStore @MainActor           [Low effort] DONE
++-- Session delete race condition              [Medium effort] (stale UI state)
 +-- BookmarkStore periodic save                [Low effort]
 +-- Non-atomic image save                      [Medium effort]
 +-- IdeasStore cleanup validation              [Low effort]
@@ -210,7 +215,8 @@ Phase 5: iOS 26 Compatibility (Before April 2026)
 +-- Adopt .glassEffect() modifier              [Low effort]
 +-- Replace custom search with .searchable()   [Low effort]
 
-Phase 6: Code Quality & Low Priority (6 items)
+Phase 6: Code Quality & Low Priority (7 items)
++-- Keyboard constraint conflicts              [Low effort] (investigate input accessory view)
 +-- Configurable history limit                 [Low effort]
 +-- Structured logging                         [Low effort]
 +-- Error UI component                         [Medium effort]
@@ -341,4 +347,4 @@ All critical code review fixes from Phase 1 have been implemented:
 
 ---
 
-*Last updated: December 27, 2025 - Added Priority 2: iOS 26 Compatibility section with Liquid Glass, @IncrementalState, and new SwiftUI features*
+*Last updated: December 27, 2025 - Added console log analysis issues: WebSocket receive loop, session delete race, keyboard constraints*

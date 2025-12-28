@@ -176,28 +176,30 @@ POST /api/abort/:requestId
 
 ## Project Registration
 
-Projects appear in the iOS app when they have session files in `~/.claude/projects/`.
+Projects appear in the iOS app when they have session files in `$HOME/.claude/projects/`.
 
 ### Session File Location
 
 ```
-~/.claude/projects/{encoded-project-path}/{session-id}.jsonl
+$HOME/.claude/projects/{encoded-project-path}/{session-id}.jsonl
 ```
 
 **Path encoding:** `/home/dev/workspace/my-project` -> `-home-dev-workspace-my-project`
 
 Note: The encoded path starts with a dash (`-`).
 
+> **Important**: Always use `$HOME` instead of `~` in SSH commands from Swift code. Tilde expansion doesn't work reliably inside quoted strings. See `CLAUDE.md` for details.
+
 ### Registering a New Project
 
 To register a project (done automatically by the iOS app during clone/create):
 
 ```bash
-# Create the project directory
-mkdir -p ~/.claude/projects/-home-dev-workspace-my-project
+# Create the project directory (use $HOME for Swift SSH commands)
+mkdir -p "$HOME/.claude/projects/-home-dev-workspace-my-project"
 
 # Create an init session file with cwd
-echo '{"type":"init","cwd":"/home/dev/workspace/my-project","timestamp":"2025-12-27T00:00:00.000Z"}' > ~/.claude/projects/-home-dev-workspace-my-project/init.jsonl
+echo '{"type":"init","cwd":"/home/dev/workspace/my-project","timestamp":"2025-12-27T00:00:00.000Z"}' > "$HOME/.claude/projects/-home-dev-workspace-my-project/init.jsonl"
 ```
 
 The `cwd` field in the session file is what determines the project path displayed in the app.
@@ -250,17 +252,19 @@ Supported key types:
 
 ### SSH Commands Used
 
+> **Note**: Use `$HOME` with double quotes in Swift code. Single quotes or `~` won't expand.
+
 | Operation | Command |
 |-----------|---------|
 | List files | `ls -laF /path/to/directory` |
-| Read session | `cat ~/.claude/projects/{path}/{session}.jsonl` |
+| Read session | `cat "$HOME/.claude/projects/{path}/{session}.jsonl"` |
 | Git clone | `git clone {url} ~/workspace/{name}` |
 | Create directory | `mkdir -p /path/to/directory` |
-| Delete session | `rm -f ~/.claude/projects/{path}/{session}.jsonl` |
-| Delete project | `rm -rf ~/.claude/projects/{encoded-path}` |
+| Delete session | `rm -f "$HOME/.claude/projects/{path}/{session}.jsonl"` |
+| Delete project | `rm -rf "$HOME/.claude/projects/{encoded-path}"` |
 | Git status | `git -C /path/to/project status --porcelain -b` |
 | Git pull | `git -C /path/to/project pull` |
-| Global search | `grep -l "query" ~/.claude/projects/*/*.jsonl` |
+| Global search | `grep -l "query" $HOME/.claude/projects/*/*.jsonl` |
 | Claude init | `cd /path && claude init --yes` |
 
 ## Troubleshooting

@@ -44,6 +44,12 @@ open ClaudeCodeApp.xcodeproj
 - NEVER store secrets in `@AppStorage` (use Keychain via `KeychainHelper`)
 - NEVER commit credentials or API keys
 
+**IMPORTANT - SSH Shell Expansion:**
+- MUST use `$HOME` instead of `~` for home directory paths in SSH commands
+- MUST use double quotes (`"..."`) not single quotes (`'...'`) when paths contain `$HOME`
+- Single quotes prevent shell variable expansion, causing paths to fail silently
+- See `.claude/rules/ssh-security.md` for examples
+
 **Code Patterns:**
 - Use `@StateObject` for manager ownership in views (WebSocketManager, SSHManager, IdeasStore)
 - Use `@EnvironmentObject` for AppSettings (injected at app root)
@@ -101,7 +107,7 @@ See `requirements/ARCHITECTURE.md` for full structure and data flows.
 
 Connects to claudecodeui via WebSocket (`ws://host:port/ws?token=JWT`). Auth via POST `/api/auth/login`.
 
-Session files: `~/.claude/projects/{encoded-path}/{session}.jsonl`
+Session files: `$HOME/.claude/projects/{encoded-path}/{session}.jsonl`
 Path encoding: `/home/dev/project` → `-home-dev-project` (starts with dash)
 
 **Note**: The backend API only returns ~5 sessions per project. The app loads all sessions via SSH for accurate counts. See `requirements/SESSIONS.md` for the full session system documentation.

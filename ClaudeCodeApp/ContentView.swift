@@ -17,6 +17,7 @@ struct ContentView: View {
     @State private var showGlobalSearch = false
     @State private var showCommands = false
     @ObservedObject private var sshManager = SSHManager.shared
+    @ObservedObject private var sessionManager = SessionManager.shared
     @StateObject private var commandStore = CommandStore.shared
     @ObservedObject private var archivedStore = ArchivedProjectsStore.shared
 
@@ -29,9 +30,6 @@ struct ContentView: View {
     @State private var isCheckingGitStatus = false
     @State private var gitRefreshError: String?
     @State private var showGitRefreshError = false
-
-    // Session counts per project path (loaded via SSH for accurate counts)
-    @State private var sessionCounts: [String: Int] = [:]
 
     // Selected project for NavigationSplitView
     @State private var selectedProject: Project?
@@ -426,7 +424,7 @@ struct ContentView: View {
         ProjectRow(
             project: project,
             gitStatus: gitStatuses[project.path] ?? .unknown,
-            sessionCount: sessionCounts[project.path],
+            sessionCount: sessionManager.sessionCount(for: project.path),
             isSelected: selectedProject?.id == project.id,
             isArchived: isArchived
         )
@@ -512,11 +510,12 @@ struct ContentView: View {
         // Remove project from Claude's project list (not the actual files)
         // The project directory in ~/.claude/projects/ is what makes it appear in the list
         let encodedPath = project.path.replacingOccurrences(of: "/", with: "-")
-        let claudeProjectDir = "~/.claude/projects/\(encodedPath)"
+        // Use $HOME with double quotes for proper shell expansion (single quotes prevent expansion)
+        let claudeProjectDir = "$HOME/.claude/projects/\(encodedPath)"
 
         do {
             // Connect if needed and delete the Claude project directory
-            let deleteCmd = "rm -rf '\(claudeProjectDir)'"
+            let deleteCmd = "rm -rf \"\(claudeProjectDir)\""
             _ = try await sshManager.executeCommandWithAutoConnect(deleteCmd, settings: settings)
 
             // Remove from local list immediately for responsive UI
@@ -541,6 +540,18 @@ struct ContentView: View {
         // Mark all as checking
         for project in projects {
             gitStatuses[project.path] = .checking
+        }
+
+        // Pre-connect SSH once before parallel git checks to avoid race condition
+        // where all concurrent tasks try to connect simultaneously
+        if !sshManager.isConnected {
+            do {
+                try await sshManager.autoConnect(settings: settings)
+            } catch {
+                // SSH not available, all projects will show .unknown
+                isCheckingGitStatus = false
+                return
+            }
         }
 
         // Check each project's git status concurrently but with some batching
@@ -593,16 +604,10 @@ struct ContentView: View {
 
     // MARK: - Session Count Loading
 
-    /// Load accurate session counts for all projects via SSH
+    /// Load accurate session counts for all projects via SessionManager
     private func loadAllSessionCounts() async {
         let projectPaths = projects.map { $0.path }
-        do {
-            let counts = try await sshManager.countSessionsForProjects(projectPaths, settings: settings)
-            sessionCounts = counts
-            print("[ContentView] Loaded session counts for \(counts.count) projects")
-        } catch {
-            print("[ContentView] Failed to load session counts: \(error)")
-        }
+        await sessionManager.loadSessionCounts(for: projectPaths, settings: settings)
     }
 }
 
