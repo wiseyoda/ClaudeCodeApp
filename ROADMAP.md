@@ -325,6 +325,13 @@ xcodebuild test -project ClaudeCodeApp.xcodeproj \
 
 ## Recently Fixed
 
+### UI/UX Fixes (December 27, 2025)
+
+| Issue | File | Fix |
+|-------|------|-----|
+| Session scroll not working | `ChatView.swift:1285` | Added 150ms delay before scroll trigger to fix race condition |
+| Status bar word wrap | `CLIStatusBarViews.swift:85-107` | Changed mode pills to icon-only display |
+
 ### Multi-Repo Support (December 27, 2025)
 
 | Issue | File | Fix |
