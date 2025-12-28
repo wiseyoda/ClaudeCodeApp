@@ -6,7 +6,9 @@ Create a native iOS application that provides a full-featured mobile interface t
 
 ## Background
 
-The [claudecodeui](https://github.com/siteboon/claudecodeui) project provides a web-based interface for Claude Code. This iOS app acts as a native client for that same backend, providing a polished mobile experience with native features like voice input, keyboard shortcuts, and Keychain storage.
+The [claudecodeui](https://github.com/wiseyoda/claudecodeui) project (our fork) provides a web-based interface for Claude Code. This iOS app acts as a native client for that same backend, providing a polished mobile experience with native features like voice input, keyboard shortcuts, and Keychain storage.
+
+> **Note**: We use a fork of siteboon/claudecodeui that adds session filtering, permission callbacks, and message batching.
 
 ## Target Users
 
@@ -33,10 +35,14 @@ The [claudecodeui](https://github.com/siteboon/claudecodeui) project provides a 
 #### 2. Session Management
 - Session selection for resuming conversations
 - Full-screen session picker with summaries and timestamps
+- Real-time session updates via WebSocket push events
+- Pagination with "Load More" for large session lists
+- Bulk operations: delete all, older than N days, keep last N
 - Rename sessions with custom names (persisted via SessionNamesStore)
-- Delete sessions with swipe-to-delete
+- Delete sessions with swipe-to-delete (optimistic UI with rollback)
 - Export sessions as markdown with share sheet
-- Session history loaded via SSH (JSONL parsing)
+- Session history loaded via API (with SSH fallback for messages)
+- Clean Architecture: SessionStore (state) → SessionRepository (data) → APIClient (HTTP)
 
 #### 3. Chat Interface
 - Send messages to Claude (text, voice, or with images)
@@ -145,7 +151,14 @@ The [claudecodeui](https://github.com/siteboon/claudecodeui) project provides a 
 - Split-view multitasking support
 - Landscape orientation optimization
 
-#### 17. Configuration
+#### 17. Permission Approval
+- Interactive approval banner when bypass permissions is OFF
+- Approve / Always Allow / Deny buttons for each tool request
+- Per-project permission mode overrides (ProjectSettingsStore)
+- Real-time WebSocket protocol for permission requests/responses
+- "Always Allow" remembers decisions per tool type
+
+#### 18. Configuration
 | Setting | Options |
 |---------|---------|
 | Server URL | Backend address |
@@ -159,7 +172,7 @@ The [claudecodeui](https://github.com/siteboon/claudecodeui) project provides a 
 | Display | Show thinking, auto-scroll |
 | Sort | By name / By date |
 
-#### 18. Notifications
+#### 19. Notifications
 - Local notifications when tasks complete (background only)
 - Request notification permissions on launch
 
@@ -173,10 +186,10 @@ The [claudecodeui](https://github.com/siteboon/claudecodeui) project provides a 
 
 #### 2. Security
 - JWT token-based authentication
-- SSH key storage in iOS Keychain
+- SSH key and password storage in iOS Keychain (via KeychainHelper)
+- Shell command escaping via `shellEscape()` function
 - Network-level security via Tailscale
 - ATS disabled for local/Tailscale IPs only
-- **Known Issues**: SSH password in UserDefaults (should migrate to Keychain)
 
 #### 3. Usability
 - CLI-inspired theme with light/dark mode support
@@ -186,9 +199,10 @@ The [claudecodeui](https://github.com/siteboon/claudecodeui) project provides a 
 - Keyboard shortcuts for iPad users
 
 #### 4. Quality
-- 28+ unit tests for parsers and utilities
+- 300+ unit tests for parsers, utilities, stores, and models
 - Structured logging via Logger utility
 - Unified error handling via AppError
+- Debug log viewer for WebSocket traffic troubleshooting
 
 ## Completed Features
 
@@ -223,12 +237,17 @@ The [claudecodeui](https://github.com/siteboon/claudecodeui) project provides a 
 - Connection status indicator
 - Unified status bar
 - QuickSettings sheet
+- Permission approval banner with Always Allow
+- Per-project settings overrides
+- Debug log viewer for troubleshooting
+- Bulk session operations
+- Session API with pagination
 
 ### Quality
 - Copy/share context menus
 - Light/dark theme support
 - File-based message persistence
-- 28+ unit tests
+- 300+ unit tests
 - Structured logging
 
 ## Out of Scope (Current Version)
@@ -244,9 +263,15 @@ The [claudecodeui](https://github.com/siteboon/claudecodeui) project provides a 
 
 ## Known Issues
 
-See ROADMAP.md Priority 1 for critical issues including:
-- WebSocket race conditions
-- Missing @MainActor annotations
-- SpeechManager missing deinit
-- SSH password in UserDefaults (should use Keychain)
-- Command injection vulnerabilities in SSH commands
+See [ROADMAP.md](../ROADMAP.md) for remaining work and [ISSUES.md](../ISSUES.md) for investigation items.
+
+**Resolved in v0.4.0:**
+- ✅ @MainActor added to APIClient and BookmarkStore
+- ✅ SpeechManager resource leak fixed with proper deinit
+- ✅ SSH password migrated to Keychain (via KeychainHelper)
+- ✅ Command injection fixed with shell escaping
+- ✅ WebSocket state race fixed (connection state timing)
+
+**Remaining:**
+- WebSocket state serialization (concurrent state access)
+- @MainActor on BookmarkStore in Models.swift

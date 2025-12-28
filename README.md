@@ -1,6 +1,6 @@
 # Coding Bridge
 
-A native iOS client for [claudecodeui](https://github.com/siteboon/claudecodeui), enabling full Claude Code access from your iPhone or iPad.
+A native iOS client for [claudecodeui](https://github.com/wiseyoda/claudecodeui), enabling full Claude Code access from your iPhone or iPad.
 
 ## Features
 
@@ -62,12 +62,23 @@ Control Claude's reasoning depth with 5 levels:
 
 ### Session Management
 
-| Feature             | Description                                    |
-| ------------------- | ---------------------------------------------- |
-| **Session Picker**  | Full-screen list with summaries and timestamps |
-| **Rename Sessions** | Custom names instead of UUIDs                  |
-| **Delete Sessions** | Swipe-to-delete with confirmation              |
-| **Export Sessions** | Save as markdown with share sheet              |
+| Feature                 | Description                                        |
+| ----------------------- | -------------------------------------------------- |
+| **Session Picker**      | Full-screen list with summaries and timestamps     |
+| **Real-time Updates**   | WebSocket push updates when sessions change        |
+| **Load More**           | Pagination for large session lists                 |
+| **Bulk Operations**     | Delete all, older than 7/30/90 days, keep last N   |
+| **Rename Sessions**     | Custom names instead of UUIDs                      |
+| **Delete Sessions**     | Swipe-to-delete with confirmation                  |
+| **Export Sessions**     | Save as markdown with share sheet                  |
+
+### Permission Approval
+
+| Feature              | Description                                       |
+| -------------------- | ------------------------------------------------- |
+| **Approval Banner**  | Compact banner for tool approval requests         |
+| **Quick Actions**    | Approve / Always Allow / Deny buttons             |
+| **Per-Project Mode** | Override global permissions per project           |
 
 ### Search & Bookmarks
 
@@ -139,12 +150,12 @@ Control Claude's reasoning depth with 5 levels:
 
 ### Backend Setup
 
-The app connects to a claudecodeui backend. See [requirements/BACKEND.md](requirements/BACKEND.md) for setup instructions.
+The app connects to a claudecodeui backend (our fork adds session filtering, permission callbacks, and message batching). See [requirements/BACKEND.md](requirements/BACKEND.md) for setup instructions.
 
 Quick start:
 
 ```bash
-git clone https://github.com/siteboon/claudecodeui.git
+git clone https://github.com/wiseyoda/claudecodeui.git
 cd claudecodeui && npm install && npm run build && npm start
 ```
 
@@ -183,16 +194,19 @@ On first launch, configure in Settings (gear icon):
 
 ### Key Components
 
-| Component          | Purpose                                          |
-| ------------------ | ------------------------------------------------ |
-| `WebSocketManager` | Real-time streaming, reconnection, message queue |
-| `SSHManager`       | Terminal, file browser, git operations           |
-| `SpeechManager`    | Voice input with iOS Speech framework            |
-| `CommandStore`     | Saved prompts with categories                    |
-| `IdeasStore`       | Per-project idea capture and persistence         |
-| `ClaudeHelper`     | AI suggestions via Haiku                         |
-| `MessageStore`     | File-based message persistence                   |
-| `BookmarkStore`    | Cross-session bookmarks                          |
+| Component           | Purpose                                          |
+| ------------------- | ------------------------------------------------ |
+| `WebSocketManager`  | Real-time streaming, reconnection, message queue |
+| `SessionStore`      | Centralized session state with pagination        |
+| `SessionRepository` | Session data access (API + Mock for testing)     |
+| `APIClient`         | REST API communication, JWT auth                 |
+| `SSHManager`        | Terminal, file browser, git operations           |
+| `SpeechManager`     | Voice input with iOS Speech framework            |
+| `CommandStore`      | Saved prompts with categories                    |
+| `IdeasStore`        | Per-project idea capture and persistence         |
+| `ClaudeHelper`      | AI suggestions via Haiku                         |
+| `MessageStore`      | File-based message persistence                   |
+| `BookmarkStore`     | Cross-session bookmarks                          |
 
 ### View Structure
 
@@ -211,13 +225,16 @@ On first launch, configure in Settings (gear icon):
 
 ## WebSocket Protocol
 
-| Message Type      | Direction    | Description       |
-| ----------------- | ------------ | ----------------- |
-| `claude-command`  | App → Server | Send user message |
-| `claude-response` | Server → App | Streaming content |
-| `claude-complete` | Server → App | Task finished     |
-| `token-budget`    | Server → App | Usage stats       |
-| `abort-session`   | App → Server | Cancel request    |
+| Message Type          | Direction    | Description                    |
+| --------------------- | ------------ | ------------------------------ |
+| `claude-command`      | App → Server | Send user message              |
+| `claude-response`     | Server → App | Streaming content              |
+| `claude-complete`     | Server → App | Task finished                  |
+| `token-budget`        | Server → App | Usage stats                    |
+| `abort-session`       | App → Server | Cancel request                 |
+| `sessions-updated`    | Server → App | Session list changed           |
+| `permission-request`  | Server → App | Tool approval request          |
+| `permission-response` | App → Server | Approve/deny/always-allow tool |
 
 ## Testing
 
@@ -252,7 +269,9 @@ The app requests these iOS permissions:
 
 | File                                                         | Description                      |
 | ------------------------------------------------------------ | -------------------------------- |
-| [ROADMAP.md](ROADMAP.md)                                     | Feature roadmap and known issues |
+| [CHANGELOG.md](CHANGELOG.md)                                 | Version history and changes      |
+| [ROADMAP.md](ROADMAP.md)                                     | Remaining work and priorities    |
+| [ISSUES.md](ISSUES.md)                                       | Bug tracking and investigations  |
 | [FUTURE-IDEAS.md](FUTURE-IDEAS.md)                           | Long-term vision and ideas       |
 | [CLAUDE.md](CLAUDE.md)                                       | Claude Code project instructions |
 | [requirements/OVERVIEW.md](requirements/OVERVIEW.md)         | Functional requirements          |

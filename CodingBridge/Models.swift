@@ -1551,19 +1551,18 @@ struct ApprovalRequest: Identifiable, Equatable {
 }
 
 /// Response to send back to server for a permission request
+/// Backend expects: { type, requestId, decision, alwaysAllow }
+/// - decision: "allow" or "deny" (NOT "allow-session" - that breaks backend logic)
+/// - alwaysAllow: true to remember decision for this session
 struct ApprovalResponse: Encodable {
     let type: String = "permission-response"
     let requestId: String
-    let decision: String  // "allow", "deny", "allow-session", "allow-always"
+    let decision: String      // "allow" or "deny"
+    let alwaysAllow: Bool     // true = remember for session
 
     init(requestId: String, allow: Bool, alwaysAllow: Bool = false) {
         self.requestId = requestId
-        if !allow {
-            self.decision = "deny"
-        } else if alwaysAllow {
-            self.decision = "allow-session"  // Remember for this session
-        } else {
-            self.decision = "allow"
-        }
+        self.decision = allow ? "allow" : "deny"
+        self.alwaysAllow = alwaysAllow
     }
 }

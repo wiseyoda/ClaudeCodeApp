@@ -86,10 +86,20 @@ We use a fork of [siteboon/claudecodeui](https://github.com/siteboon/claudecodeu
 
 ### Custom Modifications
 
+**Session API Improvements:**
+- `server/index.js`: Added `/api/projects/:name/sessions` endpoint with pagination
+- `server/index.js`: Added `sessionType` field for filtering (display/agent/helper)
+- `server/index.js`: Added `sessions-updated` WebSocket events for real-time updates
+- Cache headers: 30s for projects, 15s for sessions
+
 **Permission Approval System** (added 2025-12-28):
 - `server/claude-sdk.js`: Added `canUseTool` callback for interactive permission requests
 - `server/index.js`: Added WebSocket handler for `permission-response` messages
 - Enables iOS app to show approval banner instead of error messages when bypass permissions is OFF
+
+**Message Enhancements:**
+- `textContent` normalized field for simpler message rendering
+- `?batch=<ms>` WebSocket parameter for streaming batching
 
 ### Updating from Upstream
 

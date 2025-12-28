@@ -117,46 +117,108 @@ Each line in a session file is a JSON object. Common message types:
 }
 ```
 
-## API Limitations
+## Session API (Fork Enhancement)
 
-### Backend API (claudecodeui)
+### Backend API (wiseyoda/claudecodeui fork)
 
-The backend API at `/api/projects` returns projects with sessions, but has limitations:
+Our fork adds a proper session listing endpoint with pagination:
 
+```
+GET /api/projects/:name/sessions?limit=100&offset=0&type=display
+Authorization: Bearer <token>
+```
+
+Response:
 ```json
 {
-  "projects": [{
-    "path": "/home/dev/workspace/ClaudeCodeApp",
-    "title": "ClaudeCodeApp",
-    "sessions": [
-      {"id": "xxx", "messageCount": 3, "lastActivity": "..."},
-      // ... LIMITED to ~5 most recent sessions
-    ]
-  }]
+  "sessions": [
+    {"id": "uuid", "summary": "...", "messageCount": 42, "lastActivity": "...", "sessionType": "display"}
+  ],
+  "pagination": {"total": 85, "limit": 100, "offset": 0, "hasMore": false}
 }
 ```
 
-**Key Limitation**: The API only returns approximately 5 most recent sessions per project, even when there are 80+ sessions on the server.
+**Parameters:**
+- `limit` - Sessions per page (default: 100, max: 1000)
+- `offset` - Pagination offset
+- `type` - Filter: `display` (user sessions), `agent`, `helper`, or `all`
 
-### Workaround: SSH-Based Loading
+**Session Types:**
+| Type | Description |
+|------|-------------|
+| `display` | Regular user sessions (shown in picker) |
+| `agent` | Sub-agent sessions from Task tool |
+| `helper` | ClaudeHelper suggestion sessions |
 
-The iOS app bypasses this limitation by loading sessions directly via SSH:
+### WebSocket Push Events
+
+The fork sends real-time updates when sessions change:
+
+```json
+{
+  "type": "sessions-updated",
+  "action": "created|updated|deleted",
+  "projectPath": "/home/dev/workspace/ClaudeCodeApp",
+  "session": {"id": "uuid", "summary": "...", ...}
+}
+```
+
+### Upstream Limitations
+
+The original siteboon/claudecodeui backend returns only ~5 sessions per project. Our fork fixes this with proper pagination.
+
+### Fallback: SSH-Based Loading
+
+For session message history (individual session content), SSH is still used:
 
 ```swift
-// SSHManager.loadAllSessions() - loads ALL sessions with metadata
-// SSHManager.countSessionsForProjects() - efficiently counts sessions
+// SSHManager.loadSessionMessages() - loads messages from .jsonl file
+// (API history endpoint still has CORS issues)
 ```
 
 ## iOS App Session Management
+
+### Clean Architecture
+
+The session system follows Clean Architecture principles:
+
+```
+Views → SessionStore → SessionRepository → APIClient → Backend
+         (state)       (data layer)        (HTTP)
+```
+
+| Layer | Component | Purpose |
+|-------|-----------|---------|
+| State | `SessionStore` | Single source of truth, pagination, filtering |
+| Data | `SessionRepository` | Protocol abstraction + API implementation |
+| Network | `APIClient` | HTTP requests with JWT auth |
+| View | `SessionPickerViews` | UI for session list |
+
+### SessionStore (Singleton)
+
+Access via `SessionStore.shared`. Manages all session state:
+
+```swift
+@Published var sessionsByProject: [String: [ProjectSession]]
+@Published var metaByProject: [String: ProjectSessionMeta]
+@Published var isLoading: [String: Bool]
+@Published var activeSessionIds: [String: String]
+```
+
+**Key Methods:**
+- `loadSessions(for:)` - Fetch from API
+- `loadMore(for:)` - Pagination
+- `deleteSession(_:for:)` - Optimistic delete with rollback
+- `handleSessionsUpdated(...)` - Process WebSocket push events
+- `displaySessions(for:)` - Filtered/sorted for UI
 
 ### Session ID Sources
 
 | Source | Where Used | Notes |
 |--------|-----------|-------|
 | `wsManager.sessionId` | Active WebSocket session | Set on `session-created` callback |
-| `selectedSession?.id` | Selected from picker | From API or SSH-loaded sessions |
-| `localSessions` | ChatView state | Merged API + SSH sessions |
-| `sessionCounts` | ContentView state | SSH-loaded counts per project |
+| `SessionStore.shared` | All session state | Single source of truth |
+| `activeSessionIds[path]` | Currently open session | Per-project tracking |
 
 ### Session Creation Flow
 
@@ -237,36 +299,45 @@ head -1 | head -c 80
 
 | File | Purpose |
 |------|---------|
-| `WebSocketManager.swift` | Session creation via `session-created` callback |
-| `ChatView.swift` | Session selection, `loadAllSessionsViaSSH()` |
-| `SSHManager.swift` | `loadAllSessions()`, `countSessionsForProjects()` |
-| `Models.swift` | `ProjectSession`, `filterForDisplay()` |
-| `SessionPickerViews.swift` | Session picker UI, SSH loading |
+| `SessionStore.swift` | Centralized state management, pagination, filtering |
+| `SessionRepository.swift` | Protocol + API implementation + Mock |
+| `WebSocketManager.swift` | Session creation, `sessions-updated` handling |
+| `APIClient.swift` | HTTP requests for session API |
+| `ChatView.swift` | Session selection UI |
+| `SSHManager.swift` | Session message loading (JSONL parsing) |
+| `Models.swift` | `ProjectSession`, `ProjectSessionMeta` |
+| `SessionPickerViews.swift` | Session picker UI |
 | `ContentView.swift` | Project list with session counts |
-| `MessageStore.swift` | Session ID persistence |
+| `MessageStore.swift` | Local message persistence |
 | `ClaudeHelper.swift` | Helper session ID generation |
 
 ## Common Issues
 
 ### Sessions Not Appearing in Picker
-1. Check if `wsManager.sessionId` is set in `onSessionCreated`
-2. Verify filter isn't too aggressive (`messageCount >= 1`)
-3. Ensure `activeSessionId` is passed through filter
+1. Check `SessionStore.shared.sessionsByProject` has data
+2. Verify `displaySessions(for:)` isn't filtering too aggressively
+3. Ensure WebSocket `sessions-updated` events are being handled
+4. Check `activeSessionIds[path]` is passed to filter
+
+### Session List Not Updating
+1. Verify WebSocket is connected and receiving `sessions-updated` events
+2. Check `SessionStore.handleSessionsUpdated()` is being called
+3. Look for errors in debug logs
 
 ### Wrong Session Counts
-1. API returns limited sessions (~5) - use SSH loading
-2. Verify `sessionCounts` dictionary is populated
-3. Check `loadAllSessionCounts()` is called
+1. Check `SessionStore.metaByProject[path]?.total`
+2. Verify API is returning correct pagination data
+3. Ensure fork is deployed (upstream has 5-session limit)
 
 ### ClaudeHelper Creating Many Sessions
 1. Ensure `createHelperSessionId()` returns valid UUID format
 2. Verify helper session ID is consistent for same project path
-3. Check filter excludes helper sessions from picker
+3. Backend should filter helper sessions with `type=display` parameter
 
 ### Session Titles Missing
-1. Check `jq` is installed on server
-2. Verify shell command handles both content formats
-3. Ensure ClaudeHelper prompts are filtered (`grep -v`)
+1. Check `jq` is installed on server (for SSH fallback)
+2. Verify API is returning `summary` field
+3. Ensure ClaudeHelper prompts are filtered
 
 ## Testing Sessions
 

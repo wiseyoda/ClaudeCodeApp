@@ -18,7 +18,7 @@ struct ContentView: View {
     @State private var showGlobalSearch = false
     @State private var showCommands = false
     @ObservedObject private var sshManager = SSHManager.shared
-    @ObservedObject private var sessionManager = SessionManager.shared
+    @ObservedObject private var sessionStore = SessionStore.shared
     @StateObject private var commandStore = CommandStore.shared
     @ObservedObject private var archivedStore = ArchivedProjectsStore.shared
     @ObservedObject private var projectCache = ProjectCache.shared
@@ -521,7 +521,7 @@ struct ContentView: View {
         ProjectRow(
             project: project,
             gitStatus: gitStatuses[project.path] ?? .unknown,
-            sessionCount: sessionManager.displaySessionCount(for: project.path),
+            sessionCount: sessionStore.displaySessionCount(for: project.path),
             isSelected: selectedProject?.id == project.id,
             isArchived: isArchived,
             multiRepoStatus: multiRepoStatus,
@@ -940,10 +940,12 @@ struct ContentView: View {
 
     // MARK: - Session Count Loading
 
-    /// Load accurate session counts for all projects via SessionManager
+    /// Load accurate session counts for all projects via SessionStore
+    /// Note: Session counts now come from the API Project response, so this is a no-op.
+    /// Individual sessions are loaded when entering ChatView.
     private func loadAllSessionCounts() async {
-        let projectPaths = projects.map { $0.path }
-        await sessionManager.loadSessionCounts(for: projectPaths, settings: settings)
+        // Session counts come from API Project response, no separate loading needed
+        log.debug("[ContentView] loadAllSessionCounts called - counts come from API Project response")
     }
 }
 

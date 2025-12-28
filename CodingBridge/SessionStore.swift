@@ -41,6 +41,16 @@ final class SessionStore: ObservableObject {
         self.repository = repository
     }
 
+    /// Convenience method to configure with AppSettings
+    /// Creates an APISessionRepository internally
+    func configure(with settings: AppSettings) {
+        let repository = APISessionRepository(
+            apiClient: APIClient(settings: settings),
+            settings: settings
+        )
+        configure(with: repository)
+    }
+
     // MARK: - Session Loading
 
     /// Load sessions for a project from API
@@ -273,6 +283,13 @@ final class SessionStore: ObservableObject {
         sessionsByProject[projectPath] != nil
     }
 
+    /// Get filtered sessions for display (excludes helper and empty sessions)
+    func displaySessions(for projectPath: String) -> [ProjectSession] {
+        let activeId = activeSessionIds[projectPath]
+        return sessions(for: projectPath)
+            .filterAndSortForDisplay(projectPath: projectPath, activeSessionId: activeId)
+    }
+
     // MARK: - WebSocket Event Handling
 
     /// Handle session update from WebSocket push
@@ -354,6 +371,78 @@ extension SessionStore {
             }
         }
 
+        return deleted
+    }
+
+    /// Count sessions older than a date (for confirmation dialogs)
+    func countSessionsOlderThan(_ date: Date, for projectPath: String) -> Int {
+        let sessions = sessionsByProject[projectPath] ?? []
+        let activeId = activeSessionIds[projectPath]
+
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        return sessions.filter { session in
+            if session.id == activeId { return false }
+            guard let activityStr = session.lastActivity else { return true }
+            if let activityDate = formatter.date(from: activityStr) {
+                return activityDate < date
+            }
+            formatter.formatOptions = [.withInternetDateTime]
+            if let activityDate = formatter.date(from: activityStr) {
+                return activityDate < date
+            }
+            return true
+        }.count
+    }
+
+    /// Count sessions that would be deleted by keepOnlyLastN (for confirmation dialogs)
+    func countSessionsToDeleteKeepingN(_ count: Int, for projectPath: String) -> Int {
+        let sessions = sessionsByProject[projectPath] ?? []
+        let activeId = activeSessionIds[projectPath]
+
+        let sorted = sessions.sorted { s1, s2 in
+            (s1.lastActivity ?? "") > (s2.lastActivity ?? "")
+        }
+
+        var toKeep = Set(sorted.prefix(count).map { $0.id })
+        if let activeId = activeId {
+            toKeep.insert(activeId)
+        }
+
+        return sessions.filter { !toKeep.contains($0.id) }.count
+    }
+
+    /// Delete sessions older than a specified date
+    func deleteSessionsOlderThan(_ date: Date, for projectPath: String) async -> Int {
+        let sessions = sessionsByProject[projectPath] ?? []
+        let activeId = activeSessionIds[projectPath]
+
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        let toDelete = sessions.filter { session in
+            // Never delete active session
+            if session.id == activeId { return false }
+
+            // Parse last activity date
+            guard let activityStr = session.lastActivity else { return true }
+            if let activityDate = formatter.date(from: activityStr) {
+                return activityDate < date
+            }
+            formatter.formatOptions = [.withInternetDateTime]
+            if let activityDate = formatter.date(from: activityStr) {
+                return activityDate < date
+            }
+            return true
+        }
+
+        var deleted = 0
+        for session in toDelete {
+            if await deleteSession(session, for: projectPath) {
+                deleted += 1
+            }
+        }
         return deleted
     }
 }

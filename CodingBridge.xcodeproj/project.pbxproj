@@ -67,7 +67,6 @@
 		PC000001 /* ProjectCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = PC000002 /* ProjectCache.swift */; };
 		PS000046 /* ProjectSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = PS000047 /* ProjectSettingsStore.swift */; };
 		SK000001 /* SkeletonView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SK000002 /* SkeletonView.swift */; };
-		SM000040 /* SessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000039 /* SessionManager.swift */; };
 		SR000050 /* SessionRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = SR000051 /* SessionRepository.swift */; };
 		SS000048 /* ScrollStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = SS000049 /* ScrollStateManager.swift */; };
 		SST00052 /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = SST00053 /* SessionStore.swift */; };
@@ -132,7 +131,6 @@
 		A2000036 /* CommandStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandStore.swift; sourceTree = "<group>"; };
 		A2000037 /* CommandsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandsView.swift; sourceTree = "<group>"; };
 		A2000038 /* CommandPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPickerSheet.swift; sourceTree = "<group>"; };
-		A2000039 /* SessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionManager.swift; sourceTree = "<group>"; };
 		A2000040 /* ApprovalBannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApprovalBannerView.swift; sourceTree = "<group>"; };
 		A3000001 /* CodingBridge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CodingBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA000041 /* MessageActionBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageActionBar.swift; sourceTree = "<group>"; };
@@ -203,7 +201,6 @@
 				A2000008 /* Theme.swift */,
 				A2000009 /* TerminalView.swift */,
 				A2000010 /* SSHManager.swift */,
-				A2000039 /* SessionManager.swift */,
 				SR000051 /* SessionRepository.swift */,
 				SST00053 /* SessionStore.swift */,
 				A2000011 /* WebSocketManager.swift */,
@@ -416,7 +413,6 @@
 				A1000008 /* Theme.swift in Sources */,
 				A1000009 /* TerminalView.swift in Sources */,
 				A1000010 /* SSHManager.swift in Sources */,
-				SM000040 /* SessionManager.swift in Sources */,
 				SR000050 /* SessionRepository.swift in Sources */,
 				SST00052 /* SessionStore.swift in Sources */,
 				A1000012 /* WebSocketManager.swift in Sources */,

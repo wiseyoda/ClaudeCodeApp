@@ -6,61 +6,69 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [0.5.0] - 2025-12-28
 
 ### Added
+
+- **Session API Migration** (v0.5.1): Replaced SSH-based session loading with proper API
+  - `SessionRepository.swift` - Protocol + API implementation + Mock for testing
+  - `SessionStore.swift` - Centralized state management with pagination
+  - Clean Architecture pattern separating state, repository, and view layers
+  - Backend limit increased from 5 to 1000 sessions
+  - WebSocket `sessions-updated` events for real-time updates
+  - 12 new unit tests for session management
+- **Backend Improvements** (wiseyoda/claudecodeui fork):
+  - `sessionType` field for classifying sessions (agent/helper/display)
+  - `textContent` normalized field for simpler message rendering
+  - `?batch=<ms>` WebSocket parameter for streaming batching
+  - Cache headers (30s projects, 15s sessions) with WebSocket push updates
 - **Permission Approval Banner**: Interactive approval UI when bypass permissions is OFF
   - `ApprovalBannerView` - Compact banner with Approve/Always Allow/Deny buttons
   - `ApprovalRequest` and `ApprovalResponse` models for WebSocket protocol
   - Real-time permission request handling in WebSocketManager
   - Backend fork (wiseyoda/claudecodeui) with `canUseTool` callback support
-  - Enables non-bypass permission mode for security-conscious workflows
-- **iOS Platform Quirks Documentation**: Documented workarounds for TextEditor paste truncation, Smart Punctuation, and text hyphenation issues in CLAUDE.md
-- **SessionManager**: Centralized session management with filtering and sorting
-  - Excludes AI helper sessions (agent-*.jsonl) from session list
-  - Configurable response timeout in Settings
-  - Session sorting by last activity
+- **Session Management Improvements**:
+  - SessionManager replaced with SessionStore (Clean Architecture)
+  - Excludes AI helper sessions (agent-\*.jsonl) from session list
+  - Load More pagination for large session lists
+  - Real-time session updates via WebSocket push
 - **Bulk Session Management** (Feature #19): Delete multiple sessions at once
   - Delete all sessions for a project
   - Delete sessions older than 7, 30, or 90 days
   - Keep only the last 5, 10, or 20 sessions
   - Active session protection prevents accidental deletion
-  - Accessible via "Manage" button in session picker toolbar
 - **iOS 26 Liquid Glass UI**: Full adoption of new design system
   - `GlassTint` enum with semantic colors (primary, success, warning, error, info, accent, neutral)
   - `GlassEffectModifier` and `GlassCapsuleModifier` view modifiers in Theme.swift
-  - `glassBackground()` and `glassCapsule()` View extensions
-  - `glassMessageBubble()` helper for message-specific styling
   - Glass effects applied to GitSyncBanner, CLIProcessingView, QuickActionButton, CLIInputView
   - Toolbars updated to use `.ultraThinMaterial` for glass-ready backgrounds
-- **Native Search API**: Replaced custom search with `.searchable()` in GlobalSearchView
-- **@IncrementalState Migration Prep**: Documented migration steps for ChatView, DebugLogStore, CommandStore, IdeasStore (awaiting Xcode 26)
+- **iOS Platform Quirks Documentation**: Documented workarounds in CLAUDE.md
 
 ### Changed
+
 - **App Rebranding**: Display name changed from "Claude Code" to "Coding Bridge"
-- **Version Update**: App version set to 0.5.0
-- **App Category**: Added developer-tools category to App Store metadata
+- **Architecture**: Session management migrated from SSH to API with Clean Architecture
+- Session picker now uses API pagination instead of loading all via SSH
+- Removed `SessionManager.swift` (replaced by `SessionStore.swift`)
 - Session picker now filters phantom "New Session" entries (Issue #16 workaround)
-- Improved session delete handling to avoid stale UI state
 
 ### Fixed
-- **Helper Session Hash Collisions**: Improved hash function in `ClaudeHelper.createHelperSessionId()` to prevent collisions for similar project paths
-- **Session Delete Race**: Added timestamped tracking in SessionManager to prevent stale UI state causing delete attempts on non-existent sessions
+
+- **"Always Allow" Permission Not Working** (Issue #24): Fixed permission response format to include explicit `alwaysAllow: true` boolean
+- **Session Loading**: Now uses API instead of SSH (faster, more reliable)
+- **Helper Session Hash Collisions**: Improved hash function in `ClaudeHelper.createHelperSessionId()`
+- **Session Delete Race**: Timestamped tracking prevents stale UI state
 - **BookmarkStore Atomic Save**: Added atomic writes for crash safety
-- **Non-atomic Image Save**: Now uses atomic writes and validates JSON before saving images
-- **IdeasStore Cleanup**: Now logs cleanup failures instead of silently ignoring
-- **Orphaned Suggestion Task**: Task now stored and cancelled on view disappear
-- **SpeechManager Logging**: Changed print() calls to Logger for consistent logging
-- **WebSocketManager Observable**: Made `isAppInForeground` @Published for proper SwiftUI observability
+- **Non-atomic Image Save**: Now uses atomic writes and validates JSON before saving
 - **DebugLogStore Performance**: Static DateFormatter (was creating per-call)
-- **GlobalSearchView Errors**: Proper error logging instead of silent try? failures
-- **ChatView Organization**: Organized 40+ @State variables with MARK sections for maintainability
+- **ChatView Organization**: Organized 40+ @State variables with MARK sections
 
 ---
 
 ## [0.4.0] - 2025-12-27
 
 ### Added
+
 - **Message Action Bar**: Bottom bar on assistant messages with execution time, token count, copy button, and analyze button
 - **Quick-Access Mode Toggles**: Restored mode and thinking chips to status bar for faster access
 - **Auto-Refresh Git Status**: Periodic 30-second refresh plus auto-refresh after task completion
@@ -90,6 +98,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Extended coverage for stores, models, and helpers
 
 ### Fixed
+
 - **WebSocket State Race**: Connection state now set only after first successful receive
 - **Missing @MainActor**: Added to `APIClient.swift` and `BookmarkStore` for thread safety
 - **SpeechManager Resource Leak**: Added proper `deinit` with resource cleanup
@@ -105,6 +114,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [0.3.3] - 2025-12-27
 
 ### Added
+
 - **Ideas Drawer**: Per-project idea capture with floating action button
   - Quick capture sheet via long-press on FAB
   - Full drawer with search, tags, archive/restore
@@ -119,6 +129,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - ISSUES.md for structured bug and feature request tracking
 
 ### Fixed
+
 - Thread safety issues via `@MainActor` additions
 - WebSocket state race conditions
 - Resource cleanup in SpeechManager
@@ -128,6 +139,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [0.3.2] - 2025-12-27
 
 ### Added
+
 - **Thinking Mode**: 5-level thinking (Normal to Ultrathink)
   - ThinkingModeIndicator in status bar
   - Silently appends trigger words to messages
@@ -157,6 +169,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [0.3.1] - 2025-12-27
 
 ### Added
+
 - **SSH Key Import**: Secure key management
   - KeychainHelper for secure storage
   - SSHKeyType enum (Ed25519, RSA, ECDSA)
@@ -175,6 +188,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - TruncatableText view for long content
 
 ### Fixed
+
 - JWT auth for project listing (was using API key incorrectly)
 - API key auth handling and error messages
 - Project list selection on iPhone
@@ -184,6 +198,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [0.3.0] - 2025-12-27
 
 ### Added
+
 - **Project Management**
   - Clone from GitHub URL via SSH
   - Create new empty projects
@@ -216,6 +231,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Copy & Share: Copy buttons, context menus, share sheet
 
 ### Changed
+
 - Comprehensive documentation update for all features
 
 ---
@@ -223,12 +239,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [0.2.5] - 2025-12-26
 
 ### Added
+
 - Application hardening: extracted UI components to Views/
 - Utilities: Logger, AppError, ImageUtilities
 - Unit tests for parsers and markdown rendering
 - Auto-focus input field when conversation loads
 
 ### Changed
+
 - Improved error handling throughout the app
 - Code organization with dedicated directories
 
@@ -237,6 +255,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [0.2.0] - 2025-12-26
 
 ### Added
+
 - **Slash Commands**: /clear, /init, /resume, /help, etc.
 - **TodoWrite Visualization**: Visual checklist for task tracking
 - **AskUserQuestion**: Interactive UI for Claude questions
@@ -247,6 +266,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Processing timeout handling
 
 ### Fixed
+
 - Markdown rendering for headers and inline formatting
 - Message streaming separation (text vs tool uses)
 - Image upload via SSH with better base64 handling
@@ -259,6 +279,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [0.1.0] - 2025-12-26
 
 ### Added
+
 - **Initial Release**
 - WebSocket real-time streaming chat with Claude
 - Full markdown rendering (headers, code blocks, tables, lists)
@@ -276,13 +297,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## Version Summary
 
-| Version | Highlights |
-|---------|------------|
-| 0.1.0 | Initial app: WebSocket chat, SSH terminal, voice input |
-| 0.2.0 | Slash commands, TodoWrite, images, settings overhaul |
-| 0.2.5 | Code hardening, tests, better error handling |
-| 0.3.0 | Project/session management, git sync, model selection |
-| 0.3.1 | iPad support, SSH keys, connection indicator |
-| 0.3.2 | Search, thinking mode, command library, UI redesign |
-| 0.3.3 | Ideas Drawer, task abort |
-| 0.4.0 | Message action bar, critical bug fixes, test suite |
+| Version | Highlights                                             |
+| ------- | ------------------------------------------------------ |
+| 0.1.0   | Initial app: WebSocket chat, SSH terminal, voice input |
+| 0.2.0   | Slash commands, TodoWrite, images, settings overhaul   |
+| 0.2.5   | Code hardening, tests, better error handling           |
+| 0.3.0   | Project/session management, git sync, model selection  |
+| 0.3.1   | iPad support, SSH keys, connection indicator           |
+| 0.3.2   | Search, thinking mode, command library, UI redesign    |
+| 0.3.3   | Ideas Drawer, task abort                               |
+| 0.4.0   | Message action bar, critical bug fixes, test suite     |

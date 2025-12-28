@@ -1,6 +1,14 @@
+# Xcode Suggestions
+
+> Code review recommendations captured 2025-12-27.
+>
+> **Note**: Some items may have been addressed in subsequent releases. SessionManager was replaced by SessionStore (Clean Architecture refactor). See CHANGELOG.md for resolved items.
+
+---
+
 High‑impact recommendations based on your current codebase
 
-I took a tour through the app’s core views and managers — ContentView, ChatView, APIClient, WebSocketManager, SessionManager, TerminalView, theming, and quick settings — and captured the most impactful improvements I’d suggest. I’ve grouped them by priority so you can act quickly where it matters most.
+I took a tour through the app's core views and managers — ContentView, ChatView, APIClient, WebSocketManager, SessionStore, TerminalView, theming, and quick settings — and captured the most impactful improvements I'd suggest. I've grouped them by priority so you can act quickly where it matters most.
 
 1) Critical fixes and build hygiene
 
@@ -67,12 +75,13 @@ if let data = imageToSend,
 
 4) Architecture and maintainability
 
-• Consolidate session source of truth behind SessionManager
-   • You’ve already done most of this, and the “reject recently deleted” logic is excellent. One next step:
-      • Prefer API endpoints for counts and history whenever possible; fall back to SSH for bulk ops or when API isn’t available. This reduces coupling to filesystem layout on the server.
+• ✅ Consolidate session source of truth behind SessionStore (DONE)
+   • Implemented Clean Architecture: SessionStore → SessionRepository → APIClient
+   • API endpoints for counts and history with SSH fallback for messages
 
 • Reduce singleton coupling for testability
-   • Stores like SSHManager.shared, SessionManager.shared, ProjectSettingsStore.shared are fine for the app, but consider injecting protocol‑backed dependencies in views that you want to unit test later.
+   • SessionRepository now has protocol + MockSessionRepository for testing
+   • Stores like SSHManager.shared, SessionStore.shared, ProjectSettingsStore.shared are fine for the app, but consider injecting protocol‑backed dependencies in views that you want to unit test later.
 
 • Extract “Git status” orchestration into a small helper
    • ChatView holds “refresh/pull/commit/push” banner logic. Extracting a GitSyncController (a tiny type that coordinates SSHManager + banner state) will shrink ChatView and make it easier to test.
@@ -170,7 +179,7 @@ import Testing
 Summary of strengths
 
 • Robust, thoughtful WebSocket flow with reconnection, buffering, and session recovery.
-• Clear separation of HTTP (APIClient) and real‑time (WebSocketManager), with a centralized SessionManager.
+• Clear separation of HTTP (APIClient) and real‑time (WebSocketManager), with centralized SessionStore (Clean Architecture).
 • Accessibility, persistence, and keyboard shortcuts are well‑implemented.
 • Git integration and monorepo support are a real differentiator — the banners and action chips are excellent.
 

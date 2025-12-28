@@ -38,6 +38,17 @@ When reporting a bug, include:
 - **Note**: Not a bug - documenting that Claude's git error recovery is working as expected
 - **Source**: Session analysis 2025-12-28
 
+### #23: "Request not found" permission errors (Informational)
+- **What happened**: Backend sends `permission-error: "Request not found in your pending queue"` even when iOS successfully sends approval response
+- **Expected**: No error when approval is successfully processed
+- **Root cause**: Backend has two parallel permission systems:
+  1. Legacy system (`handlePermissionResponse()` + `pendingPermissions` Map) - handles actual permission
+  2. New system (`permissionWebSocketHandler`) - sends error if request not in its queue
+- **Note**: This is a backend architecture issue. The permission IS being handled correctly by the legacy system - the error is cosmetic from the new system
+- **Impact**: None functional - commands execute correctly. Error message in logs can be ignored.
+- **Location**: `server/index.js` in claudecodeui backend
+- **Source**: Session analysis 2025-12-28
+
 ---
 
 ## Feature Requests
@@ -74,6 +85,7 @@ See [CHANGELOG.md](CHANGELOG.md) for details on resolved issues.
 
 | # | Issue | Version |
 |---|-------|---------|
+| 24 | "Always Allow" permission not working | Unreleased |
 | 19 | Bulk session management | Unreleased |
 | 17 | Timeout errors not in debug logs | Unreleased |
 | 15 | Per-project permissions toggle | 0.4.0 |

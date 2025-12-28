@@ -1,12 +1,24 @@
 # Repository Guidelines
 
+## Project Overview
+- SwiftUI iOS 26+ client for the claudecodeui backend (wiseyoda fork), using WebSocket + REST for chat and Citadel SSH for file ops.
+- Default simulator target is iPhone 17 Pro on iOS 26.2.
+
 ## Project Structure & Module Organization
-- `CodingBridge/`: SwiftUI app source (views, managers, utilities, extensions).
+- `CodingBridge/`: SwiftUI app code (views, stores, managers, utilities).
 - `CodingBridge/Views/`, `CodingBridge/Utilities/`, `CodingBridge/Extensions/`: UI components, helpers, and shared extensions.
 - `CodingBridge/Assets.xcassets` and `assets/`: app assets and design resources.
 - `CodingBridgeTests/`: XCTest unit tests.
-- `requirements/`: product, architecture, and backend docs.
+- `requirements/` and `requirements/projects/`: product, architecture, backend, and deployment docs.
+- `CHANGELOG.md`, `ROADMAP.md`, `ISSUES.md`, `FUTURE-IDEAS.md`: planning and tracking docs.
 - `CodingBridge.xcodeproj`: Xcode project entry point.
+
+## Key Files & Architecture
+- `WebSocketManager.swift`: streaming, reconnection, session events.
+- `SSHManager.swift`: terminal, file ops, git via Citadel.
+- `SessionStore.swift` + `SessionRepository.swift` + `APIClient.swift`: session state and data layer (Clean Architecture).
+- `ChatView.swift`, `ContentView.swift`, `TerminalView.swift`, `UserQuestionsView.swift`: primary UI flows.
+- `Models.swift`, `AppSettings.swift`, `ClaudeHelper.swift`, `IdeasStore.swift`, `CommandStore.swift`, `BookmarkStore.swift`: models, settings, helpers, persistence.
 
 ## Build, Test, and Development Commands
 - `open CodingBridge.xcodeproj`: open the project in Xcode.
@@ -18,12 +30,21 @@
 - Use standard Swift/Xcode formatting (4-space indentation). No repository-wide SwiftLint/SwiftFormat config is present.
 - Naming: `UpperCamelCase` for types/files, `lowerCamelCase` for methods and properties.
 - Concurrency: add `@MainActor` to new `ObservableObject` types and use `Task { @MainActor in }` for UI updates from async code.
-- Security: escape file paths passed to `SSHManager.executeCommand()`; never store secrets in `@AppStorage` (use Keychain).
+- State management: use `@StateObject` for manager ownership in views and `@EnvironmentObject` for `AppSettings`.
+- Singletons: prefer `CommandStore.shared`, `BookmarkStore.shared`, `SessionStore.shared` for shared stores.
+- Adding files: new `.swift` files must be added to `CodingBridge.xcodeproj` (`project.pbxproj`) or they will not compile.
+
+## Security & SSH
+- Escape file paths passed to `SSHManager.executeCommand()` using proper shell quoting.
+- Use `$HOME` instead of `~` in SSH commands; use double quotes when a path includes `$HOME`.
+- Never store secrets in `@AppStorage` (use `KeychainHelper`).
 
 ## Testing Guidelines
 - Framework: XCTest in `CodingBridgeTests/`.
 - Naming: `*Tests.swift` files with `test...` methods.
-- Add tests for parsing/model changes to keep utilities and protocol handling stable.
+- Add tests for parsing/model/protocol changes to keep utilities and protocol handling stable.
+- Use `MockSessionRepository` when covering session flows.
+- Coverage notes live in `TEST-COVERAGE.md`.
 
 ## Commit & Pull Request Guidelines
 - Commit messages follow Conventional Commits (`feat:`, `fix:`, `docs:`).
@@ -32,4 +53,7 @@
 
 ## References
 - `CLAUDE.md`: coding rules, security constraints, and architecture notes.
-- `README.md`: setup, feature overview, and testing command example.
+- `README.md`: setup, feature overview, and testing examples.
+- `requirements/ARCHITECTURE.md`, `requirements/OVERVIEW.md`, `requirements/BACKEND.md`, `requirements/SESSIONS.md`, `requirements/QNAP-CONTAINER.md`: requirements and backend docs.
+- `ROADMAP.md`, `ISSUES.md`, `CHANGELOG.md`, `FUTURE-IDEAS.md`: planning and tracking.
+- `TEST-COVERAGE.md`, `SESSION-ANALYSIS.md`: test coverage and session log analysis.

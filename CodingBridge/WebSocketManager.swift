@@ -168,6 +168,26 @@ class WebSocketManager: ObservableObject {
         self.settings = newSettings
     }
 
+    // MARK: - Token Usage Polling
+
+    /// Refresh token usage from API for the current session
+    /// Call this when loading a session or periodically during active sessions
+    func refreshTokenUsage(projectPath: String, sessionId: String) async {
+        let projectName = projectPath.replacingOccurrences(of: "/", with: "-")
+        let apiClient = APIClient(settings: settings)
+
+        do {
+            let usage = try await apiClient.fetchSessionTokenUsage(
+                projectName: projectName,
+                sessionId: sessionId
+            )
+            tokenUsage = TokenUsage(used: usage.used, total: usage.total)
+            log.debug("Token usage refreshed: \(usage.used)/\(usage.total)")
+        } catch {
+            log.warning("Failed to refresh token usage: \(error.localizedDescription)")
+        }
+    }
+
     // MARK: - Session ID Validation
 
     /// Validates that a session ID is a properly formatted UUID
@@ -714,7 +734,8 @@ class WebSocketManager: ObservableObject {
         do {
             let data = try JSONEncoder().encode(response)
             if let jsonString = String(data: data, encoding: .utf8) {
-                log.info("Sending permission response: \(allow ? "allow" : "deny") for request \(requestId)")
+                log.info("Sending permission response: \(allow ? "allow" : "deny")\(alwaysAllow ? " (always)" : "") for request \(requestId)")
+                log.debug("Permission response JSON: \(jsonString)")
                 debugLog.logSent(jsonString)
 
                 webSocket?.send(.string(jsonString)) { [weak self] error in

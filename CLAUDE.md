@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-iOS client for [claudecodeui](https://github.com/siteboon/claudecodeui). SwiftUI app targeting iOS 26+ with Citadel SSH library.
+iOS client for [claudecodeui](https://github.com/wiseyoda/claudecodeui) (fork). SwiftUI app targeting iOS 26+ with Citadel SSH library.
 
 ## Commands
 
@@ -22,11 +22,11 @@ open CodingBridge.xcodeproj
 | File | Purpose |
 |------|---------|
 | `WebSocketManager.swift` | All backend communication, streaming, reconnection |
+| `SessionStore.swift` | Session state, pagination, real-time updates |
 | `SSHManager.swift` | SSH terminal, file ops, git commands via Citadel |
 | `ChatView.swift` | Main chat UI, message handling, slash commands |
 | `Models.swift` | All data models, enums, persistence stores |
 | `AppSettings.swift` | @AppStorage configuration |
-| `IdeasStore.swift` | Per-project idea capture |
 
 ## Rules
 
@@ -53,7 +53,7 @@ open CodingBridge.xcodeproj
 **Code Patterns:**
 - Use `@StateObject` for manager ownership in views (WebSocketManager, SSHManager, IdeasStore)
 - Use `@EnvironmentObject` for AppSettings (injected at app root)
-- Use singletons for shared stores: `CommandStore.shared`, `BookmarkStore.shared`
+- Use singletons for shared stores: `SessionStore.shared`, `CommandStore.shared`, `BookmarkStore.shared`
 - Persist to Documents directory using `FileManager.default.urls(for: .documentDirectory)`
 
 ## Patterns
@@ -110,21 +110,18 @@ Connects to claudecodeui via WebSocket (`ws://host:port/ws?token=JWT`). Auth via
 Session files: `$HOME/.claude/projects/{encoded-path}/{session}.jsonl`
 Path encoding: `/home/dev/project` → `-home-dev-project` (starts with dash)
 
-**Note**: The backend API only returns ~5 sessions per project. The app loads all sessions via SSH for accurate counts. See `requirements/SESSIONS.md` for the full session system documentation.
+Fork adds: session API with pagination, `sessions-updated` WebSocket events, permission callbacks.
 
 See `requirements/BACKEND.md` for full API reference.
 
-## Known Issues (Fix These!)
+## Known Issues
 
 | Issue | Location | Priority |
 |-------|----------|----------|
-| WebSocket state race | `WebSocketManager.swift:196-230` | Critical |
-| Missing @MainActor | `APIClient.swift`, `BookmarkStore` in Models.swift | Critical |
-| SpeechManager no deinit | `SpeechManager.swift` | Critical |
-| SSH password in UserDefaults | `AppSettings.swift:179` | High |
-| Command injection | `SSHManager.swift:700,747,856` | High |
+| WebSocket state serialization | `WebSocketManager.swift` | High |
+| @MainActor on BookmarkStore | `Models.swift` | High |
 
-See `ROADMAP.md` Priority 1 for full list with line numbers.
+Many critical issues fixed in v0.4.0. See `ROADMAP.md` for remaining work.
 
 ## Testing
 
@@ -140,10 +137,9 @@ See `ROADMAP.md` Priority 1 for full list with line numbers.
 
 ## References
 
-- `README.md` - Feature overview, setup guide
-- `ROADMAP.md` - Priorities, known issues with line numbers
-- `requirements/ARCHITECTURE.md` - Full system architecture, data flows
-- `requirements/BACKEND.md` - API reference, troubleshooting
-- `requirements/SESSIONS.md` - Session system deep dive (file formats, API limitations, SSH loading)
-- `requirements/OVERVIEW.md` - Functional requirements
-- `requirements/QNAP-CONTAINER.md` - QNAP container setup, persistence, troubleshooting
+- `CHANGELOG.md` - Version history
+- `ROADMAP.md` - Remaining work
+- `ISSUES.md` - Bug tracking
+- `requirements/ARCHITECTURE.md` - System architecture, data flows
+- `requirements/BACKEND.md` - API reference
+- `requirements/SESSIONS.md` - Session system deep dive

@@ -425,6 +425,12 @@ struct SessionMessageContent: Codable {
         case role, content
     }
 
+    /// Memberwise initializer for tests and direct construction
+    init(role: String?, content: [SessionContentItem]?) {
+        self.role = role
+        self.content = content
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         role = try container.decodeIfPresent(String.self, forKey: .role)
@@ -544,10 +550,15 @@ struct AnyCodableValue: Codable, CustomStringConvertible {
 }
 
 struct SessionTokenUsage: Codable {
-    let inputTokens: Int
-    let outputTokens: Int
-    let cacheCreationInputTokens: Int?
-    let cacheReadInputTokens: Int?
+    let used: Int
+    let total: Int
+    let breakdown: TokenBreakdown?
+
+    struct TokenBreakdown: Codable {
+        let input: Int
+        let cacheCreation: Int?
+        let cacheRead: Int?
+    }
 }
 
 struct ImageUploadResponse: Codable {

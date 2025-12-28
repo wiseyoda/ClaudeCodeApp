@@ -1,5 +1,145 @@
 # Architecture Documentation
 
+## Clean Architecture: Session Management
+
+The session management system uses a Clean Architecture pattern separating concerns into distinct layers:
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌──────────────────┐
+│     Views       │────▶│   SessionStore   │◀───▶│ SessionRepository│
+│                 │     │  (State Mgmt)    │     │   (Data Layer)   │
+└─────────────────┘     └──────────────────┘     └──────────────────┘
+                               ▲                         │
+                               │                         ▼
+                       ┌───────┴────────┐        ┌──────────────────┐
+                       │ WebSocketMgr   │        │   APIClient      │
+                       │ (Push Events)  │        │   (HTTP)         │
+                       └────────────────┘        └──────────────────┘
+                               ▲                         │
+                               │                         ▼
+                       ┌───────┴─────────────────────────┴───────┐
+                       │          claudecodeui Backend           │
+                       └─────────────────────────────────────────┘
+```
+
+### Layers
+
+| Layer | File | Responsibility |
+|-------|------|----------------|
+| **State** | `SessionStore.swift` | Single source of truth for session state. Published properties for reactive UI. Pagination, active session tracking, bulk operations. |
+| **Repository** | `SessionRepository.swift` | Protocol abstraction + API implementation. Handles HTTP requests and response decoding. MockSessionRepository for testing. |
+| **Views** | `SessionPickerViews.swift`, `ChatView.swift`, `ContentView.swift` | Observe SessionStore.shared for reactive updates. Trigger loads and deletions via store methods. |
+
+### SessionStore (State Layer)
+
+Singleton source of truth accessed via `SessionStore.shared`.
+
+**Published State:**
+| Property | Type | Purpose |
+|----------|------|---------|
+| `sessionsByProject` | `[String: [ProjectSession]]` | Raw sessions per project path |
+| `metaByProject` | `[String: ProjectSessionMeta]` | Pagination metadata (hasMore, total) |
+| `isLoading` | `[String: Bool]` | Loading state per project |
+| `errorByProject` | `[String: Error]` | Error state per project |
+| `activeSessionIds` | `[String: String]` | Active session per project |
+
+**Key Methods:**
+| Method | Purpose |
+|--------|---------|
+| `configure(with:)` | Inject repository dependency |
+| `loadSessions(for:forceRefresh:)` | Fetch sessions from API |
+| `loadMore(for:)` | Pagination - fetch next page |
+| `deleteSession(_:for:)` | Optimistic delete with rollback |
+| `addSession(_:for:)` | Add newly created session |
+| `handleSessionsUpdated(...)` | Process WebSocket push events |
+| `displaySessions(for:)` | Filtered/sorted sessions for UI |
+
+### SessionRepository (Data Layer)
+
+Protocol-based abstraction for testability:
+
+```swift
+protocol SessionRepository {
+    func fetchSessions(projectName: String, limit: Int, offset: Int) async throws -> SessionsResponse
+    func deleteSession(projectName: String, sessionId: String) async throws
+}
+```
+
+**Implementations:**
+- `APISessionRepository` - Production HTTP client
+- `MockSessionRepository` - Unit testing (DEBUG only)
+
+### Data Flow
+
+1. **Initial Load**: View → `SessionStore.loadSessions()` → Repository → APIClient → Backend
+2. **Pagination**: View (Load More) → `SessionStore.loadMore()` → Repository → APIClient
+3. **Push Update**: Backend → WebSocket → `WebSocketManager` → `SessionStore.handleSessionsUpdated()` → Views
+4. **Delete**: View → `SessionStore.deleteSession()` → (optimistic update) → Repository → Backend
+
+### Configuration
+
+Configure SessionStore at app startup:
+
+```swift
+// In ContentView.onAppear or CodingBridgeApp
+let repository = APISessionRepository(
+    apiClient: APIClient(settings: settings),
+    settings: settings
+)
+SessionStore.shared.configure(with: repository)
+```
+
+### Filtering & Display
+
+Sessions are stored raw. Filtering for display happens at read time:
+
+```swift
+// filterForDisplay() excludes:
+// - Helper sessions (ClaudeHelper.isHelperSession)
+// - Empty sessions (messageCount == 0) unless active
+// - Agent/task sessions (isAgentSession)
+
+// filterAndSortForDisplay() additionally:
+// - Sorts by lastActivity descending
+// - Always includes active session
+```
+
+---
+
+## Permission Approval System
+
+When bypass permissions is OFF, tool executions require user approval:
+
+```
+┌─────────────────┐     ┌──────────────────┐     ┌──────────────────┐
+│  Claude CLI     │────▶│  claudecodeui    │────▶│   iOS App        │
+│  (canUseTool)   │     │  (WebSocket)     │     │  (Approval UI)   │
+└─────────────────┘     └──────────────────┘     └──────────────────┘
+                               │                         │
+                               ◀─────────────────────────┘
+                            permission-response
+```
+
+### Components
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| `ApprovalBannerView` | `Views/ApprovalBannerView.swift` | Compact banner with Approve/Always Allow/Deny |
+| `ApprovalRequest` | `Models.swift` | Request model (tool, requestId, input) |
+| `ApprovalResponse` | `Models.swift` | Response model (approved, alwaysAllow) |
+| `ProjectSettingsStore` | `ProjectSettingsStore.swift` | Per-project permission overrides |
+
+### Flow
+
+1. Backend receives tool call from Claude CLI
+2. `canUseTool` callback triggers `permission-request` WebSocket event
+3. iOS shows `ApprovalBannerView` with tool details
+4. User taps Approve/Always Allow/Deny
+5. iOS sends `permission-response` back to backend
+6. Backend allows/denies tool execution
+
+---
+
 ## System Architecture
 
 ```
@@ -160,6 +300,8 @@ Key computed properties:
 | `onAskUserQuestion()` | Interactive questions |
 | `onError()` | Error handling |
 | `onModelChanged()` | Model switch |
+| `onPermissionRequest()` | Tool approval request |
+| `onSessionsUpdated()` | Session list changed |
 
 #### SpeechManager.swift
 - iOS Speech framework integration (SFSpeechRecognizer)
@@ -205,9 +347,11 @@ Key computed properties:
 - Separate WebSocket with 15-second timeout
 
 #### APIClient.swift
+- @MainActor class for thread-safe UI updates
 - HTTP client with JWT authentication
 - Project listing endpoint (GET /api/projects)
-- **Known Issue:** Missing @MainActor annotation
+- Session listing with pagination (GET /api/projects/:name/sessions)
+- Session deletion (DELETE /api/projects/:name/sessions/:id)
 
 #### Theme.swift
 - `CLITheme` with colorScheme-aware colors
@@ -424,17 +568,16 @@ Global Search:
 | Authentication | JWT tokens via username/password |
 | Network | Tailscale encrypted tunnel |
 | Storage | Messages in Documents (device only) |
-| SSH Keys | iOS Keychain storage |
+| SSH Keys | iOS Keychain storage via `KeychainHelper` |
+| SSH Password | iOS Keychain storage (migrated from UserDefaults in v0.4.0) |
+| Command Escaping | `shellEscape()` function for SSH paths (added in v0.4.0) |
 | HTTP | ATS disabled for local/Tailscale IPs |
 
-**Known Security Issues:**
-- SSH password in UserDefaults (should use Keychain)
-- Command injection in SSH commands (unescaped paths)
-- Hardcoded default password in settings
+See `.claude/rules/ssh-security.md` for SSH security patterns and shell escaping requirements.
 
 ## Testing
 
-28+ unit tests covering:
+300+ unit tests covering parsers, utilities, stores, and models:
 
 | Test Suite | Coverage |
 |------------|----------|
@@ -443,23 +586,32 @@ Global Search:
 | `TodoListViewTests` | TodoWrite JSON parsing |
 | `ImageUtilitiesTests` | MIME type detection |
 | `ModelsTests` | WebSocket message handling |
+| `MessageStoreTests` | Message persistence |
+| `DebugLogStoreTests` | Debug logging |
+| `ProjectSettingsStoreTests` | Project settings |
+| `ScrollStateManagerTests` | Scroll behavior |
+| `SessionStoreTests` | Session state management |
 
 Run tests:
 ```bash
 xcodebuild test -project CodingBridge.xcodeproj -scheme CodingBridge \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
-  -only-testing:CodingBridgeTests
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'
 ```
 
 ## Known Issues
 
-See ROADMAP.md for the full list. Critical issues include:
+See [ROADMAP.md](../ROADMAP.md) for remaining work and [ISSUES.md](../ISSUES.md) for investigation items.
 
-| Issue | Location | Severity |
+**Resolved in Recent Releases:**
+- ✅ Missing @MainActor on APIClient and BookmarkStore (v0.4.0)
+- ✅ SpeechManager resource leak (v0.4.0)
+- ✅ SSH password storage - migrated to Keychain (v0.4.0)
+- ✅ Command injection - added shell escaping (v0.4.0)
+- ✅ WebSocket state race - fixed connection state timing (v0.4.0)
+
+**Remaining Issues:**
+| Issue | Location | Priority |
 |-------|----------|----------|
-| WebSocket state race | WebSocketManager.swift | Critical |
-| Missing @MainActor | APIClient.swift, BookmarkStore | Critical |
-| SpeechManager no deinit | SpeechManager.swift | Critical |
-| SSH password in UserDefaults | AppSettings.swift | High |
-| Command injection | SSHManager.swift | High |
-| Message queue overwrite | WebSocketManager.swift | High |
+| WebSocket state serialization | WebSocketManager.swift | High |
+| @MainActor on BookmarkStore | Models.swift | High |
+| SSH timeout handling | SSHManager.swift | Medium |

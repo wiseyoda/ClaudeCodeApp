@@ -317,7 +317,7 @@ struct SessionPicker: View {
 
 struct SessionPickerSheet: View {
     let project: Project
-    @Binding var sessions: [ProjectSession]  // Fallback for API sessions (before SessionManager loads)
+    @Binding var sessions: [ProjectSession]  // Fallback for API sessions (before SessionStore loads)
     var activeSessionId: String?  // Currently active session (may be new with few messages)
     let onSelect: (ProjectSession) -> Void
     let onCancel: () -> Void
@@ -340,7 +340,7 @@ struct SessionPickerSheet: View {
     @State private var isDeletingBulk = false
 
     @ObservedObject private var sshManager = SSHManager.shared
-    @ObservedObject private var sessionManager = SessionManager.shared
+    @ObservedObject private var sessionStore = SessionStore.shared
 
     /// Types of bulk delete operations for confirmation dialogs
     enum BulkDeleteType: Identifiable {
@@ -360,21 +360,21 @@ struct SessionPickerSheet: View {
     /// Sessions to display - use SessionStore as single source of truth
     /// Only fall back to binding if API hasn't loaded yet
     private var displaySessions: [ProjectSession] {
-        let managerSessions = sessionManager.sessions(for: project.path)
+        let storeSessions = sessionStore.sessions(for: project.path)
 
         // If we've loaded from API, always use SessionStore (even if empty = all deleted)
-        if sessionManager.hasLoaded(for: project.path) {
-            return managerSessions.filterAndSortForDisplay(projectPath: project.path, activeSessionId: activeSessionId)
+        if sessionStore.hasLoaded(for: project.path) {
+            return storeSessions.filterAndSortForDisplay(projectPath: project.path, activeSessionId: activeSessionId)
         }
 
         // Before API loads, use binding as fallback
-        let baseSessions = managerSessions.isEmpty ? Array(sessions) : managerSessions
+        let baseSessions = storeSessions.isEmpty ? Array(sessions) : storeSessions
         return baseSessions.filterAndSortForDisplay(projectPath: project.path, activeSessionId: activeSessionId)
     }
 
     /// Whether sessions are currently loading
     private var isLoadingAllSessions: Bool {
-        sessionManager.isLoadingSessions(for: project.path)
+        sessionStore.isLoadingSessions(for: project.path)
     }
 
     /// Whether more sessions are available to load (pagination)
@@ -391,12 +391,13 @@ struct SessionPickerSheet: View {
 
     /// Load all sessions via API (SessionStore handles API-based loading)
     private func loadAllSessions() {
-        guard !sessionManager.hasLoaded(for: project.path) else {
+        guard !sessionStore.hasLoaded(for: project.path) else {
             log.debug("[SessionPickerSheet] Already loaded sessions for \(project.path), skipping reload")
             return
         }
         Task {
-            await sessionManager.loadSessions(for: project.path, settings: settings)
+            sessionStore.configure(with: settings)
+            await sessionStore.loadSessions(for: project.path, forceRefresh: true)
         }
     }
 
@@ -553,7 +554,7 @@ struct SessionPickerSheet: View {
                 }
                 Button("Delete", role: .destructive) {
                     if let session = sessionToDelete {
-                        // Call parent's delete handler - SessionManager handles state updates
+                        // Call parent's delete handler - SessionStore handles state updates
                         onDelete?(session)
                         sessionToDelete = nil
                     }
@@ -588,7 +589,7 @@ struct SessionPickerSheet: View {
             // MARK: - Bulk Actions
             .confirmationDialog("Manage Sessions", isPresented: $showBulkActions, titleVisibility: .visible) {
                 Button("Delete All Sessions", role: .destructive) {
-                    let (count, hasActive) = sessionManager.countSessionsToDelete(for: project.path)
+                    let (count, hasActive) = sessionStore.countSessionsToDelete(for: project.path)
                     let deleteCount = hasActive ? count - 1 : count
                     if deleteCount > 0 {
                         bulkDeleteConfirmation = .all(count: deleteCount, protectActive: hasActive)
@@ -606,21 +607,21 @@ struct SessionPickerSheet: View {
             .confirmationDialog("Delete Sessions Older Than", isPresented: $showDeleteAgeOptions, titleVisibility: .visible) {
                 Button("7 Days") {
                     let date = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
-                    let count = sessionManager.countSessionsOlderThan(date, for: project.path)
+                    let count = sessionStore.countSessionsOlderThan(date, for: project.path)
                     if count > 0 {
                         bulkDeleteConfirmation = .olderThan(days: 7, count: count)
                     }
                 }
                 Button("30 Days") {
                     let date = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
-                    let count = sessionManager.countSessionsOlderThan(date, for: project.path)
+                    let count = sessionStore.countSessionsOlderThan(date, for: project.path)
                     if count > 0 {
                         bulkDeleteConfirmation = .olderThan(days: 30, count: count)
                     }
                 }
                 Button("90 Days") {
                     let date = Calendar.current.date(byAdding: .day, value: -90, to: Date()) ?? Date()
-                    let count = sessionManager.countSessionsOlderThan(date, for: project.path)
+                    let count = sessionStore.countSessionsOlderThan(date, for: project.path)
                     if count > 0 {
                         bulkDeleteConfirmation = .olderThan(days: 90, count: count)
                     }
@@ -630,19 +631,19 @@ struct SessionPickerSheet: View {
             // Keep N options picker
             .confirmationDialog("Keep How Many Sessions?", isPresented: $showKeepNOptions, titleVisibility: .visible) {
                 Button("Keep Last 5") {
-                    let count = sessionManager.countSessionsToDeleteKeepingN(5, for: project.path)
+                    let count = sessionStore.countSessionsToDeleteKeepingN(5, for: project.path)
                     if count > 0 {
                         bulkDeleteConfirmation = .keepLastN(keeping: 5, deleting: count)
                     }
                 }
                 Button("Keep Last 10") {
-                    let count = sessionManager.countSessionsToDeleteKeepingN(10, for: project.path)
+                    let count = sessionStore.countSessionsToDeleteKeepingN(10, for: project.path)
                     if count > 0 {
                         bulkDeleteConfirmation = .keepLastN(keeping: 10, deleting: count)
                     }
                 }
                 Button("Keep Last 20") {
-                    let count = sessionManager.countSessionsToDeleteKeepingN(20, for: project.path)
+                    let count = sessionStore.countSessionsToDeleteKeepingN(20, for: project.path)
                     if count > 0 {
                         bulkDeleteConfirmation = .keepLastN(keeping: 20, deleting: count)
                     }
@@ -702,12 +703,12 @@ struct SessionPickerSheet: View {
         Task {
             switch confirmation {
             case .all(_, _):
-                _ = await sessionManager.deleteAllSessions(for: project.path, keepActiveSession: true, settings: settings)
+                _ = await sessionStore.deleteAllSessions(for: project.path, keepActiveSession: true)
             case .olderThan(let days, _):
                 let date = Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date()
-                _ = await sessionManager.deleteSessionsOlderThan(date, for: project.path, settings: settings)
+                _ = await sessionStore.deleteSessionsOlderThan(date, for: project.path)
             case .keepLastN(let keeping, _):
-                _ = await sessionManager.keepOnlyLastN(keeping, for: project.path, settings: settings)
+                _ = await sessionStore.keepOnlyLastN(keeping, for: project.path)
             }
             isDeletingBulk = false
             bulkDeleteConfirmation = nil

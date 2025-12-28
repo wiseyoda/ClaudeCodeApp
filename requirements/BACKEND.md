@@ -2,7 +2,9 @@
 
 ## Overview
 
-The iOS app requires a running [claudecodeui](https://github.com/siteboon/claudecodeui) backend server that the app connects to via HTTP/WebSocket, plus SSH access for file operations.
+The iOS app requires a running [claudecodeui](https://github.com/wiseyoda/claudecodeui) backend server (our fork with additional features) that the app connects to via HTTP/WebSocket, plus SSH access for file operations.
+
+> **Note**: We use a fork of the original siteboon/claudecodeui that adds session filtering, permission callbacks, message batching, and other improvements. See [QNAP-CONTAINER.md](QNAP-CONTAINER.md) for fork setup details.
 
 ## Prerequisites
 
@@ -16,7 +18,7 @@ The iOS app requires a running [claudecodeui](https://github.com/siteboon/claude
 ### Option 1: Local Machine
 
 ```bash
-git clone https://github.com/siteboon/claudecodeui.git
+git clone https://github.com/wiseyoda/claudecodeui.git
 cd claudecodeui && npm install && npm run build && npm start
 ```
 
@@ -154,7 +156,19 @@ Connect to: `ws://host:port/ws?token=<jwt_token>`
 | `claude-response` | Streaming content |
 | `claude-complete` | Task finished |
 | `token-budget` | Usage stats |
+| `sessions-updated` | Session list changed (create/update/delete) |
+| `permission-request` | Tool approval request (when bypass disabled) |
 | `error` | Error message |
+
+**Permission Response (iOS → Backend):**
+```json
+{
+  "type": "permission-response",
+  "requestId": "req-123",
+  "approved": true,
+  "alwaysAllow": false
+}
+```
 
 ### Abort Request
 
@@ -162,17 +176,42 @@ Connect to: `ws://host:port/ws?token=<jwt_token>`
 POST /api/abort/:requestId
 ```
 
-### Known API Limitations
+### Session API (Fork Enhancement)
 
-**CORS Issue:** The backend CORS config only allows `Content-Type` header, NOT `Authorization`.
+The fork adds proper session listing with pagination:
 
-| Endpoint | Auth Status |
-|----------|-------------|
-| `GET /api/projects` | Works with Bearer token |
-| `GET /api/projects/:project/histories` | **BROKEN** - CORS blocks Authorization |
-| `GET /api/projects/:project/histories/:sessionId` | **BROKEN** - Returns HTML |
+```
+GET /api/projects/:name/sessions?limit=100&offset=0&type=display
+Authorization: Bearer <token>
+```
 
-**Workaround:** The iOS app loads session history via SSH instead.
+Response:
+```json
+{
+  "sessions": [
+    {"id": "uuid", "summary": "...", "messageCount": 42, "lastActivity": "...", "sessionType": "display"}
+  ],
+  "pagination": {"total": 85, "limit": 100, "offset": 0, "hasMore": false}
+}
+```
+
+**Parameters:**
+- `limit` - Sessions per page (default: 100, max: 1000)
+- `offset` - Pagination offset
+- `type` - Filter: `display` (user sessions), `agent`, `helper`, or `all`
+
+### Known API Limitations (Upstream)
+
+**Note:** These limitations apply to the upstream siteboon/claudecodeui. Our fork fixes some of these.
+
+| Endpoint | Upstream Status | Fork Status |
+|----------|-----------------|-------------|
+| `GET /api/projects` | Works (limited sessions) | Works (full pagination) |
+| `GET /api/projects/:name/sessions` | N/A | ✅ Added in fork |
+| `GET /api/projects/:project/histories` | CORS blocks | Still broken |
+| Session message history | Returns HTML | Use SSH workaround |
+
+**Workaround:** The iOS app loads session message history via SSH for individual sessions.
 
 ## Project Registration
 

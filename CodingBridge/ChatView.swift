@@ -22,7 +22,7 @@ struct ChatView: View {
     @StateObject private var claudeHelper: ClaudeHelper
     @StateObject private var ideasStore: IdeasStore
     @StateObject private var scrollManager = ScrollStateManager()
-    @ObservedObject private var sessionManager = SessionManager.shared
+    @ObservedObject private var sessionStore = SessionStore.shared
     @ObservedObject private var sshManager = SSHManager.shared
     @ObservedObject private var projectSettingsStore = ProjectSettingsStore.shared
 
@@ -218,6 +218,9 @@ struct ChatView: View {
             disconnectTask?.cancel()
             disconnectTask = nil
 
+            // Configure SessionStore with settings (idempotent)
+            sessionStore.configure(with: settings)
+
             // Update managers with actual EnvironmentObject settings
             wsManager.updateSettings(settings)
             claudeHelper.updateSettings(settings)
@@ -247,7 +250,7 @@ struct ChatView: View {
 
             // Start loading sessions from API in background
             Task {
-                await sessionManager.loadSessions(for: project.path, settings: settings)
+                await sessionStore.loadSessions(for: project.path, forceRefresh: true)
 
                 // After sessions load, ensure we have the right session selected
                 await MainActor.run {
@@ -471,16 +474,16 @@ struct ChatView: View {
         }
         .onAppear {
             // Initialize sessions via API (SessionStore is single source of truth)
-            if !sessionManager.hasLoaded(for: project.path) {
+            if !sessionStore.hasLoaded(for: project.path) {
                 // Pre-populate with project.sessions as temporary fallback while API loads
                 if localSessions.isEmpty {
                     for session in project.sessions ?? [] {
-                        sessionManager.addSession(session, for: project.path)
+                        sessionStore.addSession(session, for: project.path)
                     }
                 }
                 // Load all sessions via API in background
                 Task {
-                    await sessionManager.loadSessions(for: project.path, settings: settings)
+                    await sessionStore.loadSessions(for: project.path, forceRefresh: true)
                 }
             }
         }
@@ -586,26 +589,26 @@ struct ChatView: View {
 
     // MARK: - View Components (extracted to help Swift compiler)
 
-    /// Sessions from SessionManager (single source of truth)
+    /// Sessions from SessionStore (single source of truth)
     private var localSessions: [ProjectSession] {
-        sessionManager.sessions(for: project.path)
+        sessionStore.sessions(for: project.path)
     }
 
     /// Binding for SessionPicker views
     private var localSessionsBinding: Binding<[ProjectSession]> {
         Binding(
-            get: { sessionManager.sessions(for: project.path) },
-            set: { _ in /* Updates go through SessionManager methods */ }
+            get: { sessionStore.sessions(for: project.path) },
+            set: { _ in /* Updates go through SessionStore methods */ }
         )
     }
 
-    /// Combined sessions list - SessionManager as single source of truth
+    /// Combined sessions list - SessionStore as single source of truth
     /// Only falls back to project.sessions before API has loaded
     /// Returns filtered sessions (excludes helper sessions)
     private var sessions: [ProjectSession] {
         let activeId = wsManager.sessionId
-        // If we've loaded from API, always use SessionManager (even if empty = all deleted)
-        if sessionManager.hasLoaded(for: project.path) {
+        // If we've loaded from API, always use SessionStore (even if empty = all deleted)
+        if sessionStore.hasLoaded(for: project.path) {
             return localSessions.filterForDisplay(projectPath: project.path, activeSessionId: activeId)
         }
         // Before API loads, use project data as fallback
@@ -1189,9 +1192,9 @@ struct ChatView: View {
                 lastAssistantMessage: nil
             )
 
-            // Add the new session to SessionManager
-            sessionManager.addSession(newSession, for: project.path)
-            sessionManager.setActiveSession(sessionId, for: project.path)
+            // Add the new session to SessionStore
+            sessionStore.addSession(newSession, for: project.path)
+            sessionStore.setActiveSession(sessionId, for: project.path)
 
             // Select the new session in the picker
             selectedSession = newSession
@@ -1424,10 +1427,9 @@ struct ChatView: View {
     }
 
     /// Load all sessions via API (SessionStore handles API-based loading)
-    /// Delegates to SessionManager for centralized state management
     private func loadAllSessions() {
         Task {
-            await sessionManager.loadSessions(for: project.path, settings: settings)
+            await sessionStore.loadSessions(for: project.path, forceRefresh: true)
         }
     }
 
@@ -1435,7 +1437,7 @@ struct ChatView: View {
 
     /// Auto-select and load session after API sessions are loaded
     private func autoSelectAndLoadSession(savedSessionId: String?, wasProcessing: Bool) {
-        let loadedSessions = sessionManager.displaySessions(for: project.path)
+        let loadedSessions = sessionStore.displaySessions(for: project.path)
 
         if let savedSessionId = savedSessionId {
             // Try to find the saved session in loaded sessions
@@ -1529,6 +1531,9 @@ struct ChatView: View {
                     sessionId: session.id
                 )
 
+                // Fetch token usage for this session
+                await wsManager.refreshTokenUsage(projectPath: project.path, sessionId: session.id)
+
                 // Convert API messages to ChatMessages
                 let historyMessages = sessionMessages.compactMap { $0.toChatMessage() }
 
@@ -1571,8 +1576,8 @@ struct ChatView: View {
     private func deleteSession(_ session: ProjectSession) async {
         print("[ChatView] Deleting session: \(session.id)")
 
-        // Use SessionManager for centralized delete
-        let success = await sessionManager.deleteSession(session, projectPath: project.path, settings: settings)
+        // Use SessionStore for centralized delete
+        let success = await sessionStore.deleteSession(session, for: project.path)
 
         if success {
             // If we deleted the currently selected session, clear it
