@@ -10,6 +10,7 @@ struct MessageActionBar: View {
     @Environment(\.colorScheme) var colorScheme
     @EnvironmentObject var settings: AppSettings
     @State private var showCopied = false
+    @State private var copyResetTask: Task<Void, Never>?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -49,7 +50,11 @@ struct MessageActionBar: View {
             Button {
                 onCopy()
                 showCopied = true
-                DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                // Cancel any existing reset task and start a new one
+                copyResetTask?.cancel()
+                copyResetTask = Task {
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    guard !Task.isCancelled else { return }
                     showCopied = false
                 }
             } label: {
@@ -63,6 +68,9 @@ struct MessageActionBar: View {
         }
         .padding(.horizontal, 4)
         .padding(.vertical, 6)
+        .onDisappear {
+            copyResetTask?.cancel()
+        }
     }
 
     /// Format execution time for display

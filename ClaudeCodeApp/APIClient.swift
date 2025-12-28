@@ -136,6 +136,21 @@ class APIClient: ObservableObject {
 
         // New API returns array directly, not wrapped
         let projects = try JSONDecoder().decode([Project].self, from: data)
+
+        // Debug: Log session counts for each project
+        for project in projects {
+            let sessionCount = project.sessions?.count ?? 0
+            log.debug("Project '\(project.name)' has \(sessionCount) sessions from API")
+            if sessionCount > 0, let sessions = project.sessions {
+                for session in sessions.prefix(3) {
+                    log.debug("  - Session \(session.id.prefix(8)): '\(session.summary ?? "nil")' (\(session.messageCount ?? 0) msgs)")
+                }
+                if sessionCount > 3 {
+                    log.debug("  ... and \(sessionCount - 3) more sessions")
+                }
+            }
+        }
+
         return projects
     }
 

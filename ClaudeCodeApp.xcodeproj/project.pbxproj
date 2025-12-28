@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		1597F6A073B1490D948C46FE /* QuickCaptureSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F4D52190DB54B75A6081DAA /* QuickCaptureSheet.swift */; };
 		1D727765964448C0BF0B34A9 /* IdeasStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4676361593D14ED18823954D /* IdeasStore.swift */; };
+		ODL75VT1JDWVUKM5HVUEOJP8 /* ProjectNamesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39UUJ7I96JL1A5K32KNO0PXO /* ProjectNamesStore.swift */; };
 		6649DD89AF7741A49571016E /* IdeasDrawerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55A0D1D2E7D841C39956EF33 /* IdeasDrawerSheet.swift */; };
 		730BCCA17F1640EF98105BAB /* IdeaRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 829A5F0CE0184E598DD8CC00 /* IdeaRowView.swift */; };
 		8D08C46693BF46478325D485 /* IdeaEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B423E7C7AA924BD1BA2E2418 /* IdeaEditorSheet.swift */; };
@@ -75,6 +76,7 @@
 		2509F4FB2EFF976200EAFBFE /* ClaudeCodeAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClaudeCodeAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2CE0280C4CD14A61A45D94D0 /* TagsFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagsFlowView.swift; sourceTree = "<group>"; };
 		4676361593D14ED18823954D /* IdeasStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeasStore.swift; sourceTree = "<group>"; };
+		39UUJ7I96JL1A5K32KNO0PXO /* ProjectNamesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectNamesStore.swift; sourceTree = "<group>"; };
 		55A0D1D2E7D841C39956EF33 /* IdeasDrawerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeasDrawerSheet.swift; sourceTree = "<group>"; };
 		829A5F0CE0184E598DD8CC00 /* IdeaRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeaRowView.swift; sourceTree = "<group>"; };
 		A2000001 /* ClaudeCodeAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeCodeAppApp.swift; sourceTree = "<group>"; };
@@ -171,6 +173,7 @@
 				DB000043 /* DebugLogStore.swift */,
 				PS000047 /* ProjectSettingsStore.swift */,
 				4676361593D14ED18823954D /* IdeasStore.swift */,
+				39UUJ7I96JL1A5K32KNO0PXO /* ProjectNamesStore.swift */,
 				A2000008 /* Theme.swift */,
 				A2000009 /* TerminalView.swift */,
 				A2000010 /* SSHManager.swift */,
@@ -407,6 +410,7 @@
 				1597F6A073B1490D948C46FE /* QuickCaptureSheet.swift in Sources */,
 				F52215AB5E74451A8C111231 /* TagsFlowView.swift in Sources */,
 				1D727765964448C0BF0B34A9 /* IdeasStore.swift in Sources */,
+				ODL75VT1JDWVUKM5HVUEOJP8 /* ProjectNamesStore.swift in Sources */,
 				A1000038 /* CommandsView.swift in Sources */,
 				A1000039 /* CommandPickerSheet.swift in Sources */,
 				AA000040 /* MessageActionBar.swift in Sources */,

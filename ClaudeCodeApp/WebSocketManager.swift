@@ -126,6 +126,7 @@ class WebSocketManager: ObservableObject {
     var onSessionCreated: ((String) -> Void)?
     var onModelChanged: ((ClaudeModel, String) -> Void)?  // (model enum, full model ID)
     var onAborted: (() -> Void)?  // Called when session is aborted
+    var onSessionRecovered: (() -> Void)?  // Called when invalid session was cleared and new session started
 
     /// Initialize with optional settings. Call updateSettings() in onAppear with the EnvironmentObject.
     init(settings: AppSettings? = nil) {
@@ -139,6 +140,38 @@ class WebSocketManager: ObservableObject {
         self.settings = newSettings
     }
 
+    // MARK: - Session ID Validation
+
+    /// Validates that a session ID is a properly formatted UUID
+    /// Returns nil if invalid, the validated ID if valid
+    nonisolated static func validateSessionId(_ sessionId: String?) -> String? {
+        guard let id = sessionId, !id.isEmpty else { return nil }
+
+        // Session IDs should be valid UUIDs (8-4-4-4-12 format)
+        // e.g., "cbd6acb5-a212-4899-90c4-ab11937e21c0"
+        let uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
+        guard id.wholeMatch(of: uuidRegex) != nil else {
+            // Invalid session ID - caller should log if needed
+            return nil
+        }
+
+        return id
+    }
+
+    /// Check if an error message indicates a session-related failure
+    private func isSessionError(_ errorMessage: String) -> Bool {
+        let sessionErrorPatterns = [
+            "session",
+            "Session not found",
+            "Invalid session",
+            "process exited with code 1",  // Often indicates session resume failure
+            "failed to resume",
+            "resume failed"
+        ]
+        let lowerError = errorMessage.lowercased()
+        return sessionErrorPatterns.contains { lowerError.contains($0.lowercased()) }
+    }
+
     /// Start or reset the processing timeout
     private func startProcessingTimeout() {
         processingTimeoutTask?.cancel()
@@ -146,8 +179,8 @@ class WebSocketManager: ObservableObject {
 
         processingTimeoutTask = Task { [weak self] in
             while !Task.isCancelled {
-                // Wait 30 seconds
-                try? await Task.sleep(nanoseconds: 30_000_000_000)
+                // Check every 5 seconds for more responsive timeout detection
+                try? await Task.sleep(nanoseconds: 5_000_000_000)
 
                 guard !Task.isCancelled else { break }
 
@@ -158,10 +191,20 @@ class WebSocketManager: ObservableObject {
                     guard self.isProcessing else { return false }
 
                     // Check if we haven't received any response for 30+ seconds
-                    if let lastResponse = self.lastResponseTime,
-                       Date().timeIntervalSince(lastResponse) >= 30 {
+                    guard let lastResponse = self.lastResponseTime else {
+                        // No response time set - this shouldn't happen, but trigger timeout
+                        log.warning("Processing timeout - lastResponseTime was nil")
+                        self.isProcessing = false
+                        self.lastActiveToolName = nil
+                        self.lastError = "Request timed out - no response from server"
+                        self.onError?("Request timed out")
+                        return false
+                    }
+
+                    let elapsed = Date().timeIntervalSince(lastResponse)
+                    if elapsed >= 30 {
                         let toolInfo = self.lastActiveToolName ?? "unknown"
-                        let errorMsg = "Processing timeout - no response for 30s (last tool: \(toolInfo))"
+                        let errorMsg = "Processing timeout - no response for \(Int(elapsed))s (last tool: \(toolInfo))"
                         log.warning(errorMsg)
                         debugLog.logError(errorMsg, details: "Last response: \(lastResponse), Session: \(self.sessionId ?? "none"), Tool: \(toolInfo)")
                         self.isProcessing = false
@@ -377,11 +420,24 @@ class WebSocketManager: ObservableObject {
             log.debug("Attaching image: \(mediaType), \(base64String.count) chars base64")
         }
 
+        // Validate session ID format before sending
+        let validatedSessionId = Self.validateSessionId(pending.sessionId)
+        if pending.sessionId != nil && validatedSessionId == nil {
+            log.warning("Clearing invalid session ID, will start fresh session")
+        }
+
+        // Log session ID for debugging
+        if let sid = validatedSessionId {
+            log.info("[Session] Resuming session: \(sid.prefix(8))...")
+        } else {
+            log.warning("[Session] No session ID - backend will create new session!")
+        }
+
         let command = WSClaudeCommand(
             command: pending.message,
             options: WSCommandOptions(
                 cwd: pending.projectPath,
-                sessionId: pending.sessionId,
+                sessionId: validatedSessionId,  // Use validated session ID
                 model: pending.model,
                 permissionMode: pending.permissionMode,
                 images: images  // Images go inside options
@@ -668,33 +724,51 @@ class WebSocketManager: ObservableObject {
     }
 
     private func receiveMessage() {
+        // Check if we should stop receiving (disconnect was called)
+        guard webSocket != nil, connectionState != .disconnected else {
+            log.debug("receiveMessage: stopping - webSocket nil or disconnected")
+            return
+        }
+
         webSocket?.receive { [weak self] result in
             Task { @MainActor in
+                // Check cancellation before processing
+                guard let self = self, self.webSocket != nil else {
+                    log.debug("receiveMessage callback: self or webSocket is nil, stopping")
+                    return
+                }
+
                 switch result {
                 case .success(let message):
                     // Mark as connected on first successful receive
-                    if self?.connectionState != .connected {
-                        self?.connectionState = .connected
-                        self?.reconnectAttempt = 0  // Reset counter only on confirmed connection
+                    if self.connectionState != .connected {
+                        self.connectionState = .connected
+                        self.reconnectAttempt = 0  // Reset counter only on confirmed connection
                         log.info("WebSocket connected (confirmed by first message)")
                         debugLog.logConnection("Connected (confirmed)")
                     }
-                    self?.handleMessage(message)
-                    self?.receiveMessage()  // Continue listening
+                    self.handleMessage(message)
+                    self.receiveMessage()  // Continue listening
 
                 case .failure(let error):
+                    // Don't log or handle if we intentionally disconnected
+                    guard self.connectionState != .disconnected else {
+                        log.debug("receiveMessage: ignoring error after disconnect")
+                        return
+                    }
+
                     log.error("Receive error: \(error)")
                     debugLog.logError("Receive error: \(error.localizedDescription)")
-                    self?.isConnected = false
-                    self?.isProcessing = false  // Reset processing state on disconnect
-                    self?.cancelProcessingTimeout()
-                    self?.lastError = error.localizedDescription
+                    self.isConnected = false
+                    self.isProcessing = false  // Reset processing state on disconnect
+                    self.cancelProcessingTimeout()
+                    self.lastError = error.localizedDescription
 
                     // Clear stale state on disconnect
-                    self?.currentText = ""
+                    self.currentText = ""
 
                     // Schedule reconnection with exponential backoff
-                    self?.scheduleReconnect()
+                    self.scheduleReconnect()
                 }
             }
         }
@@ -794,9 +868,27 @@ class WebSocketManager: ObservableObject {
                 isSwitchingModel = false  // Reset on error
                 cancelProcessingTimeout()
                 let errorMsg = msg.error ?? "Unknown error"
-                lastError = errorMsg
-                debugLog.logError("Claude error: \(errorMsg)")
-                onError?(errorMsg)
+
+                // Check if this is a session-related error that we can recover from
+                if isSessionError(errorMsg) && sessionId != nil {
+                    log.warning("Session error detected, attempting recovery: \(errorMsg)")
+                    debugLog.logError("Session error (recovering): \(errorMsg)")
+
+                    // Clear the invalid session
+                    let oldSessionId = sessionId
+                    sessionId = nil
+
+                    // Notify UI that we're recovering
+                    lastError = "Session expired, starting fresh..."
+                    onSessionRecovered?()
+
+                    log.info("Cleared invalid session \(oldSessionId ?? "nil"), will start new session on next message")
+                } else {
+                    // Regular error - pass to UI
+                    lastError = errorMsg
+                    debugLog.logError("Claude error: \(errorMsg)")
+                    onError?(errorMsg)
+                }
 
             case "session-aborted":
                 log.info("Session aborted confirmed by server")

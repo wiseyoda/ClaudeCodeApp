@@ -63,14 +63,14 @@ Issues identified during comprehensive code review (December 27, 2025).
 
 | Issue | File | Lines | Description | Status |
 |-------|------|-------|-------------|--------|
-| ClaudeHelper timeout race | `ClaudeHelper.swift` | 427-435 | Timeout task not stored/cancelled | To Do |
+| ClaudeHelper timeout race | `ClaudeHelper.swift` | 442-452 | Timeout task not stored/cancelled | **Fixed** |
 | **SSH command injection** | `SSHManager.swift` | 784, 793, 797 | Unescaped paths in uploadImage() | **Fixed** |
 | SSHManager disconnect race | `SSHManager.swift` | 614-627 | Task not awaited, client deallocated | **Fixed** (singleton + deinit) |
 | messageQueue not thread-safe | `WebSocketManager.swift` | 111, 316, 390 | Concurrent access corrupts queue | **Fixed** (MainActor) |
-| processingTimeout logic error | `WebSocketManager.swift` | 146-175 | Timeout may never trigger | To Do |
-| DispatchQueue retain cycle | `MessageActionBar.swift` | 52 | asyncAfter captures self without [weak self] | To Do |
-| Git timer cancellation | `ChatView.swift` | 208, 220 | gitRefreshTimer may fire during deallocation | To Do |
-| receiveMessage() uncancellable | `WebSocketManager.swift` | 646-657 | Recursive loop doesn't check Task.isCancelled | To Do |
+| processingTimeout logic error | `WebSocketManager.swift` | 175-224 | Timeout may never trigger | **Fixed** (5s checks, nil handling) |
+| DispatchQueue retain cycle | `MessageActionBar.swift` | 49-59 | asyncAfter not cancellable | **Fixed** (Task + onDisappear) |
+| Git timer cancellation | `ChatView.swift` | 214-223 | gitRefreshTimer may fire during deallocation | **Fixed** (Task + cancellation) |
+| receiveMessage() uncancellable | `WebSocketManager.swift` | 719-768 | Recursive loop doesn't check cancellation | **Fixed** (state checks) |
 
 ### Medium - Planned
 
@@ -98,7 +98,61 @@ Issues identified during comprehensive code review (December 27, 2025).
 
 ---
 
-## Priority 2: Code Quality
+## Priority 2: iOS 26 Compatibility
+
+iOS 26 introduces Liquid Glass UI and performance APIs. Mandatory adoption by iOS 27.
+
+### Critical - Liquid Glass (Deadline: iOS 27)
+
+| Issue | File | Description | Status |
+|-------|------|-------------|--------|
+| Liquid Glass auto-adoption | All views | Apps compiled with Xcode 26 auto-adopt glass UI | To Do |
+| Theme solid colors | `Theme.swift` | CLITheme colors may conflict with translucent materials | To Do |
+| Message bubble backgrounds | `CLIMessageView.swift` | Solid bubbles need glass adaptation | To Do |
+| Navigation/toolbar backgrounds | `ChatView.swift` | Toolbars will become translucent | To Do |
+| **Temporary opt-out** | `Info.plist` | Add `UIDesignRequiresCompatibility = YES` if needed | To Do |
+
+### High - Performance (@IncrementalState)
+
+| Issue | File | Lines | Description | Status |
+|-------|------|-------|-------------|--------|
+| Message list performance | `ChatView.swift` | 16 | Migrate `@State messages` to `@IncrementalState` | To Do |
+| Debug log list | `DebugLogStore.swift` | 8 | 500+ items, migrate to `@IncrementalState` | To Do |
+| Command list | `CommandStore.swift` | 8 | Migrate `@Published commands` | To Do |
+| Ideas list | `IdeasStore.swift` | 8 | Migrate `@Published ideas` | To Do |
+| Add `.incrementalID()` | List item views | - | Required for incremental updates to work | To Do |
+
+### Medium - New SwiftUI Features
+
+| Feature | File | Description | Status |
+|---------|------|-------------|--------|
+| Native `.searchable()` | `GlobalSearchView.swift` | Replace custom search with native API | To Do |
+| `.search` role for TabView | `ContentView.swift` | Dedicated search tab if applicable | To Do |
+| `ToolbarSpacer` | Various | Replace manual toolbar spacers | To Do |
+| `.glassEffect()` modifier | Custom views | Add frosted glass to custom components | To Do |
+| `TextEditor` + `AttributedString` | `CLIInputView.swift` | Rich text support if needed | To Do |
+| `@Animatable` macro | Custom animations | Simplify animation code | To Do |
+
+### Low - Future Consideration
+
+| Feature | Description | Notes |
+|---------|-------------|-------|
+| Native `WebView` | SwiftUI WebView component | Only if web content needed |
+| Scene bridging | Mix UIKit/SwiftUI scenes | Already pure SwiftUI, not needed |
+| `Chart3D` | 3D visualizations | Only if analytics needed |
+
+### Deadlines
+
+| Milestone | Date | Action |
+|-----------|------|--------|
+| Xcode 26 Beta | Now | Test Liquid Glass impact |
+| iOS 26 Public Release | Fall 2025 | Apps auto-adopt Liquid Glass |
+| App Store Xcode 26 Required | April 2026 | Must compile with Xcode 26 SDK |
+| Liquid Glass Mandatory | iOS 27 (~2026) | `UIDesignRequiresCompatibility` removed |
+
+---
+
+## Priority 3: Code Quality
 
 Developer experience and code health improvements.
 
@@ -122,15 +176,15 @@ Phase 1: Critical Code Review Fixes (6 items) - COMPLETE
 [x] Timer leak in ProcessingIndicator          [Low effort] DONE
 [x] Uncancelled SSH tasks (GlobalSearchView)   [Medium effort] DONE
 
-Phase 2: High Priority Fixes (8 items) - 3/8 DONE
+Phase 2: High Priority Fixes (8 items) - COMPLETE
 [x] SSH command injection (SECURITY)           [Low effort] DONE
-+-- ClaudeHelper timeout race                  [Low effort]
-+-- SSHManager disconnect race                 [Low effort]
+[x] ClaudeHelper timeout race                  [Low effort] DONE
++-- SSHManager disconnect race                 [Low effort] (already fixed as singleton + deinit)
 [x] messageQueue thread safety                 [Medium effort] DONE (MainActor)
-+-- processingTimeout logic error              [Low effort]
-+-- DispatchQueue retain cycle                 [Low effort]
-+-- Git timer cancellation                     [Low effort]
-+-- receiveMessage() uncancellable             [Low effort]
+[x] processingTimeout logic error              [Low effort] DONE
+[x] DispatchQueue retain cycle                 [Low effort] DONE
+[x] Git timer cancellation                     [Low effort] DONE
+[x] receiveMessage() uncancellable             [Low effort] DONE
 
 Phase 3: Open Issues (3 items) - COMPLETE
 [x] #13 Git refresh error on launch            [Investigation needed] DONE
@@ -147,7 +201,16 @@ Phase 4: Medium Priority Fixes (8 items) - 1/8 DONE
 +-- fileQueue race condition                   [Medium effort]
 +-- Task.isCancelled not checked               [Low effort]
 
-Phase 5: Code Quality & Low Priority (6 items)
+Phase 5: iOS 26 Compatibility (Before April 2026)
++-- Test with Xcode 26 beta                    [Investigation]
++-- Add UIDesignRequiresCompatibility flag     [Low effort] (if needed)
++-- Update Theme.swift for Liquid Glass        [Medium effort]
++-- Migrate to @IncrementalState               [Medium effort]
++-- Add .incrementalID() to list items         [Low effort]
++-- Adopt .glassEffect() modifier              [Low effort]
++-- Replace custom search with .searchable()   [Low effort]
+
+Phase 6: Code Quality & Low Priority (6 items)
 +-- Configurable history limit                 [Low effort]
 +-- Structured logging                         [Low effort]
 +-- Error UI component                         [Medium effort]
@@ -278,4 +341,4 @@ All critical code review fixes from Phase 1 have been implemented:
 
 ---
 
-*Last updated: December 27, 2025 - Completed Phase 1 Critical Fixes, Bug #13, Bug #14, and Feature #15*
+*Last updated: December 27, 2025 - Added Priority 2: iOS 26 Compatibility section with Liquid Glass, @IncrementalState, and new SwiftUI features*

@@ -8,12 +8,70 @@ class ClaudeHelper: ObservableObject {
     private var webSocket: URLSessionWebSocketTask?
     private var responseBuffer = ""
     private var completion: ((Result<String, Error>) -> Void)?
+    private var timeoutTask: Task<Void, Never>?
 
     /// Debug logging
     private var debugLog: DebugLogStore { DebugLogStore.shared }
 
-    /// Dedicated session ID for helper queries - reuses the same session to avoid polluting the UI
-    private var helperSessionId: String?
+    /// Dedicated session ID for helper queries per project.
+    /// Uses a deterministic UUID based on project path to ensure all helper
+    /// queries for the same project reuse the same session.
+    /// Format: "helper-{deterministic-uuid}" to identify helper sessions.
+    private var helperSessionIds: [String: String] = [:]
+
+    /// Get or create a helper session ID for a project.
+    /// Creates a deterministic session ID so all helper queries reuse the same session.
+    private func helperSessionId(for projectPath: String) -> String {
+        if let existing = helperSessionIds[projectPath] {
+            return existing
+        }
+        // Create a deterministic UUID from the project path
+        let sessionId = Self.createHelperSessionId(for: projectPath)
+        helperSessionIds[projectPath] = sessionId
+        return sessionId
+    }
+
+    /// Create a deterministic "helper" session ID for a project path.
+    /// Uses a simple hash to create a valid UUID format that's consistent for the same path.
+    /// Note: This is nonisolated so it can be called from non-MainActor contexts (like session filtering).
+    nonisolated static func createHelperSessionId(for projectPath: String) -> String {
+        // Hash the project path to get consistent bytes
+        let data = projectPath.data(using: .utf8) ?? Data()
+        var hash = [UInt8](repeating: 0, count: 32)
+
+        // Simple hash - use the bytes directly (for determinism)
+        for (i, byte) in data.enumerated() {
+            hash[i % 32] ^= byte
+            hash[(i + 1) % 32] = hash[(i + 1) % 32] &+ byte
+        }
+
+        // Format as UUID v4: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+        // part1: 8 hex chars (4 bytes)
+        // part2: 4 hex chars (2 bytes)
+        // part3: 4 hex chars (version 4 + 3 nibbles)
+        // part4: 4 hex chars (variant 8/9/a/b + 3 nibbles)
+        // part5: 12 hex chars (6 bytes)
+        let part1 = String(format: "%02x%02x%02x%02x", hash[0], hash[1], hash[2], hash[3])
+        let part2 = String(format: "%02x%02x", hash[4], hash[5])
+        // Version 4: first nibble is 4, followed by 3 nibbles from hash
+        let part3 = String(format: "4%02x%01x", hash[6], hash[7] & 0x0f)
+        // Variant: first nibble is 8/9/a/b, followed by 3 nibbles from hash
+        let variantNibble = 0x8 | (Int(hash[8]) & 0x03)
+        let part4 = String(format: "%01x%02x%01x", variantNibble, hash[9], hash[10] & 0x0f)
+        let part5 = String(format: "%02x%02x%02x%02x%02x%02x", hash[11], hash[12], hash[13], hash[14], hash[15], hash[16])
+
+        return "\(part1)-\(part2)-\(part3)-\(part4)-\(part5)"
+    }
+
+    /// Check if a session ID is a helper session (for filtering)
+    static func isHelperSession(_ sessionId: String) -> Bool {
+        // Helper sessions have a specific pattern based on our hash
+        // We can identify them by checking if they match the UUID format
+        // and were created by our hash function
+        // For now, we'll store known helper session IDs and check against them
+        // This is handled by storing them in helperSessionIds dictionary
+        return false  // Not used for now - filtering is done differently
+    }
 
     @Published var isLoading = false
     @Published var suggestedActions: [SuggestedAction] = []
@@ -395,12 +453,10 @@ class ClaudeHelper: ObservableObject {
         responseBuffer = ""
         self.completion = completion
 
-        // Generate or reuse a dedicated helper session ID for this project
-        // This prevents creating a new session for every helper query
-        if helperSessionId == nil {
-            let pathHash = projectPath.data(using: .utf8)?.base64EncodedString().prefix(8) ?? "default"
-            helperSessionId = "claude-helper-\(pathHash)"
-        }
+        // Get or create a deterministic helper session ID for this project.
+        // This ensures all helper queries for the same project reuse the same session,
+        // preventing session pollution while maintaining conversation context if needed.
+        let sessionId = helperSessionId(for: projectPath)
 
         let session = URLSession(configuration: .default)
         webSocket = session.webSocketTask(with: url)
@@ -411,12 +467,12 @@ class ClaudeHelper: ObservableObject {
         // Start receiving messages
         receiveMessage()
 
-        // Send the query with specified model and dedicated helper session
+        // Send the query with specified model and deterministic helper session ID
         let command = WSClaudeCommand(
             command: prompt,
             options: WSCommandOptions(
                 cwd: projectPath,
-                sessionId: helperSessionId,  // Reuse same session for all helper queries
+                sessionId: sessionId,  // Reuse same helper session per project
                 model: model,  // Use specified model (haiku for suggestions, sonnet for enhancement)
                 permissionMode: nil,
                 images: nil
@@ -438,15 +494,15 @@ class ClaudeHelper: ObservableObject {
             cleanup()
         }
 
-        // Set timeout
-        Task {
+        // Set timeout - store task so it can be cancelled on success
+        timeoutTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 15_000_000_000)  // 15 second timeout
-            await MainActor.run {
-                if self.completion != nil {
-                    debugLog.logError("ClaudeHelper timeout after 15s")
-                    self.completion?(.failure(ClaudeHelperError.timeout))
-                    self.cleanup()
-                }
+            guard !Task.isCancelled else { return }
+            await MainActor.run { [weak self] in
+                guard let self = self, self.completion != nil else { return }
+                self.debugLog.logError("ClaudeHelper timeout after 15s")
+                self.completion?(.failure(ClaudeHelperError.timeout))
+                self.cleanup()
             }
         }
     }
@@ -523,6 +579,8 @@ class ClaudeHelper: ObservableObject {
     }
 
     private func cleanup() {
+        timeoutTask?.cancel()
+        timeoutTask = nil
         webSocket?.cancel()
         webSocket = nil
         completion = nil

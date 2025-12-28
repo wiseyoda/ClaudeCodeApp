@@ -27,7 +27,7 @@ class SessionNamesStore {
 // MARK: - Session Picker
 
 struct SessionPicker: View {
-    let sessions: [ProjectSession]
+    @Binding var sessions: [ProjectSession]
     let project: Project
     @Binding var selected: ProjectSession?
     var isLoading: Bool = false
@@ -53,35 +53,16 @@ struct SessionPicker: View {
         selected == nil && activeSessionId == nil
     }
 
-    /// Sessions sorted by last activity (most recent first), excluding placeholder sessions
+    /// Sessions sorted by last activity (most recent first), excluding empty and helper sessions
+    /// Uses shared filtering logic from Models.swift
+    /// Always includes the active session (even if newly created with few messages)
     private var sortedSessions: [ProjectSession] {
-        sessions
-            .filter { session in
-                // Filter out placeholder sessions - backend initializes with summary="New Session"
-                // These are sessions created but not yet used (no real user message sent)
-                session.summary != nil && session.summary != "New Session"
-            }
-            .sorted { s1, s2 in
-                let date1 = parseDate(s1.lastActivity)
-                let date2 = parseDate(s2.lastActivity)
-                return date1 > date2
-            }
+        sessions.filterAndSortForDisplay(projectPath: project.path, activeSessionId: activeSessionId ?? selected?.id)
     }
 
     /// Number of sessions not shown in the bar (based on filtered sessions)
     private var hiddenSessionCount: Int {
         max(0, sortedSessions.count - 5)
-    }
-
-    private func parseDate(_ isoString: String?) -> Date {
-        guard let isoString = isoString else { return .distantPast }
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = formatter.date(from: isoString) {
-            return date
-        }
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: isoString) ?? .distantPast
     }
 
     var body: some View {
@@ -132,7 +113,8 @@ struct SessionPicker: View {
         .sheet(isPresented: $showAllSessions) {
             SessionPickerSheet(
                 project: project,
-                sessions: sessions,
+                sessions: $sessions,
+                activeSessionId: activeSessionId ?? selected?.id,
                 onSelect: { session in
                     showAllSessions = false
                     selected = session
@@ -205,7 +187,8 @@ struct SessionPicker: View {
 
 struct SessionPickerSheet: View {
     let project: Project
-    let sessions: [ProjectSession]
+    @Binding var sessions: [ProjectSession]  // Changed to Binding to reflect parent updates
+    var activeSessionId: String?  // Currently active session (may be new with few messages)
     let onSelect: (ProjectSession) -> Void
     let onCancel: () -> Void
     var onDelete: ((ProjectSession) -> Void)?
@@ -218,20 +201,43 @@ struct SessionPickerSheet: View {
     @State private var sessionToExport: ProjectSession?
     @State private var exportedMarkdown: String?
     @State private var showExportSheet = false
+    @State private var isLoadingAllSessions = false
+    @State private var allSessions: [ProjectSession] = []  // Full list from SSH
 
-    /// Sessions sorted by last activity (most recent first), excluding placeholder sessions
-    private var sortedSessions: [ProjectSession] {
-        sessions
-            .filter { session in
-                // Filter out placeholder sessions - backend initializes with summary="New Session"
-                // These are sessions created but not yet used (no real user message sent)
-                session.summary != nil && session.summary != "New Session"
+    @ObservedObject private var sshManager = SSHManager.shared
+
+    /// Sessions to display - use SSH-loaded sessions if available, otherwise fall back to API sessions
+    private var displaySessions: [ProjectSession] {
+        let baseSessions = allSessions.isEmpty ? sessions : allSessions
+        return baseSessions.filterAndSortForDisplay(projectPath: project.path, activeSessionId: activeSessionId)
+    }
+
+    /// Load all sessions via SSH (backend API limits to ~5)
+    private func loadAllSessionsViaSSH() {
+        guard !isLoadingAllSessions else { return }
+        isLoadingAllSessions = true
+
+        Task {
+            do {
+                let sshSessions = try await sshManager.loadAllSessions(for: project.path, settings: settings)
+                await MainActor.run {
+                    // Merge with any locally created sessions not yet on server
+                    var merged = sshSessions
+                    for session in sessions {
+                        if !merged.contains(where: { $0.id == session.id }) {
+                            merged.append(session)
+                        }
+                    }
+                    allSessions = merged
+                    isLoadingAllSessions = false
+                }
+            } catch {
+                print("[SessionPickerSheet] Failed to load sessions via SSH: \(error)")
+                await MainActor.run {
+                    isLoadingAllSessions = false
+                }
             }
-            .sorted { s1, s2 in
-                let date1 = parseDate(s1.lastActivity)
-                let date2 = parseDate(s2.lastActivity)
-                return date1 > date2
-            }
+        }
     }
 
     private func parseDate(_ isoString: String?) -> Date {
@@ -248,7 +254,16 @@ struct SessionPickerSheet: View {
     var body: some View {
         NavigationStack {
             Group {
-                if sortedSessions.isEmpty {
+                if isLoadingAllSessions && allSessions.isEmpty {
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .scaleEffect(1.2)
+                        Text("Loading all sessions...")
+                            .font(.subheadline)
+                            .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+                    }
+                    .padding()
+                } else if displaySessions.isEmpty {
                     VStack(spacing: 16) {
                         Image(systemName: "clock.arrow.circlepath")
                             .font(.system(size: 48))
@@ -265,7 +280,7 @@ struct SessionPickerSheet: View {
                     }
                     .padding()
                 } else {
-                    List(sortedSessions) { session in
+                    List(displaySessions) { session in
                         Button {
                             onSelect(session)
                         } label: {
@@ -317,7 +332,11 @@ struct SessionPickerSheet: View {
                 }
             }
             .background(CLITheme.background(for: colorScheme))
-            .navigationTitle("Sessions")
+            .onAppear {
+                // Load all sessions via SSH (backend API limits to ~5)
+                loadAllSessionsViaSSH()
+            }
+            .navigationTitle(isLoadingAllSessions ? "Sessions (loading...)" : "Sessions (\(displaySessions.count))")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {

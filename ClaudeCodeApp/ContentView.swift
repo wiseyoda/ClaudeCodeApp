@@ -20,11 +20,18 @@ struct ContentView: View {
     @StateObject private var commandStore = CommandStore.shared
     @ObservedObject private var archivedStore = ArchivedProjectsStore.shared
 
+    // Project rename state
+    @State private var projectToRename: Project?
+    @State private var renameText = ""
+
     // Git status tracking per project path
     @State private var gitStatuses: [String: GitStatus] = [:]
     @State private var isCheckingGitStatus = false
     @State private var gitRefreshError: String?
     @State private var showGitRefreshError = false
+
+    // Session counts per project path (loaded via SSH for accurate counts)
+    @State private var sessionCounts: [String: Int] = [:]
 
     // Selected project for NavigationSplitView
     @State private var selectedProject: Project?
@@ -101,6 +108,7 @@ struct ContentView: View {
                                 await loadProjects()
                                 if !projects.isEmpty {
                                     await checkAllGitStatuses()
+                                    await loadAllSessionCounts()
                                 }
                             }
                         } label: {
@@ -168,6 +176,25 @@ struct ContentView: View {
                 Text("This will remove \"\(project.title)\" from your project list. The files will remain on the server.")
             }
         }
+        .alert("Rename Project", isPresented: .init(
+            get: { projectToRename != nil },
+            set: { if !$0 { projectToRename = nil } }
+        )) {
+            TextField("Project name", text: $renameText)
+            Button("Cancel", role: .cancel) {
+                projectToRename = nil
+                renameText = ""
+            }
+            Button("Save") {
+                if let project = projectToRename {
+                    ProjectNamesStore.shared.setName(renameText.isEmpty ? nil : renameText, for: project.path)
+                }
+                projectToRename = nil
+                renameText = ""
+            }
+        } message: {
+            Text("Enter a custom display name for this project")
+        }
         .alert("Git Refresh Error", isPresented: $showGitRefreshError) {
             Button("OK", role: .cancel) {
                 gitRefreshError = nil
@@ -204,6 +231,7 @@ struct ContentView: View {
             await loadProjects()
             if !projects.isEmpty {
                 await checkAllGitStatuses()
+                await loadAllSessionCounts()
             }
         }
     }
@@ -298,15 +326,27 @@ struct ContentView: View {
         .background(CLITheme.background(for: colorScheme))
     }
 
+    /// Workspace prefix to filter and simplify project paths
+    private let workspacePrefix = "/home/dev/workspace/"
+
+    /// Projects filtered to only those in the workspace directory
+    private var workspaceProjects: [Project] {
+        projects.filter { project in
+            // Only include projects that are inside /home/dev/workspace/
+            // This excludes /home/dev and /home/dev/workspace itself
+            project.path.hasPrefix(workspacePrefix) && project.path.count > workspacePrefix.count
+        }
+    }
+
     /// Active (non-archived) projects sorted according to user preference
     private var activeProjects: [Project] {
-        let active = projects.filter { !archivedStore.isArchived($0.path) }
+        let active = workspaceProjects.filter { !archivedStore.isArchived($0.path) }
         return sortProjects(active)
     }
 
     /// Archived projects sorted according to user preference
     private var archivedProjects: [Project] {
-        let archived = projects.filter { archivedStore.isArchived($0.path) }
+        let archived = workspaceProjects.filter { archivedStore.isArchived($0.path) }
         return sortProjects(archived)
     }
 
@@ -363,6 +403,7 @@ struct ContentView: View {
             await loadProjects()
             if !projects.isEmpty {
                 await checkAllGitStatuses()
+                await loadAllSessionCounts()
             }
         }
         .background(CLITheme.background(for: colorScheme))
@@ -385,6 +426,7 @@ struct ContentView: View {
         ProjectRow(
             project: project,
             gitStatus: gitStatuses[project.path] ?? .unknown,
+            sessionCount: sessionCounts[project.path],
             isSelected: selectedProject?.id == project.id,
             isArchived: isArchived
         )
@@ -415,6 +457,13 @@ struct ContentView: View {
             .tint(isArchived ? CLITheme.green(for: colorScheme) : CLITheme.yellow(for: colorScheme))
         }
         .contextMenu {
+            Button {
+                projectToRename = project
+                renameText = ProjectNamesStore.shared.getName(for: project.path) ?? project.title
+            } label: {
+                Label("Rename", systemImage: "pencil")
+            }
+
             Button {
                 archivedStore.toggleArchive(project.path)
             } label: {
@@ -541,6 +590,20 @@ struct ContentView: View {
         )
         gitStatuses[project.path] = status
     }
+
+    // MARK: - Session Count Loading
+
+    /// Load accurate session counts for all projects via SSH
+    private func loadAllSessionCounts() async {
+        let projectPaths = projects.map { $0.path }
+        do {
+            let counts = try await sshManager.countSessionsForProjects(projectPaths, settings: settings)
+            sessionCounts = counts
+            print("[ContentView] Loaded session counts for \(counts.count) projects")
+        } catch {
+            print("[ContentView] Failed to load session counts: \(error)")
+        }
+    }
 }
 
 // MARK: - Project Row
@@ -548,9 +611,23 @@ struct ContentView: View {
 struct ProjectRow: View {
     let project: Project
     let gitStatus: GitStatus
+    var sessionCount: Int? = nil  // SSH-loaded count (overrides API count if set)
     var isSelected: Bool = false
     var isArchived: Bool = false
     @Environment(\.colorScheme) var colorScheme
+
+    /// Display name: custom name if set, otherwise project.title
+    private var displayName: String {
+        if let customName = ProjectNamesStore.shared.getName(for: project.path) {
+            return customName
+        }
+        return project.title
+    }
+
+    /// Whether this project has a custom name
+    private var hasCustomName: Bool {
+        ProjectNamesStore.shared.hasCustomName(for: project.path)
+    }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -561,10 +638,17 @@ struct ProjectRow: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(project.title)
+                    Text(displayName)
                         .font(CLITheme.monoFont)
                         .foregroundColor(CLITheme.primaryText(for: colorScheme))
                         .opacity(isArchived ? 0.6 : 1)
+
+                    // Custom name indicator
+                    if hasCustomName {
+                        Image(systemName: "pencil.circle.fill")
+                            .font(.system(size: 10))
+                            .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                    }
 
                     // Git status indicator
                     if !isArchived {
@@ -572,18 +656,13 @@ struct ProjectRow: View {
                     }
                 }
 
-                HStack(spacing: 8) {
-                    Text(project.path)
+                // Use SSH-loaded count if available, otherwise fall back to API count
+                let count = sessionCount ?? project.displaySessions.count
+                if count > 0 {
+                    Text("[\(count) sessions]")
                         .font(CLITheme.monoSmall)
-                        .foregroundColor(CLITheme.mutedText(for: colorScheme))
-                        .lineLimit(1)
-
-                    if let sessions = project.sessions, !sessions.isEmpty {
-                        Text("[\(sessions.count) sessions]")
-                            .font(CLITheme.monoSmall)
-                            .foregroundColor(CLITheme.cyan(for: colorScheme))
-                            .opacity(isArchived ? 0.6 : 1)
-                    }
+                        .foregroundColor(CLITheme.cyan(for: colorScheme))
+                        .opacity(isArchived ? 0.6 : 1)
                 }
             }
 

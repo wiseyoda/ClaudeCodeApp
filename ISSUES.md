@@ -34,7 +34,15 @@ When reporting a bug, include:
 
 ### Feature Requests
 
-*No open feature requests at this time.*
+#### #18: Multi-repo/monorepo git status support (Low Priority)
+- **What**: Apps like `level-agency-tools` have multiple subrepos/workspaces. Currently git status only checks the main repo.
+- **Expected**: Show aggregate git status across all subrepos, or at least indicate when subrepos have uncommitted changes
+- **Scope**: Low impact - only affects projects with monorepo/multi-workspace structure
+- **Considerations**:
+  - Detect monorepo structure (pnpm workspaces, yarn workspaces, git submodules)
+  - Run git status in each subrepo directory
+  - Aggregate results for display (e.g., "3/5 repos have changes")
+  - May need UI changes to show per-repo breakdown
 
 ---
 

@@ -36,7 +36,7 @@ struct ChatView: View {
     @State private var isSearching = false
     @State private var searchText = ""
     @State private var messageFilter: MessageFilter = .all
-    @State private var localSessions: [ProjectSession]?  // Local copy for session management
+    @State private var localSessions: [ProjectSession] = []  // Local copy for session management
     @ObservedObject private var sshManager = SSHManager.shared  // For session deletion
     @ObservedObject private var projectSettingsStore = ProjectSettingsStore.shared
     @FocusState private var isInputFocused: Bool
@@ -46,7 +46,7 @@ struct ChatView: View {
     @State private var isAutoPulling = false
     @State private var showGitBanner = true
     @State private var hasPromptedCleanup = false
-    @State private var gitRefreshTimer: Timer?
+    @State private var gitRefreshTask: Task<Void, Never>?
 
     // Model selection state
     @State private var showingModelPicker = false
@@ -186,10 +186,27 @@ struct ChatView: View {
 
             // Restore last session ID for conversation continuity
             if let savedSessionId = MessageStore.loadSessionId(for: project.path) {
+                print("[ChatView] Loaded saved session ID: \(savedSessionId.prefix(8))...")
                 wsManager.sessionId = savedSessionId
                 // Find matching session in project sessions for UI
                 if let sessions = project.sessions {
                     selectedSession = sessions.first { $0.id == savedSessionId }
+                    if selectedSession != nil {
+                        print("[ChatView] Found matching session in project.sessions")
+                    } else {
+                        print("[ChatView] WARNING: Saved session not found in project.sessions (count: \(sessions.count))")
+                    }
+                }
+            } else {
+                print("[ChatView] No saved session ID found for project")
+                // Auto-select the most recent session if available
+                if let sessions = project.sessions,
+                   let mostRecent = sessions.sorted(by: { ($0.lastActivity ?? "") > ($1.lastActivity ?? "") }).first,
+                   (mostRecent.messageCount ?? 0) > 1 {
+                    print("[ChatView] Auto-selecting most recent session: \(mostRecent.id.prefix(8))...")
+                    wsManager.sessionId = mostRecent.id
+                    selectedSession = mostRecent
+                    MessageStore.saveSessionId(mostRecent.id, for: project.path)
                 }
             }
 
@@ -211,10 +228,14 @@ struct ChatView: View {
             // Initialize model state
             customModelId = settings.customModelId
 
-            // Start periodic git status refresh timer (every 30 seconds)
-            gitRefreshTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { _ in
-                Task { @MainActor in
-                    refreshGitStatus()
+            // Start periodic git status refresh task (every 30 seconds)
+            gitRefreshTask = Task {
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 30_000_000_000)  // 30 seconds
+                    guard !Task.isCancelled else { break }
+                    await MainActor.run {
+                        refreshGitStatus()
+                    }
                 }
             }
         }
@@ -222,9 +243,9 @@ struct ChatView: View {
             // Save messages when leaving
             MessageStore.saveMessages(messages, for: project.path)
 
-            // Invalidate git refresh timer
-            gitRefreshTimer?.invalidate()
-            gitRefreshTimer = nil
+            // Cancel git refresh task
+            gitRefreshTask?.cancel()
+            gitRefreshTask = nil
 
             // Delay disconnect to handle NavigationSplitView layout recreations
             // If onAppear is called again quickly, the disconnect will be cancelled
@@ -287,7 +308,7 @@ struct ChatView: View {
         .sheet(isPresented: $showingSessionPicker) {
             SessionPickerSheet(
                 project: project,
-                sessions: localSessions ?? project.sessions ?? [],
+                sessions: $localSessions,
                 onSelect: { session in
                     showingSessionPicker = false
                     selectedSession = session
@@ -338,9 +359,12 @@ struct ChatView: View {
             }
         }
         .onAppear {
-            // Initialize local sessions copy
-            if localSessions == nil {
-                localSessions = project.sessions
+            // Initialize local sessions - try to load ALL via SSH (API only returns ~5)
+            if localSessions.isEmpty {
+                // Start with API sessions as fallback
+                localSessions = project.sessions ?? []
+                // Load all sessions via SSH in background
+                loadAllSessionsViaSSH()
             }
         }
         // MARK: - Keyboard Shortcuts (iPad)
@@ -448,14 +472,14 @@ struct ChatView: View {
 
     /// Combined sessions list (local updates + original project sessions)
     private var sessions: [ProjectSession] {
-        localSessions ?? project.sessions ?? []
+        localSessions.isEmpty ? (project.sessions ?? []) : localSessions
     }
 
     @ViewBuilder
     private var sessionPickerView: some View {
         if !sessions.isEmpty {
             SessionPicker(
-                sessions: sessions,
+                sessions: $localSessions,
                 project: project,
                 selected: $selectedSession,
                 isLoading: isLoadingHistory,
@@ -876,6 +900,9 @@ struct ChatView: View {
         }
 
         wsManager.onSessionCreated = { sessionId in
+            print("[ChatView] NEW SESSION CREATED: \(sessionId.prefix(8))...")
+            // Set wsManager.sessionId so SessionPicker's activeSessionId includes this session
+            wsManager.sessionId = sessionId
             // Save session ID for continuity when returning to this project
             MessageStore.saveSessionId(sessionId, for: project.path)
 
@@ -893,11 +920,11 @@ struct ChatView: View {
             )
 
             // Initialize localSessions if needed and add the new session
-            if localSessions == nil {
+            if localSessions.isEmpty {
                 localSessions = project.sessions ?? []
             }
             // Insert at beginning (most recent)
-            localSessions?.insert(newSession, at: 0)
+            localSessions.insert(newSession, at: 0)
 
             // Select the new session in the picker
             selectedSession = newSession
@@ -918,6 +945,19 @@ struct ChatView: View {
             )
             messages.append(abortMsg)
             processingStartTime = nil
+        }
+
+        wsManager.onSessionRecovered = {
+            // Show feedback that session was recovered
+            let recoveryMsg = ChatMessage(
+                role: .system,
+                content: "⚠️ Previous session expired. Starting fresh session.",
+                timestamp: Date()
+            )
+            messages.append(recoveryMsg)
+
+            // Clear the stored session ID for this project
+            MessageStore.clearSessionId(for: project.path)
         }
     }
 
@@ -956,6 +996,13 @@ struct ChatView: View {
         // Use stored session ID (from wsManager) if available, falling back to selected session
         // This ensures we resume the correct session even if selectedSession is nil
         let sessionToResume = wsManager.sessionId ?? selectedSession?.id
+
+        // Debug: Log session ID being used
+        if let sid = sessionToResume {
+            print("[ChatView] Sending message with sessionToResume: \(sid.prefix(8))...")
+        } else {
+            print("[ChatView] WARNING: Sending message with NO session ID - new session will be created!")
+        }
 
         // If we have an image, send it with the message
         if let imageData = imageToSend {
@@ -1090,6 +1137,32 @@ struct ChatView: View {
         }
     }
 
+    /// Load all sessions via SSH (backend API only returns ~5)
+    private func loadAllSessionsViaSSH() {
+        Task {
+            do {
+                let sshSessions = try await sshManager.loadAllSessions(for: project.path, settings: settings)
+                await MainActor.run {
+                    // Merge with any locally created sessions not yet on server
+                    var merged = sshSessions
+                    for session in localSessions {
+                        if !merged.contains(where: { $0.id == session.id }) {
+                            merged.append(session)
+                        }
+                    }
+                    // Sort by last activity
+                    localSessions = merged.sorted { s1, s2 in
+                        (s1.lastActivity ?? "") > (s2.lastActivity ?? "")
+                    }
+                    print("[ChatView] Loaded \(localSessions.count) sessions via SSH")
+                }
+            } catch {
+                print("[ChatView] Failed to load sessions via SSH: \(error)")
+                // Keep using API sessions as fallback
+            }
+        }
+    }
+
     /// Load full session history via API
     private func loadSessionHistory(_ session: ProjectSession) {
         messages = []  // Clear current messages
@@ -1146,13 +1219,31 @@ struct ChatView: View {
         let encodedPath = project.path.replacingOccurrences(of: "/", with: "-")
         let sessionFile = "~/.claude/projects/\(encodedPath)/\(session.id).jsonl"
 
+        print("[ChatView] Deleting session: \(session.id)")
+        print("[ChatView] Session file path: \(sessionFile)")
+
         do {
+            // First verify the file exists
+            let checkCmd = "ls -la '\(sessionFile)' 2>&1"
+            let checkResult = try await sshManager.executeCommandWithAutoConnect(checkCmd, settings: settings)
+            print("[ChatView] File check result: \(checkResult)")
+
+            // Delete the file
             let deleteCmd = "rm -f '\(sessionFile)'"
-            _ = try await sshManager.executeCommandWithAutoConnect(deleteCmd, settings: settings)
+            let deleteResult = try await sshManager.executeCommandWithAutoConnect(deleteCmd, settings: settings)
+            print("[ChatView] Delete result: \(deleteResult)")
+
+            // Verify deletion
+            let verifyCmd = "ls '\(sessionFile)' 2>&1 || echo 'FILE_DELETED'"
+            let verifyResult = try await sshManager.executeCommandWithAutoConnect(verifyCmd, settings: settings)
+            print("[ChatView] Verify deletion: \(verifyResult)")
 
             // Remove from local list
             await MainActor.run {
-                localSessions?.removeAll { $0.id == session.id }
+                let countBefore = localSessions.count
+                localSessions.removeAll { $0.id == session.id }
+                let countAfter = localSessions.count
+                print("[ChatView] Local sessions: \(countBefore) -> \(countAfter)")
 
                 // If we deleted the currently selected session, clear it
                 if selectedSession?.id == session.id {
@@ -1162,7 +1253,7 @@ struct ChatView: View {
                     MessageStore.clearSessionId(for: project.path)
                 }
 
-                // Notify parent to refresh project list
+                // Notify parent to refresh project list (after local state is updated)
                 onSessionsChanged?()
             }
         } catch {

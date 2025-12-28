@@ -68,4 +68,48 @@ final class ClaudeHelperTests: XCTestCase {
 
         XCTAssertNil(enhanced)
     }
+
+    // MARK: - Helper Session ID Tests
+
+    func testCreateHelperSessionIdIsDeterministic() {
+        // Same project path should always produce the same session ID
+        let path = "/home/dev/workspace/ClaudeCodeApp"
+        let id1 = ClaudeHelper.createHelperSessionId(for: path)
+        let id2 = ClaudeHelper.createHelperSessionId(for: path)
+
+        XCTAssertEqual(id1, id2, "Same path should produce same session ID")
+    }
+
+    func testCreateHelperSessionIdIsDifferentForDifferentPaths() {
+        let path1 = "/home/dev/workspace/ClaudeCodeApp"
+        let path2 = "/home/dev/workspace/OtherProject"
+
+        let id1 = ClaudeHelper.createHelperSessionId(for: path1)
+        let id2 = ClaudeHelper.createHelperSessionId(for: path2)
+
+        XCTAssertNotEqual(id1, id2, "Different paths should produce different session IDs")
+    }
+
+    func testCreateHelperSessionIdIsValidUUIDFormat() {
+        let path = "/home/dev/workspace/TestProject"
+        let sessionId = ClaudeHelper.createHelperSessionId(for: path)
+
+        // UUID format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
+        let uuidRegex = try! NSRegularExpression(
+            pattern: "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+            options: .caseInsensitive
+        )
+        let range = NSRange(sessionId.startIndex..., in: sessionId)
+        let match = uuidRegex.firstMatch(in: sessionId, options: [], range: range)
+
+        XCTAssertNotNil(match, "Session ID should be a valid UUID v4 format: \(sessionId)")
+    }
+
+    func testCreateHelperSessionIdHandlesEmptyPath() {
+        let sessionId = ClaudeHelper.createHelperSessionId(for: "")
+
+        // Should still produce a valid UUID
+        XCTAssertEqual(sessionId.count, 36, "Should be 36 characters (UUID format)")
+        XCTAssertTrue(sessionId.contains("-"), "Should contain dashes")
+    }
 }

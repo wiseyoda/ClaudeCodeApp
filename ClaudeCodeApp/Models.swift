@@ -231,6 +231,57 @@ struct ProjectSession: Codable, Identifiable {
     let lastAssistantMessage: String?
 }
 
+// MARK: - Session Filtering
+
+extension Array where Element == ProjectSession {
+    /// Filter sessions to show only user conversation sessions.
+    /// Excludes:
+    /// - ClaudeHelper sessions (used for suggestions, not user conversations)
+    /// - Empty sessions (messageCount == 0, never had any messages)
+    /// - Always includes the activeSessionId if provided (current session)
+    func filterForDisplay(projectPath: String, activeSessionId: String? = nil) -> [ProjectSession] {
+        let helperSessionId = ClaudeHelper.createHelperSessionId(for: projectPath)
+
+        return self.filter { session in
+            // Always include the active/current session (even if it's new with few messages)
+            if let activeId = activeSessionId, session.id == activeId {
+                return true
+            }
+            // Filter out ClaudeHelper sessions
+            if session.id == helperSessionId {
+                return false
+            }
+            // Filter out truly empty sessions (messageCount == 0)
+            // Keep sessions with 1+ messages (user's first message counts!)
+            // Sessions with nil messageCount are kept (might be valid but missing data)
+            guard let count = session.messageCount else { return true }
+            return count >= 1
+        }
+    }
+
+    /// Filter and sort sessions by last activity (most recent first)
+    func filterAndSortForDisplay(projectPath: String, activeSessionId: String? = nil) -> [ProjectSession] {
+        filterForDisplay(projectPath: projectPath, activeSessionId: activeSessionId)
+            .sorted { s1, s2 in
+                let date1 = s1.lastActivity ?? ""
+                let date2 = s2.lastActivity ?? ""
+                return date1 > date2
+            }
+    }
+}
+
+extension Project {
+    /// Get filtered sessions for display (excludes helper and empty sessions)
+    var displaySessions: [ProjectSession] {
+        (sessions ?? []).filterForDisplay(projectPath: path)
+    }
+
+    /// Get filtered and sorted sessions for display
+    var sortedDisplaySessions: [ProjectSession] {
+        (sessions ?? []).filterAndSortForDisplay(projectPath: path)
+    }
+}
+
 // MARK: - Message for UI
 
 struct ChatMessage: Identifiable, Equatable, Codable {

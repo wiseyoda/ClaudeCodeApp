@@ -41,4 +41,40 @@ final class ConnectionStateTests: XCTestCase {
             XCTAssertEqual(state.accessibilityLabel, expected)
         }
     }
+
+    // MARK: - Session ID Validation Tests
+
+    func testValidateSessionIdAcceptsValidUUIDs() {
+        let validUUIDs = [
+            "cbd6acb5-a212-4899-90c4-ab11937e21c0",
+            "ABCD1234-5678-9ABC-DEF0-123456789ABC",
+            "00000000-0000-0000-0000-000000000000"
+        ]
+
+        for uuid in validUUIDs {
+            XCTAssertEqual(WebSocketManager.validateSessionId(uuid), uuid,
+                          "Should accept valid UUID: \(uuid)")
+        }
+    }
+
+    func testValidateSessionIdRejectsInvalidFormats() {
+        let invalidSessionIds = [
+            "",
+            "not-a-uuid",
+            "cbd6acb5-a212-4899-90c4",  // Too short
+            "cbd6acb5-a212-4899-90c4-ab11937e21c0-extra",  // Too long
+            "cbd6acb5a2124899-90c4-ab11937e21c0",  // Missing hyphen
+            "gggggggg-gggg-gggg-gggg-gggggggggggg",  // Invalid hex chars
+            "12345678-1234-1234-1234-1234567890123"  // One digit too many in last section
+        ]
+
+        for id in invalidSessionIds {
+            XCTAssertNil(WebSocketManager.validateSessionId(id),
+                        "Should reject invalid session ID: \(id)")
+        }
+    }
+
+    func testValidateSessionIdReturnsNilForNil() {
+        XCTAssertNil(WebSocketManager.validateSessionId(nil))
+    }
 }

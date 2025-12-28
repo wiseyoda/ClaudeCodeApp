@@ -30,6 +30,10 @@ open ClaudeCodeApp.xcodeproj
 
 ## Rules
 
+**IMPORTANT - Adding Files:**
+- MUST add new `.swift` files to `project.pbxproj` (use `xcodebuild` or Xcode)
+- After creating a file, run build to verify it's included—unlinked files won't compile
+
 **IMPORTANT - Thread Safety:**
 - MUST add `@MainActor` to any new `ObservableObject` class
 - MUST use `Task { @MainActor in }` for UI updates from async contexts
@@ -100,6 +104,8 @@ Connects to claudecodeui via WebSocket (`ws://host:port/ws?token=JWT`). Auth via
 Session files: `~/.claude/projects/{encoded-path}/{session}.jsonl`
 Path encoding: `/home/dev/project` → `-home-dev-project` (starts with dash)
 
+**Note**: The backend API only returns ~5 sessions per project. The app loads all sessions via SSH for accurate counts. See `requirements/SESSIONS.md` for the full session system documentation.
+
 See `requirements/BACKEND.md` for full API reference.
 
 ## Known Issues (Fix These!)
@@ -124,4 +130,6 @@ See `ROADMAP.md` Priority 1 for full list with line numbers.
 - `ROADMAP.md` - Priorities, known issues with line numbers
 - `requirements/ARCHITECTURE.md` - Full system architecture, data flows
 - `requirements/BACKEND.md` - API reference, troubleshooting
+- `requirements/SESSIONS.md` - Session system deep dive (file formats, API limitations, SSH loading)
 - `requirements/OVERVIEW.md` - Functional requirements
+- `requirements/QNAP-CONTAINER.md` - QNAP container setup, persistence, troubleshooting
