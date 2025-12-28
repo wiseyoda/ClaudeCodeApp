@@ -9,6 +9,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+- **iOS Platform Quirks Documentation**: Documented workarounds for TextEditor paste truncation, Smart Punctuation, and text hyphenation issues in CLAUDE.md
 - **SessionManager**: Centralized session management with filtering and sorting
   - Excludes AI helper sessions (agent-*.jsonl) from session list
   - Configurable response timeout in Settings
@@ -30,10 +31,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **@IncrementalState Migration Prep**: Documented migration steps for ChatView, DebugLogStore, CommandStore, IdeasStore (awaiting Xcode 26)
 
 ### Changed
+- **App Rebranding**: Display name changed from "Claude Code" to "Coding Bridge"
+- **Version Update**: App version set to 0.5.0
+- **App Category**: Added developer-tools category to App Store metadata
 - Session picker now filters phantom "New Session" entries (Issue #16 workaround)
 - Improved session delete handling to avoid stale UI state
 
 ### Fixed
+- **Helper Session Hash Collisions**: Improved hash function in `ClaudeHelper.createHelperSessionId()` to prevent collisions for similar project paths
 - **Session Delete Race**: Added timestamped tracking in SessionManager to prevent stale UI state causing delete attempts on non-existent sessions
 - **BookmarkStore Atomic Save**: Added atomic writes for crash safety
 - **Non-atomic Image Save**: Now uses atomic writes and validates JSON before saving images

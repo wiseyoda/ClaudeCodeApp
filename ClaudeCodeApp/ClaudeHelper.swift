@@ -32,17 +32,35 @@ class ClaudeHelper: ObservableObject {
     }
 
     /// Create a deterministic "helper" session ID for a project path.
-    /// Uses a simple hash to create a valid UUID format that's consistent for the same path.
+    /// Uses a hash to create a valid UUID format that's consistent for the same path.
     /// Note: This is nonisolated so it can be called from non-MainActor contexts (like session filtering).
     nonisolated static func createHelperSessionId(for projectPath: String) -> String {
         // Hash the project path to get consistent bytes
         let data = projectPath.data(using: .utf8) ?? Data()
         var hash = [UInt8](repeating: 0, count: 32)
 
-        // Simple hash - use the bytes directly (for determinism)
+        // Initialize with non-zero seed values to prevent zero-state issues
+        for i in 0..<32 {
+            hash[i] = UInt8((i * 17 + 31) & 0xFF)
+        }
+
+        // Mix each byte into the hash with better avalanche properties
         for (i, byte) in data.enumerated() {
-            hash[i % 32] ^= byte
-            hash[(i + 1) % 32] = hash[(i + 1) % 32] &+ byte
+            // Mix the byte position into the hash for position sensitivity
+            let positionByte = UInt8((i * 37 + 7) & 0xFF)
+            let mixedByte = byte &+ positionByte
+
+            // Update multiple positions for better diffusion
+            hash[i % 32] = hash[i % 32] &+ mixedByte
+            hash[(i + 1) % 32] ^= mixedByte
+            hash[(i + 7) % 32] = hash[(i + 7) % 32] &+ (mixedByte >> 3)
+            hash[(i + 13) % 32] ^= (mixedByte << 2) | (mixedByte >> 6)
+        }
+
+        // Final mixing pass to propagate differences
+        for i in 0..<32 {
+            hash[i] = hash[i] &+ hash[(i + 17) % 32]
+            hash[(i + 5) % 32] ^= hash[i]
         }
 
         // Format as UUID v4: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx

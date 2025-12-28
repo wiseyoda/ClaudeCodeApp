@@ -614,14 +614,15 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 0.5.0;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Claude Code";
+				INFOPLIST_KEY_CFBundleDisplayName = "Coding Bridge";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSAppTransportSecurity_AllowsArbitraryLoads = YES;
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Claude Code needs microphone access to transcribe your voice messages.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Claude Code needs photo library access to attach images to messages.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Claude Code uses speech recognition to convert your voice to text.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Coding Bridge needs microphone access to transcribe your voice messages.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Coding Bridge needs photo library access to attach images to messages.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Coding Bridge uses speech recognition to convert your voice to text.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -632,7 +633,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.level.ClaudeCodeApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -647,14 +648,15 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 0.5.0;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Claude Code";
+				INFOPLIST_KEY_CFBundleDisplayName = "Coding Bridge";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSAppTransportSecurity_AllowsArbitraryLoads = YES;
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Claude Code needs microphone access to transcribe your voice messages.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Claude Code needs photo library access to attach images to messages.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Claude Code uses speech recognition to convert your voice to text.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Coding Bridge needs microphone access to transcribe your voice messages.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Coding Bridge needs photo library access to attach images to messages.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Coding Bridge uses speech recognition to convert your voice to text.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -665,7 +667,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 0.5.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.level.ClaudeCodeApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;

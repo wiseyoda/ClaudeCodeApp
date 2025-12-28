@@ -130,6 +130,14 @@ See `ROADMAP.md` Priority 1 for full list with line numbers.
 
 300+ unit tests covering parsers and utilities. Test files in `ClaudeCodeAppTests/`.
 
+## iOS Platform Quirks
+
+| Issue | Workaround | Location |
+|-------|------------|----------|
+| TextEditor paste truncation | First character sometimes dropped when pasting. `SSHKeyDetection` auto-recovers by detecting invalid magic bytes and prepending missing `b` for OpenSSH keys. | `SSHManager.swift:360-384` |
+| Smart Punctuation | iOS converts `-` to em/en dashes. `normalizeKeyContent()` converts all Unicode dashes back to ASCII. | `SSHManager.swift:245-281` |
+| Text hyphenation | iOS adds soft hyphens to wrapped text. Base64 filtering strips all non-base64 chars. | `SSHManager.swift:339-341` |
+
 ## References
 
 - `README.md` - Feature overview, setup guide
