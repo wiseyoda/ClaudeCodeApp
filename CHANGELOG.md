@@ -19,18 +19,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Keep only the last 5, 10, or 20 sessions
   - Active session protection prevents accidental deletion
   - Accessible via "Manage" button in session picker toolbar
-- **iOS 26 Compatibility Research**: Documented Liquid Glass UI requirements and migration path
+- **iOS 26 Liquid Glass UI**: Full adoption of new design system
+  - `GlassTint` enum with semantic colors (primary, success, warning, error, info, accent, neutral)
+  - `GlassEffectModifier` and `GlassCapsuleModifier` view modifiers in Theme.swift
+  - `glassBackground()` and `glassCapsule()` View extensions
+  - `glassMessageBubble()` helper for message-specific styling
+  - Glass effects applied to GitSyncBanner, CLIProcessingView, QuickActionButton, CLIInputView
+  - Toolbars updated to use `.ultraThinMaterial` for glass-ready backgrounds
+- **Native Search API**: Replaced custom search with `.searchable()` in GlobalSearchView
+- **@IncrementalState Migration Prep**: Documented migration steps for ChatView, DebugLogStore, CommandStore, IdeasStore (awaiting Xcode 26)
 
 ### Changed
-- Session picker now filters phantom "New Session" entries
+- Session picker now filters phantom "New Session" entries (Issue #16 workaround)
 - Improved session delete handling to avoid stale UI state
 
 ### Fixed
-- **SpeechManager**: Changed print() calls to Logger for consistent logging
-- **WebSocketManager**: Made `isAppInForeground` @Published for proper SwiftUI observability
-- **DebugLogStore**: Static DateFormatter for performance (was creating per-call)
-- **GlobalSearchView**: Proper error logging instead of silent try? failures
-- **ChatView**: Organized 40+ @State variables with MARK sections for maintainability
+- **Session Delete Race**: Added timestamped tracking in SessionManager to prevent stale UI state causing delete attempts on non-existent sessions
+- **BookmarkStore Atomic Save**: Added atomic writes for crash safety
+- **Non-atomic Image Save**: Now uses atomic writes and validates JSON before saving images
+- **IdeasStore Cleanup**: Now logs cleanup failures instead of silently ignoring
+- **Orphaned Suggestion Task**: Task now stored and cancelled on view disappear
+- **SpeechManager Logging**: Changed print() calls to Logger for consistent logging
+- **WebSocketManager Observable**: Made `isAppInForeground` @Published for proper SwiftUI observability
+- **DebugLogStore Performance**: Static DateFormatter (was creating per-call)
+- **GlobalSearchView Errors**: Proper error logging instead of silent try? failures
+- **ChatView Organization**: Organized 40+ @State variables with MARK sections for maintainability
 
 ---
 
@@ -261,4 +274,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | 0.3.1 | iPad support, SSH keys, connection indicator |
 | 0.3.2 | Search, thinking mode, command library, UI redesign |
 | 0.3.3 | Ideas Drawer, task abort |
-| 0.4.0 | Message action bar, critical bug fixes, test suite (current) |
+| 0.4.0 | Message action bar, critical bug fixes, test suite |

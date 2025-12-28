@@ -1,226 +1,373 @@
-# ClaudeCodeApp Roadmap
+# ClaudeCodeApp Implementation Plan
 
-> Active development priorities for the iOS Claude Code client. This document covers committed, near-term work only.
+> Comprehensive plan for fixing all identified issues in the iOS Claude Code client.
 >
-> For completed work, see [CHANGELOG.md](CHANGELOG.md).
-> For open issues, see [ISSUES.md](ISSUES.md).
-> For future ideas and strategic vision, see [FUTURE-IDEAS.md](FUTURE-IDEAS.md).
+> **Related docs**: [CHANGELOG.md](CHANGELOG.md) | [ISSUES.md](ISSUES.md) | [FUTURE-IDEAS.md](FUTURE-IDEAS.md)
 
 ---
 
-## Status Legend
+## Overview
 
-| Symbol | Meaning |
-|--------|---------|
-| Critical | Must fix immediately |
-| High | Next sprint |
-| Medium | Planned |
-| Low | Backlog |
-
----
-
-## Priority 1: Open Issues
-
-Active bugs and feature requests from ISSUES.md.
-
-### Bugs (Investigating)
-
-| # | Issue | Description | Status |
-|---|-------|-------------|--------|
-| 16 | Phantom "New Session" entries | Empty sessions created on app open without user action | **Fixed** |
-
-### Feature Requests
-
-| # | Feature | Description | Effort | Priority |
-|---|---------|-------------|--------|----------|
-| 19 | Bulk session management | Delete all, by age, or keep last N sessions | Medium | **Done** |
-| 18 | Multi-repo git status | Show aggregate git status for monorepos | Medium | Low |
+| Phase | Focus | Priority | Est. Tasks |
+|-------|-------|----------|------------|
+| 1 | Security Hardening | Critical | 8 |
+| 2 | Data Correctness | High | 6 |
+| 3 | Stability & Thread Safety | High | 5 |
+| 4 | Architecture Refactoring | Medium | 7 |
+| 5 | Performance & Polish | Medium | 9 |
+| 6 | iOS 26 Adoption | Medium | 6 |
+| 7 | Test Coverage | Ongoing | 6 |
 
 ---
 
-## Priority 2: Code Quality Fixes (Medium)
+## Phase 1: Security Hardening
 
-Remaining issues from code review that need attention.
+> **Priority**: Critical | **Do First**
 
-| Issue | File | Lines | Description | Effort |
-|-------|------|-------|-------------|--------|
-| Session delete race | `SessionManager.swift` | 27-35, 261-313 | Stale UI state causes delete attempts on non-existent sessions | **Fixed** |
-| BookmarkStore save | `Models.swift` | 590-666 | Added atomic writes for crash safety | **Fixed** |
-| Non-atomic image save | `Models.swift` | 392-413 | Now uses atomic writes, validates JSON before saving images | **Fixed** |
-| IdeasStore cleanup | `Models.swift` | 519-541 | Now logs cleanup failures instead of silently ignoring | **Fixed** |
-| Orphaned suggestion task | `ChatView.swift` | 736-749 | Task now stored and cancelled on view disappear | **Fixed** |
-| EnvironmentObject assumption | `CLIStatusBarViews.swift` | 14 | Standard SwiftUI pattern, app correctly injects at root | N/A |
-| fileQueue race condition | `Models.swift` | 361 | Correctly uses serial queue, no race condition | N/A |
-| Task.isCancelled check | `WebSocketManager.swift` | 653 | Already has cancellation check | N/A |
+### 1.1 Command Injection Prevention
 
----
+Shell commands interpolate unescaped user inputs, enabling command injection.
 
-## Priority 3: iOS 26 Compatibility - **COMPLETE**
+| Task | File | Line | Action |
+|------|------|------|--------|
+| Escape git URL | `CloneProjectSheet.swift` | 167 | Wrap URL in `shellEscape()` |
+| Escape grep path | `SSHManager.swift` | 1468 | Use `shellEscape()` for project path |
+| Escape shell path | `ContentView.swift` | 573 | Use `shellEscape()` for path interpolation |
+| Fix bash -c expansion | `SSHManager.swift` | 1024 | Refactor `executeCommandWithTimeout` to avoid bash -c wrapper |
 
-iOS 26 introduces Liquid Glass UI and performance APIs. Mandatory adoption by iOS 27.
-
-### Critical - Liquid Glass (Deadline: iOS 27)
-
-| Issue | File | Description | Status |
-|-------|------|-------------|--------|
-| Liquid Glass auto-adoption | All views | Apps compiled with Xcode 26 auto-adopt glass UI | **Done** |
-| Theme solid colors | `Theme.swift` | Added glass materials, tints, and modifiers | **Done** |
-| Message bubble backgrounds | `CLIMessageView.swift` | Added glass effects to badges, processing, buttons | **Done** |
-| Navigation/toolbar backgrounds | `ChatView.swift` | Using .ultraThinMaterial for glass-ready toolbars | **Done** |
-| Temporary opt-out | `Info.plist` | Not needed - full glass adoption chosen | N/A |
-
-### High - Performance (@IncrementalState)
-
-| Issue | File | Description | Status |
-|-------|------|-------------|--------|
-| Message list performance | `ChatView.swift` | Added migration documentation for @IncrementalState | **Ready** |
-| Debug log list | `DebugLogStore.swift` | Added migration documentation for @IncrementalState | **Ready** |
-| Command list | `CommandStore.swift` | Added migration documentation for @IncrementalState | **Ready** |
-| Ideas list | `IdeasStore.swift` | Added migration documentation for @IncrementalState | **Ready** |
-| Add `.incrementalID()` | List item views | Documented in migration steps | **Ready** |
-
-> **Note**: @IncrementalState migration is prepared but requires Xcode 26 beta for final implementation.
-
-### Medium - New SwiftUI Features
-
-| Feature | File | Description | Status |
-|---------|------|-------------|--------|
-| Native `.searchable()` | `GlobalSearchView.swift` | Replaced custom search with native API | **Done** |
-| `.search` role for TabView | `ContentView.swift` | N/A - app uses NavigationSplitView | N/A |
-| `ToolbarSpacer` | Various | Documented for future adoption | **Ready** |
-| `.glassEffect()` modifier | Custom views | Added glassBackground() and glassCapsule() modifiers | **Done** |
-| `TextEditor` + `AttributedString` | `CLIInputView.swift` | Documented for future migration | **Ready** |
-| `@Animatable` macro | Custom animations | Requires Xcode 26 for implementation | **Ready** |
-
-### Implementation Summary
-
-**Added to Theme.swift:**
-- `GlassTint` enum with semantic colors (primary, success, warning, error, info, accent, neutral)
-- `GlassEffectModifier` view modifier for rounded rectangle glass
-- `GlassCapsuleModifier` view modifier for capsule/pill glass buttons
-- `glassBackground()` and `glassCapsule()` View extensions
-- `glassMessageBubble()` helper for message-specific styling
-
-**Glass effects applied to:**
-- GitSyncBanner with semantic tints
-- Commit/Push/Ask Claude buttons
-- CLIProcessingView thinking indicator
-- QuickActionButton copy/share actions
-- CLIInputView text field and recording indicator
-- Result count badges in message views
-
-### Deadlines
-
-| Milestone | Date | Action |
-|-----------|------|--------|
-| Xcode 26 Beta | Now | Test Liquid Glass impact |
-| iOS 26 Public Release | Fall 2025 | Apps auto-adopt Liquid Glass |
-| App Store Xcode 26 Required | April 2026 | Must compile with Xcode 26 SDK |
-| Liquid Glass Mandatory | iOS 27 (~2026) | `UIDesignRequiresCompatibility` removed |
-
----
-
-## Priority 4: Low Priority / Backlog
-
-Developer experience and code health improvements.
-
-| Issue | File | Description | Status |
-|-------|------|-------------|--------|
-| Keyboard constraint conflicts | `ChatView.swift` | Input accessory view layout conflicts | Backlog |
-| Uses print() not Logger | `SpeechManager.swift` | Inconsistent logging at lines 107, 127 | **Fixed** |
-| Missing @MainActor | `DebugLogStore.swift` | copyToClipboard() already on MainActor class | N/A |
-| Excessive @State | `ChatView.swift` | 40+ variables organized with MARK comments | **Fixed** |
-| Not @Published | `WebSocketManager.swift` | isAppInForeground not observable at line 80 | **Fixed** |
-| DateFormatter per-call | `DebugLogStore.swift` | Now uses static formatter for performance | **Fixed** |
-| Silent search failures | `GlobalSearchView.swift` | Now logs errors via log.warning/debug | **Fixed** |
-
-### Code Quality Enhancements
-
-| Feature | Description | Effort |
-|---------|-------------|--------|
-| Configurable History | Make 50-message limit configurable (25, 50, 100, 200) | Low |
-| Error UI Component | Centralized error display component | Medium |
-| Structured Logging | Consistent Logger usage across all managers | Low |
-| Unit Test Coverage | Expand tests for managers (WebSocket, SSH, Speech) | Medium |
-
----
-
-## Implementation Order
-
+**Implementation**:
+```swift
+// Ensure all SSH commands use the existing helper:
+private func shellEscape(_ string: String) -> String {
+    let escaped = string.replacingOccurrences(of: "'", with: "'\\''")
+    return "'\(escaped)'"
+}
 ```
-Phase 1: Critical Code Review Fixes (6 items) - COMPLETE
-Phase 2: High Priority Fixes (9 items) - COMPLETE
-Phase 3: Open Issues (#7, #13, #14, #15, #17) - COMPLETE
 
-Phase 4: Medium Priority Fixes (8 items) - COMPLETE
-   [x] Session delete race condition              [Medium effort] DONE (timestamped tracking)
-   [x] BookmarkStore atomic save                  [Low effort] DONE (atomic writes)
-   [x] Non-atomic image save                      [Medium effort] DONE (validate then save)
-   [x] IdeasStore cleanup validation              [Low effort] DONE (logs failures)
-   [x] Orphaned suggestion task                   [Low effort] DONE (stored + cancelled)
-   [x] EnvironmentObject assumption               N/A (standard SwiftUI pattern)
-   [x] fileQueue race condition                   N/A (correctly uses serial queue)
-   [x] Task.isCancelled not checked               N/A (already has check)
+### 1.2 Credential Storage Migration
 
-Phase 5: iOS 26 Compatibility (Before April 2026) - COMPLETE
-   [x] Test with Xcode 26 beta                    DONE (researched, prepared for testing)
-   [x] Add UIDesignRequiresCompatibility flag     N/A (full glass adoption chosen)
-   [x] Update Theme.swift for Liquid Glass        DONE (glass modifiers, tints, materials)
-   [x] Migrate to @IncrementalState               READY (documented migration steps)
-   [x] Add .incrementalID() to list items         READY (documented in migration steps)
-   [x] Adopt .glassEffect() modifier              DONE (glassBackground, glassCapsule)
-   [x] Replace custom search with .searchable()   DONE (GlobalSearchView)
+Backend credentials stored in plain text UserDefaults; must migrate to Keychain.
 
-Phase 6: Code Quality & Low Priority (11 items) - IN PROGRESS
-   [x] Uses print() not Logger (SpeechManager)    [Low effort] DONE
-   [x] Missing @MainActor (DebugLogStore)         N/A (already on MainActor class)
-   [x] Excessive @State (ChatView)                [Medium effort] DONE (MARK comments)
-   [x] Not @Published (WebSocketManager)          [Low effort] DONE
-   [x] DateFormatter per-call (DebugLogStore)     [Low effort] DONE (static formatter)
-   [x] Silent search failures (GlobalSearchView)  [Low effort] DONE (proper logging)
-   +-- Keyboard constraint conflicts              [Low effort] (separate UI issue)
-   +-- Configurable history limit                 [Low effort]
-   +-- Structured logging                         [Low effort]
-   +-- Error UI component                         [Medium effort]
-   +-- Unit test coverage                         [Medium effort]
+| Task | File | Line | Action |
+|------|------|------|--------|
+| Migrate authPassword | `AppSettings.swift` | 223 | Move to Keychain with migration |
+| Migrate authToken | `AppSettings.swift` | 224 | Move to Keychain with migration |
+| Migrate apiKey | `AppSettings.swift` | 225 | Move to Keychain with migration |
+| Redact JWT in logs | `APIClient.swift` | 112 | Replace token with `[REDACTED]` |
+
+**Implementation**: Follow the existing `sshPassword` migration pattern:
+```swift
+var authToken: String {
+    get { KeychainHelper.shared.retrieveAuthToken() ?? "" }
+    set { KeychainHelper.shared.storeAuthToken(newValue) }
+}
+
+func migrateCredentialsIfNeeded() {
+    // One-time migration from UserDefaults to Keychain
+}
+```
+
+### 1.3 SSH Host Key Validation
+
+Host key verification disabled with `.acceptAnything()`, enabling MITM attacks.
+
+| Task | File | Lines | Action |
+|------|------|-------|--------|
+| Add host key validation | `SSHManager.swift` | 780, 821 | Implement known-hosts or trust-on-first-use |
+
+**Implementation Options**:
+1. **Trust-on-first-use (TOFU)**: Store fingerprint in Keychain on first connect, verify on subsequent
+2. **Known hosts file**: Read/write `~/.ssh/known_hosts` format
+3. **User prompt**: Show fingerprint dialog on first connect
+
+---
+
+## Phase 2: Data Correctness
+
+> **Priority**: High
+
+### 2.1 API URL Encoding
+
+API paths built with raw strings fail for project names with spaces/special characters.
+
+| Task | File | Lines | Action |
+|------|------|-------|--------|
+| Encode session path | `APIClient.swift` | 165 | Use `addingPercentEncoding(withAllowedCharacters:)` |
+| Encode token path | `APIClient.swift` | 208 | Use `addingPercentEncoding(withAllowedCharacters:)` |
+
+**Implementation**:
+```swift
+let encodedProject = projectName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? projectName
+let encodedSession = sessionId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? sessionId
+components.path = "/api/projects/\(encodedProject)/sessions/\(encodedSession)/messages"
+```
+
+### 2.2 Session History Completeness
+
+Session history parsing returns on first content item, dropping multi-part messages.
+
+| Task | File | Lines | Action |
+|------|------|-------|--------|
+| Aggregate content parts | `APIClient.swift` | 334, 338 | Collect all text/tool_use items instead of returning on first |
+| Handle tool_use in history | `APIClient.swift` | 350-354 | Emit separate ChatMessage for each tool_use |
+
+### 2.3 Session History Fallback
+
+When API fails, no fallback to SSH-based history loading.
+
+| Task | File | Lines | Action |
+|------|------|-------|--------|
+| Add SSH fallback | `ChatView.swift` | 1196, 1228 | Try SSH history load when API returns error |
+| Surface error state | `ChatView.swift` | - | Show clear error when both methods fail |
+
+### 2.4 Auth Retry Handling
+
+Recursive `fetchProjects()` after `login()` with no retry cap risks infinite loops.
+
+| Task | File | Lines | Action |
+|------|------|-------|--------|
+| Add retry limit | `APIClient.swift` | 122, 126 | Add `retryCount` parameter, max 1 retry |
+
+**Implementation**:
+```swift
+func fetchProjects(retryCount: Int = 0) async throws -> [Project] {
+    // ...
+    if httpResponse.statusCode == 401 && retryCount < 1 {
+        try await login()
+        return try await fetchProjects(retryCount: retryCount + 1)
+    }
+    // ...
+}
 ```
 
 ---
 
-## Completed Phases (Moved to CHANGELOG)
+## Phase 3: Stability & Thread Safety
 
-The following phases have been completed and their details moved to CHANGELOG.md:
+> **Priority**: High
 
-- **Phase 1: Critical Code Review Fixes** - 6 items (December 27, 2025)
-  - Force unwrap URLComponents, Data encoding fixes
-  - WebSocket state race and send queue race fixes
-  - Timer leak in ProcessingIndicator
-  - Uncancelled SSH tasks in GlobalSearchView
+### 3.1 @MainActor Annotations
 
-- **Phase 2: High Priority Fixes** - 9 items (December 27, 2025)
-  - WebSocket receive loop connection ID tracking
-  - SSH command injection fix
-  - ClaudeHelper timeout race, SSHManager disconnect race
-  - messageQueue thread safety, processingTimeout logic
-  - DispatchQueue retain cycle, Git timer cancellation
-  - receiveMessage() cancellation checks
+ObservableObject classes missing @MainActor can cause cross-thread crashes.
 
-- **Phase 3: Open Issues** - Issues #7, #13, #14, #15, #17 (December 27, 2025)
-  - Debug log viewer (verbose output)
-  - Git refresh error handling
-  - Status indicator state colors
-  - Per-project permissions toggle
-  - Timeout error logging
+| Task | File | Line | Action |
+|------|------|------|--------|
+| Add @MainActor to BookmarkStore | `Models.swift` | 819 | Add annotation, audit callers |
+| Add @MainActor to AppSettings | `AppSettings.swift` | 191 | Add annotation, audit callers |
 
-- **Phase 5: iOS 26 Compatibility** - All items (December 27, 2025)
-  - Added iOS 26 Liquid Glass support with full adoption
-  - Created GlassTint enum and glass effect modifiers in Theme.swift
-  - Applied glass effects to GitSyncBanner, CLIProcessingView, QuickActionButton, CLIInputView
-  - Updated toolbars to use .ultraThinMaterial for glass-ready backgrounds
-  - Replaced custom search with native .searchable() in GlobalSearchView
-  - Prepared stores for @IncrementalState migration (awaiting Xcode 26)
-  - Documented TextEditor + AttributedString migration path
+### 3.2 WebSocket State Machine
+
+Connection state transitions can race between ping/receive callbacks.
+
+| Task | File | Lines | Action |
+|------|------|-------|--------|
+| Serialize state transitions | `WebSocketManager.swift` | 269-332 | Use actor or serial queue for state |
+| Guard message sends | `WebSocketManager.swift` | 405-423 | Ensure connection fully established before send |
+
+**Implementation Option**: Extract to actor
+```swift
+actor WebSocketState {
+    private(set) var connectionState: ConnectionState = .disconnected
+
+    func transition(to newState: ConnectionState) -> Bool {
+        // Validate transition is legal
+        connectionState = newState
+        return true
+    }
+}
+```
+
+### 3.3 SSH Command Serialization
+
+Citadel SSH library doesn't handle concurrent commands reliably.
+
+| Task | File | Lines | Action |
+|------|------|-------|--------|
+| Serialize git status checks | `ContentView.swift` | 612 | Use async queue or sequential execution |
+| Serialize multi-project SSH | `SSHManager.swift` | 1281 | Already fixed, verify consistency |
 
 ---
 
-*Last updated: December 27, 2025 - Completed Phase 5 (iOS 26 Liquid Glass, .searchable(), @IncrementalState preparation)*
+## Phase 4: Architecture Refactoring
+
+> **Priority**: Medium
+
+### 4.1 ChatView Decomposition
+
+ChatView has 25+ @State properties and ~1968 lines.
+
+| Task | Files | Action |
+|------|-------|--------|
+| Extract ChatViewModel | `ChatView.swift` | Move state to ObservableObject |
+| Extract ChatSearchView | `ChatView.swift` | Separate search UI and logic |
+| Extract ChatToolbar | `ChatView.swift` | Toolbar as separate component |
+| Extract GitStatusCoordinator | `ChatView.swift` | Git refresh logic to coordinator |
+
+### 4.2 Large File Splits
+
+| Task | File | Lines | Extract To |
+|------|------|-------|------------|
+| Split ContentView | `ContentView.swift` | 1558 | ProjectListView, SearchCoordinator |
+| Split SSHManager | `SSHManager.swift` | 1593 | FileOperations, GitOperations |
+| Split WebSocketManager | `WebSocketManager.swift` | 1112 | MessageParser, ConnectionManager |
+
+### 4.3 Error Handling Standardization
+
+Multiple error patterns coexist; standardize on:
+
+| Pattern | Use Case |
+|---------|----------|
+| `ErrorStore.shared.post()` | User-facing errors (banners) |
+| `throws` | Recoverable errors for callers |
+| `log.error()` | Debug/diagnostic only |
+
+**Remove**: Duplicate `lastError` + `onError?()` callback patterns.
+
+---
+
+## Phase 5: Performance & Polish
+
+> **Priority**: Medium
+
+### 5.1 Async File IO
+
+| Task | File | Lines | Action |
+|------|------|-------|--------|
+| Async message loading | `Models.swift` | 546 | Move file read to background |
+| Lazy image loading | `Models.swift` | 569 | Load image data on-demand |
+
+### 5.2 Timeout Handling
+
+| Task | File | Line | Action |
+|------|------|------|--------|
+| Cancel stale timeouts | `ClaudeHelper.swift` | 516 | Cancel prior task before new query |
+| Centralize timeout constants | Various | - | Create `Timeouts` enum |
+
+```swift
+enum Timeouts {
+    static let abort: TimeInterval = 3.0
+    static let modelSwitch: TimeInterval = 5.0
+    static let processing: TimeInterval = 300.0
+    static let claudeHelper: TimeInterval = 15.0
+}
+```
+
+### 5.3 Code Quality Fixes
+
+| Task | File | Line | Action |
+|------|------|------|--------|
+| Remove force unwrap | `WebSocketManager.swift` | 986 | Use guard-let binding |
+| Flatten nested parsing | `WebSocketManager.swift` | 1042-1098 | Extract to typed parse functions |
+| Deduplicate session validation | Multiple | - | Single `SessionIdValidator` utility |
+
+### 5.4 Input Validation
+
+| Task | Location | Action |
+|------|----------|--------|
+| Validate slash commands | ChatView | Sanitize /resume, /model input |
+| Validate session IDs | WebSocket sends | Check UUID format before send |
+
+### 5.5 Accessibility
+
+| Task | Files | Action |
+|------|-------|--------|
+| Add accessibilityLabel | Toolbar items | All interactive elements |
+| Add accessibilityHint | Complex controls | Describe actions |
+
+### 5.6 Other Polish
+
+| Task | File | Action |
+|------|------|--------|
+| Keyboard constraints | `ChatView.swift` | Fix input accessory layout conflicts |
+| Centralized error UI | Various | Single ErrorBanner component |
+| Consistent logging | Various | Use Logger across all managers |
+
+---
+
+## Phase 6: iOS 26 Adoption
+
+> **Priority**: Medium | **Environment**: Xcode 26.2 / iOS 26.2
+
+| Task | Files | Action |
+|------|-------|--------|
+| @IncrementalState | ChatView, CommandStore, IdeasStore, DebugLogStore | Replace @State arrays for list performance |
+| .incrementalID() | List item views | Add to ForEach items |
+| ToolbarSpacer | Various | Adopt new spacing API |
+| TextEditor + AttributedString | CLIInputView | Rich text editing |
+| @Animatable macro | Custom animations | New animation system |
+| Liquid Glass styling | Navigation, toolbars | Adopt new material system |
+
+---
+
+## Phase 7: Test Coverage
+
+> **Priority**: Ongoing
+
+### New Tests Required
+
+| Test Suite | Coverage |
+|------------|----------|
+| Security tests | Shell escaping edge cases, command injection vectors |
+| URL encoding tests | Project paths with spaces, special chars, Unicode |
+| Session history tests | Multi-part content flattening, tool_use aggregation |
+| Integration tests | WebSocket connection, SSH command execution |
+| UI tests | SwiftUI views, accessibility |
+| Performance tests | Message loading, large chat history |
+
+### Run Tests
+```bash
+xcodebuild test -project ClaudeCodeApp.xcodeproj \
+  -scheme ClaudeCodeApp \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'
+```
+
+---
+
+## Recently Fixed
+
+### Multi-Repo Support (December 27, 2025)
+
+| Issue | File | Fix |
+|-------|------|-----|
+| Git submodules not detected | `SSHManager.swift:1154` | Changed `find -type d` to `find \( -type d -o -type f \)` |
+| Concurrent SSH errors | `SSHManager.swift:1229-1248` | Changed to sequential execution |
+| Concurrent pull errors | `SSHManager.swift:1276-1290` | Changed to sequential execution |
+
+---
+
+## Feature Requests
+
+| # | Feature | Description | Priority |
+|---|---------|-------------|----------|
+| 18 | Multi-repo git status | Aggregate status for monorepos | Low |
+
+---
+
+## Quick Reference
+
+### File Hotspots (by issue count)
+
+| File | Issues | Primary Concerns |
+|------|--------|------------------|
+| `AppSettings.swift` | 4 | Credential storage, @MainActor |
+| `SSHManager.swift` | 4 | Shell escaping, host validation, bash -c |
+| `APIClient.swift` | 4 | URL encoding, history parsing, retry loop, log redaction |
+| `ChatView.swift` | 3 | @State sprawl, size, SSH fallback |
+| `WebSocketManager.swift` | 3 | State races, parsing, force unwrap |
+| `Models.swift` | 2 | @MainActor, sync IO |
+
+### Implementation Order
+
+```
+Phase 1 (Security)     ─────────────────────────────────────►
+Phase 2 (Data)         ──────────────────────────►
+Phase 3 (Stability)    ─────────────────►
+Phase 4 (Architecture) ──────────────────────────────────────►
+Phase 5 (Polish)       ────────────────────────────────────────────►
+Phase 6 (iOS 26)                                    [blocked]──────►
+Phase 7 (Tests)        ══════════════════════════════════════════════►
+```
+
+---
+
+_Last updated: December 27, 2025_

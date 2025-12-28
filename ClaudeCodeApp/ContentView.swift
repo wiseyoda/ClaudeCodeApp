@@ -1534,8 +1534,11 @@ struct SSHKeyImportSheet: View {
     private func saveKey() {
         guard canSave else { return }
 
+        // Normalize the key content (fixes truncation issues from paste)
+        let normalizedKey = SSHKeyDetection.normalizeSSHKey(keyContent)
+
         // Store key in Keychain
-        if KeychainHelper.shared.storeSSHKey(keyContent) {
+        if KeychainHelper.shared.storeSSHKey(normalizedKey) {
             // Store passphrase if provided
             if !passphrase.isEmpty {
                 KeychainHelper.shared.storePassphrase(passphrase)

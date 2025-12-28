@@ -14,8 +14,10 @@ class SpeechManager: ObservableObject {
     @Published var authorizationStatus: SFSpeechRecognizerAuthorizationStatus = .notDetermined
     @Published var errorMessage: String?
 
-    init() {
-        checkAuthorization()
+    init(shouldRequestAuthorization: Bool = true) {
+        if shouldRequestAuthorization {
+            checkAuthorization()
+        }
     }
 
     deinit {

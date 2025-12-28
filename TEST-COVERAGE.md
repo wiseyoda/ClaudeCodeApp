@@ -2,9 +2,9 @@
 
 ## Summary
 - **Last Updated**: 2025-12-27
-- **Total Test Files**: 34
-- **Total Test Cases**: 318
-- **Estimated Coverage**: ~50% (models, stores, utilities, persistence, session filtering; managers mostly untested)
+- **Total Test Files**: 37
+- **Total Test Cases**: 334
+- **Estimated Coverage**: ~50% (models, stores, utilities, persistence, session filtering; managers partially covered)
 
 ## Current Coverage
 Most tests are unit tests in `ClaudeCodeAppTests/` using XCTest. Coverage spans parsing, enums, and store logic:
@@ -40,7 +40,10 @@ Most tests are unit tests in `ClaudeCodeAppTests/` using XCTest. Coverage spans 
 - `ClaudeCodeAppTests/SessionManagerTests.swift`: session insertion, display filtering/sorting, active session persistence, and deletion counts.
 - `ClaudeCodeAppTests/WebSocketModelsTests.swift`: WebSocket message encoding/decoding and `AnyCodable` array/double handling (10 tests).
 - `ClaudeCodeAppTests/WebSocketManagerSessionIdTests.swift`: session ID validation logic.
+- `ClaudeCodeAppTests/WebSocketManagerParsingTests.swift`: WebSocketManager parsing for session events, token budgets, assistant/tool content, model switch confirmations, and session recovery (7 tests).
 - `ClaudeCodeAppTests/ScrollStateManagerTests.swift`: scroll debouncing, reset behavior, and auto-scroll flags (4 tests).
+- `ClaudeCodeAppTests/SSHManagerTests.swift`: SSH config parsing, command building for `cd`, and ANSI stripping (6 tests).
+- `ClaudeCodeAppTests/SpeechManagerTests.swift`: authorization gating, availability, and recording toggles (3 tests).
 - `ClaudeCodeAppTests/ClaudeCodeAppTests.swift`: Swift Testing stub; currently no assertions.
 
 No UI tests, integration tests, or automated coverage reporting are configured.
@@ -59,7 +62,12 @@ Priority additions to improve coverage and regression safety:
 
 ## Recent Additions (2025-12-27)
 
-### Session 9 (Latest)
+### Session 10 (Latest)
+- **WebSocketManagerParsingTests.swift**: 7 tests covering session creation, token budgets, assistant/tool content parsing, model switch confirmations, and session error recovery.
+- **SSHManagerTests.swift**: 6 tests covering SSH config parsing, `cd` command building, and ANSI stripping.
+- **SpeechManagerTests.swift**: 3 tests covering authorization gating, availability, and recording toggles.
+
+### Session 9
 - **NamesStoreTests.swift**: 5 tests covering project/session custom name persistence and clearing.
 - **SessionManagerTests.swift**: 11 tests covering session insertion, display filtering/sorting, active session persistence, and deletion counts.
 - **ProjectSessionFilterTests.swift**: 6 tests covering helper/empty filtering, active inclusion, and display sorting.

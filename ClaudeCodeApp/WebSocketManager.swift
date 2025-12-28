@@ -822,6 +822,10 @@ class WebSocketManager: ObservableObject {
         }
     }
 
+    func processIncomingMessage(_ text: String) {
+        parseMessage(text)
+    }
+
     private func parseMessage(_ text: String) {
         log.debug("Received: \(text.prefix(300))")
         debugLog.logReceived(text)
