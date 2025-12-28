@@ -192,8 +192,10 @@ struct ChatView: View {
                 let savedMessages = await MessageStore.loadMessages(for: project.path)
                 if !savedMessages.isEmpty {
                     messages = savedMessages
-                    // Trigger scroll to bottom after loading persisted messages
-                    scrollToBottomTrigger = true
+                    // Trigger scroll to bottom after a short delay to allow SwiftUI to render
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        scrollToBottomTrigger = true
+                    }
                 }
             }
 
@@ -1281,8 +1283,10 @@ struct ChatView: View {
                         messages = historyMessages
                         print("[ChatView] Loaded \(historyMessages.count) messages from session history via API")
                     }
-                    // Trigger scroll to bottom
-                    scrollToBottomTrigger = true
+                    // Trigger scroll to bottom after a short delay to allow SwiftUI to render the messages
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        scrollToBottomTrigger = true
+                    }
                 }
             } catch {
                 print("[ChatView] Failed to load session history via API: \(error)")
@@ -1294,8 +1298,10 @@ struct ChatView: View {
                     }
                     // Show error message
                     messages.append(ChatMessage(role: .system, content: "Could not load history: \(error.localizedDescription)", timestamp: Date()))
-                    // Trigger scroll to bottom
-                    scrollToBottomTrigger = true
+                    // Trigger scroll to bottom after a short delay to allow SwiftUI to render
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                        scrollToBottomTrigger = true
+                    }
                 }
             }
         }
