@@ -386,15 +386,15 @@ class WebSocketManager: ObservableObject {
             return
         }
 
-        guard !sessionId.isEmpty else {
-            log.warning("Cannot attach to session - empty session ID")
+        guard let validatedId = Self.validateSessionId(sessionId) else {
+            log.warning("Cannot attach to session - invalid session ID format")
             return
         }
 
-        log.info("Attempting to reattach to session: \(sessionId.prefix(8))...")
+        log.info("Attempting to reattach to session: \(validatedId.prefix(8))...")
         isReattaching = true
         isProcessing = true
-        self.sessionId = sessionId
+        self.sessionId = validatedId
         startProcessingTimeout()
 
         // Send a /status command which is a no-op but will trigger the backend
@@ -403,7 +403,7 @@ class WebSocketManager: ObservableObject {
             command: "/status",
             options: WSCommandOptions(
                 cwd: projectPath,
-                sessionId: sessionId,
+                sessionId: validatedId,
                 model: nil,
                 permissionMode: nil,
                 images: nil
@@ -667,17 +667,17 @@ class WebSocketManager: ObservableObject {
             return
         }
 
-        guard let sid = sessionId else {
-            // Even without session ID, reset local state
+        guard let sid = sessionId, let validatedSid = Self.validateSessionId(sid) else {
+            // Even without valid session ID, reset local state
             resetProcessingState()
             onAborted?()
             return
         }
 
-        log.info("Aborting session: \(sid)")
+        log.info("Aborting session: \(validatedSid)")
         isAborting = true
 
-        let abort = WSAbortSession(sessionId: sid)
+        let abort = WSAbortSession(sessionId: validatedSid)
 
         do {
             let data = try JSONEncoder().encode(abort)
@@ -827,12 +827,15 @@ class WebSocketManager: ObservableObject {
         let command = "/model \(modelArg)"
         log.info("Switching model: \(command)")
 
+        // Validate session ID if present
+        let validatedSessionId = Self.validateSessionId(sessionId)
+
         // Send via WebSocket directly (not through sendMessage which adds to pending)
         let wsCommand = WSClaudeCommand(
             command: command,
             options: WSCommandOptions(
                 cwd: projectPath,
-                sessionId: sessionId,
+                sessionId: validatedSessionId,
                 model: nil,
                 permissionMode: nil,
                 images: nil
@@ -1202,17 +1205,15 @@ class WebSocketManager: ObservableObject {
         let messageType = data["type"] as? String ?? data["role"] as? String
 
         // If no type, but has content, process it directly (SDK sometimes omits type)
-        if messageType == nil {
+        guard let type = messageType else {
             if data["content"] != nil {
                 log.debug("No type but has content, processing directly")
                 processContent(data)
-                return
+            } else {
+                log.debug("No type/role in claude-response: \(data.keys)")
             }
-            log.debug("No type/role in claude-response: \(data.keys)")
             return
         }
-
-        let type = messageType!
 
         switch type {
         case "system":

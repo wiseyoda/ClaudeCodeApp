@@ -54,6 +54,7 @@ struct ApprovalBannerView: View {
                     .background(CLITheme.green(for: colorScheme))
                     .cornerRadius(6)
                 }
+                .accessibilityIdentifier("ApprovalBannerApprove")
                 .buttonStyle(.plain)
 
                 // Always Allow button
@@ -75,6 +76,7 @@ struct ApprovalBannerView: View {
                             .stroke(CLITheme.cyan(for: colorScheme).opacity(0.3), lineWidth: 1)
                     )
                 }
+                .accessibilityIdentifier("ApprovalBannerAlways")
                 .buttonStyle(.plain)
 
                 // Deny button
@@ -92,6 +94,7 @@ struct ApprovalBannerView: View {
                     .background(CLITheme.red(for: colorScheme).opacity(0.1))
                     .cornerRadius(6)
                 }
+                .accessibilityIdentifier("ApprovalBannerDeny")
                 .buttonStyle(.plain)
 
                 Spacer()
@@ -111,6 +114,8 @@ struct ApprovalBannerView: View {
         .padding(.bottom, 4)
         .transition(.move(edge: .bottom).combined(with: .opacity))
         .animation(.easeInOut(duration: 0.2), value: request.id)
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("ApprovalBanner")
     }
 }
 

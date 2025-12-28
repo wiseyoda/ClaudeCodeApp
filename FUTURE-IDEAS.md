@@ -807,29 +807,50 @@ Session analysis shows Grep usage increased to 11.6% of tool calls (94 occurrenc
 
 **Files to modify:** `CLIMessageView.swift` (consider extracting to `GrepResultView.swift` if complex)
 
-### QW2: Haptic Feedback for Key Actions
+### QW2: Haptic Feedback for Key Actions ✅
 
-**Effort:** Low | **Impact:** Low
+**Status:** Complete | **Implemented:** December 2025
 
-Add subtle haptic feedback for send, abort, copy, and error states. Uses UIImpactFeedbackGenerator with light, medium, rigid patterns.
+Added `HapticManager` utility with light/medium/rigid/success/warning/error feedback:
+- **Send message:** Medium impact haptic
+- **Abort:** Rigid impact haptic
+- **Error:** Error notification haptic
+- **Copy actions:** Light impact haptic (code blocks, quick actions, context menu)
 
-### QW3: Message Timestamps Display
+**Files modified:** `HapticManager.swift` (new), `ChatView.swift`, `CLIMessageView.swift`, `CodeBlockView.swift`
 
-**Effort:** Low | **Impact:** Medium
+### QW3: Message Timestamps Display ✅
 
-Show message timestamps inline (optional toggle). Add relative time display ("2 min ago") with tap-to-reveal absolute time.
+**Status:** Complete | **Implemented:** December 2025
 
-### QW4: Code Block Language Badge
+Added relative timestamp display to message headers:
+- Shows abbreviated relative time ("2 min. ago") next to each message header
+- Uses `RelativeDateTimeFormatter` with `.abbreviated` style
+- Muted text color at 70% opacity to not distract from content
 
-**Effort:** Low | **Impact:** Medium
+**Files modified:** `CLIMessageView.swift`
 
-Show detected language badge in code block header (e.g., "Swift", "Python"). Helps users quickly identify code type.
+### QW4: Code Block Language Badge ✅
 
-### QW5: Pull-to-Refresh on Chat
+**Status:** Complete | **Implemented:** December 2025
 
-**Effort:** Low | **Impact:** Low
+Enhanced `CodeBlockView` with language display:
+- Pill-shaped badge with language icon and display name
+- Language detection from markdown fence (swift, typescript, python, etc.)
+- SF Symbol icons for language categories (terminal for shell, globe for web, etc.)
 
-Add pull-to-refresh gesture to reload session history and check for updates. Complements existing git status refresh.
+**Files modified:** `CodeBlockView.swift`
+
+### QW5: Pull-to-Refresh on Chat ✅
+
+**Status:** Complete | **Implemented:** December 2025
+
+Added `.refreshable` modifier to chat ScrollView:
+- Reloads session history from API
+- Refreshes git status in background
+- Light haptic feedback on pull
+
+**Files modified:** `ChatView.swift`
 
 ### QW6: Unit Tests for Session Analysis Helpers
 

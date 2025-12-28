@@ -17,12 +17,17 @@ struct CodingBridgeApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var settings = AppSettings()
     @Environment(\.scenePhase) private var scenePhase
+    private let isUITestMode = ProcessInfo.processInfo.environment["CODINGBRIDGE_UITEST_MODE"] == "1"
+        || ProcessInfo.processInfo.arguments.contains("--ui-test-mode")
+        || ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
 
     init() {
-        // Request notification permissions on launch
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
-            if granted {
-                print("[App] Notification permission granted")
+        if !isUITestMode {
+            // Request notification permissions on launch
+            UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+                if granted {
+                    print("[App] Notification permission granted")
+                }
             }
         }
 
@@ -40,8 +45,18 @@ struct CodingBridgeApp: App {
     var body: some Scene {
         WindowGroup {
             ZStack(alignment: .top) {
+                #if DEBUG
+                if isUITestMode {
+                    PermissionApprovalTestHarnessView()
+                        .environmentObject(settings)
+                } else {
+                    ContentView()
+                        .environmentObject(settings)
+                }
+                #else
                 ContentView()
                     .environmentObject(settings)
+                #endif
 
                 // Global error banner overlay
                 ErrorBanner()

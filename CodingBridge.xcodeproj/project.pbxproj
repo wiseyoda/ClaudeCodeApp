@@ -10,7 +10,6 @@
 		1205495BA2434BF79B906228 /* ErrorAnalyticsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 603895DCE0554062BCEC87F7 /* ErrorAnalyticsStore.swift */; };
 		1597F6A073B1490D948C46FE /* QuickCaptureSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F4D52190DB54B75A6081DAA /* QuickCaptureSheet.swift */; };
 		1D727765964448C0BF0B34A9 /* IdeasStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4676361593D14ED18823954D /* IdeasStore.swift */; };
-		25B4D8D62F010A1100538809 /* xcode-suggestions.md in Resources */ = {isa = PBXBuildFile; fileRef = 25B4D8D52F010A1100538809 /* xcode-suggestions.md */; };
 		6649DD89AF7741A49571016E /* IdeasDrawerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55A0D1D2E7D841C39956EF33 /* IdeasDrawerSheet.swift */; };
 		730BCCA17F1640EF98105BAB /* IdeaRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 829A5F0CE0184E598DD8CC00 /* IdeaRowView.swift */; };
 		7C37B73A99654D65838AC5B5 /* ToolErrorClassification.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7280E348A6154DEB85D30D3D /* ToolErrorClassification.swift */; };
@@ -30,6 +29,7 @@
 		A1000013 /* SpeechManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000012 /* SpeechManager.swift */; };
 		A1000014 /* UserQuestionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000013 /* UserQuestionsView.swift */; };
 		A1000015 /* ImageUtilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000014 /* ImageUtilities.swift */; };
+		HM000001 /* HapticManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = HM000002 /* HapticManager.swift */; };
 		A1000016 /* String+Markdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000015 /* String+Markdown.swift */; };
 		A1000017 /* CodeBlockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000016 /* CodeBlockView.swift */; };
 		A1000018 /* DiffView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000017 /* DiffView.swift */; };
@@ -70,10 +70,18 @@
 		SR000050 /* SessionRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = SR000051 /* SessionRepository.swift */; };
 		SS000048 /* ScrollStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = SS000049 /* ScrollStateManager.swift */; };
 		SST00052 /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = SST00053 /* SessionStore.swift */; };
+		B9000002 /* PermissionApprovalTestHarnessView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000001 /* PermissionApprovalTestHarnessView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		2509F4FF2EFF976200EAFBFE /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A8000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A6000001;
+			remoteInfo = CodingBridge;
+		};
+		B900000A /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = A8000001 /* Project object */;
 			proxyType = 1;
@@ -85,7 +93,7 @@
 /* Begin PBXFileReference section */
 		1F4D52190DB54B75A6081DAA /* QuickCaptureSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickCaptureSheet.swift; sourceTree = "<group>"; };
 		2509F4FB2EFF976200EAFBFE /* CodingBridgeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CodingBridgeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		25B4D8D52F010A1100538809 /* xcode-suggestions.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "xcode-suggestions.md"; sourceTree = "<group>"; };
+		B9000003 /* CodingBridgeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CodingBridgeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2CE0280C4CD14A61A45D94D0 /* TagsFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagsFlowView.swift; sourceTree = "<group>"; };
 		39UUJ7I96JL1A5K32KNO0PXO /* ProjectNamesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectNamesStore.swift; sourceTree = "<group>"; };
 		4676361593D14ED18823954D /* IdeasStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeasStore.swift; sourceTree = "<group>"; };
@@ -107,6 +115,7 @@
 		A2000012 /* SpeechManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechManager.swift; sourceTree = "<group>"; };
 		A2000013 /* UserQuestionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserQuestionsView.swift; sourceTree = "<group>"; };
 		A2000014 /* ImageUtilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageUtilities.swift; sourceTree = "<group>"; };
+		HM000002 /* HapticManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManager.swift; sourceTree = "<group>"; };
 		A2000015 /* String+Markdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "String+Markdown.swift"; sourceTree = "<group>"; };
 		A2000016 /* CodeBlockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeBlockView.swift; sourceTree = "<group>"; };
 		A2000017 /* DiffView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiffView.swift; sourceTree = "<group>"; };
@@ -132,6 +141,7 @@
 		A2000037 /* CommandsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandsView.swift; sourceTree = "<group>"; };
 		A2000038 /* CommandPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPickerSheet.swift; sourceTree = "<group>"; };
 		A2000040 /* ApprovalBannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApprovalBannerView.swift; sourceTree = "<group>"; };
+		B9000001 /* PermissionApprovalTestHarnessView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionApprovalTestHarnessView.swift; sourceTree = "<group>"; };
 		A3000001 /* CodingBridge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CodingBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA000041 /* MessageActionBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageActionBar.swift; sourceTree = "<group>"; };
 		B423E7C7AA924BD1BA2E2418 /* IdeaEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeaEditorSheet.swift; sourceTree = "<group>"; };
@@ -151,10 +161,18 @@
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		2509F4FC2EFF976200EAFBFE /* CodingBridgeTests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = CodingBridgeTests; sourceTree = "<group>"; };
+		B9000004 /* CodingBridgeUITests */ = {isa = PBXFileSystemSynchronizedRootGroup; explicitFileTypes = {}; explicitFolders = (); path = CodingBridgeUITests; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		2509F4F82EFF976200EAFBFE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B9000007 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -177,8 +195,8 @@
 			children = (
 				A5000002 /* CodingBridge */,
 				2509F4FC2EFF976200EAFBFE /* CodingBridgeTests */,
+				B9000004 /* CodingBridgeUITests */,
 				A5000003 /* Products */,
-				25B4D8D52F010A1100538809 /* xcode-suggestions.md */,
 			);
 			sourceTree = "<group>";
 		};
@@ -222,6 +240,7 @@
 			children = (
 				A3000001 /* CodingBridge.app */,
 				2509F4FB2EFF976200EAFBFE /* CodingBridgeTests.xctest */,
+				B9000003 /* CodingBridgeUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -230,6 +249,7 @@
 			isa = PBXGroup;
 			children = (
 				A2000014 /* ImageUtilities.swift */,
+				HM000002 /* HapticManager.swift */,
 				A2000024 /* Logger.swift */,
 				A2000025 /* AppError.swift */,
 				SS000049 /* ScrollStateManager.swift */,
@@ -268,6 +288,7 @@
 				A2000037 /* CommandsView.swift */,
 				A2000038 /* CommandPickerSheet.swift */,
 				A2000040 /* ApprovalBannerView.swift */,
+				B9000001 /* PermissionApprovalTestHarnessView.swift */,
 				D406B32A88A3423899A037FB /* IdeasFAB.swift */,
 				55A0D1D2E7D841C39956EF33 /* IdeasDrawerSheet.swift */,
 				829A5F0CE0184E598DD8CC00 /* IdeaRowView.swift */,
@@ -309,6 +330,29 @@
 			productReference = 2509F4FB2EFF976200EAFBFE /* CodingBridgeTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		B9000005 /* CodingBridgeUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B900000D /* Build configuration list for PBXNativeTarget "CodingBridgeUITests" */;
+			buildPhases = (
+				B9000006 /* Sources */,
+				B9000007 /* Frameworks */,
+				B9000008 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B9000009 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				B9000004 /* CodingBridgeUITests */,
+			);
+			name = CodingBridgeUITests;
+			packageProductDependencies = (
+			);
+			productName = CodingBridgeUITests;
+			productReference = B9000003 /* CodingBridgeUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 		A6000001 /* CodingBridge */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = A7000003 /* Build configuration list for PBXNativeTarget "CodingBridge" */;
@@ -343,6 +387,10 @@
 						CreatedOnToolsVersion = 26.2;
 						TestTargetID = A6000001;
 					};
+					B9000005 = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = A6000001;
+					};
 					A6000001 = {
 						CreatedOnToolsVersion = 15.0;
 					};
@@ -366,6 +414,7 @@
 			targets = (
 				A6000001 /* CodingBridge */,
 				2509F4FA2EFF976200EAFBFE /* CodingBridgeTests */,
+				B9000005 /* CodingBridgeUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -375,7 +424,13 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				25B4D8D62F010A1100538809 /* xcode-suggestions.md in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B9000008 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -391,6 +446,13 @@
 
 /* Begin PBXSourcesBuildPhase section */
 		2509F4F72EFF976200EAFBFE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B9000006 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -419,6 +481,7 @@
 				A1000013 /* SpeechManager.swift in Sources */,
 				A1000014 /* UserQuestionsView.swift in Sources */,
 				A1000015 /* ImageUtilities.swift in Sources */,
+				HM000001 /* HapticManager.swift in Sources */,
 				A1000016 /* String+Markdown.swift in Sources */,
 				A1000017 /* CodeBlockView.swift in Sources */,
 				A1000018 /* DiffView.swift in Sources */,
@@ -461,6 +524,7 @@
 				EB000052 /* ErrorBanner.swift in Sources */,
 				PC000001 /* ProjectCache.swift in Sources */,
 				SK000001 /* SkeletonView.swift in Sources */,
+				B9000002 /* PermissionApprovalTestHarnessView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -471,6 +535,11 @@
 			isa = PBXTargetDependency;
 			target = A6000001 /* CodingBridge */;
 			targetProxy = 2509F4FF2EFF976200EAFBFE /* PBXContainerItemProxy */;
+		};
+		B9000009 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A6000001 /* CodingBridge */;
+			targetProxy = B900000A /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -514,6 +583,46 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CodingBridge.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CodingBridge";
+			};
+			name = Release;
+		};
+		B900000B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.level.CodingBridgeUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = CodingBridge;
+			};
+			name = Debug;
+		};
+		B900000C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.level.CodingBridgeUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = CodingBridge;
 			};
 			name = Release;
 		};
@@ -718,6 +827,15 @@
 			buildConfigurations = (
 				2509F5012EFF976200EAFBFE /* Debug */,
 				2509F5022EFF976200EAFBFE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B900000D /* Build configuration list for PBXNativeTarget "CodingBridgeUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B900000B /* Debug */,
+				B900000C /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

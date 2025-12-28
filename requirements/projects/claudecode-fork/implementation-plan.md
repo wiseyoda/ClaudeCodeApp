@@ -61,19 +61,19 @@ Complete these verification steps:
 - [ ] API returns all sessions (not just 5)
 - [ ] Pagination works (Load More button)
 - [ ] Summaries populated correctly
-- [ ] Helper sessions excluded from display
-- [ ] Agent sessions excluded from display
-- [ ] Sort order correct (newest first)
+- [x] Helper sessions excluded from display
+- [x] Agent sessions excluded from display
+- [x] Sort order correct (newest first)
 - [ ] WebSocket push updates work
-- [ ] Session deletion updates list
+- [x] Session deletion updates list
 
 **Permission System:**
-- [ ] Permission requests arrive in iOS
-- [ ] UI displays correctly
-- [ ] Approve works
-- [ ] Deny works
-- [ ] Timeout handled gracefully
-- [ ] "Always Allow" remembers decision
+- [x] Permission requests arrive in iOS
+- [x] UI displays correctly
+- [x] Approve works
+- [x] Deny works
+- [x] Timeout handled gracefully
+- [x] "Always Allow" remembers decision
 
 ---
 

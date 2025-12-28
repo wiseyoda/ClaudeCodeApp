@@ -25,6 +25,24 @@ final class WebSocketManagerParsingTests: XCTestCase {
         XCTAssertEqual(manager.tokenUsage?.total, 100)
     }
 
+    func testPermissionRequestSetsPendingApprovalAndCallback() throws {
+        let manager = WebSocketManager(parseSynchronously: true)
+        var capturedRequest: ApprovalRequest?
+        manager.onApprovalRequest = { capturedRequest = $0 }
+
+        let data: [String: Any] = [
+            "requestId": "req-123",
+            "toolName": "Bash",
+            "input": ["command": "ls -la"]
+        ]
+        let json = try makeMessage(type: "permission-request", data: data)
+        manager.processIncomingMessage(json)
+
+        XCTAssertEqual(manager.pendingApproval?.id, "req-123")
+        XCTAssertEqual(capturedRequest?.toolName, "Bash")
+        XCTAssertEqual(capturedRequest?.displayDescription, "ls -la")
+    }
+
     func testAssistantTextAppendsAndCallsOnText() throws {
         let manager = WebSocketManager(parseSynchronously: true)
         var capturedText: String?

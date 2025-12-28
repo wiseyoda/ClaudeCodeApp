@@ -1,9 +1,9 @@
 # Test Coverage
 
 ## Summary
-- **Last Updated**: 2025-12-27
-- **Total Test Files**: 37
-- **Total Test Cases**: 334
+- **Last Updated**: 2025-12-28
+- **Total Test Files**: 42
+- **Total Test Cases**: 375
 - **Estimated Coverage**: ~50% (models, stores, utilities, persistence, session filtering; managers partially covered)
 
 ## Current Coverage
@@ -45,24 +45,54 @@ Most tests are unit tests in `CodingBridgeTests/` using XCTest. Coverage spans p
 - `CodingBridgeTests/SSHManagerTests.swift`: SSH config parsing, command building for `cd`, and ANSI stripping (6 tests).
 - `CodingBridgeTests/SpeechManagerTests.swift`: authorization gating, availability, and recording toggles (3 tests).
 - `CodingBridgeTests/CodingBridgeTests.swift`: Swift Testing stub; currently no assertions.
+- `CodingBridgeTests/ApprovalResponseTests.swift`: permission response encoding for allow/deny/always allow.
+- `CodingBridgeTests/SessionAPIIntegrationTests.swift`: env-gated session API pagination, summary, and deletion checks.
+- `CodingBridgeTests/SessionWebSocketIntegrationTests.swift`: env-gated `sessions-updated` WebSocket push verification.
+- `CodingBridgeUITests/PermissionApprovalUITests.swift`: UI test harness for approval banner actions and timeout simulation.
 
-No UI tests, integration tests, or automated coverage reporting are configured.
+UI tests and integration tests exist but are env-gated; automated coverage reporting is not configured.
 
 ## Running Tests
 - `xcodebuild test -project CodingBridge.xcodeproj -scheme CodingBridge -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'`
 - For coverage metrics, enable in Xcode or pass `-enableCodeCoverage YES` to `xcodebuild`.
+
+## Integration/UI Test Configuration
+Integration tests are opt-in and gated by environment variables to avoid live data changes.
+
+**Required for integration tests:**
+- `CODINGBRIDGE_TEST_BACKEND_URL`
+- `CODINGBRIDGE_TEST_AUTH_TOKEN`
+- `CODINGBRIDGE_TEST_PROJECT_NAME` (encoded) or `CODINGBRIDGE_TEST_PROJECT_PATH` (raw path)
+
+**Optional integration knobs:**
+- `CODINGBRIDGE_TEST_SESSION_MIN_TOTAL` (default: 6)
+- `CODINGBRIDGE_TEST_REQUIRE_SUMMARIES=1`
+- `CODINGBRIDGE_TEST_ALLOW_MUTATIONS=1`
+- `CODINGBRIDGE_TEST_DELETE_SESSION_ID`
+- `CODINGBRIDGE_TEST_WEBSOCKET_URL` (override)
+
+UI tests use `CODINGBRIDGE_UITEST_MODE=1` automatically via the UI test target.
 
 ## Roadmap for Future Tests
 Priority additions to improve coverage and regression safety:
 - **WebSocket + backend**: `WebSocketManager` state transitions, reconnect backoff, streaming assembly, tool-use message ordering, error handling. Requires mocking `URLSessionWebSocketTask`.
 - **SSH + file operations**: `SSHManager` path escaping, ls output parsing, git status parsing. Requires mocking SSH client.
 - **MessageStore edge cases**: corrupted file handling, image cleanup, UserDefaults migration paths. Current tests cover happy paths.
-- **UI flows**: snapshot or XCUITest coverage for chat rendering (Markdown, diff, todo list), attachments, project/session pickers.
+- **UI flows**: expand beyond approval banner harness to cover chat rendering (Markdown, diff, todo list), attachments, and project/session pickers.
 - **Performance**: large message histories, long streaming responses, and file browser pagination.
 
-## Recent Additions (2025-12-27)
+## Recent Additions (2025-12-28)
 
-### Session 10 (Latest)
+### Session 11 (Latest)
+- **ApprovalResponseTests.swift**: 3 tests covering approval response encoding for allow/deny/always allow.
+- **SessionAPIIntegrationTests.swift**: env-gated checks for session API pagination, summaries, and deletion.
+- **SessionWebSocketIntegrationTests.swift**: env-gated `sessions-updated` push on deletion.
+- **PermissionApprovalUITests.swift**: UI harness coverage for approval banner actions and timeout.
+- **SessionStoreTests.swift**: 2 tests covering sessions-updated created/updated reload behavior.
+- **ProjectSessionFilterTests.swift**: 1 test covering agent session filtering.
+- **WebSocketManagerParsingTests.swift**: 1 test covering permission-request parsing.
+
+### Session 10
 - **WebSocketManagerParsingTests.swift**: 7 tests covering session creation, token budgets, assistant/tool content parsing, model switch confirmations, and session error recovery.
 - **SSHManagerTests.swift**: 6 tests covering SSH config parsing, `cd` command building, and ANSI stripping.
 - **SpeechManagerTests.swift**: 3 tests covering authorization gating, availability, and recording toggles.

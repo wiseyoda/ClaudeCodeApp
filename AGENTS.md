@@ -9,6 +9,7 @@
 - `CodingBridge/Views/`, `CodingBridge/Utilities/`, `CodingBridge/Extensions/`: UI components, helpers, and shared extensions.
 - `CodingBridge/Assets.xcassets` and `assets/`: app assets and design resources.
 - `CodingBridgeTests/`: XCTest unit tests.
+- `CodingBridgeUITests/`: XCTest UI tests (launches the app via a test harness).
 - `requirements/` and `requirements/projects/`: product, architecture, backend, and deployment docs.
 - `CHANGELOG.md`, `ROADMAP.md`, `ISSUES.md`, `FUTURE-IDEAS.md`: planning and tracking docs.
 - `CodingBridge.xcodeproj`: Xcode project entry point.
@@ -23,7 +24,8 @@
 ## Build, Test, and Development Commands
 - `open CodingBridge.xcodeproj`: open the project in Xcode.
 - `xcodebuild -project CodingBridge.xcodeproj -scheme CodingBridge -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'`: build from the CLI.
-- `xcodebuild test -project CodingBridge.xcodeproj -scheme CodingBridge -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'`: run unit tests.
+- `xcodebuild test -project CodingBridge.xcodeproj -scheme CodingBridge -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2' -only-testing:CodingBridgeTests`: run unit tests.
+- `xcodebuild test -project CodingBridge.xcodeproj -scheme CodingBridge -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2' -only-testing:CodingBridgeUITests`: run UI tests.
 - Backend requirement: the app expects a running `claudecodeui` backend; see `requirements/BACKEND.md` for setup.
 
 ## Coding Style & Naming Conventions
@@ -41,10 +43,12 @@
 
 ## Testing Guidelines
 - Framework: XCTest in `CodingBridgeTests/`.
+- UI tests live in `CodingBridgeUITests/` and use the `PermissionApprovalTestHarnessView` when `CODINGBRIDGE_UITEST_MODE=1` or `--ui-test-mode` is set.
 - Naming: `*Tests.swift` files with `test...` methods.
 - Add tests for parsing/model/protocol changes to keep utilities and protocol handling stable.
 - Use `MockSessionRepository` when covering session flows.
 - Coverage notes live in `TEST-COVERAGE.md`.
+- Integration tests are gated by environment variables: `CODINGBRIDGE_TEST_BACKEND_URL`, `CODINGBRIDGE_TEST_AUTH_TOKEN`, and `CODINGBRIDGE_TEST_PROJECT_NAME` or `CODINGBRIDGE_TEST_PROJECT_PATH` (optional: `CODINGBRIDGE_TEST_REQUIRE_SUMMARIES`, `CODINGBRIDGE_TEST_WEBSOCKET_URL`, `CODINGBRIDGE_TEST_ALLOW_MUTATIONS`, `CODINGBRIDGE_TEST_DELETE_SESSION_ID`).
 
 ## Commit & Pull Request Guidelines
 - Commit messages follow Conventional Commits (`feat:`, `fix:`, `docs:`).

@@ -2,6 +2,7 @@ import XCTest
 import SwiftUI
 @testable import CodingBridge
 
+@MainActor
 final class AppSettingsTests: XCTestCase {
 
     // MARK: - ThinkingMode Tests

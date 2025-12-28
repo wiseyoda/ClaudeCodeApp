@@ -38,19 +38,53 @@ final class ScrollStateManager: ObservableObject {
     /// Last reported scroll offset (to avoid redundant state updates)
     private var lastReportedOffset: CGFloat = 0
 
+    /// Lowest (most negative) offset observed (tracks bottom without relying on content size)
+    private var lowestReportedOffset: CGFloat = 0
+
+    /// Last reported content height
+    private var lastContentHeight: CGFloat = 0
+
+    /// Last reported viewport height
+    private var lastViewportHeight: CGFloat = 0
+
     /// Threshold for considering offset changes significant (reduces noise)
     private let offsetThreshold: CGFloat = 30
+
+    /// Threshold for considering "at bottom" (within this many points)
+    private let atBottomThreshold: CGFloat = 100
+
+    /// Track if bottom anchor visibility updates are driving auto-scroll state
+    private var hasAnchorVisibilityUpdates = false
 
     // MARK: - Public API
 
     /// Call this from onPreferenceChange with the current scroll offset.
     /// This method debounces rapid calls to prevent UI freezes during scrolling.
-    /// - Parameter offset: The current scroll offset (negative when scrolled down, 0 at top)
+    /// - Parameter offset: The content frame's minY in scroll coordinate space
+    ///   - 0 when at top (not scrolled)
+    ///   - Negative when scrolled down (content moved up)
     func handleScrollOffset(_ offset: CGFloat) {
         // Skip if offset hasn't changed significantly (reduces state churn)
         guard abs(offset - lastReportedOffset) > offsetThreshold else { return }
         lastReportedOffset = offset
+        if offset < lowestReportedOffset {
+            lowestReportedOffset = offset
+        }
 
+        // Recalculate at-bottom status
+        recalculateAtBottom()
+    }
+
+    /// Update content and viewport dimensions for at-bottom calculation
+    func updateScrollDimensions(contentHeight: CGFloat, viewportHeight: CGFloat) {
+        lastContentHeight = contentHeight
+        lastViewportHeight = viewportHeight
+        // Recalculate at-bottom status when dimensions change
+        recalculateAtBottom()
+    }
+
+    /// Recalculate whether we're at the bottom based on offset and dimensions
+    private func recalculateAtBottom() {
         // Cancel any pending position update
         scrollPositionDebounceTask?.cancel()
 
@@ -58,13 +92,23 @@ final class ScrollStateManager: ObservableObject {
         scrollPositionDebounceTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: self?.positionDebounceDelay ?? 50_000_000)
             guard !Task.isCancelled, let self else { return }
+            guard !self.hasAnchorVisibilityUpdates else { return }
 
-            // If user is more than 50pt from bottom, they're scrolling up
-            if offset < -50 {
-                self.userDidScrollUp()
-            } else if offset >= -20 {
-                // User is near bottom - re-enable auto-scroll
+            // Calculate if at bottom:
+            // - scrollOffset is how much we've scrolled (negative of minY)
+            // - maxScroll is the maximum we can scroll (contentHeight - viewportHeight)
+            // - If scrollOffset is close to maxScroll, we're at the bottom
+            let scrollOffset = -self.lastReportedOffset
+            let maxScroll = max(0, self.lastContentHeight - self.lastViewportHeight)
+            let dimensionDistance = maxScroll - scrollOffset
+            let offsetDistance = self.lowestReportedOffset < 0
+                ? max(0, self.lastReportedOffset - self.lowestReportedOffset)
+                : 0
+            let distanceFromBottom = max(dimensionDistance, offsetDistance)
+            if distanceFromBottom < self.atBottomThreshold {
                 self.userDidScrollToBottom()
+            } else {
+                self.userDidScrollUp()
             }
         }
     }
@@ -78,12 +122,33 @@ final class ScrollStateManager: ObservableObject {
         scrollDebounceTask?.cancel()  // Cancel any pending auto-scroll
     }
 
+    /// Record user scroll activity without changing auto-scroll state.
+    func recordUserScrollGesture() {
+        lastUserScrollTime = Date()
+    }
+
     /// Call this when user scrolls back to bottom
     func userDidScrollToBottom() {
         // Avoid redundant state updates
         guard !isAutoScrollEnabled else { return }
         isAutoScrollEnabled = true
         lastUserScrollTime = nil
+    }
+
+    /// Update auto-scroll state based on bottom anchor visibility
+    /// This is more reliable than offset tracking
+    func updateBottomAnchorVisible(_ isVisible: Bool) {
+        hasAnchorVisibilityUpdates = true
+        if isVisible {
+            // At bottom - enable auto-scroll, hide button
+            guard !isAutoScrollEnabled else { return }
+            isAutoScrollEnabled = true
+            lastUserScrollTime = nil
+        } else {
+            // Not at bottom - only disable if the user is actively scrolling
+            guard isUserActivelyScrolling else { return }
+            userDidScrollUp()
+        }
     }
 
     /// Check if user is actively scrolling (recently scrolled)
@@ -111,9 +176,13 @@ final class ScrollStateManager: ObservableObject {
     }
 
     /// Force an immediate scroll to bottom (no debounce).
+    /// Note: Does NOT set isAutoScrollEnabled=true immediately - that happens
+    /// when scroll position tracking verifies we're actually at the bottom.
+    /// This prevents the button from hiding before scroll completes.
     /// - Parameter animated: Whether to animate the scroll.
     func forceScrollToBottom(animated: Bool = true) {
-        isAutoScrollEnabled = true
+        // Don't prematurely set isAutoScrollEnabled = true
+        // Let handleScrollOffset() verify we're actually at bottom
         lastUserScrollTime = nil
         scrollDebounceTask?.cancel()
         performScroll(animated: animated)
@@ -125,8 +194,16 @@ final class ScrollStateManager: ObservableObject {
         lastUserScrollTime = nil
         scrollDebounceTask?.cancel()
         scrollDebounceTask = nil
+        scrollPositionDebounceTask?.cancel()
+        scrollPositionDebounceTask = nil
         isScrolling = false
         shouldScroll = false
+        // Reset last offset to ensure first position update isn't skipped
+        lastReportedOffset = 0
+        lowestReportedOffset = 0
+        lastContentHeight = 0
+        lastViewportHeight = 0
+        hasAnchorVisibilityUpdates = false
     }
 
     // MARK: - Private

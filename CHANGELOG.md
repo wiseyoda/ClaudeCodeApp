@@ -6,6 +6,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.5.1] - 2025-12-28
+
+### Added
+
+- **Message Queuing Design Documentation**: Complete feature specification for queuing messages while agent is busy
+  - `requirements/projects/message-queuing/README.md` - Overview and key decisions
+  - `requirements/projects/message-queuing/REQUIREMENTS.md` - Functional and non-functional requirements
+  - `requirements/projects/message-queuing/ARCHITECTURE.md` - Technical design and data flows
+  - `requirements/projects/message-queuing/IMPLEMENTATION-PLAN.md` - Step-by-step build plan
+  - `requirements/projects/message-queuing/UI-SPEC.md` - UI/UX design specification
+- **Background Hardening Design Documentation**: Complete spec for reliable background operation
+  - `requirements/projects/background-hardening/` - Full requirements package (9 documents)
+- **HapticManager**: Centralized haptic feedback utility for consistent tactile feedback
+- **UI Test Infrastructure**: Permission approval test harness and UI test suite
+  - `PermissionApprovalTestHarnessView.swift` - Debug harness for testing approval flows
+  - `CodingBridgeUITests/PermissionApprovalUITests.swift` - UI automation tests
+- **Integration Test Infrastructure**: Session API and WebSocket integration tests
+  - `IntegrationTestConfig.swift` - Environment-based test configuration
+  - `SessionAPIIntegrationTests.swift` - API endpoint tests
+  - `SessionWebSocketIntegrationTests.swift` - Real-time update tests
+- **New Test Cases**:
+  - `ApprovalResponseTests.swift` - Permission response encoding tests
+  - Additional `SessionStoreTests` for sessions-updated handling
+  - Additional `WebSocketManagerParsingTests` for permission requests
+  - Additional `ProjectSessionFilterTests` for agent session filtering
+
+### Changed
+
+- **Scroll-to-Bottom UX**: Improved detection of "at bottom" state
+  - Added content and viewport dimension tracking in `ScrollStateManager`
+  - Bottom anchor visibility tracking for more reliable auto-scroll
+  - Button now uses compact chevron icon instead of filled circle
+- **Code Block Headers**: Enhanced language display with icons and colored badges
+  - Display-friendly language names (TypeScript, JavaScript, etc.)
+  - SF Symbol icons per language type
+  - Capsule badge with subtle cyan background
+
+### Fixed
+
+- **API URL Encoding**: Project names with spaces/special characters now work correctly
+  - Added `addingPercentEncoding` to session, token, and upload API paths
+- **Auth Retry Loop**: Added retry limit (max 1) to prevent infinite auth loops
+- **WebSocket Session ID Validation**: All session ID sends now validate UUID format
+- **Force Unwrap Removed**: WebSocket message type parsing now uses guard-let
+- **Pull-to-Refresh**: Chat view now supports refresh gesture to reload session history
+
+---
+
 ## [0.5.0] - 2025-12-28
 
 ### Added
@@ -62,6 +110,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Non-atomic Image Save**: Now uses atomic writes and validates JSON before saving
 - **DebugLogStore Performance**: Static DateFormatter (was creating per-call)
 - **ChatView Organization**: Organized 40+ @State variables with MARK sections
+- Fix scroll-to-bottom button visibility when scrolling up or returning to bottom
 
 ---
 
@@ -307,3 +356,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | 0.3.2   | Search, thinking mode, command library, UI redesign    |
 | 0.3.3   | Ideas Drawer, task abort                               |
 | 0.4.0   | Message action bar, critical bug fixes, test suite     |
+| 0.5.0   | Session API migration, permission approval, iOS 26 UI  |
+| 0.5.1   | Message queuing docs, haptics, scroll UX, bug fixes    |

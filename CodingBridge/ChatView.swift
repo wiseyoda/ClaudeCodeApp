@@ -135,6 +135,9 @@ struct ChatView: View {
                         GitStatusIndicator(status: gitStatus)
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel("Git status")
+                    .accessibilityHint("Tap to refresh git status")
+                    .accessibilityValue(gitStatus.accessibilityLabel)
                 }
             }
 
@@ -522,6 +525,7 @@ struct ChatView: View {
         // Cmd+.: Abort current request
         Button("") {
             if wsManager.isProcessing {
+                HapticManager.rigid()
                 wsManager.abortSession()
             }
         }
@@ -732,51 +736,46 @@ struct ChatView: View {
                     .coordinateSpace(name: "chatScroll")
                     .scrollDismissesKeyboard(.interactively)
                     .background(CLITheme.background(for: colorScheme))
+                    // Pull-to-refresh: reload session history and git status
+                    .refreshable {
+                        await refreshChatContent()
+                    }
                     // Detect user scrolling - uses debounced handler to prevent UI freezes
                     .onPreferenceChange(ScrollOffsetPreferenceKey.self) { offset in
                         // Use debounced handler to avoid rapid state updates during scrolling
                         scrollManager.handleScrollOffset(offset)
                     }
-                    // Track scroll position to detect user scrolling up
+                    // Track content size for at-bottom calculation and auto-scroll
                     .onPreferenceChange(ContentSizePreferenceKey.self) { contentSize in
-                        // Only track when content is larger than viewport
-                        if contentSize.height > outerGeometry.size.height {
-                            // Content size changed - request scroll if auto-scroll is enabled
-                            if settings.autoScrollEnabled {
-                                scrollManager.requestScrollToBottom()
-                            }
+                        // Update scroll dimensions for at-bottom calculation
+                        scrollManager.updateScrollDimensions(
+                            contentHeight: contentSize.height,
+                            viewportHeight: outerGeometry.size.height
+                        )
+                        // Request scroll when content grows (if auto-scroll enabled)
+                        if contentSize.height > outerGeometry.size.height && settings.autoScrollEnabled {
+                            scrollManager.requestScrollToBottom()
                         }
                     }
-                    // Detect user scroll gesture to disable auto-scroll when scrolled up
+                    // Record user scroll activity to distinguish from content growth
                     .simultaneousGesture(
                         DragGesture(minimumDistance: 5)
-                            .onChanged { value in
-                                // User is scrolling up (negative translation = scrolling up in content)
-                                if value.translation.height > 0 {
-                                    // Scrolling up (finger moving down) - might want to disable auto-scroll
-                                    // We'll let the scroll position tracker handle the actual logic
-                                }
+                            .onChanged { _ in
+                                scrollManager.recordUserScrollGesture()
                             }
                     )
-
                     // Scroll to bottom button - appears when user has scrolled up
                     if !scrollManager.isAutoScrollEnabled {
                         Button {
                             scrollManager.forceScrollToBottom()
                         } label: {
-                            Image(systemName: "chevron.down.circle.fill")
-                                .font(.system(size: 36))
-                                .foregroundStyle(CLITheme.blue(for: colorScheme))
-                                .background(
-                                    Circle()
-                                        .fill(CLITheme.background(for: colorScheme))
-                                        .frame(width: 32, height: 32)
-                                )
-                                .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                            Image(systemName: "chevron.compact.down")
+                                .font(.system(size: 28, weight: .medium))
+                                .foregroundStyle(CLITheme.primaryText(for: colorScheme).opacity(0.6))
                         }
-                        .padding(.bottom, 12)
-                        .transition(.opacity.combined(with: .scale))
-                        .animation(.easeInOut(duration: 0.2), value: scrollManager.isAutoScrollEnabled)
+                        .padding(.bottom, 16)
+                        .transition(.opacity)
+                        .animation(.easeInOut(duration: 0.15), value: scrollManager.isAutoScrollEnabled)
                     }
                 }
                 // Unified scroll trigger - responds to scrollManager.shouldScroll
@@ -966,11 +965,18 @@ struct ChatView: View {
                 streamingIndicatorView
             }
 
-            // Bottom anchor - use Spacer with explicit frame to ensure it's always rendered
-            // Color.clear can be skipped by LazyVStack, causing scroll failures
+            // Bottom anchor for scrollTo target
+            // Use Spacer with explicit frame to ensure it's always rendered
+            // (Color.clear can be skipped by LazyVStack, causing scroll failures)
             Spacer()
                 .frame(height: 1)
                 .id("bottomAnchor")
+                .onAppear {
+                    scrollManager.updateBottomAnchorVisible(true)
+                }
+                .onDisappear {
+                    scrollManager.updateBottomAnchorVisible(false)
+                }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -1163,6 +1169,9 @@ struct ChatView: View {
         }
 
         wsManager.onError = { error in
+            // Haptic feedback for error
+            HapticManager.error()
+
             let errorMessage = ChatMessage(
                 role: .error,
                 content: "Error: \(error)",
@@ -1253,6 +1262,9 @@ struct ChatView: View {
     private func sendMessage() {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty || selectedImage != nil else { return }
+
+        // Haptic feedback for send action
+        HapticManager.medium()
 
         // Check for slash commands (client-side handling)
         if text.hasPrefix("/") && selectedImage == nil {
@@ -1548,8 +1560,13 @@ struct ChatView: View {
                         messages = historyMessages
                         print("[ChatView] Loaded \(historyMessages.count) messages from session history via API")
                     }
-                    // Trigger scroll to bottom after a short delay to allow SwiftUI to render the messages
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    // Trigger scroll to bottom after delays to allow SwiftUI to render
+                    // First scroll attempt after initial render
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        scrollToBottomTrigger = true
+                    }
+                    // Second scroll attempt after layout settles (handles complex content)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                         scrollToBottomTrigger = true
                     }
                 }
@@ -1563,8 +1580,11 @@ struct ChatView: View {
                     }
                     // Show error message
                     messages.append(ChatMessage(role: .system, content: "Could not load history: \(error.localizedDescription)", timestamp: Date()))
-                    // Trigger scroll to bottom after a short delay to allow SwiftUI to render
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    // Trigger scroll to bottom after delays to allow SwiftUI to render
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                        scrollToBottomTrigger = true
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                         scrollToBottomTrigger = true
                     }
                 }
@@ -1622,6 +1642,36 @@ struct ChatView: View {
     }
 
     /// Refresh git status for this project
+    /// Refresh chat content: reload session history and git status
+    private func refreshChatContent() async {
+        HapticManager.light()
+
+        // Refresh git status in background
+        Task {
+            refreshGitStatus()
+        }
+
+        // Reload session history if we have an active session
+        if let sessionId = wsManager.sessionId {
+            do {
+                let sessionMessages = try await apiClient.fetchSessionMessages(
+                    projectName: project.name,
+                    sessionId: sessionId
+                )
+                // Convert to ChatMessages and update on main actor
+                let historyMessages = sessionMessages.compactMap { $0.toChatMessage() }
+                await MainActor.run {
+                    // Only update if we got messages
+                    if !historyMessages.isEmpty {
+                        messages = historyMessages
+                    }
+                }
+            } catch {
+                print("[ChatView] Failed to refresh session history: \(error)")
+            }
+        }
+    }
+
     private func refreshGitStatus() {
         Task {
             gitStatus = .checking

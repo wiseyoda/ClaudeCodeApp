@@ -188,6 +188,7 @@ enum HistoryLimit: Int, CaseIterable {
     }
 }
 
+@MainActor
 class AppSettings: ObservableObject {
     // Server Configuration
     @AppStorage("serverURL") var serverURL: String = "http://10.0.3.2:8080"

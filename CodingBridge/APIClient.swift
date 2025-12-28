@@ -102,7 +102,9 @@ class APIClient: ObservableObject {
 
     // MARK: - Projects
 
-    func fetchProjects() async throws -> [Project] {
+    /// Fetch all projects from the API.
+    /// - Parameter retryCount: Internal counter to prevent infinite retry loops (max 1 retry after re-auth)
+    func fetchProjects(retryCount: Int = 0) async throws -> [Project] {
         guard let url = settings.baseURL?.appendingPathComponent("api/projects") else {
             throw APIError.invalidURL
         }
@@ -131,10 +133,15 @@ class APIClient: ObservableObject {
         log.debug("Projects response status: \(httpResponse.statusCode)")
 
         if httpResponse.statusCode == 401 {
+            // Only retry once to prevent infinite loop
+            guard retryCount < 1 else {
+                log.error("Auth retry limit reached, giving up")
+                throw APIError.authenticationFailed
+            }
             // Try to login with username/password and retry
-            log.debug("Got 401, attempting login...")
+            log.debug("Got 401, attempting login (retry \(retryCount + 1)/1)...")
             try await login()
-            return try await fetchProjects()
+            return try await fetchProjects(retryCount: retryCount + 1)
         }
 
         guard httpResponse.statusCode == 200 else {
@@ -177,7 +184,10 @@ class APIClient: ObservableObject {
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw APIError.invalidURL
         }
-        components.path = "/api/projects/\(projectName)/sessions/\(sessionId)/messages"
+        // URL-encode path components to handle spaces and special characters
+        let encodedProjectName = projectName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? projectName
+        let encodedSessionId = sessionId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? sessionId
+        components.path = "/api/projects/\(encodedProjectName)/sessions/\(encodedSessionId)/messages"
         components.queryItems = [
             URLQueryItem(name: "limit", value: String(limit)),
             URLQueryItem(name: "offset", value: String(offset))
@@ -216,7 +226,10 @@ class APIClient: ObservableObject {
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw APIError.invalidURL
         }
-        components.path = "/api/projects/\(projectName)/sessions/\(sessionId)/token-usage"
+        // URL-encode path components to handle spaces and special characters
+        let encodedProjectName = projectName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? projectName
+        let encodedSessionId = sessionId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? sessionId
+        components.path = "/api/projects/\(encodedProjectName)/sessions/\(encodedSessionId)/token-usage"
 
         guard let url = components.url else {
             throw APIError.invalidURL
@@ -244,7 +257,9 @@ class APIClient: ObservableObject {
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw APIError.invalidURL
         }
-        components.path = "/api/projects/\(projectName)/upload-images"
+        // URL-encode path components to handle spaces and special characters
+        let encodedProjectName = projectName.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? projectName
+        components.path = "/api/projects/\(encodedProjectName)/upload-images"
 
         guard let url = components.url else {
             throw APIError.invalidURL

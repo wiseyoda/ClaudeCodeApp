@@ -12,7 +12,7 @@
 |-------|-------|----------|--------|
 | 1 | Security Hardening | Critical | ✅ Complete |
 | 2 | Data Correctness | High | In Progress |
-| 3 | Stability & Thread Safety | High | Pending |
+| 3 | Stability & Thread Safety | High | In Progress |
 | 4 | Architecture Refactoring | Medium | Pending |
 | 5 | Performance & Polish | Medium | Partial |
 | 6 | iOS 26 Adoption | Medium | Pending |
@@ -36,24 +36,25 @@ See: [requirements/projects/claudecode-fork/implementation-plan.md](requirements
 
 ## Phase 2: Data Correctness
 
-> **Priority**: High
+> **Priority**: High | **Status**: Mostly Complete
 
-### 2.1 Read Tool File Extension Labels
+### 2.1 Read Tool File Extension Labels ✅
 
 Session analysis shows Read dominates at 40% of tool usage. Add file extension context to headers.
 
-| Task | File | Action |
+| Task | File | Status |
 |------|------|--------|
-| Add extension labels | `CLIMessageView.swift` | Show language name in Read header (Swift, TypeScript, etc.) |
+| Add extension labels | `CLIMessageView.swift` | ✅ Complete - Shows language name (Swift, TypeScript, etc.) |
 
-### 2.2 API URL Encoding
+### 2.2 API URL Encoding ✅
 
 API paths built with raw strings fail for project names with spaces/special characters.
 
-| Task | File | Action |
+| Task | File | Status |
 |------|------|--------|
-| Encode session path | `APIClient.swift` | Use `addingPercentEncoding(withAllowedCharacters:)` |
-| Encode token path | `APIClient.swift` | Use `addingPercentEncoding(withAllowedCharacters:)` |
+| Encode session path | `APIClient.swift` | ✅ Complete - Uses `addingPercentEncoding` |
+| Encode token path | `APIClient.swift` | ✅ Complete - Uses `addingPercentEncoding` |
+| Encode upload path | `APIClient.swift` | ✅ Complete - Uses `addingPercentEncoding` |
 
 ### 2.3 Session History Completeness
 
@@ -63,13 +64,13 @@ Session history parsing returns on first content item, dropping multi-part messa
 |------|------|--------|
 | Aggregate content parts | `APIClient.swift` | Collect all text/tool_use items instead of returning on first |
 
-### 2.4 Auth Retry Handling
+### 2.4 Auth Retry Handling ✅
 
 Recursive `fetchProjects()` after `login()` with no retry cap risks infinite loops.
 
-| Task | File | Action |
+| Task | File | Status |
 |------|------|--------|
-| Add retry limit | `APIClient.swift` | Add `retryCount` parameter, max 1 retry |
+| Add retry limit | `APIClient.swift` | ✅ Complete - `retryCount` parameter, max 1 retry |
 
 ---
 
@@ -77,14 +78,14 @@ Recursive `fetchProjects()` after `login()` with no retry cap risks infinite loo
 
 > **Priority**: High
 
-### 3.1 @MainActor Annotations
+### 3.1 @MainActor Annotations ✅
 
 ObservableObject classes missing @MainActor can cause cross-thread crashes.
 
-| Task | File | Action |
+| Task | File | Status |
 |------|------|--------|
-| Add @MainActor to BookmarkStore | `Models.swift` | Add annotation, audit callers |
-| Add @MainActor to AppSettings | `AppSettings.swift` | Add annotation, audit callers |
+| Add @MainActor to BookmarkStore | `Models.swift` | ✅ Complete - Already present |
+| Add @MainActor to AppSettings | `AppSettings.swift` | ✅ Complete - Added annotation |
 
 ### 3.2 WebSocket State Machine
 
@@ -151,24 +152,31 @@ ChatView has 25+ @State properties and ~1968 lines.
 
 ### 5.2 Code Quality Fixes
 
-| Task | File | Action |
+| Task | File | Status |
 |------|------|--------|
-| Remove force unwrap | `WebSocketManager.swift` | Use guard-let binding |
-| Flatten nested parsing | `WebSocketManager.swift` | Extract to typed parse functions |
+| Remove force unwrap | `WebSocketManager.swift` | ✅ Complete - Uses guard-let |
+| Flatten nested parsing | `WebSocketManager.swift` | Pending - Extract to typed parse functions |
 
 ### 5.3 Input Validation
 
-| Task | Location | Action |
+| Task | Location | Status |
 |------|----------|--------|
-| Validate slash commands | ChatView | Sanitize /resume, /model input |
-| Validate session IDs | WebSocket sends | Check UUID format before send |
+| Validate slash commands | ChatView | Pending - Sanitize /resume, /model input |
+| Validate session IDs | WebSocket sends | ✅ Complete - UUID validation in attachToSession, abortSession, switchModel |
 
-### 5.4 Accessibility
+### 5.4 Accessibility ✅
 
-| Task | Files | Action |
+| Task | Files | Status |
 |------|-------|--------|
-| Add accessibilityLabel | Toolbar items | All interactive elements |
-| Add accessibilityHint | Complex controls | Describe actions |
+| Add accessibilityLabel | Toolbar items | ✅ Complete - Git status, search, ideas, menu |
+| Add accessibilityHint | Complex controls | ✅ Complete - Describes actions |
+| Add accessibilityValue | Dynamic state | ✅ Complete - Git status, ideas count |
+
+### 5.5 Chat Scroll UX ✅
+
+| Task | Files | Status |
+|------|-------|--------|
+| Scroll-to-bottom button visibility | `ChatView.swift`, `ScrollStateManager.swift` | ✅ Complete - Shows when scrolled up, hides at bottom |
 
 ---
 
@@ -214,11 +222,11 @@ xcodebuild test -project CodingBridge.xcodeproj \
 
 | File | Issues | Primary Concerns |
 |------|--------|------------------|
-| `CLIMessageView.swift` | 2 | Extension labels, size (692 lines) |
-| `APIClient.swift` | 3 | URL encoding, history parsing, retry loop |
-| `ChatView.swift` | 3 | @State sprawl, size |
-| `WebSocketManager.swift` | 3 | State races, parsing, force unwrap |
-| `Models.swift` | 1 | @MainActor |
+| `CLIMessageView.swift` | 1 | Size (700+ lines) - extension labels ✅ |
+| `APIClient.swift` | 1 | History parsing - URL encoding ✅, retry loop ✅ |
+| `ChatView.swift` | 2 | @State sprawl, size - accessibility ✅ |
+| `WebSocketManager.swift` | 2 | State races, parsing - force unwrap ✅, session ID validation ✅ |
+| `Models.swift` | 0 | @MainActor ✅ |
 
 ### Implementation Order
 

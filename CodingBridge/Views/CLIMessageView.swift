@@ -47,6 +47,13 @@ struct CLIMessageView: View {
         bookmarkStore.isBookmarked(messageId: message.id)
     }
 
+    /// Relative timestamp like "2m ago" or "1h ago"
+    private var relativeTimestamp: String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: message.timestamp, relativeTo: Date())
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             // Header line with bullet/icon
@@ -87,6 +94,11 @@ struct CLIMessageView: View {
                             .truncationMode(.tail)
                     }
                 }
+
+                // Relative timestamp
+                Text(relativeTimestamp)
+                    .font(.system(size: 10))
+                    .foregroundColor(CLITheme.mutedText(for: colorScheme).opacity(0.7))
 
                 Spacer()
 
@@ -139,6 +151,7 @@ struct CLIMessageView: View {
         .contextMenu {
             // Copy button
             Button {
+                HapticManager.light()
                 UIPasteboard.general.string = message.content
             } label: {
                 Label("Copy", systemImage: "doc.on.doc")
@@ -303,6 +316,66 @@ struct CLIMessageView: View {
         return url.count > 30 ? String(url.prefix(30)) + "..." : url
     }
 
+    /// Get display language name from file extension
+    static func languageLabel(for path: String) -> String {
+        let ext = (path as NSString).pathExtension.lowercased()
+        switch ext {
+        // Common programming languages
+        case "swift": return "Swift"
+        case "ts", "tsx": return "TypeScript"
+        case "js", "jsx", "mjs", "cjs": return "JavaScript"
+        case "py", "pyw": return "Python"
+        case "rs": return "Rust"
+        case "go": return "Go"
+        case "java": return "Java"
+        case "kt", "kts": return "Kotlin"
+        case "rb", "erb": return "Ruby"
+        case "php": return "PHP"
+        case "cs": return "C#"
+        case "cpp", "cc", "cxx", "hpp", "hxx": return "C++"
+        case "c", "h": return "C"
+        case "m", "mm": return "Objective-C"
+        case "scala": return "Scala"
+        case "r": return "R"
+        case "dart": return "Dart"
+        case "ex", "exs": return "Elixir"
+        case "clj", "cljs": return "Clojure"
+        case "hs": return "Haskell"
+        case "lua": return "Lua"
+        case "pl", "pm": return "Perl"
+        case "sh", "bash", "zsh", "fish": return "Shell"
+        case "ps1", "psm1": return "PowerShell"
+
+        // Markup and data
+        case "md", "markdown": return "Markdown"
+        case "json", "jsonc": return "JSON"
+        case "yaml", "yml": return "YAML"
+        case "xml": return "XML"
+        case "html", "htm": return "HTML"
+        case "css", "scss", "sass", "less": return "CSS"
+        case "sql": return "SQL"
+        case "graphql", "gql": return "GraphQL"
+        case "toml": return "TOML"
+        case "ini", "cfg": return "Config"
+        case "env": return "Env"
+
+        // Project files
+        case "pbxproj": return "Xcode Project"
+        case "xcscheme": return "Xcode Scheme"
+        case "plist": return "Plist"
+        case "podfile": return "CocoaPods"
+        case "gemfile": return "Bundler"
+        case "dockerfile": return "Docker"
+        case "makefile": return "Make"
+
+        // Plain text
+        case "txt", "text": return "Text"
+        case "log": return "Log"
+
+        default: return ""
+        }
+    }
+
     // MARK: - Static Computation Methods (called once during init)
 
     /// Compute tool header text - called once during init to avoid recomputation
@@ -320,7 +393,10 @@ struct CLIMessageView: View {
             }
         case .read:
             if let path = extractParam(from: content, key: "file_path") {
-                return "\(displayName): \(shortenPath(path))"
+                let langLabel = Self.languageLabel(for: path)
+                return langLabel.isEmpty
+                    ? "\(displayName): \(shortenPath(path))"
+                    : "\(displayName) [\(langLabel)]: \(shortenPath(path))"
             }
         case .write:
             if let path = extractParam(from: content, key: "file_path") {
@@ -762,6 +838,7 @@ struct QuickActionButton: View {
 
     var body: some View {
         Button {
+            HapticManager.light()
             action()
             withAnimation(.easeInOut(duration: 0.2)) {
                 showConfirmation = true

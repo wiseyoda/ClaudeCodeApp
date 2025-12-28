@@ -198,6 +198,46 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertNil(store.activeSessionId(for: path))
     }
 
+    func testHandleSessionsUpdatedCreatedReloadsSessions() async {
+        let path = makeProjectPath()
+        let encodedPath = path.replacingOccurrences(of: "/", with: "-")
+
+        store.addSession(makeSession(id: "existing"), for: path)
+        mockRepo.mockSessions = [makeSession(id: "new")]
+        mockRepo.mockTotal = 1
+        mockRepo.mockHasMore = false
+        mockRepo.fetchSessionsCalled = false
+
+        await store.handleSessionsUpdated(
+            projectName: encodedPath,
+            sessionId: "new",
+            action: "created"
+        )
+
+        XCTAssertTrue(mockRepo.fetchSessionsCalled)
+        XCTAssertEqual(store.sessions(for: path).first?.id, "new")
+    }
+
+    func testHandleSessionsUpdatedUpdatedReloadsSessions() async {
+        let path = makeProjectPath()
+        let encodedPath = path.replacingOccurrences(of: "/", with: "-")
+
+        store.addSession(makeSession(id: "existing"), for: path)
+        mockRepo.mockSessions = [makeSession(id: "updated")]
+        mockRepo.mockTotal = 1
+        mockRepo.mockHasMore = false
+        mockRepo.fetchSessionsCalled = false
+
+        await store.handleSessionsUpdated(
+            projectName: encodedPath,
+            sessionId: "updated",
+            action: "updated"
+        )
+
+        XCTAssertTrue(mockRepo.fetchSessionsCalled)
+        XCTAssertEqual(store.sessions(for: path).first?.id, "updated")
+    }
+
     // MARK: - Bulk Operations Tests
 
     func testCountSessionsToDelete() {

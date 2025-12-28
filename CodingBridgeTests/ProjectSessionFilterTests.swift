@@ -32,6 +32,18 @@ final class ProjectSessionFilterTests: XCTestCase {
         XCTAssertEqual(filtered.map { $0.id }, ["user"])
     }
 
+    func testFilterForDisplayExcludesAgentSessions() {
+        let projectPath = "/tmp/filter-agent"
+        let sessions = [
+            makeSession(id: "agent-123", messageCount: 2),
+            makeSession(id: "user", messageCount: 2)
+        ]
+
+        let filtered = sessions.filterForDisplay(projectPath: projectPath)
+
+        XCTAssertEqual(filtered.map { $0.id }, ["user"])
+    }
+
     func testFilterForDisplayExcludesEmptySessionsButKeepsNilCount() {
         let projectPath = "/tmp/filter-empty"
         let sessions = [

@@ -70,6 +70,26 @@ When reporting a bug, include:
   - Ensure WCAG AA contrast ratio (4.5:1 minimum) for accessibility
 - **Priority**: Medium - affects usability of voice input feature
 
+### #27: Session API checklist verification blocked by missing integration test env vars
+- **What happened**: Integration tests for Session API/WebSocket were skipped because `CODINGBRIDGE_TEST_*` environment variables were not set, leaving checklist items unverified.
+- **Expected**: Tests run against a configured backend and confirm remaining Session API checklist items.
+- **Steps to reproduce**: Run `xcodebuild test -project CodingBridge.xcodeproj -scheme CodingBridge -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2' -only-testing:CodingBridgeTests` without integration env vars.
+- **Next steps**:
+  - Set `CODINGBRIDGE_TEST_BACKEND_URL`, `CODINGBRIDGE_TEST_AUTH_TOKEN`, and `CODINGBRIDGE_TEST_PROJECT_NAME` (or `CODINGBRIDGE_TEST_PROJECT_PATH`).
+  - Optional: `CODINGBRIDGE_TEST_REQUIRE_SUMMARIES=1`, `CODINGBRIDGE_TEST_WEBSOCKET_URL`, `CODINGBRIDGE_TEST_ALLOW_MUTATIONS=1`, `CODINGBRIDGE_TEST_DELETE_SESSION_ID`.
+  - Re-run the tests and update `requirements/projects/claudecode-fork/implementation-plan.md` checklist.
+- **Location**: `CodingBridgeTests/SessionAPIIntegrationTests.swift`, `CodingBridgeTests/SessionWebSocketIntegrationTests.swift`
+
+### #28: `xcodebuild test` (all targets) fails to load CodingBridgeTests bundle
+- **What happened**: Running the default scheme test command fails with `Failed to create a bundle instance representing .../CodingBridgeTests.xctest`.
+- **Expected**: `xcodebuild test -project CodingBridge.xcodeproj -scheme CodingBridge ...` runs unit + UI tests without bundle load errors.
+- **Steps to reproduce**: Run `xcodebuild test -project CodingBridge.xcodeproj -scheme CodingBridge -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'`.
+- **Notes**: `-only-testing:CodingBridgeTests` and `-only-testing:CodingBridgeUITests` succeed independently.
+- **Investigation needed**:
+  - Inspect scheme/test plan configuration for mixed unit/UI targets.
+  - Verify test host/bundle loader settings and derived data staging.
+- **Location**: `CodingBridge.xcodeproj/xcshareddata/xcschemes/CodingBridge.xcscheme`, `CodingBridge.xcodeproj/project.pbxproj`
+
 ---
 
 ## Feature Requests

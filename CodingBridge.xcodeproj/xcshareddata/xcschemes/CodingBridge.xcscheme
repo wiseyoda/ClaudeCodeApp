@@ -40,6 +40,16 @@
                ReferencedContainer = "container:CodingBridge.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "B9000005"
+               BuildableName = "CodingBridgeUITests.xctest"
+               BlueprintName = "CodingBridgeUITests"
+               ReferencedContainer = "container:CodingBridge.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction
