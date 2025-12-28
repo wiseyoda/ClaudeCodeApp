@@ -1606,7 +1606,7 @@ struct CustomModelPickerSheet: View {
     }
 }
 
-// MARK: - Git Sync Banner (iOS 26+ Liquid Glass compatible)
+// MARK: - Git Sync Banner (Compact, Dark Mode Optimized)
 
 struct GitSyncBanner: View {
     let status: GitStatus
@@ -1619,238 +1619,179 @@ struct GitSyncBanner: View {
     let onAskClaude: (() -> Void)?
     @Environment(\.colorScheme) var colorScheme
 
-    /// Glass tint for banner based on status (iOS 26+ Liquid Glass)
-    private var glassTint: CLITheme.GlassTint {
-        switch status {
-        case .dirty, .dirtyAndAhead, .diverged:
-            return .warning
-        case .behind:
-            return .info
-        case .ahead:
-            return .primary
-        case .error:
-            return .error
-        default:
-            return .neutral
-        }
-    }
-
     var body: some View {
-        HStack(spacing: 10) {
-            // Status icon
+        HStack(spacing: 8) {
+            // Status icon (compact)
             if isAutoPulling || isRefreshing {
                 ProgressView()
-                    .scaleEffect(0.8)
+                    .scaleEffect(0.6)
+                    .frame(width: 14, height: 14)
             } else {
                 Image(systemName: status.icon)
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundColor(iconColor)
             }
 
-            // Status text
-            VStack(alignment: .leading, spacing: 2) {
-                Text(isRefreshing ? "Checking..." : statusTitle)
-                    .font(CLITheme.monoSmall)
-                    .fontWeight(.medium)
-                    .foregroundColor(CLITheme.primaryText(for: colorScheme))
-
-                Text(isRefreshing ? "Refreshing git status" : statusSubtitle)
-                    .font(.caption)
-                    .foregroundColor(CLITheme.secondaryText(for: colorScheme))
-            }
+            // Status text (single line, compact)
+            Text(isRefreshing ? "Checking..." : statusTitle)
+                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                .foregroundColor(CLITheme.primaryText(for: colorScheme))
+                .lineLimit(1)
 
             Spacer()
 
-            // Actions
+            // Action buttons (compact pills)
             if !isAutoPulling && !isRefreshing {
-                // Pull button (for behind status)
-                if let onPull = onPull {
-                    Button {
-                        onPull()
-                    } label: {
-                        Image(systemName: "arrow.down.circle")
-                            .font(.system(size: 16))
-                            .foregroundColor(CLITheme.cyan(for: colorScheme))
+                HStack(spacing: 6) {
+                    // Pull button (for behind status)
+                    if let onPull = onPull {
+                        compactButton(
+                            title: "Pull",
+                            icon: "arrow.down",
+                            color: CLITheme.cyan(for: colorScheme),
+                            action: onPull
+                        )
                     }
-                    .accessibilityLabel("Pull changes")
-                }
 
-                // Commit button (for dirty/ahead statuses) - iOS 26+ glass styling
-                if let onCommit = onCommit {
-                    Button {
-                        onCommit()
-                    } label: {
-                        Label(commitButtonLabel, systemImage: commitButtonIcon)
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .foregroundColor(commitButtonColor)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .glassCapsule(tint: commitButtonGlassTint, isInteractive: true)
+                    // Commit/Push button
+                    if let onCommit = onCommit {
+                        compactButton(
+                            title: commitButtonLabel,
+                            icon: commitButtonIcon,
+                            color: commitButtonColor,
+                            action: onCommit
+                        )
                     }
-                    .accessibilityLabel(commitButtonAccessibilityLabel)
-                    .accessibilityHint("Ask Claude to commit your changes")
-                }
 
-                // Refresh button
-                Button {
-                    onRefresh()
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.caption)
-                        .foregroundColor(CLITheme.secondaryText(for: colorScheme))
-                }
-                .accessibilityLabel("Refresh git status")
-
-                if let onAskClaude = onAskClaude {
-                    Button {
-                        onAskClaude()
-                    } label: {
-                        Text("Ask Claude")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .foregroundColor(CLITheme.cyan(for: colorScheme))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .glassCapsule(tint: .info, isInteractive: true)
+                    // Ask Claude button
+                    if let onAskClaude = onAskClaude {
+                        compactButton(
+                            title: "Ask",
+                            icon: "bubble.left",
+                            color: CLITheme.purple(for: colorScheme),
+                            action: onAskClaude
+                        )
                     }
+
+                    // Refresh button (icon only)
+                    Button(action: onRefresh) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                    }
+                    .buttonStyle(.plain)
                 }
             }
 
-            // Dismiss button
-            Button {
-                onDismiss()
-            } label: {
+            // Dismiss button (compact)
+            Button(action: onDismiss) {
                 Image(systemName: "xmark")
-                    .font(.caption)
+                    .font(.system(size: 9, weight: .bold))
                     .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                    .frame(width: 16, height: 16)
+                    .background(
+                        Circle()
+                            .fill(CLITheme.mutedText(for: colorScheme).opacity(0.15))
+                    )
             }
+            .buttonStyle(.plain)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        // iOS 26+: Use glass effect with semantic tint
-        .glassBackground(tint: glassTint, cornerRadius: 0)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(bannerBackground)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(status.accessibilityLabel)
     }
 
+    // MARK: - Compact Button Helper
+
+    @ViewBuilder
+    private func compactButton(
+        title: String,
+        icon: String,
+        color: Color,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 3) {
+                Image(systemName: icon)
+                    .font(.system(size: 9, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 10, weight: .semibold))
+            }
+            .foregroundColor(colorScheme == .dark ? .white : color)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                Capsule()
+                    .fill(color.opacity(colorScheme == .dark ? 0.8 : 0.15))
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Computed Properties
+
     private var iconColor: Color {
         switch status.colorName {
-        case "green":
-            return CLITheme.green(for: colorScheme)
-        case "orange":
-            return CLITheme.yellow(for: colorScheme)
-        case "blue":
-            return CLITheme.blue(for: colorScheme)
-        case "cyan":
-            return CLITheme.cyan(for: colorScheme)
-        case "red":
-            return CLITheme.red(for: colorScheme)
-        default:
-            return CLITheme.mutedText(for: colorScheme)
+        case "green": return CLITheme.green(for: colorScheme)
+        case "orange": return CLITheme.yellow(for: colorScheme)
+        case "blue": return CLITheme.blue(for: colorScheme)
+        case "cyan": return CLITheme.cyan(for: colorScheme)
+        case "red": return CLITheme.red(for: colorScheme)
+        default: return CLITheme.mutedText(for: colorScheme)
         }
     }
 
     private var bannerBackground: Color {
-        switch status {
-        case .dirty, .dirtyAndAhead, .diverged:
-            return CLITheme.yellow(for: colorScheme).opacity(0.1)
-        case .behind:
-            return CLITheme.cyan(for: colorScheme).opacity(0.1)
-        case .ahead:
-            return CLITheme.blue(for: colorScheme).opacity(0.1)
-        case .error:
-            return CLITheme.red(for: colorScheme).opacity(0.1)
-        default:
-            return CLITheme.secondaryBackground(for: colorScheme)
-        }
+        let baseColor: Color = {
+            switch status {
+            case .dirty, .dirtyAndAhead, .diverged:
+                return CLITheme.yellow(for: colorScheme)
+            case .behind:
+                return CLITheme.cyan(for: colorScheme)
+            case .ahead:
+                return CLITheme.blue(for: colorScheme)
+            case .error:
+                return CLITheme.red(for: colorScheme)
+            default:
+                return CLITheme.mutedText(for: colorScheme)
+            }
+        }()
+        return baseColor.opacity(colorScheme == .dark ? 0.15 : 0.08)
     }
 
     private var statusTitle: String {
-        if isAutoPulling {
-            return "Pulling latest changes..."
-        }
-
+        if isAutoPulling { return "Pulling..." }
         switch status {
-        case .dirty:
-            return "Uncommitted changes"
-        case .ahead(let count):
-            return "\(count) unpushed commit\(count == 1 ? "" : "s")"
-        case .behind(let count):
-            return "\(count) commit\(count == 1 ? "" : "s") behind"
-        case .dirtyAndAhead:
-            return "Local changes + unpushed commits"
-        case .diverged:
-            return "Diverged from remote"
-        case .error(let msg):
-            return "Error: \(msg)"
-        default:
-            return ""
+        case .dirty: return "Uncommitted changes"
+        case .ahead(let count): return "\(count) unpushed"
+        case .behind(let count): return "\(count) behind"
+        case .dirtyAndAhead: return "Changes + unpushed"
+        case .diverged: return "Diverged"
+        case .error(let msg): return "Error: \(msg.prefix(20))"
+        default: return ""
         }
     }
-
-    private var statusSubtitle: String {
-        if isAutoPulling {
-            return "Auto-syncing with remote..."
-        }
-
-        switch status {
-        case .dirty, .dirtyAndAhead, .diverged:
-            return "Tap 'Commit' to create a commit, or 'Ask Claude' to review first"
-        case .ahead:
-            return "Tap 'Push' to sync with remote"
-        case .behind:
-            return "Will auto-pull when ready"
-        case .error:
-            return "Check your connection"
-        default:
-            return ""
-        }
-    }
-
-    // MARK: - Commit Button Properties
 
     private var commitButtonLabel: String {
         switch status {
-        case .dirty, .dirtyAndAhead, .diverged:
-            return "Commit"
-        case .ahead:
-            return "Push"
-        default:
-            return "Commit"
+        case .ahead: return "Push"
+        default: return "Commit"
         }
     }
 
     private var commitButtonIcon: String {
         switch status {
-        case .dirty, .dirtyAndAhead, .diverged:
-            return "checkmark.circle"
-        case .ahead:
-            return "arrow.up.circle"
-        default:
-            return "checkmark.circle"
+        case .ahead: return "arrow.up"
+        default: return "checkmark"
         }
     }
 
     private var commitButtonColor: Color {
         switch status {
-        case .dirty, .dirtyAndAhead, .diverged:
-            return CLITheme.green(for: colorScheme)
-        case .ahead:
-            return CLITheme.blue(for: colorScheme)
-        default:
-            return CLITheme.green(for: colorScheme)
-        }
-    }
-
-    /// Glass tint for commit button (iOS 26+ Liquid Glass)
-    private var commitButtonGlassTint: CLITheme.GlassTint {
-        switch status {
-        case .dirty, .dirtyAndAhead, .diverged:
-            return .success
-        case .ahead:
-            return .primary
-        default:
-            return .success
+        case .ahead: return CLITheme.blue(for: colorScheme)
+        default: return CLITheme.green(for: colorScheme)
         }
     }
 
