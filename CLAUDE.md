@@ -1,17 +1,17 @@
 # CLAUDE.md
 
-iOS client for [claudecodeui](https://github.com/siteboon/claudecodeui). SwiftUI app targeting iOS 17+ with Citadel SSH library.
+iOS client for [claudecodeui](https://github.com/siteboon/claudecodeui). SwiftUI app targeting iOS 26+ with Citadel SSH library.
 
 ## Commands
 
-**IMPORTANT: Always use iPhone 17 Pro with iOS 26.1 - this is the current development target.**
+**IMPORTANT: Always use iPhone 17 Pro with iOS 26.2 - this is the current development target.**
 
 ```bash
 # Build
-xcodebuild -project ClaudeCodeApp.xcodeproj -scheme ClaudeCodeApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.1'
+xcodebuild -project ClaudeCodeApp.xcodeproj -scheme ClaudeCodeApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'
 
 # Test
-xcodebuild test -project ClaudeCodeApp.xcodeproj -scheme ClaudeCodeApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.1'
+xcodebuild test -project ClaudeCodeApp.xcodeproj -scheme ClaudeCodeApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'
 
 # Open in Xcode
 open ClaudeCodeApp.xcodeproj
@@ -128,7 +128,7 @@ See `ROADMAP.md` Priority 1 for full list with line numbers.
 
 ## Testing
 
-28+ unit tests covering parsers and utilities. Test files in `ClaudeCodeAppTests/`.
+300+ unit tests covering parsers and utilities. Test files in `ClaudeCodeAppTests/`.
 
 ## References
 

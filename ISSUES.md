@@ -27,14 +27,11 @@ When reporting a bug, include:
 - **Workaround applied**: Filter out sessions with `summary == "New Session"` in `SessionPickerViews.swift`
 - **Status**: Monitoring - workaround in place, will investigate further if issues persist
 
-### #17: Timeout errors not appearing in debug logs (Fixed December 27, 2025)
-- **What happened**: "Request timed out" errors shown to user but not captured in debug log viewer
-- **Expected**: All errors should appear in debug logs for troubleshooting
-- **Fix applied**: Added `debugLog.logError()` calls to timeout handling and error cases in `WebSocketManager.swift`. Also added `lastActiveToolName` tracking to show which tool was running when timeout occurred.
+---
 
-### Feature Requests
+## Feature Requests
 
-#### #18: Multi-repo/monorepo git status support (Low Priority)
+### #18: Multi-repo/monorepo git status support (Low Priority)
 - **What**: Apps like `level-agency-tools` have multiple subrepos/workspaces. Currently git status only checks the main repo.
 - **Expected**: Show aggregate git status across all subrepos, or at least indicate when subrepos have uncommitted changes
 - **Scope**: Low impact - only affects projects with monorepo/multi-workspace structure
@@ -44,60 +41,40 @@ When reporting a bug, include:
   - Aggregate results for display (e.g., "3/5 repos have changes")
   - May need UI changes to show per-repo breakdown
 
+### #19: Bulk session history management ✅ RESOLVED
+- **What**: Ability to manage session history in bulk - delete all, delete by age, keep only recent N sessions
+- **Resolution**: Implemented "Manage" button in SessionPickerSheet with three operations:
+  - Delete all sessions (protects active session)
+  - Delete sessions older than 7/30/90 days
+  - Keep last 5/10/20 sessions
+- **Implementation**:
+  - SessionManager bulk delete methods with batch SSH deletion
+  - Confirmation dialogs showing count before deletion
+  - Progress indicator during bulk operations
+- **Status**: Completed December 27, 2025
+
 ---
 
 ## Resolved Issues
 
-Issues that have been fixed are listed below. See CHANGELOG.md for full details.
+Issues that have been fixed. See CHANGELOG.md for full details.
 
-### #7: Verbose output log for debugging (Fixed December 27, 2025)
-- **Resolution**: Added `DebugLogStore` and `DebugLogView` for viewing raw WebSocket messages. Developer section in QuickSettingsSheet with toggle and log viewer access.
-
-### #13: Git refresh error alert on app launch (Fixed December 27, 2025)
-- **Resolution**: Modified `SSHManager.checkGitStatusWithAutoConnect()` to silently return `.unknown` for SSH connection failures instead of showing an error alert.
-
-### #14: Claude status indicator stuck red (Fixed December 27, 2025)
-- **Resolution**: Updated `UnifiedStatusBar` to accept full `ConnectionState`. Added yellow color and pulsing animation for connecting/reconnecting states.
-
-### #15: Per-project permissions toggle (Fixed December 27, 2025)
-- **Resolution**: Added `ProjectSettingsStore` for per-project settings. Status bar bypass indicator is now tappable to toggle per-project override (cycles through: use global -> force on -> force off -> use global).
-
-### #4: Message action bar at bottom of messages (Fixed in v0.4.0)
-- **Resolution**: Added `MessageActionBar.swift` with execution time, token count, copy, and analyze buttons
-
-### #8: Restore quick-access mode and thinking toggles (Fixed in v0.4.0)
-- **Resolution**: Restored mode and thinking chips to status bar for faster access
-
-### #11: Auto-refresh git status in active project (Fixed in v0.4.0)
-- **Resolution**: Added 30-second periodic refresh plus auto-refresh after task completion
-
-### #12: Quick commit & push button in pending changes banner (Fixed in v0.4.0)
-- **Resolution**: Added button in pending changes banner to commit and push via Claude
-
-### #1: App crashes periodically during use (Fixed in v1.3.0)
-- **Root cause**: Thread safety issues in WebSocketManager - race conditions and message queue overwrites
-- **Fix**: Added `@MainActor` to managers, replaced single `pendingMessage` with queue, fixed WebSocket state race
-
-### #2: Session resume doesn't restore in-progress tasks (Fixed in v1.3.0)
-- **Root cause**: No auto-select of last session, sendMessage used wrong session ID
-- **Fix**: Use `wsManager.sessionId` fallback in sendMessage when selectedSession is nil
-
-### #3: Redundant thinking/status indicators (Fixed in v1.3.0)
-- **Root cause**: CLIProcessingView in chat duplicated status bar indicator
-- **Fix**: Replaced redundant CLIProcessingView with minimal indicator; status bar is primary
-
-### #5: Git refresh fails silently on projects list (Fixed in v1.3.0)
-- **Root cause**: No error UI when git status checks failed
-- **Fix**: Added git refresh error alert in ContentView
-
-### #6: TodoWrite tool output not parsed correctly (Fixed in v1.3.0)
-- **Root cause**: Parser didn't handle spacing variations and escape sequences
-- **Fix**: Improved TodoWrite parser to handle edge cases
-
-### #9: Chat scroll position jumps on rotation (Fixed in v1.3.0)
-- **Root cause**: ScrollViewReader reset on orientation change
-- **Fix**: Preserve scroll position via orientation change listener
-
-### #10: Token usage calculation may be inaccurate (Verified in v1.3.0)
-- **Investigation result**: Token usage comes from backend, not hardcoded
-- **Status**: Verified working correctly
+| # | Issue | Resolution | Version |
+|---|-------|------------|---------|
+| 19 | Bulk session management | Added "Manage" button with delete all/by age/keep N options | Unreleased |
+| 17 | Timeout errors not in debug logs | Added `debugLog.logError()` calls and `lastActiveToolName` tracking | Unreleased |
+| 15 | Per-project permissions toggle | Added `ProjectSettingsStore` with tappable status bar toggle | 0.4.0 |
+| 14 | Status indicator stuck red | Updated `UnifiedStatusBar` with full `ConnectionState` and colors | 0.4.0 |
+| 13 | Git refresh error on launch | Modified `checkGitStatusWithAutoConnect()` to silently return `.unknown` | 0.4.0 |
+| 12 | Quick commit & push button | Added button in pending changes banner | 0.4.0 |
+| 11 | Auto-refresh git status | Added 30-second periodic refresh plus post-task auto-refresh | 0.4.0 |
+| 8 | Restore mode/thinking toggles | Restored chips to status bar | 0.4.0 |
+| 7 | Verbose output log | Added `DebugLogStore` and `DebugLogView` | 0.4.0 |
+| 4 | Message action bar | Added `MessageActionBar.swift` with execution time, tokens, copy, analyze | 0.4.0 |
+| 10 | Token usage calculation | Verified working correctly - comes from backend | 0.3.3 |
+| 9 | Chat scroll on rotation | Preserve scroll position via orientation listener | 0.3.3 |
+| 6 | TodoWrite parsing | Improved parser for spacing and escape sequences | 0.3.3 |
+| 5 | Git refresh fails silently | Added git refresh error alert in ContentView | 0.3.3 |
+| 3 | Redundant indicators | Replaced redundant CLIProcessingView with minimal indicator | 0.3.3 |
+| 2 | Session resume broken | Use `wsManager.sessionId` fallback in sendMessage | 0.3.3 |
+| 1 | App crashes periodically | Added `@MainActor` to managers, fixed race conditions | 0.3.3 |

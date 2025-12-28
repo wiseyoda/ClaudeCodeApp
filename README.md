@@ -130,7 +130,7 @@ Control Claude's reasoning depth with 5 levels:
 
 ## Requirements
 
-- iOS 17.0+
+- iOS 26.2+
 - Xcode 15.0+
 - A running [claudecodeui](https://github.com/siteboon/claudecodeui) backend
 - Network access to the backend (via Tailscale or local network)
@@ -221,11 +221,11 @@ On first launch, configure in Settings (gear icon):
 
 ## Testing
 
-28+ unit tests covering parsers and utilities:
+300+ unit tests covering parsers and utilities:
 
 ```bash
 xcodebuild test -project ClaudeCodeApp.xcodeproj -scheme ClaudeCodeApp \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro'
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'
 ```
 
 ### Test Coverage

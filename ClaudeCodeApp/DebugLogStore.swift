@@ -42,6 +42,13 @@ struct DebugLogEntry: Identifiable {
     let message: String
     let details: String?
 
+    /// Static DateFormatter for performance (avoid creating per-call)
+    private static let timestampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss.SSS"
+        return formatter
+    }()
+
     /// Pretty-print JSON if the message is valid JSON
     var formattedMessage: String {
         guard let data = message.data(using: .utf8),
@@ -55,20 +62,29 @@ struct DebugLogEntry: Identifiable {
 
     /// Timestamp formatted for display
     var formattedTimestamp: String {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm:ss.SSS"
-        return formatter.string(from: timestamp)
+        Self.timestampFormatter.string(from: timestamp)
     }
 }
 
 // MARK: - Debug Log Store
 
 /// Singleton store for debug logs, used to capture WebSocket traffic
+///
+/// ## iOS 26+ Migration: @IncrementalState
+/// This store manages 500+ entries and is a prime candidate for @IncrementalState.
+/// When Xcode 26 is available, migrate `entries` to use @IncrementalState for
+/// better performance in List views with large datasets.
+///
+/// Migration steps:
+/// 1. Change `@Published var entries` to `@IncrementalState var entries`
+/// 2. Add `.incrementalID()` modifier to list items using `entry.id`
+/// 3. Use incremental update methods instead of full array replacement
 @MainActor
 class DebugLogStore: ObservableObject {
     static let shared = DebugLogStore()
 
     /// All captured log entries
+    /// iOS 26+: Migrate to @IncrementalState for better List performance
     @Published var entries: [DebugLogEntry] = []
 
     /// Whether debug logging is enabled (controlled by AppSettings)

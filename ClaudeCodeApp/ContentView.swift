@@ -31,6 +31,10 @@ struct ContentView: View {
     @State private var gitRefreshError: String?
     @State private var showGitRefreshError = false
 
+    // Multi-repo (monorepo) tracking
+    @State private var multiRepoStatuses: [String: MultiRepoStatus] = [:]
+    @State private var expandedProjects: Set<String> = []
+
     // Selected project for NavigationSplitView
     @State private var selectedProject: Project?
     @State private var columnVisibility: NavigationSplitViewVisibility = .all
@@ -40,9 +44,11 @@ struct ContentView: View {
             // Sidebar: Project list
             sidebarContent
                 .navigationTitle("Claude Code")
-                .toolbarBackground(CLITheme.secondaryBackground(for: colorScheme), for: .navigationBar)
+                // iOS 26+: Use Material for glass-compatible toolbar
+                .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
                 .toolbarBackground(.visible, for: .navigationBar)
                 .toolbar {
+                    // iOS 26+: ToolbarSpacer can be used between items for flexible layout
                     ToolbarItem(placement: .navigationBarTrailing) {
                         HStack(spacing: 16) {
                             Button {
@@ -229,6 +235,7 @@ struct ContentView: View {
             await loadProjects()
             if !projects.isEmpty {
                 await checkAllGitStatuses()
+                await discoverAllSubRepos()
                 await loadAllSessionCounts()
             }
         }
@@ -370,6 +377,39 @@ struct ContentView: View {
             Section {
                 ForEach(activeProjects) { project in
                     projectRow(for: project, isArchived: false)
+
+                    // Sub-repos when expanded
+                    if expandedProjects.contains(project.path),
+                       let multiRepoStatus = multiRepoStatuses[project.path],
+                       multiRepoStatus.hasSubRepos {
+                        ForEach(multiRepoStatus.subRepos) { subRepo in
+                            SubRepoRow(
+                                subRepo: subRepo,
+                                projectPath: project.path,
+                                onRefresh: {
+                                    Task { await refreshSubRepoStatus(project: project, subRepo: subRepo) }
+                                },
+                                onPull: {
+                                    Task { await pullSubRepo(project: project, subRepo: subRepo) }
+                                }
+                            )
+                            .listRowBackground(CLITheme.secondaryBackground(for: colorScheme).opacity(0.5))
+                            .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
+                        }
+
+                        // Action bar for batch operations
+                        SubRepoActionBar(
+                            multiRepoStatus: multiRepoStatus,
+                            onPullAll: {
+                                Task { await pullAllBehindSubRepos(project: project) }
+                            },
+                            onRefreshAll: {
+                                Task { await refreshAllSubRepos(project: project) }
+                            }
+                        )
+                        .listRowBackground(CLITheme.secondaryBackground(for: colorScheme).opacity(0.3))
+                        .listRowInsets(EdgeInsets(top: 0, leading: 12, bottom: 0, trailing: 12))
+                    }
                 }
             } header: {
                 if !archivedProjects.isEmpty {
@@ -401,6 +441,7 @@ struct ContentView: View {
             await loadProjects()
             if !projects.isEmpty {
                 await checkAllGitStatuses()
+                await discoverAllSubRepos()
                 await loadAllSessionCounts()
             }
         }
@@ -421,12 +462,26 @@ struct ContentView: View {
 
     @ViewBuilder
     private func projectRow(for project: Project, isArchived: Bool) -> some View {
+        let isExpanded = expandedProjects.contains(project.path)
+        let multiRepoStatus = multiRepoStatuses[project.path]
+
         ProjectRow(
             project: project,
             gitStatus: gitStatuses[project.path] ?? .unknown,
             sessionCount: sessionManager.sessionCount(for: project.path),
             isSelected: selectedProject?.id == project.id,
-            isArchived: isArchived
+            isArchived: isArchived,
+            multiRepoStatus: multiRepoStatus,
+            isExpanded: isExpanded,
+            onToggleExpand: {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    if expandedProjects.contains(project.path) {
+                        expandedProjects.remove(project.path)
+                    } else {
+                        expandedProjects.insert(project.path)
+                    }
+                }
+            }
         )
         .tag(project)
         .listRowBackground(
@@ -602,6 +657,171 @@ struct ContentView: View {
         gitStatuses[project.path] = status
     }
 
+    // MARK: - Multi-Repo (Monorepo) Support
+
+    /// Discover sub-repos for all projects in background
+    private func discoverAllSubRepos() async {
+        guard sshManager.isConnected else { return }
+
+        await withTaskGroup(of: (String, [String]).self) { group in
+            for project in projects {
+                group.addTask {
+                    let subRepoPaths = await sshManager.discoverSubReposWithAutoConnect(
+                        project.path,
+                        maxDepth: 2,
+                        settings: settings
+                    )
+                    return (project.path, subRepoPaths)
+                }
+            }
+
+            for await (projectPath, subRepoPaths) in group {
+                if !subRepoPaths.isEmpty {
+                    // Create SubRepo objects with unknown status
+                    let subRepos = subRepoPaths.map { relativePath in
+                        SubRepo(
+                            relativePath: relativePath,
+                            fullPath: (projectPath as NSString).appendingPathComponent(relativePath),
+                            status: .unknown
+                        )
+                    }
+                    multiRepoStatuses[projectPath] = MultiRepoStatus(subRepos: subRepos, isScanning: true)
+
+                    // Now check their statuses
+                    Task {
+                        await checkSubRepoStatuses(for: projectPath, subRepoPaths: subRepoPaths)
+                    }
+                }
+            }
+        }
+    }
+
+    /// Check git status for all sub-repos of a project
+    private func checkSubRepoStatuses(for projectPath: String, subRepoPaths: [String]) async {
+        let statuses = await sshManager.checkMultiRepoStatusWithAutoConnect(
+            projectPath,
+            subRepoPaths: subRepoPaths,
+            settings: settings
+        )
+
+        // Update the sub-repos with their statuses
+        if var multiRepoStatus = multiRepoStatuses[projectPath] {
+            multiRepoStatus.isScanning = false
+            multiRepoStatus.subRepos = multiRepoStatus.subRepos.map { subRepo in
+                var updated = subRepo
+                if let status = statuses[subRepo.relativePath] {
+                    updated.status = status
+                }
+                return updated
+            }
+            multiRepoStatuses[projectPath] = multiRepoStatus
+        }
+    }
+
+    /// Refresh a single sub-repo's status
+    private func refreshSubRepoStatus(project: Project, subRepo: SubRepo) async {
+        guard var multiRepoStatus = multiRepoStatuses[project.path] else { return }
+
+        // Mark as checking
+        if let index = multiRepoStatus.subRepos.firstIndex(where: { $0.relativePath == subRepo.relativePath }) {
+            multiRepoStatus.subRepos[index].status = .checking
+            multiRepoStatuses[project.path] = multiRepoStatus
+        }
+
+        // Check status
+        let status = await sshManager.checkGitStatusWithAutoConnect(
+            subRepo.fullPath,
+            settings: settings
+        )
+
+        // Update status
+        if var updatedStatus = multiRepoStatuses[project.path],
+           let index = updatedStatus.subRepos.firstIndex(where: { $0.relativePath == subRepo.relativePath }) {
+            updatedStatus.subRepos[index].status = status
+            multiRepoStatuses[project.path] = updatedStatus
+        }
+    }
+
+    /// Refresh all sub-repos for a project
+    private func refreshAllSubRepos(project: Project) async {
+        guard let multiRepoStatus = multiRepoStatuses[project.path] else { return }
+
+        let subRepoPaths = multiRepoStatus.subRepos.map { $0.relativePath }
+
+        // Mark all as checking
+        var updatedStatus = multiRepoStatus
+        updatedStatus.isScanning = true
+        updatedStatus.subRepos = updatedStatus.subRepos.map { subRepo in
+            var updated = subRepo
+            updated.status = .checking
+            return updated
+        }
+        multiRepoStatuses[project.path] = updatedStatus
+
+        // Check all statuses
+        await checkSubRepoStatuses(for: project.path, subRepoPaths: subRepoPaths)
+    }
+
+    /// Pull a single sub-repo
+    private func pullSubRepo(project: Project, subRepo: SubRepo) async {
+        guard var multiRepoStatus = multiRepoStatuses[project.path],
+              let index = multiRepoStatus.subRepos.firstIndex(where: { $0.relativePath == subRepo.relativePath }) else {
+            return
+        }
+
+        // Mark as checking
+        multiRepoStatus.subRepos[index].status = .checking
+        multiRepoStatuses[project.path] = multiRepoStatus
+
+        // Perform pull
+        let success = await sshManager.pullSubRepo(
+            project.path,
+            relativePath: subRepo.relativePath,
+            settings: settings
+        )
+
+        // Refresh status after pull
+        let newStatus = await sshManager.checkGitStatusWithAutoConnect(
+            subRepo.fullPath,
+            settings: settings
+        )
+
+        // Update status
+        if var updatedStatus = multiRepoStatuses[project.path],
+           let updatedIndex = updatedStatus.subRepos.firstIndex(where: { $0.relativePath == subRepo.relativePath }) {
+            updatedStatus.subRepos[updatedIndex].status = success ? newStatus : .error("Pull failed")
+            multiRepoStatuses[project.path] = updatedStatus
+        }
+    }
+
+    /// Pull all sub-repos that are behind
+    private func pullAllBehindSubRepos(project: Project) async {
+        guard var multiRepoStatus = multiRepoStatuses[project.path] else { return }
+
+        let behindRepos = multiRepoStatus.subRepos.filter { $0.status.canAutoPull }
+        guard !behindRepos.isEmpty else { return }
+
+        // Mark all as checking
+        multiRepoStatus.isScanning = true
+        for subRepo in behindRepos {
+            if let index = multiRepoStatus.subRepos.firstIndex(where: { $0.relativePath == subRepo.relativePath }) {
+                multiRepoStatus.subRepos[index].status = .checking
+            }
+        }
+        multiRepoStatuses[project.path] = multiRepoStatus
+
+        // Pull all in parallel
+        _ = await sshManager.pullAllBehindSubRepos(
+            project.path,
+            subRepos: behindRepos,
+            settings: settings
+        )
+
+        // Refresh all statuses
+        let subRepoPaths = behindRepos.map { $0.relativePath }
+        await checkSubRepoStatuses(for: project.path, subRepoPaths: subRepoPaths)
+    }
+
     // MARK: - Session Count Loading
 
     /// Load accurate session counts for all projects via SessionManager
@@ -619,6 +839,9 @@ struct ProjectRow: View {
     var sessionCount: Int? = nil  // SSH-loaded count (overrides API count if set)
     var isSelected: Bool = false
     var isArchived: Bool = false
+    var multiRepoStatus: MultiRepoStatus? = nil
+    var isExpanded: Bool = false
+    var onToggleExpand: (() -> Void)? = nil
     @Environment(\.colorScheme) var colorScheme
 
     /// Display name: custom name if set, otherwise project.title
@@ -634,12 +857,30 @@ struct ProjectRow: View {
         ProjectNamesStore.shared.hasCustomName(for: project.path)
     }
 
+    /// Whether this project has sub-repos
+    private var hasSubRepos: Bool {
+        multiRepoStatus?.hasSubRepos ?? false
+    }
+
     var body: some View {
         HStack(spacing: 8) {
-            Text(isSelected ? "●" : ">")
-                .font(CLITheme.monoFont)
-                .foregroundColor(isSelected ? CLITheme.blue(for: colorScheme) : CLITheme.green(for: colorScheme))
-                .opacity(isArchived ? 0.5 : 1)
+            // Leading indicator: disclosure triangle for monorepos, or selection dot
+            if hasSubRepos {
+                Button {
+                    onToggleExpand?()
+                } label: {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(CLITheme.green(for: colorScheme))
+                        .frame(width: 14)
+                }
+                .buttonStyle(.plain)
+            } else {
+                Text(isSelected ? "●" : ">")
+                    .font(CLITheme.monoFont)
+                    .foregroundColor(isSelected ? CLITheme.blue(for: colorScheme) : CLITheme.green(for: colorScheme))
+                    .opacity(isArchived ? 0.5 : 1)
+            }
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
@@ -659,15 +900,29 @@ struct ProjectRow: View {
                     if !isArchived {
                         GitStatusIndicator(status: gitStatus)
                     }
+
+                    // Multi-repo summary badge (when collapsed)
+                    if hasSubRepos && !isExpanded, let status = multiRepoStatus {
+                        MultiRepoSummaryBadge(status: status)
+                    }
                 }
 
-                // Use SSH-loaded count if available, otherwise fall back to API count
-                let count = sessionCount ?? project.displaySessions.count
-                if count > 0 {
-                    Text("[\(count) sessions]")
-                        .font(CLITheme.monoSmall)
-                        .foregroundColor(CLITheme.cyan(for: colorScheme))
-                        .opacity(isArchived ? 0.6 : 1)
+                // Session count + sub-repo count
+                HStack(spacing: 8) {
+                    let count = sessionCount ?? project.displaySessions.count
+                    if count > 0 {
+                        Text("[\(count) sessions]")
+                            .font(CLITheme.monoSmall)
+                            .foregroundColor(CLITheme.cyan(for: colorScheme))
+                            .opacity(isArchived ? 0.6 : 1)
+                    }
+
+                    if hasSubRepos, let status = multiRepoStatus {
+                        Text("[\(status.subRepos.count) repos]")
+                            .font(CLITheme.monoSmall)
+                            .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                            .opacity(isArchived ? 0.6 : 1)
+                    }
                 }
             }
 
@@ -679,6 +934,167 @@ struct ProjectRow: View {
         }
         .padding(.vertical, 12)
         .contentShape(Rectangle())
+    }
+}
+
+// MARK: - Multi-Repo Summary Badge
+
+struct MultiRepoSummaryBadge: View {
+    let status: MultiRepoStatus
+    @Environment(\.colorScheme) var colorScheme
+
+    var body: some View {
+        if status.isScanning {
+            ProgressView()
+                .scaleEffect(0.5)
+                .frame(width: 12, height: 12)
+        } else if !status.summary.isEmpty {
+            HStack(spacing: 4) {
+                Image(systemName: status.worstStatus.icon)
+                    .font(.system(size: 10))
+                Text(status.summary)
+                    .font(CLITheme.monoSmall)
+            }
+            .foregroundColor(badgeColor)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(badgeColor.opacity(0.15))
+            .cornerRadius(4)
+        }
+    }
+
+    private var badgeColor: Color {
+        switch status.worstStatus.colorName {
+        case "green":
+            return CLITheme.green(for: colorScheme)
+        case "orange":
+            return CLITheme.yellow(for: colorScheme)
+        case "blue":
+            return CLITheme.blue(for: colorScheme)
+        case "cyan":
+            return CLITheme.cyan(for: colorScheme)
+        case "red":
+            return CLITheme.red(for: colorScheme)
+        default:
+            return CLITheme.mutedText(for: colorScheme)
+        }
+    }
+}
+
+// MARK: - Sub-Repo Row
+
+struct SubRepoRow: View {
+    let subRepo: SubRepo
+    let projectPath: String
+    var onRefresh: (() -> Void)? = nil
+    var onPull: (() -> Void)? = nil
+    @Environment(\.colorScheme) var colorScheme
+
+    var body: some View {
+        HStack(spacing: 8) {
+            // Indentation spacer
+            Spacer()
+                .frame(width: 24)
+
+            // Tree connector
+            Text("├─")
+                .font(CLITheme.monoSmall)
+                .foregroundColor(CLITheme.mutedText(for: colorScheme))
+
+            // Sub-repo path
+            Text(subRepo.relativePath)
+                .font(CLITheme.monoSmall)
+                .foregroundColor(CLITheme.primaryText(for: colorScheme))
+                .lineLimit(1)
+
+            // Status indicator
+            GitStatusIndicator(status: subRepo.status)
+
+            Spacer()
+
+            // Action buttons
+            if subRepo.status.canAutoPull {
+                Button {
+                    onPull?()
+                } label: {
+                    Text("Pull")
+                        .font(CLITheme.monoSmall)
+                        .foregroundColor(CLITheme.cyan(for: colorScheme))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(CLITheme.cyan(for: colorScheme).opacity(0.15))
+                        .cornerRadius(4)
+                }
+                .buttonStyle(.plain)
+            }
+
+            Button {
+                onRefresh?()
+            } label: {
+                Image(systemName: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 12))
+                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 6)
+        .padding(.leading, 8)
+        .background(CLITheme.secondaryBackground(for: colorScheme).opacity(0.5))
+    }
+}
+
+// MARK: - Sub-Repo Action Bar
+
+struct SubRepoActionBar: View {
+    let multiRepoStatus: MultiRepoStatus
+    var onPullAll: (() -> Void)? = nil
+    var onRefreshAll: (() -> Void)? = nil
+    @Environment(\.colorScheme) var colorScheme
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Spacer()
+                .frame(width: 32)
+
+            if multiRepoStatus.pullableCount > 0 {
+                Button {
+                    onPullAll?()
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.down.circle")
+                        Text("Pull All Behind (\(multiRepoStatus.pullableCount))")
+                    }
+                    .font(CLITheme.monoSmall)
+                    .foregroundColor(CLITheme.cyan(for: colorScheme))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(CLITheme.cyan(for: colorScheme).opacity(0.15))
+                    .cornerRadius(6)
+                }
+                .buttonStyle(.plain)
+            }
+
+            Button {
+                onRefreshAll?()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                    Text("Refresh All")
+                }
+                .font(CLITheme.monoSmall)
+                .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(CLITheme.secondaryBackground(for: colorScheme))
+                .cornerRadius(6)
+            }
+            .buttonStyle(.plain)
+
+            Spacer()
+        }
+        .padding(.vertical, 8)
+        .padding(.leading, 8)
+        .background(CLITheme.secondaryBackground(for: colorScheme).opacity(0.3))
     }
 }
 

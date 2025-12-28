@@ -501,8 +501,10 @@ class ClaudeHelper: ObservableObject {
             if let jsonString = String(data: data, encoding: .utf8) {
                 webSocket?.send(.string(jsonString)) { [weak self] error in
                     if let error = error {
-                        self?.completion?(.failure(error))
-                        self?.cleanup()
+                        Task { @MainActor [weak self] in
+                            self?.completion?(.failure(error))
+                            self?.cleanup()
+                        }
                     }
                 }
             }

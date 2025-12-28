@@ -202,8 +202,30 @@ struct SessionPickerSheet: View {
     @State private var exportedMarkdown: String?
     @State private var showExportSheet = false
 
+    // Bulk delete state
+    @State private var showBulkActions = false
+    @State private var showDeleteAgeOptions = false
+    @State private var showKeepNOptions = false
+    @State private var bulkDeleteConfirmation: BulkDeleteType? = nil
+    @State private var isDeletingBulk = false
+
     @ObservedObject private var sshManager = SSHManager.shared
     @ObservedObject private var sessionManager = SessionManager.shared
+
+    /// Types of bulk delete operations for confirmation dialogs
+    enum BulkDeleteType: Identifiable {
+        case all(count: Int, protectActive: Bool)
+        case olderThan(days: Int, count: Int)
+        case keepLastN(keeping: Int, deleting: Int)
+
+        var id: String {
+            switch self {
+            case .all: return "all"
+            case .olderThan: return "olderThan"
+            case .keepLastN: return "keepLastN"
+            }
+        }
+    }
 
     /// Sessions to display - use SessionManager as single source of truth
     /// Only fall back to binding if SessionManager hasn't loaded yet
@@ -342,6 +364,18 @@ struct SessionPickerSheet: View {
                     }
                     .foregroundColor(CLITheme.secondaryText(for: colorScheme))
                 }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    if isDeletingBulk {
+                        ProgressView()
+                            .scaleEffect(0.8)
+                    } else {
+                        Button("Manage") {
+                            showBulkActions = true
+                        }
+                        .foregroundColor(CLITheme.cyan(for: colorScheme))
+                        .disabled(displaySessions.isEmpty)
+                    }
+                }
             }
             .alert("Delete Session?", isPresented: .init(
                 get: { sessionToDelete != nil },
@@ -384,6 +418,132 @@ struct SessionPickerSheet: View {
                     SessionExportSheet(markdown: markdown, sessionId: sessionToExport?.id ?? "session")
                 }
             }
+            // MARK: - Bulk Actions
+            .confirmationDialog("Manage Sessions", isPresented: $showBulkActions, titleVisibility: .visible) {
+                Button("Delete All Sessions", role: .destructive) {
+                    let (count, hasActive) = sessionManager.countSessionsToDelete(for: project.path)
+                    let deleteCount = hasActive ? count - 1 : count
+                    if deleteCount > 0 {
+                        bulkDeleteConfirmation = .all(count: deleteCount, protectActive: hasActive)
+                    }
+                }
+                Button("Delete Old Sessions...") {
+                    showDeleteAgeOptions = true
+                }
+                Button("Keep Last N Sessions...") {
+                    showKeepNOptions = true
+                }
+                Button("Cancel", role: .cancel) { }
+            }
+            // Age options picker
+            .confirmationDialog("Delete Sessions Older Than", isPresented: $showDeleteAgeOptions, titleVisibility: .visible) {
+                Button("7 Days") {
+                    let date = Calendar.current.date(byAdding: .day, value: -7, to: Date()) ?? Date()
+                    let count = sessionManager.countSessionsOlderThan(date, for: project.path)
+                    if count > 0 {
+                        bulkDeleteConfirmation = .olderThan(days: 7, count: count)
+                    }
+                }
+                Button("30 Days") {
+                    let date = Calendar.current.date(byAdding: .day, value: -30, to: Date()) ?? Date()
+                    let count = sessionManager.countSessionsOlderThan(date, for: project.path)
+                    if count > 0 {
+                        bulkDeleteConfirmation = .olderThan(days: 30, count: count)
+                    }
+                }
+                Button("90 Days") {
+                    let date = Calendar.current.date(byAdding: .day, value: -90, to: Date()) ?? Date()
+                    let count = sessionManager.countSessionsOlderThan(date, for: project.path)
+                    if count > 0 {
+                        bulkDeleteConfirmation = .olderThan(days: 90, count: count)
+                    }
+                }
+                Button("Cancel", role: .cancel) { }
+            }
+            // Keep N options picker
+            .confirmationDialog("Keep How Many Sessions?", isPresented: $showKeepNOptions, titleVisibility: .visible) {
+                Button("Keep Last 5") {
+                    let count = sessionManager.countSessionsToDeleteKeepingN(5, for: project.path)
+                    if count > 0 {
+                        bulkDeleteConfirmation = .keepLastN(keeping: 5, deleting: count)
+                    }
+                }
+                Button("Keep Last 10") {
+                    let count = sessionManager.countSessionsToDeleteKeepingN(10, for: project.path)
+                    if count > 0 {
+                        bulkDeleteConfirmation = .keepLastN(keeping: 10, deleting: count)
+                    }
+                }
+                Button("Keep Last 20") {
+                    let count = sessionManager.countSessionsToDeleteKeepingN(20, for: project.path)
+                    if count > 0 {
+                        bulkDeleteConfirmation = .keepLastN(keeping: 20, deleting: count)
+                    }
+                }
+                Button("Cancel", role: .cancel) { }
+            }
+            // Bulk delete confirmation
+            .alert(bulkDeleteTitle, isPresented: .init(
+                get: { bulkDeleteConfirmation != nil },
+                set: { if !$0 { bulkDeleteConfirmation = nil } }
+            )) {
+                Button("Cancel", role: .cancel) {
+                    bulkDeleteConfirmation = nil
+                }
+                Button("Delete", role: .destructive) {
+                    executeBulkDelete()
+                }
+            } message: {
+                Text(bulkDeleteMessage)
+            }
+        }
+    }
+
+    // MARK: - Bulk Delete Helpers
+
+    private var bulkDeleteTitle: String {
+        guard let confirmation = bulkDeleteConfirmation else { return "Delete Sessions?" }
+        switch confirmation {
+        case .all(let count, _):
+            return "Delete \(count) Session\(count == 1 ? "" : "s")?"
+        case .olderThan(let days, let count):
+            return "Delete \(count) Session\(count == 1 ? "" : "s") Older Than \(days) Days?"
+        case .keepLastN(_, let deleting):
+            return "Delete \(deleting) Session\(deleting == 1 ? "" : "s")?"
+        }
+    }
+
+    private var bulkDeleteMessage: String {
+        guard let confirmation = bulkDeleteConfirmation else { return "" }
+        switch confirmation {
+        case .all(_, let protectActive):
+            if protectActive {
+                return "This will permanently delete all sessions except the currently active one."
+            }
+            return "This will permanently delete all sessions for this project."
+        case .olderThan(let days, _):
+            return "This will permanently delete all sessions that haven't been used in over \(days) days."
+        case .keepLastN(let keeping, _):
+            return "This will keep only the \(keeping) most recent sessions and delete the rest."
+        }
+    }
+
+    private func executeBulkDelete() {
+        guard let confirmation = bulkDeleteConfirmation else { return }
+        isDeletingBulk = true
+
+        Task {
+            switch confirmation {
+            case .all(_, _):
+                _ = await sessionManager.deleteAllSessions(for: project.path, keepActiveSession: true, settings: settings)
+            case .olderThan(let days, _):
+                let date = Calendar.current.date(byAdding: .day, value: -days, to: Date()) ?? Date()
+                _ = await sessionManager.deleteSessionsOlderThan(date, for: project.path, settings: settings)
+            case .keepLastN(let keeping, _):
+                _ = await sessionManager.keepOnlyLastN(keeping, for: project.path, settings: settings)
+            }
+            isDeletingBulk = false
+            bulkDeleteConfirmation = nil
         }
     }
 

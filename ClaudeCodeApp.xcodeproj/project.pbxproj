@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		1597F6A073B1490D948C46FE /* QuickCaptureSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F4D52190DB54B75A6081DAA /* QuickCaptureSheet.swift */; };
 		1D727765964448C0BF0B34A9 /* IdeasStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4676361593D14ED18823954D /* IdeasStore.swift */; };
-		ODL75VT1JDWVUKM5HVUEOJP8 /* ProjectNamesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39UUJ7I96JL1A5K32KNO0PXO /* ProjectNamesStore.swift */; };
 		6649DD89AF7741A49571016E /* IdeasDrawerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55A0D1D2E7D841C39956EF33 /* IdeasDrawerSheet.swift */; };
 		730BCCA17F1640EF98105BAB /* IdeaRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 829A5F0CE0184E598DD8CC00 /* IdeaRowView.swift */; };
 		8D08C46693BF46478325D485 /* IdeaEditorSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = B423E7C7AA924BD1BA2E2418 /* IdeaEditorSheet.swift */; };
@@ -23,7 +22,6 @@
 		A1000008 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000008 /* Theme.swift */; };
 		A1000009 /* TerminalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000009 /* TerminalView.swift */; };
 		A1000010 /* SSHManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000010 /* SSHManager.swift */; };
-		SM000040 /* SessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000039 /* SessionManager.swift */; };
 		A1000011 /* Citadel in Frameworks */ = {isa = PBXBuildFile; productRef = A1100001 /* Citadel */; };
 		A1000012 /* WebSocketManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000011 /* WebSocketManager.swift */; };
 		A1000013 /* SpeechManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000012 /* SpeechManager.swift */; };
@@ -40,7 +38,6 @@
 		A1000024 /* CLIMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000023 /* CLIMessageView.swift */; };
 		A1000025 /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000024 /* Logger.swift */; };
 		A1000026 /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000025 /* AppError.swift */; };
-		SS000048 /* ScrollStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = SS000049 /* ScrollStateManager.swift */; };
 		A1000027 /* FilePickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000026 /* FilePickerSheet.swift */; };
 		A1000028 /* CloneProjectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000027 /* CloneProjectSheet.swift */; };
 		A1000029 /* NewProjectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000028 /* NewProjectSheet.swift */; };
@@ -59,7 +56,12 @@
 		DB000044 /* DebugLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB000045 /* DebugLogView.swift */; };
 		F52215AB5E74451A8C111231 /* TagsFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CE0280C4CD14A61A45D94D0 /* TagsFlowView.swift */; };
 		F651E84643F2460D8BA6DFB9 /* IdeasFAB.swift in Sources */ = {isa = PBXBuildFile; fileRef = D406B32A88A3423899A037FB /* IdeasFAB.swift */; };
+		ODL75VT1JDWVUKM5HVUEOJP8 /* ProjectNamesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39UUJ7I96JL1A5K32KNO0PXO /* ProjectNamesStore.swift */; };
 		PS000046 /* ProjectSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = PS000047 /* ProjectSettingsStore.swift */; };
+		SM000040 /* SessionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000039 /* SessionManager.swift */; };
+		SS000048 /* ScrollStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = SS000049 /* ScrollStateManager.swift */; };
+		ER000050 /* ErrorStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = ER000051 /* ErrorStore.swift */; };
+		EB000052 /* ErrorBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB000053 /* ErrorBanner.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -76,8 +78,8 @@
 		1F4D52190DB54B75A6081DAA /* QuickCaptureSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickCaptureSheet.swift; sourceTree = "<group>"; };
 		2509F4FB2EFF976200EAFBFE /* ClaudeCodeAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ClaudeCodeAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2CE0280C4CD14A61A45D94D0 /* TagsFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagsFlowView.swift; sourceTree = "<group>"; };
-		4676361593D14ED18823954D /* IdeasStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeasStore.swift; sourceTree = "<group>"; };
 		39UUJ7I96JL1A5K32KNO0PXO /* ProjectNamesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectNamesStore.swift; sourceTree = "<group>"; };
+		4676361593D14ED18823954D /* IdeasStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeasStore.swift; sourceTree = "<group>"; };
 		55A0D1D2E7D841C39956EF33 /* IdeasDrawerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeasDrawerSheet.swift; sourceTree = "<group>"; };
 		829A5F0CE0184E598DD8CC00 /* IdeaRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeaRowView.swift; sourceTree = "<group>"; };
 		A2000001 /* ClaudeCodeAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeCodeAppApp.swift; sourceTree = "<group>"; };
@@ -90,7 +92,6 @@
 		A2000008 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		A2000009 /* TerminalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalView.swift; sourceTree = "<group>"; };
 		A2000010 /* SSHManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHManager.swift; sourceTree = "<group>"; };
-		A2000039 /* SessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionManager.swift; sourceTree = "<group>"; };
 		A2000011 /* WebSocketManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebSocketManager.swift; sourceTree = "<group>"; };
 		A2000012 /* SpeechManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechManager.swift; sourceTree = "<group>"; };
 		A2000013 /* UserQuestionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserQuestionsView.swift; sourceTree = "<group>"; };
@@ -106,7 +107,6 @@
 		A2000023 /* CLIMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIMessageView.swift; sourceTree = "<group>"; };
 		A2000024 /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
 		A2000025 /* AppError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppError.swift; sourceTree = "<group>"; };
-		SS000049 /* ScrollStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollStateManager.swift; sourceTree = "<group>"; };
 		A2000026 /* FilePickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePickerSheet.swift; sourceTree = "<group>"; };
 		A2000027 /* CloneProjectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloneProjectSheet.swift; sourceTree = "<group>"; };
 		A2000028 /* NewProjectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewProjectSheet.swift; sourceTree = "<group>"; };
@@ -120,6 +120,7 @@
 		A2000036 /* CommandStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandStore.swift; sourceTree = "<group>"; };
 		A2000037 /* CommandsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandsView.swift; sourceTree = "<group>"; };
 		A2000038 /* CommandPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPickerSheet.swift; sourceTree = "<group>"; };
+		A2000039 /* SessionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionManager.swift; sourceTree = "<group>"; };
 		A3000001 /* ClaudeCodeApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClaudeCodeApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA000041 /* MessageActionBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageActionBar.swift; sourceTree = "<group>"; };
 		B423E7C7AA924BD1BA2E2418 /* IdeaEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeaEditorSheet.swift; sourceTree = "<group>"; };
@@ -127,6 +128,9 @@
 		DB000043 /* DebugLogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogStore.swift; sourceTree = "<group>"; };
 		DB000045 /* DebugLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogView.swift; sourceTree = "<group>"; };
 		PS000047 /* ProjectSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSettingsStore.swift; sourceTree = "<group>"; };
+		SS000049 /* ScrollStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollStateManager.swift; sourceTree = "<group>"; };
+		ER000051 /* ErrorStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorStore.swift; sourceTree = "<group>"; };
+		EB000053 /* ErrorBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorBanner.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -173,6 +177,7 @@
 				A2000033 /* ClaudeHelper.swift */,
 				A2000036 /* CommandStore.swift */,
 				DB000043 /* DebugLogStore.swift */,
+				ER000051 /* ErrorStore.swift */,
 				PS000047 /* ProjectSettingsStore.swift */,
 				4676361593D14ED18823954D /* IdeasStore.swift */,
 				39UUJ7I96JL1A5K32KNO0PXO /* ProjectNamesStore.swift */,
@@ -249,6 +254,7 @@
 				2CE0280C4CD14A61A45D94D0 /* TagsFlowView.swift */,
 				AA000041 /* MessageActionBar.swift */,
 				DB000045 /* DebugLogView.swift */,
+				EB000053 /* ErrorBanner.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -421,6 +427,8 @@
 				DB000042 /* DebugLogStore.swift in Sources */,
 				PS000046 /* ProjectSettingsStore.swift in Sources */,
 				DB000044 /* DebugLogView.swift in Sources */,
+				ER000050 /* ErrorStore.swift in Sources */,
+				EB000052 /* ErrorBanner.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -442,7 +450,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = patrickpatterson.ClaudeCodeAppTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -463,7 +471,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.1;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = patrickpatterson.ClaudeCodeAppTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -530,7 +538,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
@@ -589,7 +597,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
@@ -623,6 +631,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.level.ClaudeCodeApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -655,6 +664,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.level.ClaudeCodeApp;
 				PRODUCT_NAME = "$(TARGET_NAME)";

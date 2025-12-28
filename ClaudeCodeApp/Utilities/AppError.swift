@@ -67,6 +67,28 @@ enum AppError: LocalizedError {
             return false
         }
     }
+
+    /// SF Symbol icon name for this error type
+    var icon: String {
+        switch self {
+        case .networkUnavailable:
+            return "wifi.slash"
+        case .serverUnreachable, .connectionFailed:
+            return "network.slash"
+        case .authenticationFailed:
+            return "lock.slash"
+        case .sessionExpired:
+            return "clock.badge.exclamationmark"
+        case .messageFailed:
+            return "bubble.left.and.exclamationmark.bubble.right"
+        case .imageUploadFailed:
+            return "photo.badge.exclamationmark"
+        case .sshConnectionFailed:
+            return "terminal"
+        case .invalidResponse:
+            return "exclamationmark.triangle"
+        }
+    }
 }
 
 // MARK: - Error Alert Helper

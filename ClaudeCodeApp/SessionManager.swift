@@ -24,8 +24,15 @@ class SessionManager: ObservableObject {
     /// Track which projects have been loaded via SSH (don't use stale API data after this)
     private var hasLoadedFromSSH: Set<String> = []
 
-    /// Track recently deleted session IDs to prevent re-adding from stale sources
-    private var deletedSessionIds: Set<String> = []
+    /// Track recently deleted session IDs with timestamps to prevent re-adding from stale sources
+    /// Entries expire after `deletionTrackingTimeout` to prevent unbounded memory growth
+    private var deletedSessionIds: [String: Date] = [:]
+
+    /// How long to track deleted session IDs (5 minutes should cover any race conditions)
+    private let deletionTrackingTimeout: TimeInterval = 300 // 5 minutes
+
+    /// Maximum number of deleted session IDs to track (prevents memory leak if cleanup fails)
+    private let maxDeletedSessionIds = 100
 
     // MARK: - Dependencies
 
@@ -39,11 +46,20 @@ class SessionManager: ObservableObject {
     func loadSessions(for projectPath: String, settings: AppSettings) async {
         isLoading[projectPath] = true
 
+        // Clean up expired deletion tracking entries
+        cleanupExpiredDeletions()
+
         do {
             var sessions = try await sshManager.loadAllSessions(for: projectPath, settings: settings)
 
             // Filter out any sessions that were recently deleted (in case of race conditions)
-            sessions = sessions.filter { !deletedSessionIds.contains($0.id) }
+            let deletedIds = Set(deletedSessionIds.keys)
+            let filteredCount = sessions.count
+            sessions = sessions.filter { !deletedIds.contains($0.id) }
+
+            if sessions.count < filteredCount {
+                print("[SessionManager] Filtered out \(filteredCount - sessions.count) recently deleted sessions")
+            }
 
             sessionsByProject[projectPath] = sessions
             sessionCounts[projectPath] = sessions.count
@@ -89,7 +105,8 @@ class SessionManager: ObservableObject {
         print("[SessionManager] Session file: \(sessionFile)")
 
         // Track this session as deleted IMMEDIATELY to prevent race conditions
-        deletedSessionIds.insert(session.id)
+        // Store with timestamp for expiration-based cleanup
+        trackDeletion(session.id)
 
         // Update local state IMMEDIATELY for responsive UI
         if var sessions = sessionsByProject[projectPath] {
@@ -144,8 +161,8 @@ class SessionManager: ObservableObject {
     /// Returns true if session was added, false if rejected (e.g., was deleted)
     @discardableResult
     func addSession(_ session: ProjectSession, for projectPath: String) -> Bool {
-        // Don't add sessions that were recently deleted
-        if deletedSessionIds.contains(session.id) {
+        // Don't add sessions that were recently deleted (check with timestamp validation)
+        if isRecentlyDeleted(session.id) {
             print("[SessionManager] Rejecting add of deleted session: \(session.id.prefix(8))...")
             return false
         }
@@ -239,5 +256,249 @@ class SessionManager: ObservableObject {
     func clearActiveSessionId(for projectPath: String) {
         activeSessionIds[projectPath] = nil
         MessageStore.clearSessionId(for: projectPath)
+    }
+
+    // MARK: - Deletion Tracking (Race Condition Prevention)
+
+    /// Track a session as deleted with current timestamp
+    private func trackDeletion(_ sessionId: String) {
+        // Clean up before adding if we're at capacity
+        if deletedSessionIds.count >= maxDeletedSessionIds {
+            cleanupExpiredDeletions()
+
+            // If still at capacity after cleanup, remove oldest entries
+            if deletedSessionIds.count >= maxDeletedSessionIds {
+                let sorted = deletedSessionIds.sorted { $0.value < $1.value }
+                let toRemove = sorted.prefix(deletedSessionIds.count - maxDeletedSessionIds + 1)
+                for (id, _) in toRemove {
+                    deletedSessionIds.removeValue(forKey: id)
+                }
+                print("[SessionManager] Pruned \(toRemove.count) oldest deletion tracking entries")
+            }
+        }
+
+        deletedSessionIds[sessionId] = Date()
+        print("[SessionManager] Tracking deletion of session: \(sessionId.prefix(8))... (tracking \(deletedSessionIds.count) deletions)")
+    }
+
+    /// Check if a session was recently deleted (within timeout window)
+    private func isRecentlyDeleted(_ sessionId: String) -> Bool {
+        guard let deletionTime = deletedSessionIds[sessionId] else {
+            return false
+        }
+
+        // Check if deletion is still within the tracking window
+        let elapsed = Date().timeIntervalSince(deletionTime)
+        if elapsed > deletionTrackingTimeout {
+            // Expired - remove and allow session
+            deletedSessionIds.removeValue(forKey: sessionId)
+            print("[SessionManager] Deletion tracking expired for session: \(sessionId.prefix(8))...")
+            return false
+        }
+
+        return true
+    }
+
+    /// Remove expired deletion tracking entries
+    private func cleanupExpiredDeletions() {
+        let now = Date()
+        let expiredIds = deletedSessionIds.filter { now.timeIntervalSince($0.value) > deletionTrackingTimeout }
+
+        if !expiredIds.isEmpty {
+            for id in expiredIds.keys {
+                deletedSessionIds.removeValue(forKey: id)
+            }
+            print("[SessionManager] Cleaned up \(expiredIds.count) expired deletion tracking entries")
+        }
+    }
+
+    // MARK: - Bulk Session Deletion
+
+    /// Delete all sessions for a project
+    /// - Parameters:
+    ///   - projectPath: The project path
+    ///   - keepActiveSession: If true, keeps the currently active session
+    ///   - settings: App settings for SSH connection
+    /// - Returns: Number of sessions deleted
+    func deleteAllSessions(for projectPath: String, keepActiveSession: Bool, settings: AppSettings) async -> Int {
+        let sessions = sessionsByProject[projectPath] ?? []
+        let activeId = activeSessionIds[projectPath]
+
+        var toDelete = sessions
+        if keepActiveSession, let activeId = activeId {
+            toDelete = sessions.filter { $0.id != activeId }
+        }
+
+        guard !toDelete.isEmpty else {
+            print("[SessionManager] No sessions to delete")
+            return 0
+        }
+
+        return await deleteSessions(toDelete, for: projectPath, settings: settings)
+    }
+
+    /// Delete sessions older than a specified date
+    /// - Parameters:
+    ///   - date: Sessions with lastActivity before this date will be deleted
+    ///   - projectPath: The project path
+    ///   - settings: App settings for SSH connection
+    /// - Returns: Number of sessions deleted
+    func deleteSessionsOlderThan(_ date: Date, for projectPath: String, settings: AppSettings) async -> Int {
+        let sessions = sessionsByProject[projectPath] ?? []
+        let activeId = activeSessionIds[projectPath]
+
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        let toDelete = sessions.filter { session in
+            // Never delete active session
+            if session.id == activeId { return false }
+
+            // Parse last activity date
+            guard let activityStr = session.lastActivity else { return true } // No date = old
+            if let activityDate = formatter.date(from: activityStr) {
+                return activityDate < date
+            }
+            // Try without fractional seconds
+            formatter.formatOptions = [.withInternetDateTime]
+            if let activityDate = formatter.date(from: activityStr) {
+                return activityDate < date
+            }
+            return true // Can't parse = treat as old
+        }
+
+        guard !toDelete.isEmpty else {
+            print("[SessionManager] No sessions older than \(date) to delete")
+            return 0
+        }
+
+        return await deleteSessions(toDelete, for: projectPath, settings: settings)
+    }
+
+    /// Keep only the N most recent sessions, delete the rest
+    /// - Parameters:
+    ///   - count: Number of sessions to keep
+    ///   - projectPath: The project path
+    ///   - settings: App settings for SSH connection
+    /// - Returns: Number of sessions deleted
+    func keepOnlyLastN(_ count: Int, for projectPath: String, settings: AppSettings) async -> Int {
+        let sessions = sessionsByProject[projectPath] ?? []
+        let activeId = activeSessionIds[projectPath]
+
+        // Sort by lastActivity descending (most recent first)
+        let sorted = sessions.sorted { s1, s2 in
+            (s1.lastActivity ?? "") > (s2.lastActivity ?? "")
+        }
+
+        // Keep top N, but always include active session
+        var toKeep = Set(sorted.prefix(count).map { $0.id })
+        if let activeId = activeId {
+            toKeep.insert(activeId)
+        }
+
+        let toDelete = sessions.filter { !toKeep.contains($0.id) }
+
+        guard !toDelete.isEmpty else {
+            print("[SessionManager] No sessions to delete (keeping \(count))")
+            return 0
+        }
+
+        return await deleteSessions(toDelete, for: projectPath, settings: settings)
+    }
+
+    /// Count sessions that would be deleted by each bulk operation (for confirmation dialogs)
+    func countSessionsToDelete(for projectPath: String) -> (all: Int, activeProtected: Bool) {
+        let sessions = sessionsByProject[projectPath] ?? []
+        let activeId = activeSessionIds[projectPath]
+        let hasActive = activeId != nil && sessions.contains { $0.id == activeId }
+        return (sessions.count, hasActive)
+    }
+
+    /// Count sessions older than a date (for confirmation)
+    func countSessionsOlderThan(_ date: Date, for projectPath: String) -> Int {
+        let sessions = sessionsByProject[projectPath] ?? []
+        let activeId = activeSessionIds[projectPath]
+
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        return sessions.filter { session in
+            if session.id == activeId { return false }
+            guard let activityStr = session.lastActivity else { return true }
+            if let activityDate = formatter.date(from: activityStr) {
+                return activityDate < date
+            }
+            formatter.formatOptions = [.withInternetDateTime]
+            if let activityDate = formatter.date(from: activityStr) {
+                return activityDate < date
+            }
+            return true
+        }.count
+    }
+
+    /// Count sessions that would be deleted by keepOnlyLastN (for confirmation)
+    func countSessionsToDeleteKeepingN(_ count: Int, for projectPath: String) -> Int {
+        let sessions = sessionsByProject[projectPath] ?? []
+        let activeId = activeSessionIds[projectPath]
+
+        let sorted = sessions.sorted { s1, s2 in
+            (s1.lastActivity ?? "") > (s2.lastActivity ?? "")
+        }
+
+        var toKeep = Set(sorted.prefix(count).map { $0.id })
+        if let activeId = activeId {
+            toKeep.insert(activeId)
+        }
+
+        return sessions.filter { !toKeep.contains($0.id) }.count
+    }
+
+    /// Internal helper to delete multiple sessions via SSH
+    private func deleteSessions(_ sessions: [ProjectSession], for projectPath: String, settings: AppSettings) async -> Int {
+        let encodedPath = projectPath.replacingOccurrences(of: "/", with: "-")
+        let baseDir = "$HOME/.claude/projects/\(encodedPath)"
+
+        print("[SessionManager] ========== BULK DELETE ==========")
+        print("[SessionManager] Deleting \(sessions.count) sessions for \(projectPath)")
+
+        // Track all deletions immediately
+        for session in sessions {
+            trackDeletion(session.id)
+        }
+
+        // Update local state immediately
+        if var currentSessions = sessionsByProject[projectPath] {
+            let deleteIds = Set(sessions.map { $0.id })
+            currentSessions.removeAll { deleteIds.contains($0.id) }
+            sessionsByProject[projectPath] = currentSessions
+            sessionCounts[projectPath] = currentSessions.count
+        }
+
+        // Build file list and delete in batches (to avoid shell command length limits)
+        let batchSize = 50
+        var totalDeleted = 0
+
+        for batch in stride(from: 0, to: sessions.count, by: batchSize) {
+            let end = min(batch + batchSize, sessions.count)
+            let batchSessions = Array(sessions[batch..<end])
+
+            let fileList = batchSessions.map { "\"\(baseDir)/\($0.id).jsonl\"" }.joined(separator: " ")
+            let deleteCmd = "rm -f \(fileList) && echo 'DELETED_\(batchSessions.count)' || echo 'DELETE_FAILED'"
+
+            do {
+                let result = try await sshManager.executeCommandWithAutoConnect(deleteCmd, settings: settings)
+                if result.contains("DELETED") {
+                    totalDeleted += batchSessions.count
+                    print("[SessionManager] Deleted batch of \(batchSessions.count) sessions")
+                } else {
+                    print("[SessionManager] Failed to delete batch: \(result)")
+                }
+            } catch {
+                print("[SessionManager] Error deleting batch: \(error)")
+            }
+        }
+
+        print("[SessionManager] ✅ Bulk delete complete: \(totalDeleted)/\(sessions.count) deleted")
+        return totalDeleted
     }
 }

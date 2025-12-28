@@ -1,15 +1,18 @@
 import SwiftUI
 
 // CLI-inspired theme colors supporting dark and light modes
+// iOS 26+ Liquid Glass compatible
 enum CLITheme {
     // MARK: - Background Colors
 
+    /// Primary background color - adapts to Liquid Glass on iOS 26+
     static func background(for scheme: ColorScheme) -> Color {
         scheme == .dark
             ? Color(red: 0.08, green: 0.08, blue: 0.08)  // Near black
             : Color(red: 0.96, green: 0.96, blue: 0.96)  // Light gray
     }
 
+    /// Secondary background color - adapts to Liquid Glass on iOS 26+
     static func secondaryBackground(for scheme: ColorScheme) -> Color {
         scheme == .dark
             ? Color(red: 0.12, green: 0.12, blue: 0.12)
@@ -234,6 +237,138 @@ enum CLITheme {
     static let monoFont = Font.system(.body, design: .monospaced)
     static let monoSmall = Font.system(.caption, design: .monospaced)
     static let monoLarge = Font.system(.title3, design: .monospaced)
+
+    // MARK: - iOS 26+ Glass Tint Colors
+
+    /// Tint colors for glass effects with semantic meaning
+    enum GlassTint {
+        case primary    // Blue - primary actions
+        case success    // Green - success/completion
+        case warning    // Yellow/Orange - warnings
+        case error      // Red - errors
+        case info       // Cyan - informational
+        case accent     // Purple - accent/highlight
+        case neutral    // Gray - neutral/muted
+
+        func color(for scheme: ColorScheme) -> Color {
+            switch self {
+            case .primary: return CLITheme.blue(for: scheme)
+            case .success: return CLITheme.green(for: scheme)
+            case .warning: return CLITheme.yellow(for: scheme)
+            case .error: return CLITheme.red(for: scheme)
+            case .info: return CLITheme.cyan(for: scheme)
+            case .accent: return CLITheme.purple(for: scheme)
+            case .neutral: return CLITheme.mutedText(for: scheme)
+            }
+        }
+    }
+}
+
+// MARK: - iOS 26 Native Glass Effect View Modifier
+
+/// View modifier for applying native iOS 26 Liquid Glass effects
+/// Uses the native .glassEffect() API with semantic tinting
+struct GlassEffectModifier: ViewModifier {
+    let tint: CLITheme.GlassTint?
+    let cornerRadius: CGFloat
+    let isInteractive: Bool
+    @Environment(\.colorScheme) private var colorScheme
+
+    init(tint: CLITheme.GlassTint? = nil, cornerRadius: CGFloat = 12, isInteractive: Bool = false) {
+        self.tint = tint
+        self.cornerRadius = cornerRadius
+        self.isInteractive = isInteractive
+    }
+
+    func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius)
+
+        // Build the glass style with optional tint and interactivity
+        let glassStyle: Glass = {
+            var glass = Glass.regular
+            if let tint = tint {
+                glass = glass.tint(tint.color(for: colorScheme))
+            }
+            if isInteractive {
+                glass = glass.interactive()
+            }
+            return glass
+        }()
+
+        return content
+            .glassEffect(glassStyle, in: shape)
+    }
+}
+
+/// View modifier for capsule-shaped glass effects (buttons, pills)
+/// Uses native iOS 26 .glassEffect() API
+struct GlassCapsuleModifier: ViewModifier {
+    let tint: CLITheme.GlassTint?
+    let isInteractive: Bool
+    @Environment(\.colorScheme) private var colorScheme
+
+    init(tint: CLITheme.GlassTint? = nil, isInteractive: Bool = true) {
+        self.tint = tint
+        self.isInteractive = isInteractive
+    }
+
+    func body(content: Content) -> some View {
+        // Build the glass style with optional tint and interactivity
+        let glassStyle: Glass = {
+            var glass = Glass.regular
+            if let tint = tint {
+                glass = glass.tint(tint.color(for: colorScheme))
+            }
+            if isInteractive {
+                glass = glass.interactive()
+            }
+            return glass
+        }()
+
+        return content
+            .glassEffect(glassStyle, in: Capsule())
+    }
+}
+
+// MARK: - View Extension for Glass Effects
+
+extension View {
+    /// Apply a glass effect to the view (iOS 26+ Liquid Glass compatible)
+    /// - Parameters:
+    ///   - tint: Optional semantic tint color
+    ///   - cornerRadius: Corner radius for the glass shape
+    ///   - isInteractive: Whether the glass responds to touch (iOS 26+ only)
+    func glassBackground(
+        tint: CLITheme.GlassTint? = nil,
+        cornerRadius: CGFloat = 12,
+        isInteractive: Bool = false
+    ) -> some View {
+        modifier(GlassEffectModifier(tint: tint, cornerRadius: cornerRadius, isInteractive: isInteractive))
+    }
+
+    /// Apply a capsule-shaped glass effect (for buttons, pills)
+    func glassCapsule(
+        tint: CLITheme.GlassTint? = nil,
+        isInteractive: Bool = true
+    ) -> some View {
+        modifier(GlassCapsuleModifier(tint: tint, isInteractive: isInteractive))
+    }
+
+    /// Apply glass effect to a message bubble
+    func glassMessageBubble(role: ChatMessage.Role, colorScheme: ColorScheme) -> some View {
+        let tint: CLITheme.GlassTint? = {
+            switch role {
+            case .user: return .primary
+            case .assistant: return nil
+            case .error: return .error
+            case .toolUse, .toolResult, .resultSuccess: return .info
+            case .thinking: return .accent
+            case .system: return .neutral
+            }
+        }()
+
+        return self.glassBackground(tint: tint, cornerRadius: 16)
+    }
 }
 
 // MARK: - Connection Status Indicator

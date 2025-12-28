@@ -180,7 +180,7 @@ The [claudecodeui](https://github.com/siteboon/claudecodeui) project provides a 
 
 #### 3. Usability
 - CLI-inspired theme with light/dark mode support
-- Support for iOS 17.0+
+- Support for iOS 26.2+
 - Works on iPhone and iPad
 - VoiceOver accessibility labels on interactive elements
 - Keyboard shortcuts for iPad users

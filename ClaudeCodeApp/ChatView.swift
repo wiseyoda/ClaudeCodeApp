@@ -2,18 +2,33 @@ import SwiftUI
 import UIKit
 import PhotosUI
 
+// MARK: - ChatView
+
 struct ChatView: View {
+    // MARK: - Properties
     let project: Project
     let apiClient: APIClient
     let initialGitStatus: GitStatus
-    var onSessionsChanged: (() -> Void)?  // Callback when sessions are added/deleted
+    var onSessionsChanged: (() -> Void)?
+
+    // MARK: - Environment
     @EnvironmentObject var settings: AppSettings
-    @StateObject private var wsManager: WebSocketManager
-    @StateObject private var claudeHelper: ClaudeHelper
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
 
+    // MARK: - Managers (StateObject/ObservedObject)
+    @StateObject private var wsManager: WebSocketManager
+    @StateObject private var claudeHelper: ClaudeHelper
+    @StateObject private var ideasStore: IdeasStore
+    @StateObject private var scrollManager = ScrollStateManager()
+    @ObservedObject private var sessionManager = SessionManager.shared
+    @ObservedObject private var sshManager = SSHManager.shared
+    @ObservedObject private var projectSettingsStore = ProjectSettingsStore.shared
+
+    // MARK: - Chat State (messages, input, session)
+    /// iOS 26+: Migrate to @IncrementalState for better List performance with large message lists
+    /// Add `.incrementalID()` modifier to CLIMessageView using `message.id`
     @State private var messages: [ChatMessage] = []
     @State private var inputText = ""
     @State private var selectedImage: Data?
@@ -22,49 +37,41 @@ struct ChatView: View {
     @State private var isUploadingImage = false
     @State private var isLoadingHistory = false
     @State private var scrollToBottomTrigger = false
-    @State private var pendingQuestions: AskUserQuestionData?  // For AskUserQuestion tool
-    @State private var showingHelpSheet = false  // For /help command
-    @State private var showingSessionPicker = false  // For /resume command
-    @State private var showingBookmarks = false  // For bookmarks view
+    @State private var pendingQuestions: AskUserQuestionData?
 
-    // Ideas drawer state
-    @StateObject private var ideasStore: IdeasStore
-    @State private var showIdeasDrawer = false
-    @State private var showQuickCapture = false
-
-    // Search and filter state
+    // MARK: - Search State
     @State private var isSearching = false
     @State private var searchText = ""
     @State private var messageFilter: MessageFilter = .all
 
-    // Session management (centralized via SessionManager)
-    @ObservedObject private var sessionManager = SessionManager.shared
-    @ObservedObject private var sshManager = SSHManager.shared
-    @ObservedObject private var projectSettingsStore = ProjectSettingsStore.shared
-    @FocusState private var isInputFocused: Bool
-
-    // Git sync state
+    // MARK: - Git State
     @State private var gitStatus: GitStatus = .unknown
     @State private var isAutoPulling = false
     @State private var showGitBanner = true
     @State private var hasPromptedCleanup = false
     @State private var gitRefreshTask: Task<Void, Never>?
 
-    // Model selection state
+    // MARK: - Model State
     @State private var showingModelPicker = false
     @State private var currentModel: ClaudeModel?
     @State private var customModelId = ""
 
-    // Quick settings sheet
+    // MARK: - Sheet State
+    @State private var showingHelpSheet = false
+    @State private var showingSessionPicker = false
+    @State private var showingBookmarks = false
+    @State private var showIdeasDrawer = false
+    @State private var showQuickCapture = false
     @State private var showQuickSettings = false
 
-    // Scroll state management
-    @StateObject private var scrollManager = ScrollStateManager()
+    // MARK: - Scroll State
     @State private var visibleMessageIds: Set<String> = []
     @State private var savedScrollPosition: String?
+    @FocusState private var isInputFocused: Bool
 
-    // Delayed disconnect to handle NavigationSplitView layout recreations
+    // MARK: - Background Tasks
     @State private var disconnectTask: Task<Void, Never>?
+    @State private var analyzeTask: Task<Void, Never>?
 
     init(project: Project, apiClient: APIClient, initialGitStatus: GitStatus = .unknown, onSessionsChanged: (() -> Void)? = nil) {
         self.project = project
@@ -100,7 +107,9 @@ struct ChatView: View {
         }
         .background(CLITheme.background(for: colorScheme))
         .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(CLITheme.secondaryBackground(for: colorScheme), for: .navigationBar)
+        // iOS 26+: Toolbar will automatically adopt Liquid Glass styling
+        // Using Material for glass-compatible background on iOS 17-25
+        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             // Custom title with git status
@@ -243,11 +252,15 @@ struct ChatView: View {
         }
         .onDisappear {
             // Save messages when leaving
-            MessageStore.saveMessages(messages, for: project.path)
+            MessageStore.saveMessages(messages, for: project.path, maxMessages: settings.historyLimit.rawValue)
 
             // Cancel git refresh task
             gitRefreshTask?.cancel()
             gitRefreshTask = nil
+
+            // Cancel any running message analysis
+            analyzeTask?.cancel()
+            analyzeTask = nil
 
             // Delay disconnect to handle NavigationSplitView layout recreations
             // If onAppear is called again quickly, the disconnect will be cancelled
@@ -261,7 +274,7 @@ struct ChatView: View {
         }
         .onChange(of: messages) { _, newMessages in
             // Save messages whenever they change (debounced by iOS)
-            MessageStore.saveMessages(newMessages, for: project.path)
+            MessageStore.saveMessages(newMessages, for: project.path, maxMessages: settings.historyLimit.rawValue)
         }
         .onChange(of: inputText) { _, newText in
             // Auto-save draft input
@@ -732,8 +745,11 @@ struct ChatView: View {
                     projectPath: project.path,
                     projectTitle: project.title,
                     onAnalyze: { msg in
+                        // Cancel any previous analysis task
+                        analyzeTask?.cancel()
                         // Use ClaudeHelper to analyze the message
-                        Task {
+                        analyzeTask = Task {
+                            guard !Task.isCancelled else { return }
                             await claudeHelper.analyzeMessage(
                                 msg,
                                 recentMessages: messages,
@@ -1058,7 +1074,7 @@ struct ChatView: View {
         }
 
         // Persist messages
-        MessageStore.saveMessages(messages, for: project.path)
+        MessageStore.saveMessages(messages, for: project.path, maxMessages: settings.historyLimit.rawValue)
     }
 
     // MARK: - Slash Commands
@@ -1531,7 +1547,7 @@ struct CustomModelPickerSheet: View {
     }
 }
 
-// MARK: - Git Sync Banner
+// MARK: - Git Sync Banner (iOS 26+ Liquid Glass compatible)
 
 struct GitSyncBanner: View {
     let status: GitStatus
@@ -1543,6 +1559,22 @@ struct GitSyncBanner: View {
     let onCommit: (() -> Void)?
     let onAskClaude: (() -> Void)?
     @Environment(\.colorScheme) var colorScheme
+
+    /// Glass tint for banner based on status (iOS 26+ Liquid Glass)
+    private var glassTint: CLITheme.GlassTint {
+        switch status {
+        case .dirty, .dirtyAndAhead, .diverged:
+            return .warning
+        case .behind:
+            return .info
+        case .ahead:
+            return .primary
+        case .error:
+            return .error
+        default:
+            return .neutral
+        }
+    }
 
     var body: some View {
         HStack(spacing: 10) {
@@ -1583,7 +1615,7 @@ struct GitSyncBanner: View {
                     .accessibilityLabel("Pull changes")
                 }
 
-                // Commit button (for dirty/ahead statuses)
+                // Commit button (for dirty/ahead statuses) - iOS 26+ glass styling
                 if let onCommit = onCommit {
                     Button {
                         onCommit()
@@ -1591,11 +1623,10 @@ struct GitSyncBanner: View {
                         Label(commitButtonLabel, systemImage: commitButtonIcon)
                             .font(.caption)
                             .fontWeight(.medium)
+                            .foregroundColor(commitButtonColor)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
-                            .background(commitButtonColor.opacity(0.2))
-                            .foregroundColor(commitButtonColor)
-                            .cornerRadius(6)
+                            .glassCapsule(tint: commitButtonGlassTint, isInteractive: true)
                     }
                     .accessibilityLabel(commitButtonAccessibilityLabel)
                     .accessibilityHint("Ask Claude to commit your changes")
@@ -1618,11 +1649,10 @@ struct GitSyncBanner: View {
                         Text("Ask Claude")
                             .font(.caption)
                             .fontWeight(.medium)
+                            .foregroundColor(CLITheme.cyan(for: colorScheme))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 5)
-                            .background(CLITheme.cyan(for: colorScheme).opacity(0.2))
-                            .foregroundColor(CLITheme.cyan(for: colorScheme))
-                            .cornerRadius(6)
+                            .glassCapsule(tint: .info, isInteractive: true)
                     }
                 }
             }
@@ -1638,7 +1668,8 @@ struct GitSyncBanner: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
-        .background(bannerBackground)
+        // iOS 26+: Use glass effect with semantic tint
+        .glassBackground(tint: glassTint, cornerRadius: 0)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(status.accessibilityLabel)
     }
@@ -1749,6 +1780,18 @@ struct GitSyncBanner: View {
             return CLITheme.blue(for: colorScheme)
         default:
             return CLITheme.green(for: colorScheme)
+        }
+    }
+
+    /// Glass tint for commit button (iOS 26+ Liquid Glass)
+    private var commitButtonGlassTint: CLITheme.GlassTint {
+        switch status {
+        case .dirty, .dirtyAndAhead, .diverged:
+            return .success
+        case .ahead:
+            return .primary
+        default:
+            return .success
         }
     }
 

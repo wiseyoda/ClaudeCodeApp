@@ -20,10 +20,20 @@ struct SavedCommand: Identifiable, Codable, Equatable {
 }
 
 /// Manages persistent storage of saved commands
+///
+/// ## iOS 26+ Migration: @IncrementalState
+/// This store is a candidate for @IncrementalState when the commands list grows.
+/// The migration will improve List performance for users with many saved commands.
+///
+/// Migration steps:
+/// 1. Change `@Published var commands` to `@IncrementalState var commands`
+/// 2. Add `.incrementalID()` modifier to CommandRow views using `command.id`
+/// 3. Use incremental update methods for add/update/delete operations
 @MainActor
 class CommandStore: ObservableObject {
     static let shared = CommandStore()
 
+    /// iOS 26+: Consider migrating to @IncrementalState for better List performance
     @Published var commands: [SavedCommand] = []
 
     private static let fileName = "commands.json"

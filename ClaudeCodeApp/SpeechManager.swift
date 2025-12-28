@@ -104,7 +104,7 @@ class SpeechManager: ObservableObject {
             audioEngine.prepare()
             try audioEngine.start()
             isRecording = true
-            print("[Speech] Recording started")
+            log.info("Recording started")
         } catch {
             errorMessage = "Audio engine error: \(error.localizedDescription)"
             stopRecording()
@@ -124,7 +124,7 @@ class SpeechManager: ObservableObject {
         audioEngine = nil
 
         isRecording = false
-        print("[Speech] Recording stopped, text: \(transcribedText)")
+        log.info("Recording stopped, text: \(transcribedText)")
     }
 
     func toggleRecording() {

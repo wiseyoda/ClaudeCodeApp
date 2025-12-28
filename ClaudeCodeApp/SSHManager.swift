@@ -1111,6 +1111,138 @@ class SSHManager: ObservableObject {
         return String(buffer: result)
     }
 
+    // MARK: - Multi-Repo Discovery
+
+    /// Discover nested git repositories within a project directory
+    /// Scans up to maxDepth levels deep for subdirectories containing .git folders
+    /// - Parameters:
+    ///   - basePath: The root project path to scan
+    ///   - maxDepth: Maximum depth to scan (default 2)
+    /// - Returns: Array of relative paths to directories containing .git
+    func discoverSubRepos(_ basePath: String, maxDepth: Int = 2) async throws -> [String] {
+        guard let client = client, isConnected else {
+            throw SSHError.notConnected
+        }
+
+        let escapedPath = shellEscape(basePath)
+
+        // Use find to locate .git directories, then extract parent paths
+        // -mindepth 2 excludes the root .git folder (depth 1 would be ./.git)
+        // Output format: ./packages/api (relative paths)
+        let cmd = """
+        cd \(escapedPath) && find . -mindepth 2 -maxdepth \(maxDepth + 1) -name '.git' -type d 2>/dev/null | \
+        sed 's|/\\.git$||' | \
+        sed 's|^\\./||' | \
+        sort
+        """
+
+        let result = try await client.executeCommand(cmd)
+        let output = String(buffer: result).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !output.isEmpty else {
+            return []
+        }
+
+        // Parse output: one relative path per line
+        return output
+            .components(separatedBy: "\n")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+    }
+
+    /// Discover nested git repositories with auto-connect
+    func discoverSubReposWithAutoConnect(_ basePath: String, maxDepth: Int = 2, settings: AppSettings) async -> [String] {
+        do {
+            if !isConnected {
+                try await autoConnect(settings: settings)
+            }
+            return try await discoverSubRepos(basePath, maxDepth: maxDepth)
+        } catch {
+            log.error("Failed to discover sub-repos in \(basePath): \(error)")
+            return []
+        }
+    }
+
+    /// Check git status for multiple sub-repositories concurrently
+    /// - Parameters:
+    ///   - basePath: The root project path
+    ///   - subRepoPaths: Array of relative paths to sub-repos
+    /// - Returns: Dictionary mapping relative path to GitStatus
+    func checkMultiRepoStatus(_ basePath: String, subRepoPaths: [String]) async -> [String: GitStatus] {
+        guard isConnected else {
+            return Dictionary(uniqueKeysWithValues: subRepoPaths.map { ($0, GitStatus.unknown) })
+        }
+
+        // Check all sub-repos concurrently
+        return await withTaskGroup(of: (String, GitStatus).self) { group in
+            for relativePath in subRepoPaths {
+                group.addTask {
+                    let fullPath = (basePath as NSString).appendingPathComponent(relativePath)
+                    do {
+                        let status = try await self.checkGitStatus(fullPath)
+                        return (relativePath, status)
+                    } catch {
+                        return (relativePath, .error(error.localizedDescription))
+                    }
+                }
+            }
+
+            var results: [String: GitStatus] = [:]
+            for await (path, status) in group {
+                results[path] = status
+            }
+            return results
+        }
+    }
+
+    /// Check git status for multiple sub-repositories with auto-connect
+    func checkMultiRepoStatusWithAutoConnect(
+        _ basePath: String,
+        subRepoPaths: [String],
+        settings: AppSettings
+    ) async -> [String: GitStatus] {
+        do {
+            if !isConnected {
+                try await autoConnect(settings: settings)
+            }
+            return await checkMultiRepoStatus(basePath, subRepoPaths: subRepoPaths)
+        } catch {
+            log.error("Failed to check multi-repo status for \(basePath): \(error)")
+            return Dictionary(uniqueKeysWithValues: subRepoPaths.map { ($0, GitStatus.unknown) })
+        }
+    }
+
+    /// Pull a specific sub-repository
+    func pullSubRepo(_ basePath: String, relativePath: String, settings: AppSettings) async -> Bool {
+        let fullPath = (basePath as NSString).appendingPathComponent(relativePath)
+        return await gitPullWithAutoConnect(fullPath, settings: settings)
+    }
+
+    /// Pull all sub-repositories that are behind
+    /// - Returns: Dictionary of relativePath -> success/failure
+    func pullAllBehindSubRepos(
+        _ basePath: String,
+        subRepos: [SubRepo],
+        settings: AppSettings
+    ) async -> [String: Bool] {
+        let behindRepos = subRepos.filter { $0.status.canAutoPull }
+
+        return await withTaskGroup(of: (String, Bool).self) { group in
+            for subRepo in behindRepos {
+                group.addTask {
+                    let success = await self.pullSubRepo(basePath, relativePath: subRepo.relativePath, settings: settings)
+                    return (subRepo.relativePath, success)
+                }
+            }
+
+            var results: [String: Bool] = [:]
+            for await (path, success) in group {
+                results[path] = success
+            }
+            return results
+        }
+    }
+
     /// List files with auto-connect
     func listFilesWithAutoConnect(_ path: String, settings: AppSettings) async throws -> [FileEntry] {
         if !isConnected {

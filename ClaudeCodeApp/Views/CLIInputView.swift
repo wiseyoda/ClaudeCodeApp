@@ -2,6 +2,11 @@ import SwiftUI
 import PhotosUI
 
 // MARK: - CLI Input View
+// iOS 26+: TextEditor supports AttributedString for rich text
+// Consider migrating to TextEditor with AttributedString binding for:
+// - Syntax highlighting of code blocks
+// - Styled @mentions and file references
+// - Rich formatting in prompts
 
 struct CLIInputView: View {
     @Binding var text: String
@@ -79,7 +84,7 @@ struct CLIInputView: View {
                         attachmentMenuButton
                     }
 
-                    // Multi-line text input
+                    // Multi-line text input with iOS 26+ glass-ready styling
                     TextField("Type a message...", text: $text, axis: .vertical)
                         .font(settings.scaledFont(.body))
                         .foregroundColor(CLITheme.primaryText(for: colorScheme))
@@ -95,8 +100,7 @@ struct CLIInputView: View {
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
-                        .background(CLITheme.secondaryBackground(for: colorScheme))
-                        .cornerRadius(20)
+                        .glassBackground(cornerRadius: 20)
 
                     // Send button
                     sendButton
@@ -163,7 +167,8 @@ struct CLIInputView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
-        .background(CLITheme.secondaryBackground(for: colorScheme))
+        // iOS 26+: Glass background with error tint for recording state
+        .glassBackground(tint: .error, cornerRadius: 0)
     }
 
     private func imagePreview(_ uiImage: UIImage) -> some View {

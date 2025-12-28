@@ -55,15 +55,14 @@ struct CLIMessageView: View {
                         .foregroundColor(CLITheme.mutedText(for: colorScheme))
                         .font(settings.scaledFont(.small))
 
-                    // Show count badge when collapsed
+                    // Show count badge when collapsed (iOS 26+ glass-ready)
                     if !isExpanded, let badge = resultCountBadge {
                         Text(badge)
                             .font(settings.scaledFont(.small))
                             .foregroundColor(badgeColor)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(badgeColor.opacity(0.15))
-                            .cornerRadius(4)
+                            .glassBackground(tint: glassTintForBadge, cornerRadius: 4)
                     }
                 }
 
@@ -467,6 +466,17 @@ struct CLIMessageView: View {
         return CLITheme.mutedText(for: colorScheme)
     }
 
+    /// Glass tint for the result count badge (iOS 26+ Liquid Glass)
+    private var glassTintForBadge: CLITheme.GlassTint? {
+        let content = message.content
+        if message.role == .toolResult {
+            if let exitCode = extractBashExitCode(from: content) {
+                return exitCode == 0 ? .success : .error
+            }
+        }
+        return .neutral
+    }
+
     /// Generate a count badge for collapsed tool outputs
     private var resultCountBadge: String? {
         let content = message.content
@@ -613,7 +623,7 @@ struct CLIMessageView: View {
     }
 }
 
-// MARK: - CLI Processing View
+// MARK: - CLI Processing View (iOS 26+ Liquid Glass compatible)
 
 struct CLIProcessingView: View {
     @State private var dotCount = 0
@@ -630,6 +640,9 @@ struct CLIProcessingView: View {
             Spacer()
         }
         .font(settings.scaledFont(.body))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .glassBackground(tint: .warning, cornerRadius: 8)
         .onReceive(timer) { _ in
             dotCount = (dotCount + 1) % 4
         }
@@ -639,7 +652,7 @@ struct CLIProcessingView: View {
     }
 }
 
-// MARK: - Quick Action Button
+// MARK: - Quick Action Button (iOS 26+ Liquid Glass compatible)
 
 struct QuickActionButton: View {
     let icon: String
@@ -668,8 +681,11 @@ struct QuickActionButton: View {
                         ? CLITheme.green(for: colorScheme)
                         : CLITheme.mutedText(for: colorScheme)
                 )
+                .frame(width: 24, height: 24)
+                .glassCapsule(tint: showConfirmation ? .success : nil, isInteractive: true)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(showConfirmation ? "Copied" : label)
+        // iOS 26+: Button will automatically get glass styling via system
     }
 }

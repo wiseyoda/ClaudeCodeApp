@@ -23,9 +23,14 @@ struct ClaudeCodeAppApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environmentObject(settings)
-                .preferredColorScheme(settings.appTheme.colorScheme)
+            ZStack(alignment: .top) {
+                ContentView()
+                    .environmentObject(settings)
+
+                // Global error banner overlay
+                ErrorBanner()
+            }
+            .preferredColorScheme(settings.appTheme.colorScheme)
         }
     }
 }

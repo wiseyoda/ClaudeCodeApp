@@ -52,6 +52,9 @@ class WebSocketManager: ObservableObject {
     private var webSocket: URLSessionWebSocketTask?
     private var settings: AppSettings
 
+    /// Unique ID for the current connection - used to detect stale receive callbacks
+    private var connectionId: UUID = UUID()
+
     /// Current connection state - use this instead of isConnected
     @Published var connectionState: ConnectionState = .disconnected
 
@@ -78,7 +81,7 @@ class WebSocketManager: ObservableObject {
     @Published var isSwitchingModel = false
 
     /// Track whether app is in foreground - set by ChatView
-    var isAppInForeground = true
+    @Published var isAppInForeground = true
 
     // Reconnection state
     private var isReconnecting = false
@@ -198,6 +201,7 @@ class WebSocketManager: ObservableObject {
                         self.lastActiveToolName = nil
                         self.lastError = "Request timed out - no response from server"
                         self.onError?("Request timed out")
+                        ErrorStore.shared.post(.connectionFailed("Request timed out - no response from server"))
                         return false
                     }
 
@@ -213,6 +217,7 @@ class WebSocketManager: ObservableObject {
                         self.lastActiveToolName = nil
                         self.lastError = "Request timed out after \(elapsedFormatted) - no response from server. Long operations may need increased timeout in Settings."
                         self.onError?("Request timed out")
+                        ErrorStore.shared.post(.connectionFailed("Request timed out after \(elapsedFormatted)"))
                         return false
                     }
 
@@ -266,6 +271,7 @@ class WebSocketManager: ObservableObject {
             lastError = "Invalid WebSocket URL"
             connectionState = .disconnected
             debugLog.logError("Invalid WebSocket URL")
+            ErrorStore.shared.post(.serverUnreachable(settings.serverURL))
             return
         }
 
@@ -273,6 +279,10 @@ class WebSocketManager: ObservableObject {
         reconnectTask?.cancel()
         reconnectTask = nil
         isReconnecting = false
+
+        // Generate new connection ID to invalidate any stale receive callbacks
+        connectionId = UUID()
+        let currentConnectionId = connectionId
 
         // Clean up existing connection if any
         webSocket?.cancel(with: .goingAway, reason: nil)
@@ -297,6 +307,11 @@ class WebSocketManager: ObservableObject {
         webSocket?.sendPing { [weak self] error in
             Task { @MainActor in
                 guard let self = self else { return }
+                // Verify this ping is for the current connection (not a stale one)
+                guard self.connectionId == currentConnectionId else {
+                    log.debug("Ping callback from stale connection, ignoring")
+                    return
+                }
                 if let error = error {
                     log.debug("Ping failed: \(error.localizedDescription)")
                     // Don't treat ping failure as connection failure - wait for receive
@@ -314,7 +329,7 @@ class WebSocketManager: ObservableObject {
 
         // Note: reconnectAttempt is also reset in receiveMessage success as backup
 
-        receiveMessage()
+        receiveMessage(forConnection: currentConnectionId)
     }
 
     func disconnect() {
@@ -725,10 +740,16 @@ class WebSocketManager: ObservableObject {
         }
     }
 
-    private func receiveMessage() {
-        // Check if we should stop receiving (disconnect was called)
+    private func receiveMessage(forConnection expectedConnectionId: UUID) {
+        // Check if we should stop receiving (disconnect was called or connection changed)
         guard webSocket != nil, connectionState != .disconnected else {
             log.debug("receiveMessage: stopping - webSocket nil or disconnected")
+            return
+        }
+
+        // Verify this is still the current connection
+        guard connectionId == expectedConnectionId else {
+            log.debug("receiveMessage: stopping - connection ID changed (stale receive loop)")
             return
         }
 
@@ -737,6 +758,12 @@ class WebSocketManager: ObservableObject {
                 // Check cancellation before processing
                 guard let self = self, self.webSocket != nil else {
                     log.debug("receiveMessage callback: self or webSocket is nil, stopping")
+                    return
+                }
+
+                // Verify this callback is for the current connection (not a stale one)
+                guard self.connectionId == expectedConnectionId else {
+                    log.debug("receiveMessage callback: stale connection ID, ignoring")
                     return
                 }
 
@@ -750,12 +777,18 @@ class WebSocketManager: ObservableObject {
                         debugLog.logConnection("Connected (confirmed)")
                     }
                     self.handleMessage(message)
-                    self.receiveMessage()  // Continue listening
+                    self.receiveMessage(forConnection: expectedConnectionId)  // Continue listening
 
                 case .failure(let error):
                     // Don't log or handle if we intentionally disconnected
                     guard self.connectionState != .disconnected else {
                         log.debug("receiveMessage: ignoring error after disconnect")
+                        return
+                    }
+
+                    // Verify this is still the current connection before handling error
+                    guard self.connectionId == expectedConnectionId else {
+                        log.debug("receiveMessage error: stale connection, ignoring")
                         return
                     }
 

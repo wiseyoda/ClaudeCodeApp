@@ -214,19 +214,18 @@ struct HighlightedText: View {
             segments.append((String(text[currentIndex..<text.endIndex]), false))
         }
 
-        return AnyView(
-            segments.reduce(Text("")) { result, segment in
-                if segment.1 {
-                    // Highlighted segment - use bold instead of background (Text limitation)
-                    result + Text(segment.0)
-                        .font(baseFont)
-                        .bold()
-                        .foregroundColor(CLITheme.yellow(for: colorScheme))
-                } else {
-                    result + Text(segment.0)
-                        .font(baseFont)
-                }
+        // iOS 26+: Text '+' operator deprecated, use attributed string instead
+        var attributedString = AttributedString()
+        for segment in segments {
+            var part = AttributedString(segment.0)
+            part.font = baseFont
+            if segment.1 {
+                // Highlighted segment
+                part.inlinePresentationIntent = .stronglyEmphasized
+                part.foregroundColor = CLITheme.yellow(for: colorScheme)
             }
-        )
+            attributedString.append(part)
+        }
+        return AnyView(Text(attributedString))
     }
 }

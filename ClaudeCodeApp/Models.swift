@@ -189,6 +189,158 @@ enum GitStatus: Equatable {
     }
 }
 
+// MARK: - Multi-Repo Git Status
+
+/// Represents a nested git repository within a project
+struct SubRepo: Identifiable, Hashable {
+    let id: UUID
+    let relativePath: String  // e.g., "packages/api" or "services/auth"
+    let fullPath: String      // Full path for git commands
+    var status: GitStatus
+
+    init(relativePath: String, fullPath: String, status: GitStatus = .unknown) {
+        self.id = UUID()
+        self.relativePath = relativePath
+        self.fullPath = fullPath
+        self.status = status
+    }
+
+    // Hashable conformance (exclude status for stable identity)
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(relativePath)
+        hasher.combine(fullPath)
+    }
+
+    static func == (lhs: SubRepo, rhs: SubRepo) -> Bool {
+        lhs.relativePath == rhs.relativePath && lhs.fullPath == rhs.fullPath
+    }
+}
+
+/// Aggregated status for a project with multiple nested git repositories
+struct MultiRepoStatus {
+    var subRepos: [SubRepo]
+    var isScanning: Bool = false
+
+    init(subRepos: [SubRepo] = [], isScanning: Bool = false) {
+        self.subRepos = subRepos
+        self.isScanning = isScanning
+    }
+
+    /// Human-readable summary of sub-repo statuses (e.g., "2 dirty, 1 behind")
+    var summary: String {
+        guard !subRepos.isEmpty else { return "" }
+
+        var counts: [String: Int] = [:]
+
+        for subRepo in subRepos {
+            switch subRepo.status {
+            case .dirty, .dirtyAndAhead:
+                counts["dirty", default: 0] += 1
+            case .behind:
+                counts["behind", default: 0] += 1
+            case .ahead:
+                counts["ahead", default: 0] += 1
+            case .diverged:
+                counts["diverged", default: 0] += 1
+            case .error:
+                counts["error", default: 0] += 1
+            case .clean:
+                counts["clean", default: 0] += 1
+            case .unknown, .checking, .notGitRepo:
+                break
+            }
+        }
+
+        // Build summary string, prioritizing actionable items
+        var parts: [String] = []
+        if let count = counts["dirty"], count > 0 {
+            parts.append("\(count) dirty")
+        }
+        if let count = counts["behind"], count > 0 {
+            parts.append("\(count) behind")
+        }
+        if let count = counts["ahead"], count > 0 {
+            parts.append("\(count) ahead")
+        }
+        if let count = counts["diverged"], count > 0 {
+            parts.append("\(count) diverged")
+        }
+        if let count = counts["error"], count > 0 {
+            parts.append("\(count) error")
+        }
+
+        if parts.isEmpty {
+            let cleanCount = counts["clean"] ?? 0
+            if cleanCount == subRepos.count {
+                return "all clean"
+            }
+            return "\(subRepos.count) repos"
+        }
+
+        return parts.joined(separator: ", ")
+    }
+
+    /// Returns the most actionable/urgent status for badge coloring
+    var worstStatus: GitStatus {
+        // Priority order: error > diverged > dirty > behind > ahead > clean > unknown
+        var hasError = false
+        var hasDiverged = false
+        var hasDirty = false
+        var hasBehind = false
+        var hasAhead = false
+        var hasClean = false
+
+        for subRepo in subRepos {
+            switch subRepo.status {
+            case .error:
+                hasError = true
+            case .diverged:
+                hasDiverged = true
+            case .dirty, .dirtyAndAhead:
+                hasDirty = true
+            case .behind:
+                hasBehind = true
+            case .ahead:
+                hasAhead = true
+            case .clean:
+                hasClean = true
+            default:
+                break
+            }
+        }
+
+        if hasError { return .error("sub-repo error") }
+        if hasDiverged { return .diverged }
+        if hasDirty { return .dirty }
+        if hasBehind { return .behind(1) }
+        if hasAhead { return .ahead(1) }
+        if hasClean { return .clean }
+        return .unknown
+    }
+
+    /// Whether any sub-repo needs user attention
+    var hasActionableItems: Bool {
+        subRepos.contains { subRepo in
+            switch subRepo.status {
+            case .dirty, .dirtyAndAhead, .behind, .ahead, .diverged, .error:
+                return true
+            default:
+                return false
+            }
+        }
+    }
+
+    /// Count of sub-repos that can be auto-pulled
+    var pullableCount: Int {
+        subRepos.filter { $0.status.canAutoPull }.count
+    }
+
+    /// Whether there are any sub-repos
+    var hasSubRepos: Bool {
+        !subRepos.isEmpty
+    }
+}
+
 // MARK: - Project Models (new claudecodeui API)
 
 struct Project: Codable, Identifiable, Hashable {
@@ -356,7 +508,8 @@ private struct ChatMessageDTO: Codable {
 }
 
 class MessageStore {
-    private static let maxMessages = 50
+    /// Default message limit (used when no limit is specified)
+    static let defaultMaxMessages = 50
     /// Serial queue for synchronized file access to prevent race conditions
     private static let fileQueue = DispatchQueue(label: "com.claudecodeapp.messagestore", qos: .userInitiated)
 
@@ -427,8 +580,8 @@ class MessageStore {
         }
     }
 
-    /// Save messages for a project (keeps last 50)
-    static func saveMessages(_ messages: [ChatMessage], for projectPath: String) {
+    /// Save messages for a project (keeps last N messages based on limit)
+    static func saveMessages(_ messages: [ChatMessage], for projectPath: String, maxMessages: Int = defaultMaxMessages) {
         // Capture messages as DTOs to avoid retaining ChatMessage objects
         let persistableMessages = Array(messages
             .filter { !$0.isStreaming }
@@ -444,18 +597,31 @@ class MessageStore {
             let file = messagesFile(for: projectPath)
             let imagesDir = imagesDirectory(for: projectPath)
 
-            // Save images
-            for (filename, imageData) in imageDataMap {
-                let imagePath = imagesDir.appendingPathComponent(filename)
-                try? imageData.write(to: imagePath)
+            // First, encode JSON to verify it will succeed before writing images
+            let jsonData: Data
+            do {
+                jsonData = try JSONEncoder().encode(dtos)
+            } catch {
+                log.error("Failed to encode messages: \(error)")
+                return
             }
 
+            // Save images (now we know JSON encoding succeeded)
+            for (filename, imageData) in imageDataMap {
+                let imagePath = imagesDir.appendingPathComponent(filename)
+                do {
+                    try imageData.write(to: imagePath, options: .atomic)
+                } catch {
+                    log.warning("Failed to save image \(filename): \(error)")
+                }
+            }
+
+            // Save JSON atomically (if this fails, images are still valid for next save)
             do {
-                let data = try JSONEncoder().encode(dtos)
-                try data.write(to: file)
+                try jsonData.write(to: file, options: .atomic)
                 log.debug("Saved \(dtos.count) messages for \(projectPath)")
             } catch {
-                log.error("Failed to save messages: \(error)")
+                log.error("Failed to save messages JSON: \(error)")
             }
 
             // Clean up old images that are no longer referenced
@@ -505,14 +671,24 @@ class MessageStore {
 
     private static func cleanupOrphanedImages(for projectPath: String, validIds: Set<UUID>) {
         let imagesDir = imagesDirectory(for: projectPath)
-        guard let files = try? FileManager.default.contentsOfDirectory(at: imagesDir, includingPropertiesForKeys: nil) else {
+
+        let files: [URL]
+        do {
+            files = try FileManager.default.contentsOfDirectory(at: imagesDir, includingPropertiesForKeys: nil)
+        } catch {
+            // Directory doesn't exist or can't be read - not an error for cleanup
             return
         }
 
         for file in files {
             let filename = file.deletingPathExtension().lastPathComponent
             if let uuid = UUID(uuidString: filename), !validIds.contains(uuid) {
-                try? FileManager.default.removeItem(at: file)
+                do {
+                    try FileManager.default.removeItem(at: file)
+                    log.debug("Cleaned up orphaned image: \(filename)")
+                } catch {
+                    log.warning("Failed to remove orphaned image \(filename): \(error)")
+                }
             }
         }
     }
@@ -709,7 +885,7 @@ class BookmarkStore: ObservableObject {
     private func saveBookmarks() {
         do {
             let data = try JSONEncoder().encode(bookmarks)
-            try data.write(to: bookmarksFile)
+            try data.write(to: bookmarksFile, options: .atomic)
             log.debug("Saved \(bookmarks.count) bookmarks")
         } catch {
             log.error("Failed to save bookmarks: \(error)")

@@ -77,8 +77,21 @@ struct QuickSettingsSheet: View {
                     Toggle(isOn: $settings.autoScrollEnabled) {
                         Label("Auto-scroll", systemImage: "arrow.down.to.line")
                     }
+
+                    Picker(selection: Binding(
+                        get: { settings.historyLimit },
+                        set: { settings.historyLimit = $0 }
+                    )) {
+                        ForEach(HistoryLimit.allCases, id: \.self) { limit in
+                            Text("\(limit.displayName) messages").tag(limit)
+                        }
+                    } label: {
+                        Label("History Limit", systemImage: "clock.arrow.circlepath")
+                    }
                 } header: {
                     Text("Display")
+                } footer: {
+                    Text("Messages saved per project. Higher limits use more storage.")
                 }
 
                 // Advanced Section

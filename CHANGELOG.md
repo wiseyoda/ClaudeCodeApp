@@ -8,7 +8,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-*No unreleased changes*
+### Added
+- **SessionManager**: Centralized session management with filtering and sorting
+  - Excludes AI helper sessions (agent-*.jsonl) from session list
+  - Configurable response timeout in Settings
+  - Session sorting by last activity
+- **Bulk Session Management** (Feature #19): Delete multiple sessions at once
+  - Delete all sessions for a project
+  - Delete sessions older than 7, 30, or 90 days
+  - Keep only the last 5, 10, or 20 sessions
+  - Active session protection prevents accidental deletion
+  - Accessible via "Manage" button in session picker toolbar
+- **iOS 26 Compatibility Research**: Documented Liquid Glass UI requirements and migration path
+
+### Changed
+- Session picker now filters phantom "New Session" entries
+- Improved session delete handling to avoid stale UI state
+
+### Fixed
+- **SpeechManager**: Changed print() calls to Logger for consistent logging
+- **WebSocketManager**: Made `isAppInForeground` @Published for proper SwiftUI observability
+- **DebugLogStore**: Static DateFormatter for performance (was creating per-call)
+- **GlobalSearchView**: Proper error logging instead of silent try? failures
+- **ChatView**: Organized 40+ @State variables with MARK sections for maintainability
 
 ---
 

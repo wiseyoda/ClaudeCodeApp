@@ -11,7 +11,7 @@ struct GlobalSearchResult: Identifiable {
     let matchPreview: String
 }
 
-// MARK: - Global Search View
+// MARK: - Global Search View (iOS 26+ compatible with .searchable)
 
 struct GlobalSearchView: View {
     let projects: [Project]
@@ -31,9 +31,6 @@ struct GlobalSearchView: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Search input
-                searchInputView
-
                 // Results or placeholder
                 if isSearching {
                     loadingView
@@ -50,7 +47,8 @@ struct GlobalSearchView: View {
             .background(CLITheme.background(for: colorScheme))
             .navigationTitle("Search All Sessions")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbarBackground(CLITheme.secondaryBackground(for: colorScheme), for: .navigationBar)
+            // iOS 26+: Use Material for glass-compatible toolbar
+            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
@@ -60,6 +58,13 @@ struct GlobalSearchView: View {
                     .foregroundColor(CLITheme.blue(for: colorScheme))
                 }
             }
+            // iOS 26+: Native .searchable() with glass-compatible styling
+            // Replaces custom searchInputView for better UX and Liquid Glass support
+            .searchable(text: $searchText, prompt: "Search across all sessions...")
+            .onSubmit(of: .search) {
+                performSearch()
+            }
+            // iOS 26+: searchToolbarBehavior(.minimize) available for collapsible search
         }
         .onAppear {
             connectSSH()
@@ -69,7 +74,17 @@ struct GlobalSearchView: View {
             searchTask?.cancel()
             connectTask?.cancel()
         }
+        .onChange(of: searchText) { oldValue, newValue in
+            // Clear results when search text is cleared
+            if newValue.isEmpty {
+                results = []
+                hasSearched = false
+            }
+        }
     }
+
+    // MARK: - Legacy searchInputView (replaced by .searchable() in iOS 26+)
+    // Keeping for reference during transition
 
     private var searchInputView: some View {
         HStack(spacing: 8) {
@@ -260,7 +275,8 @@ struct GlobalSearchView: View {
 
                 // List session files (use $HOME for consistent shell expansion)
                 let sessionsPath = "$HOME/.claude/projects/\(encodedPath)"
-                if let output = try? await sshManager.executeCommand("ls \(sessionsPath)/*.jsonl 2>/dev/null") {
+                do {
+                    let output = try await sshManager.executeCommand("ls \(sessionsPath)/*.jsonl 2>/dev/null")
                     let files = output.components(separatedBy: .newlines).filter { !$0.isEmpty }
 
                     for file in files.prefix(20) { // Limit to 20 sessions per project
@@ -271,7 +287,8 @@ struct GlobalSearchView: View {
                         let sessionId = URL(fileURLWithPath: file).deletingPathExtension().lastPathComponent
 
                         // Read and search the file
-                        if let content = try? await sshManager.executeCommand("cat '\(file)'") {
+                        do {
+                            let content = try await sshManager.executeCommand("cat '\(file)'")
                             let messages = SessionHistoryLoader.parseSessionHistory(content)
                             let matches = messages.filter {
                                 $0.content.localizedCaseInsensitiveContains(searchText)
@@ -287,8 +304,13 @@ struct GlobalSearchView: View {
                                     matchPreview: preview
                                 ))
                             }
+                        } catch {
+                            log.warning("Failed to read session file \(file): \(error.localizedDescription)")
                         }
                     }
+                } catch {
+                    // No sessions for this project or SSH error - log for debugging
+                    log.debug("No sessions found for \(project.title): \(error.localizedDescription)")
                 }
             }
 

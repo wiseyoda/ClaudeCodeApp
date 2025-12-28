@@ -10,8 +10,8 @@
 
 ## Build, Test, and Development Commands
 - `open ClaudeCodeApp.xcodeproj`: open the project in Xcode.
-- `xcodebuild -project ClaudeCodeApp.xcodeproj -scheme ClaudeCodeApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`: build from the CLI.
-- `xcodebuild test -project ClaudeCodeApp.xcodeproj -scheme ClaudeCodeApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro'`: run unit tests.
+- `xcodebuild -project ClaudeCodeApp.xcodeproj -scheme ClaudeCodeApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'`: build from the CLI.
+- `xcodebuild test -project ClaudeCodeApp.xcodeproj -scheme ClaudeCodeApp -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'`: run unit tests.
 - Backend requirement: the app expects a running `claudecodeui` backend; see `requirements/BACKEND.md` for setup.
 
 ## Coding Style & Naming Conventions

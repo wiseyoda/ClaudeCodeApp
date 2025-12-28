@@ -171,6 +171,23 @@ enum FontSizePreset: Int, CaseIterable {
     }
 }
 
+// History limit (messages per project)
+enum HistoryLimit: Int, CaseIterable {
+    case small = 25
+    case medium = 50
+    case large = 100
+    case extraLarge = 200
+
+    var displayName: String {
+        switch self {
+        case .small: return "25"
+        case .medium: return "50"
+        case .large: return "100"
+        case .extraLarge: return "200"
+        }
+    }
+}
+
 class AppSettings: ObservableObject {
     // Server Configuration
     @AppStorage("serverURL") var serverURL: String = "http://10.0.3.2:8080"
@@ -189,6 +206,7 @@ class AppSettings: ObservableObject {
     // Chat Display Settings
     @AppStorage("showThinkingBlocks") var showThinkingBlocks: Bool = true
     @AppStorage("autoScrollEnabled") var autoScrollEnabled: Bool = true
+    @AppStorage("historyLimit") private var historyLimitRaw: Int = HistoryLimit.medium.rawValue
 
     // Debug Settings
     @AppStorage("debugLoggingEnabled") var debugLoggingEnabled: Bool = false
@@ -252,6 +270,11 @@ class AppSettings: ObservableObject {
     var projectSortOrder: ProjectSortOrder {
         get { ProjectSortOrder(rawValue: projectSortOrderRaw) ?? .name }
         set { projectSortOrderRaw = newValue.rawValue }
+    }
+
+    var historyLimit: HistoryLimit {
+        get { HistoryLimit(rawValue: historyLimitRaw) ?? .medium }
+        set { historyLimitRaw = newValue.rawValue }
     }
 
     var sshAuthType: SSHAuthType {
