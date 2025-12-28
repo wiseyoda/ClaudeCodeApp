@@ -449,12 +449,11 @@ struct ChatView: View {
 
     /// Sheet view for AskUserQuestion - extracted to help Swift compiler
     @ViewBuilder
-    private func userQuestionsSheet(_ initialData: AskUserQuestionData) -> some View {
-        UserQuestionsView(
-            questionData: Binding(
-                get: { pendingQuestions ?? initialData },
-                set: { pendingQuestions = $0 }
-            ),
+    private func userQuestionsSheet(_ questionData: AskUserQuestionData) -> some View {
+        // Use a StateObject wrapper to hold the mutable question data
+        // This avoids binding issues that can cause the sheet to freeze
+        UserQuestionsSheetWrapper(
+            initialData: questionData,
             onSubmit: { answer in
                 handleQuestionAnswer(answer)
             },
@@ -976,8 +975,13 @@ struct ChatView: View {
 
         wsManager.onAskUserQuestion = { questionData in
             // Show the question UI sheet
-            print("[ChatView] Received AskUserQuestion with \(questionData.questions.count) questions")
-            pendingQuestions = questionData
+            // Only set if we don't already have pending questions (prevents duplicate dialogs)
+            if pendingQuestions == nil {
+                print("[ChatView] Received AskUserQuestion with \(questionData.questions.count) questions")
+                pendingQuestions = questionData
+            } else {
+                print("[ChatView] Ignoring duplicate AskUserQuestion - already showing dialog")
+            }
         }
 
         wsManager.onAborted = {

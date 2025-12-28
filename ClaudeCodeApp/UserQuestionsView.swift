@@ -1,5 +1,30 @@
 import SwiftUI
 
+/// Wrapper view that owns the question data state
+/// This fixes binding issues that caused the sheet to freeze
+struct UserQuestionsSheetWrapper: View {
+    let initialData: AskUserQuestionData
+    let onSubmit: (String) -> Void
+    let onCancel: () -> Void
+
+    @State private var questionData: AskUserQuestionData
+
+    init(initialData: AskUserQuestionData, onSubmit: @escaping (String) -> Void, onCancel: @escaping () -> Void) {
+        self.initialData = initialData
+        self.onSubmit = onSubmit
+        self.onCancel = onCancel
+        self._questionData = State(initialValue: initialData)
+    }
+
+    var body: some View {
+        UserQuestionsView(
+            questionData: $questionData,
+            onSubmit: onSubmit,
+            onCancel: onCancel
+        )
+    }
+}
+
 /// A view for displaying and collecting answers to Claude's AskUserQuestion tool
 struct UserQuestionsView: View {
     @Binding var questionData: AskUserQuestionData
