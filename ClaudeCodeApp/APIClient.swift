@@ -109,7 +109,18 @@ class APIClient: ObservableObject {
 
         let request = authorizedRequest(for: url)
         log.debug("Fetching projects from: \(url)")
-        log.debug("Auth header: \(request.value(forHTTPHeaderField: "Authorization") ?? "none")")
+        // Redact the actual token value for security - only log presence/type
+        let authHeaderStatus: String
+        if let authHeader = request.value(forHTTPHeaderField: "Authorization") {
+            if authHeader.hasPrefix("Bearer ") {
+                authHeaderStatus = "Bearer [REDACTED]"
+            } else {
+                authHeaderStatus = "[REDACTED]"
+            }
+        } else {
+            authHeaderStatus = "none"
+        }
+        log.debug("Auth header: \(authHeaderStatus)")
 
         let (data, response) = try await URLSession.shared.data(for: request)
 

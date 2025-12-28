@@ -1,6 +1,15 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+// MARK: - Shell Escaping
+
+/// Escape a string for safe use in shell commands as a literal argument
+/// Uses single-quote escaping: wrap in single quotes and escape any internal single quotes
+private func shellEscape(_ string: String) -> String {
+    let escaped = string.replacingOccurrences(of: "'", with: "'\\''")
+    return "'\(escaped)'"
+}
+
 struct ContentView: View {
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
@@ -565,12 +574,14 @@ struct ContentView: View {
         // Remove project from Claude's project list (not the actual files)
         // The project directory in ~/.claude/projects/ is what makes it appear in the list
         let encodedPath = project.path.replacingOccurrences(of: "/", with: "-")
-        // Use $HOME with double quotes for proper shell expansion (single quotes prevent expansion)
-        let claudeProjectDir = "$HOME/.claude/projects/\(encodedPath)"
+        // Shell-escape the encoded path to prevent command injection
+        let escapedEncodedPath = shellEscape(encodedPath)
+        // Use $HOME with double quotes for proper shell expansion, then append escaped path
+        let claudeProjectDir = "\"$HOME/.claude/projects/\"\(escapedEncodedPath)"
 
         do {
             // Connect if needed and delete the Claude project directory
-            let deleteCmd = "rm -rf \"\(claudeProjectDir)\""
+            let deleteCmd = "rm -rf \(claudeProjectDir)"
             _ = try await sshManager.executeCommandWithAutoConnect(deleteCmd, settings: settings)
 
             // Remove from local list immediately for responsive UI

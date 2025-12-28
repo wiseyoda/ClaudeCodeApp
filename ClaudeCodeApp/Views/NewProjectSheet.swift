@@ -1,5 +1,14 @@
 import SwiftUI
 
+// MARK: - Shell Escaping
+
+/// Escape a string for safe use in shell commands as a literal argument
+/// Uses single-quote escaping: wrap in single quotes and escape any internal single quotes
+private func shellEscape(_ string: String) -> String {
+    let escaped = string.replacingOccurrences(of: "'", with: "'\\''")
+    return "'\(escaped)'"
+}
+
 // MARK: - New Project Sheet
 
 struct NewProjectSheet: View {
@@ -151,12 +160,13 @@ struct NewProjectSheet: View {
         progress = "Connecting to server..."
 
         do {
-            let workspaceDir = "~/workspace"
-            let projectDir = "\(workspaceDir)/\(sanitizedName)"
+            let workspaceDir = "$HOME/workspace"
+            // sanitizedName is already validated to contain only alphanumerics and -_
+            let escapedSanitizedName = shellEscape(sanitizedName)
 
             // Check if directory already exists
             progress = "Checking if project exists..."
-            let checkCmd = "test -d \(projectDir) && echo 'EXISTS' || echo 'NOT_FOUND'"
+            let checkCmd = "test -d \"\(workspaceDir)\"/\(escapedSanitizedName) && echo 'EXISTS' || echo 'NOT_FOUND'"
             let checkOutput = try await sshManager.executeCommandWithAutoConnect(checkCmd, settings: settings)
 
             if checkOutput.contains("EXISTS") {
@@ -165,28 +175,35 @@ struct NewProjectSheet: View {
 
             // Create the project directory
             progress = "Creating project directory..."
-            let mkdirCmd = "mkdir -p \(projectDir)"
+            let mkdirCmd = "mkdir -p \"\(workspaceDir)\"/\(escapedSanitizedName)"
             _ = try await sshManager.executeCommand(mkdirCmd)
 
             // Get the absolute path
-            let realpathCmd = "realpath \(projectDir)"
+            let realpathCmd = "realpath \"\(workspaceDir)\"/\(escapedSanitizedName)"
             let absolutePath = try await sshManager.executeCommand(realpathCmd)
             let cleanPath = absolutePath.trimmingCharacters(in: .whitespacesAndNewlines)
 
             // Register with Claude
             progress = "Registering project..."
             let encodedPath = cleanPath.replacingOccurrences(of: "/", with: "-")
-            // Use $HOME with double quotes for proper shell expansion (single quotes prevent expansion)
-            let claudeProjectDir = "$HOME/.claude/projects/\(encodedPath)"
+            // Shell-escape the encoded path for safe use in shell commands
+            let escapedEncodedPath = shellEscape(encodedPath)
+            // Use $HOME with double quotes for proper shell expansion, then append escaped path
+            let claudeProjectDir = "\"$HOME/.claude/projects/\"\(escapedEncodedPath)"
             let timestamp = ISO8601DateFormatter().string(from: Date())
-            let sessionContent = "{\"type\":\"init\",\"cwd\":\"\(cleanPath)\",\"timestamp\":\"\(timestamp)\"}"
-            let setupCmd = "mkdir -p \"\(claudeProjectDir)\" && echo '\(sessionContent)' > \"\(claudeProjectDir)/init.jsonl\""
+            // Escape cleanPath for JSON embedding (escape backslashes and quotes)
+            let jsonEscapedPath = cleanPath
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+            let sessionContent = "{\"type\":\"init\",\"cwd\":\"\(jsonEscapedPath)\",\"timestamp\":\"\(timestamp)\"}"
+            // Shell-escape the JSON content for safe use in echo command
+            let setupCmd = "mkdir -p \(claudeProjectDir) && echo \(shellEscape(sessionContent)) > \(claudeProjectDir)/init.jsonl"
             _ = try? await sshManager.executeCommand(setupCmd)
 
             // Optionally initialize Claude
             if initializeClaude {
                 progress = "Initializing Claude..."
-                let initCmd = "cd '\(cleanPath)' && claude init --yes 2>&1 || claude init 2>&1 || true"
+                let initCmd = "cd \(shellEscape(cleanPath)) && claude init --yes 2>&1 || claude init 2>&1 || true"
                 _ = await sshManager.executeCommandWithTimeout(initCmd, timeoutSeconds: 10)
             }
 

@@ -220,9 +220,10 @@ class AppSettings: ObservableObject {
 
     // Auth Settings (for claudecodeui backend)
     @AppStorage("authUsername") var authUsername: String = ""
-    @AppStorage("authPassword") var authPassword: String = ""  // Must be set by user
-    @AppStorage("authToken") var authToken: String = ""
-    @AppStorage("apiKey") var apiKey: String = ""  // API key for REST endpoints
+    // Auth credentials are stored in Keychain for security - see computed properties below
+    @Published private var _authPasswordCache: String?
+    @Published private var _authTokenCache: String?
+    @Published private var _apiKeyCache: String?
 
     // SSH Settings
     @AppStorage("sshHost") var sshHost: String = "10.0.3.2"
@@ -235,8 +236,9 @@ class AppSettings: ObservableObject {
     // MARK: - Initialization
 
     init() {
-        // Migrate SSH password from UserDefaults to Keychain on first launch after update
+        // Migrate credentials from UserDefaults to Keychain on first launch after update
         migrateSSHPasswordIfNeeded()
+        migrateAuthCredentialsIfNeeded()
     }
 
     // MARK: - Computed Properties
@@ -310,6 +312,86 @@ class AppSettings: ObservableObject {
                 // Remove from UserDefaults after successful migration
                 UserDefaults.standard.removeObject(forKey: oldKey)
                 _sshPasswordCache = oldPassword
+            }
+        }
+    }
+
+    // MARK: - Auth Credentials (Keychain-backed)
+
+    /// Auth password stored securely in Keychain
+    var authPassword: String {
+        get {
+            if let cached = _authPasswordCache {
+                return cached
+            }
+            let password = KeychainHelper.shared.retrieveAuthPassword() ?? ""
+            _authPasswordCache = password
+            return password
+        }
+        set {
+            _authPasswordCache = newValue
+            KeychainHelper.shared.storeAuthPassword(newValue)
+        }
+    }
+
+    /// Auth token (JWT) stored securely in Keychain
+    var authToken: String {
+        get {
+            if let cached = _authTokenCache {
+                return cached
+            }
+            let token = KeychainHelper.shared.retrieveAuthToken() ?? ""
+            _authTokenCache = token
+            return token
+        }
+        set {
+            _authTokenCache = newValue
+            KeychainHelper.shared.storeAuthToken(newValue)
+        }
+    }
+
+    /// API key stored securely in Keychain
+    var apiKey: String {
+        get {
+            if let cached = _apiKeyCache {
+                return cached
+            }
+            let key = KeychainHelper.shared.retrieveAPIKey() ?? ""
+            _apiKeyCache = key
+            return key
+        }
+        set {
+            _apiKeyCache = newValue
+            KeychainHelper.shared.storeAPIKey(newValue)
+        }
+    }
+
+    /// Migrate auth credentials from UserDefaults to Keychain if needed
+    func migrateAuthCredentialsIfNeeded() {
+        // Migrate authPassword
+        let passwordKey = "authPassword"
+        if let oldPassword = UserDefaults.standard.string(forKey: passwordKey), !oldPassword.isEmpty {
+            if KeychainHelper.shared.storeAuthPassword(oldPassword) {
+                UserDefaults.standard.removeObject(forKey: passwordKey)
+                _authPasswordCache = oldPassword
+            }
+        }
+
+        // Migrate authToken
+        let tokenKey = "authToken"
+        if let oldToken = UserDefaults.standard.string(forKey: tokenKey), !oldToken.isEmpty {
+            if KeychainHelper.shared.storeAuthToken(oldToken) {
+                UserDefaults.standard.removeObject(forKey: tokenKey)
+                _authTokenCache = oldToken
+            }
+        }
+
+        // Migrate apiKey
+        let apiKeyKey = "apiKey"
+        if let oldKey = UserDefaults.standard.string(forKey: apiKeyKey), !oldKey.isEmpty {
+            if KeychainHelper.shared.storeAPIKey(oldKey) {
+                UserDefaults.standard.removeObject(forKey: apiKeyKey)
+                _apiKeyCache = oldKey
             }
         }
     }

@@ -1,14 +1,16 @@
 import Foundation
 import Citadel
 import NIOCore
+import NIOSSH
 import Crypto
 import Security
+import CryptoKit
 
 // MARK: - Shell Escaping
 
 /// Escape a string for safe use in shell commands as a literal argument
 /// Uses single-quote escaping: wrap in single quotes and escape any internal single quotes
-private func shellEscape(_ string: String) -> String {
+func shellEscape(_ string: String) -> String {
     // Replace ' with '\'' (end quote, escaped quote, start quote)
     let escaped = string.replacingOccurrences(of: "'", with: "'\\''")
     return "'\(escaped)'"
@@ -36,6 +38,13 @@ class KeychainHelper {
         case privateKey = "ssh_private_key"
         case passphrase = "ssh_key_passphrase"
         case sshPassword = "ssh_password"
+        // Auth credentials for claudecodeui backend
+        case authPassword = "auth_password"
+        case authToken = "auth_token"
+        case apiKey = "api_key"
+        // SSH host key fingerprints for TOFU (Trust On First Use) validation
+        // Format: "host:port" -> fingerprint
+        case hostKeyPrefix = "ssh_hostkey_"
     }
 
     private init() {}
@@ -215,12 +224,337 @@ class KeychainHelper {
         retrieveSSHPassword() != nil
     }
 
+    // MARK: - Auth Password (claudecodeui backend)
+
+    /// Store the auth password securely
+    @discardableResult
+    func storeAuthPassword(_ password: String) -> Bool {
+        guard !password.isEmpty, let data = password.data(using: .utf8) else {
+            deleteAuthPassword()
+            return true
+        }
+        deleteAuthPassword()
+
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: Account.authPassword.rawValue,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        ]
+
+        let status = SecItemAdd(query as CFDictionary, nil)
+        return status == errSecSuccess
+    }
+
+    /// Retrieve the stored auth password
+    func retrieveAuthPassword() -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: Account.authPassword.rawValue,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        if status == errSecSuccess, let data = result as? Data {
+            return String(data: data, encoding: .utf8)
+        }
+        return nil
+    }
+
+    /// Delete the stored auth password
+    @discardableResult
+    func deleteAuthPassword() -> Bool {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: Account.authPassword.rawValue
+        ]
+
+        let status = SecItemDelete(query as CFDictionary)
+        return status == errSecSuccess || status == errSecItemNotFound
+    }
+
+    // MARK: - Auth Token (JWT for claudecodeui backend)
+
+    /// Store the auth token securely
+    @discardableResult
+    func storeAuthToken(_ token: String) -> Bool {
+        guard !token.isEmpty, let data = token.data(using: .utf8) else {
+            deleteAuthToken()
+            return true
+        }
+        deleteAuthToken()
+
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: Account.authToken.rawValue,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        ]
+
+        let status = SecItemAdd(query as CFDictionary, nil)
+        return status == errSecSuccess
+    }
+
+    /// Retrieve the stored auth token
+    func retrieveAuthToken() -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: Account.authToken.rawValue,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        if status == errSecSuccess, let data = result as? Data {
+            return String(data: data, encoding: .utf8)
+        }
+        return nil
+    }
+
+    /// Delete the stored auth token
+    @discardableResult
+    func deleteAuthToken() -> Bool {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: Account.authToken.rawValue
+        ]
+
+        let status = SecItemDelete(query as CFDictionary)
+        return status == errSecSuccess || status == errSecItemNotFound
+    }
+
+    // MARK: - API Key (for claudecodeui REST endpoints)
+
+    /// Store the API key securely
+    @discardableResult
+    func storeAPIKey(_ key: String) -> Bool {
+        guard !key.isEmpty, let data = key.data(using: .utf8) else {
+            deleteAPIKey()
+            return true
+        }
+        deleteAPIKey()
+
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: Account.apiKey.rawValue,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        ]
+
+        let status = SecItemAdd(query as CFDictionary, nil)
+        return status == errSecSuccess
+    }
+
+    /// Retrieve the stored API key
+    func retrieveAPIKey() -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: Account.apiKey.rawValue,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        if status == errSecSuccess, let data = result as? Data {
+            return String(data: data, encoding: .utf8)
+        }
+        return nil
+    }
+
+    /// Delete the stored API key
+    @discardableResult
+    func deleteAPIKey() -> Bool {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: Account.apiKey.rawValue
+        ]
+
+        let status = SecItemDelete(query as CFDictionary)
+        return status == errSecSuccess || status == errSecItemNotFound
+    }
+
     /// Remove all stored SSH credentials
     func clearAll() {
         deleteSSHKey()
         deletePassphrase()
         deleteSSHPassword()
         log.info("All SSH credentials cleared from Keychain")
+    }
+
+    /// Remove all stored credentials (SSH and auth)
+    func clearAllCredentials() {
+        deleteSSHKey()
+        deletePassphrase()
+        deleteSSHPassword()
+        deleteAuthPassword()
+        deleteAuthToken()
+        deleteAPIKey()
+        log.info("All credentials cleared from Keychain")
+    }
+
+    // MARK: - SSH Host Key Fingerprints (TOFU)
+
+    /// Generate Keychain account name for a host:port pair
+    private func hostKeyAccount(for host: String, port: Int) -> String {
+        return "\(Account.hostKeyPrefix.rawValue)\(host):\(port)"
+    }
+
+    /// Store a host key fingerprint for TOFU validation
+    @discardableResult
+    func storeHostKeyFingerprint(_ fingerprint: String, host: String, port: Int) -> Bool {
+        guard !fingerprint.isEmpty, let data = fingerprint.data(using: .utf8) else {
+            return false
+        }
+
+        let account = hostKeyAccount(for: host, port: port)
+
+        // Delete any existing fingerprint first
+        deleteHostKeyFingerprint(host: host, port: port)
+
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
+        ]
+
+        let status = SecItemAdd(query as CFDictionary, nil)
+        if status == errSecSuccess {
+            log.info("Stored host key fingerprint for \(host):\(port)")
+            return true
+        } else {
+            log.error("Failed to store host key fingerprint: \(status)")
+            return false
+        }
+    }
+
+    /// Retrieve the stored host key fingerprint
+    func retrieveHostKeyFingerprint(host: String, port: Int) -> String? {
+        let account = hostKeyAccount(for: host, port: port)
+
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        if status == errSecSuccess, let data = result as? Data {
+            return String(data: data, encoding: .utf8)
+        }
+        return nil
+    }
+
+    /// Delete a stored host key fingerprint
+    @discardableResult
+    func deleteHostKeyFingerprint(host: String, port: Int) -> Bool {
+        let account = hostKeyAccount(for: host, port: port)
+
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
+
+        let status = SecItemDelete(query as CFDictionary)
+        return status == errSecSuccess || status == errSecItemNotFound
+    }
+
+    /// Check if we have a stored fingerprint for this host
+    func hasHostKeyFingerprint(host: String, port: Int) -> Bool {
+        retrieveHostKeyFingerprint(host: host, port: port) != nil
+    }
+}
+
+// MARK: - TOFU Host Key Validator
+
+/// SSH host key validation error
+enum SSHHostKeyError: Error, LocalizedError {
+    case mismatch(expected: String, received: String)
+
+    var errorDescription: String? {
+        switch self {
+        case .mismatch(let expected, let received):
+            return "SSH host key mismatch! Expected: \(expected.prefix(16))..., Received: \(received.prefix(16))... This could indicate a man-in-the-middle attack."
+        }
+    }
+}
+
+/// Trust On First Use (TOFU) host key validator
+/// On first connection: stores the host's key fingerprint
+/// On subsequent connections: verifies the fingerprint matches
+struct TOFUHostKeyValidator {
+    let host: String
+    let port: Int
+
+    /// Create a TOFU validator for a specific host and port
+    init(host: String, port: Int) {
+        self.host = host
+        self.port = port
+    }
+
+    /// Create an SSHHostKeyValidator using TOFU strategy
+    func validator() -> SSHHostKeyValidator {
+        return .custom { publicKey in
+            // Compute fingerprint from the public key
+            let fingerprint = computeFingerprint(from: publicKey)
+
+            // Check if we have a stored fingerprint for this host
+            if let storedFingerprint = KeychainHelper.shared.retrieveHostKeyFingerprint(host: host, port: port) {
+                // Verify the fingerprint matches
+                if storedFingerprint == fingerprint {
+                    log.debug("SSH host key verified for \(host):\(port)")
+                    return  // Success - fingerprint matches
+                } else {
+                    // CRITICAL: Fingerprint mismatch - possible MITM attack
+                    log.error("SSH host key mismatch for \(host):\(port)!")
+                    log.error("Expected: \(storedFingerprint)")
+                    log.error("Received: \(fingerprint)")
+                    throw SSHHostKeyError.mismatch(expected: storedFingerprint, received: fingerprint)
+                }
+            } else {
+                // First connection - trust and store the fingerprint
+                log.info("First SSH connection to \(host):\(port) - storing host key fingerprint")
+                KeychainHelper.shared.storeHostKeyFingerprint(fingerprint, host: host, port: port)
+                return  // Success - trusted on first use
+            }
+        }
+    }
+
+    /// Compute a SHA-256 fingerprint from public key data
+    private func computeFingerprint(from publicKey: NIOSSHPublicKey) -> String {
+        // Get the raw public key bytes and compute SHA-256 hash
+        var hasher = SHA256()
+
+        // Use the public key's raw representation
+        // NIOSSHPublicKey doesn't expose raw bytes directly, so we use its description
+        // which includes the key type and base64-encoded key data
+        let keyDescription = String(describing: publicKey)
+        hasher.update(data: Data(keyDescription.utf8))
+
+        let digest = hasher.finalize()
+        return digest.map { String(format: "%02x", $0) }.joined(separator: ":")
     }
 }
 
@@ -818,12 +1152,13 @@ class SSHManager: ObservableObject {
                 throw SSHError.unsupportedKeyType("\(keyType.description) - only Ed25519 and RSA are supported")
             }
 
-            // Connect with key authentication
+            // Connect with key authentication using TOFU host key validation
+            let tofuValidator = TOFUHostKeyValidator(host: host, port: port)
             let client = try await SSHClient.connect(
                 host: host,
                 port: port,
                 authenticationMethod: authMethod,
-                hostKeyValidator: .acceptAnything(),
+                hostKeyValidator: tofuValidator.validator(),
                 reconnect: .never
             )
 
@@ -859,12 +1194,13 @@ class SSHManager: ObservableObject {
         output = "Connecting to \(username)@\(host):\(port)...\n"
 
         do {
-            // Connect with password authentication
+            // Connect with password authentication using TOFU host key validation
+            let tofuValidator = TOFUHostKeyValidator(host: host, port: port)
             let client = try await SSHClient.connect(
                 host: host,
                 port: port,
                 authenticationMethod: .passwordBased(username: username, password: password),
-                hostKeyValidator: .acceptAnything(),
+                hostKeyValidator: tofuValidator.validator(),
                 reconnect: .never
             )
 
@@ -1507,14 +1843,15 @@ class SSHManager: ObservableObject {
         // /home/dev/workspace/ClaudeCodeApp → -home-dev-workspace-ClaudeCodeApp
         let encodedPath = projectPath.replacingOccurrences(of: "/", with: "-")
         // Use $HOME for consistent shell expansion (~ doesn't expand in all contexts)
-        let sessionsDir = "$HOME/.claude/projects/\(encodedPath)"
+        // Shell-escape the encoded path to prevent command injection
+        let escapedEncodedPath = shellEscape(encodedPath)
 
         // Get session files with metadata and first REAL user message for summary
         // Uses jq for proper JSON parsing (handles both array and string content formats)
         // Filters: meta messages, ClaudeHelper prompts, system error messages
         // Extracts: session_id|line_count|mtime|first_user_message_text
         let command = """
-            cd \(sessionsDir) && ls -1 *.jsonl 2>/dev/null | grep -v '^agent-' | while read f; do
+            cd "$HOME/.claude/projects"/\(escapedEncodedPath) && ls -1 *.jsonl 2>/dev/null | grep -v '^agent-' | while read f; do
                 name=$(basename "$f" .jsonl)
                 lines=$(wc -l < "$f" | tr -d ' ')
                 mtime=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null)
@@ -1586,16 +1923,16 @@ class SSHManager: ObservableObject {
         }
 
         let encodedPath = projectPath.replacingOccurrences(of: "/", with: "-")
-        // Use $HOME for consistent shell expansion (~ doesn't expand in all contexts)
-        let sessionsDir = "$HOME/.claude/projects/\(encodedPath)"
+        // Shell-escape the encoded path to prevent command injection
+        let escapedEncodedPath = shellEscape(encodedPath)
 
-        // Get the helper session ID to exclude it
+        // Get the helper session ID to exclude it (already a safe UUID format)
         let helperSessionId = ClaudeHelper.createHelperSessionId(for: projectPath)
 
         // Count non-agent session files that have content (at least 1 line)
         // Also exclude helper sessions used for AI suggestions
         let command = """
-            cd \(sessionsDir) 2>/dev/null && ls -1 *.jsonl 2>/dev/null | grep -v '^agent-' | grep -v '^\(helperSessionId).jsonl$' | while read f; do
+            cd "$HOME/.claude/projects"/\(escapedEncodedPath) 2>/dev/null && ls -1 *.jsonl 2>/dev/null | grep -v '^agent-' | grep -v '^\(helperSessionId).jsonl$' | while read f; do
                 [ -s "$f" ] && echo "$f"
             done | wc -l | tr -d ' '
             """
@@ -1616,14 +1953,14 @@ class SSHManager: ObservableObject {
         // Process in batches to avoid command line length limits
         for path in projectPaths {
             let encodedPath = path.replacingOccurrences(of: "/", with: "-")
-            // Use $HOME for consistent shell expansion (~ doesn't expand in all contexts)
-            let sessionsDir = "$HOME/.claude/projects/\(encodedPath)"
+            // Shell-escape the encoded path to prevent command injection
+            let escapedEncodedPath = shellEscape(encodedPath)
 
-            // Get the helper session ID to exclude it
+            // Get the helper session ID to exclude it (already a safe UUID format)
             let helperSessionId = ClaudeHelper.createHelperSessionId(for: path)
 
             let command = """
-                cd \(sessionsDir) 2>/dev/null && ls -1 *.jsonl 2>/dev/null | grep -v '^agent-' | grep -v '^\(helperSessionId).jsonl$' | while read f; do
+                cd "$HOME/.claude/projects"/\(escapedEncodedPath) 2>/dev/null && ls -1 *.jsonl 2>/dev/null | grep -v '^agent-' | grep -v '^\(helperSessionId).jsonl$' | while read f; do
                     [ -s "$f" ] && echo "$f"
                 done | wc -l | tr -d ' '
                 """

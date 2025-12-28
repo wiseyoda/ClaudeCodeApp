@@ -1,5 +1,14 @@
 import SwiftUI
 
+// MARK: - Shell Escaping
+
+/// Escape a string for safe use in shell commands as a literal argument
+/// Uses single-quote escaping: wrap in single quotes and escape any internal single quotes
+private func shellEscape(_ string: String) -> String {
+    let escaped = string.replacingOccurrences(of: "'", with: "'\\''")
+    return "'\(escaped)'"
+}
+
 // MARK: - Clone Project Sheet
 
 struct CloneProjectSheet: View {
@@ -163,8 +172,8 @@ struct CloneProjectSheet: View {
             progress = "Cloning repository..."
 
             // Clone to workspace directory
-            let workspaceDir = "~/workspace"
-            let cloneCmd = "mkdir -p \(workspaceDir) && cd \(workspaceDir) && git clone \(gitURL) 2>&1"
+            let workspaceDir = "$HOME/workspace"
+            let cloneCmd = "mkdir -p \"\(workspaceDir)\" && cd \"\(workspaceDir)\" && git clone \(shellEscape(gitURL)) 2>&1"
 
             // Execute clone command
             let output = try await sshManager.executeCommandWithAutoConnect(cloneCmd, settings: settings)
@@ -178,7 +187,8 @@ struct CloneProjectSheet: View {
             }
 
             // Verify the clone succeeded by checking if directory exists
-            let verifyCmd = "test -d \(workspaceDir)/\(repoName) && echo 'EXISTS' || echo 'NOT_FOUND'"
+            let escapedRepoName = shellEscape(repoName)
+            let verifyCmd = "test -d \"\(workspaceDir)\"/\(escapedRepoName) && echo 'EXISTS' || echo 'NOT_FOUND'"
             let verifyOutput = try await sshManager.executeCommand(verifyCmd)
             if verifyOutput.contains("NOT_FOUND") {
                 throw SSHError.connectionFailed("Clone failed - repository directory not created")
@@ -187,28 +197,35 @@ struct CloneProjectSheet: View {
             progress = "Registering project..."
 
             // Get the absolute path of the cloned repo
-            let realpathCmd = "realpath \(workspaceDir)/\(repoName)"
+            let realpathCmd = "realpath \"\(workspaceDir)\"/\(escapedRepoName)"
             let absolutePath = try await sshManager.executeCommand(realpathCmd)
             let cleanPath = absolutePath.trimmingCharacters(in: .whitespacesAndNewlines)
 
             // Create Claude project directory structure
             // Path encoding: /home/user/workspace/repo -> -home-user-workspace-repo
             let encodedPath = cleanPath.replacingOccurrences(of: "/", with: "-")
-            // Use $HOME with double quotes for proper shell expansion (single quotes prevent expansion)
-            let claudeProjectDir = "$HOME/.claude/projects/\(encodedPath)"
+            // Shell-escape the encoded path for safe use in shell commands
+            let escapedEncodedPath = shellEscape(encodedPath)
+            // Use $HOME with double quotes for proper shell expansion, then append escaped path
+            let claudeProjectDir = "\"$HOME/.claude/projects/\"\(escapedEncodedPath)"
 
             // Create the project directory and a session file with cwd so it appears in the project list
             // The backend reads 'cwd' from session files to determine project paths
             let timestamp = ISO8601DateFormatter().string(from: Date())
-            let sessionContent = "{\"type\":\"init\",\"cwd\":\"\(cleanPath)\",\"timestamp\":\"\(timestamp)\"}"
-            let setupCmd = "mkdir -p \"\(claudeProjectDir)\" && echo '\(sessionContent)' > \"\(claudeProjectDir)/init.jsonl\""
+            // Escape cleanPath for JSON (escape backslashes and quotes)
+            let jsonEscapedPath = cleanPath
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+            let sessionContent = "{\"type\":\"init\",\"cwd\":\"\(jsonEscapedPath)\",\"timestamp\":\"\(timestamp)\"}"
+            // Shell-escape the JSON content for safe use in echo command
+            let setupCmd = "mkdir -p \(claudeProjectDir) && echo \(shellEscape(sessionContent)) > \(claudeProjectDir)/init.jsonl"
             _ = try? await sshManager.executeCommand(setupCmd)
 
             progress = "Initializing Claude..."
 
             // Try to initialize Claude in the cloned repo with timeout
             // Use --yes flag if available, and timeout after 10 seconds
-            let initCmd = "cd '\(cleanPath)' && claude init --yes 2>&1 || claude init 2>&1 || true"
+            let initCmd = "cd \(shellEscape(cleanPath)) && claude init --yes 2>&1 || claude init 2>&1 || true"
             let initResult = await sshManager.executeCommandWithTimeout(initCmd, timeoutSeconds: 10)
 
             if initResult == nil {
