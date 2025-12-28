@@ -155,6 +155,34 @@ struct ChatView: View {
                     }
                     .accessibilityLabel(isSearching ? "Close search" : "Search messages")
 
+                    // Ideas button
+                    ZStack(alignment: .topTrailing) {
+                        Image(systemName: "lightbulb")
+                            .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+                        // Badge for idea count
+                        if ideasStore.ideas.count > 0 {
+                            Text(ideasStore.ideas.count > 99 ? "99+" : "\(ideasStore.ideas.count)")
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(CLITheme.red(for: colorScheme))
+                                .clipShape(Capsule())
+                                .offset(x: 8, y: -8)
+                        }
+                    }
+                    .onTapGesture {
+                        showIdeasDrawer = true
+                    }
+                    .onLongPressGesture(minimumDuration: 0.4) {
+                        let generator = UIImpactFeedbackGenerator(style: .medium)
+                        generator.impactOccurred()
+                        showQuickCapture = true
+                    }
+                    .accessibilityLabel("Ideas")
+                    .accessibilityHint("Tap to open ideas drawer, hold to quick capture")
+                    .accessibilityValue(ideasStore.ideas.count > 0 ? "\(ideasStore.ideas.count) ideas" : "No ideas")
+
                     // More options menu
                     Menu {
                         Button {
@@ -689,38 +717,72 @@ struct ChatView: View {
     private var messagesScrollView: some View {
         ScrollViewReader { proxy in
             GeometryReader { outerGeometry in
-                ScrollView {
-                    messagesListView
-                        .background(
-                            GeometryReader { contentGeometry in
-                                Color.clear
-                                    .preference(
-                                        key: ContentSizePreferenceKey.self,
-                                        value: contentGeometry.size
-                                    )
-                                    // Track scroll offset for user scroll detection
-                                    .preference(
-                                        key: ScrollOffsetPreferenceKey.self,
-                                        value: contentGeometry.frame(in: .named("chatScroll")).minY
-                                    )
+                ZStack(alignment: .bottom) {
+                    ScrollView {
+                        messagesListView
+                            .background(
+                                GeometryReader { contentGeometry in
+                                    Color.clear
+                                        .preference(
+                                            key: ContentSizePreferenceKey.self,
+                                            value: contentGeometry.size
+                                        )
+                                        // Track scroll offset for user scroll detection
+                                        .preference(
+                                            key: ScrollOffsetPreferenceKey.self,
+                                            value: contentGeometry.frame(in: .named("chatScroll")).minY
+                                        )
+                                }
+                            )
+                    }
+                    .coordinateSpace(name: "chatScroll")
+                    .scrollDismissesKeyboard(.interactively)
+                    .background(CLITheme.background(for: colorScheme))
+                    // Detect user scrolling - uses debounced handler to prevent UI freezes
+                    .onPreferenceChange(ScrollOffsetPreferenceKey.self) { offset in
+                        // Use debounced handler to avoid rapid state updates during scrolling
+                        scrollManager.handleScrollOffset(offset)
+                    }
+                    // Track scroll position to detect user scrolling up
+                    .onPreferenceChange(ContentSizePreferenceKey.self) { contentSize in
+                        // Only track when content is larger than viewport
+                        if contentSize.height > outerGeometry.size.height {
+                            // Content size changed - request scroll if auto-scroll is enabled
+                            if settings.autoScrollEnabled {
+                                scrollManager.requestScrollToBottom()
                             }
-                        )
-                }
-                .coordinateSpace(name: "chatScroll")
-                .background(CLITheme.background(for: colorScheme))
-                // Detect user scrolling - uses debounced handler to prevent UI freezes
-                .onPreferenceChange(ScrollOffsetPreferenceKey.self) { offset in
-                    // Use debounced handler to avoid rapid state updates during scrolling
-                    scrollManager.handleScrollOffset(offset)
-                }
-                // Track scroll position to detect user scrolling up
-                .onPreferenceChange(ContentSizePreferenceKey.self) { contentSize in
-                    // Only track when content is larger than viewport
-                    if contentSize.height > outerGeometry.size.height {
-                        // Content size changed - request scroll if auto-scroll is enabled
-                        if settings.autoScrollEnabled {
-                            scrollManager.requestScrollToBottom()
                         }
+                    }
+                    // Detect user scroll gesture to disable auto-scroll when scrolled up
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 5)
+                            .onChanged { value in
+                                // User is scrolling up (negative translation = scrolling up in content)
+                                if value.translation.height > 0 {
+                                    // Scrolling up (finger moving down) - might want to disable auto-scroll
+                                    // We'll let the scroll position tracker handle the actual logic
+                                }
+                            }
+                    )
+
+                    // Scroll to bottom button - appears when user has scrolled up
+                    if !scrollManager.isAutoScrollEnabled {
+                        Button {
+                            scrollManager.forceScrollToBottom()
+                        } label: {
+                            Image(systemName: "chevron.down.circle.fill")
+                                .font(.system(size: 36))
+                                .foregroundStyle(CLITheme.blue(for: colorScheme))
+                                .background(
+                                    Circle()
+                                        .fill(CLITheme.background(for: colorScheme))
+                                        .frame(width: 32, height: 32)
+                                )
+                                .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
+                        }
+                        .padding(.bottom, 12)
+                        .transition(.opacity.combined(with: .scale))
+                        .animation(.easeInOut(duration: 0.2), value: scrollManager.isAutoScrollEnabled)
                     }
                 }
                 // Unified scroll trigger - responds to scrollManager.shouldScroll
@@ -773,17 +835,6 @@ struct ChatView: View {
                         }
                     }
                 }
-                // Detect user scroll gesture to disable auto-scroll when scrolled up
-                .simultaneousGesture(
-                    DragGesture(minimumDistance: 5)
-                        .onChanged { value in
-                            // User is scrolling up (negative translation = scrolling up in content)
-                            if value.translation.height > 0 {
-                                // Scrolling up (finger moving down) - might want to disable auto-scroll
-                                // We'll let the scroll position tracker handle the actual logic
-                            }
-                        }
-                )
             }
         }
     }
@@ -902,7 +953,8 @@ struct ChatView: View {
                             await claudeHelper.analyzeMessage(
                                 msg,
                                 recentMessages: messages,
-                                projectPath: project.path
+                                projectPath: project.path,
+                                sessionId: wsManager.sessionId  // Use current session to avoid creating orphan sessions
                             )
                         }
                     }
@@ -1011,9 +1063,7 @@ struct ChatView: View {
                 onAbort: { wsManager.abortSession() },
                 recentMessages: messages,
                 claudeHelper: claudeHelper,
-                ideaCount: ideasStore.ideas.count,
-                onIdeasTap: { showIdeasDrawer = true },
-                onIdeasLongPress: { showQuickCapture = true }
+                sessionId: wsManager.sessionId  // Pass session ID to avoid creating orphan sessions
             )
             .id("input-view")
         }

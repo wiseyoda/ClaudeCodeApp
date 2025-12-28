@@ -240,7 +240,8 @@ class ClaudeHelper: ObservableObject {
     func suggestRelevantFiles(
         recentMessages: [ChatMessage],
         availableFiles: [String],
-        projectPath: String
+        projectPath: String,
+        sessionId: String? = nil
     ) async {
         guard !recentMessages.isEmpty, !availableFiles.isEmpty else {
             await MainActor.run { suggestedFiles = [] }
@@ -273,7 +274,7 @@ class ClaudeHelper: ObservableObject {
         await MainActor.run { isLoading = true }
 
         do {
-            let response = try await sendQuickQuery(prompt: prompt, projectPath: projectPath)
+            let response = try await sendQuickQuery(prompt: prompt, projectPath: projectPath, sessionId: sessionId)
             let files = parseFileList(from: response, availableFiles: availableFiles)
             await MainActor.run {
                 suggestedFiles = files
@@ -403,7 +404,8 @@ class ClaudeHelper: ObservableObject {
     func analyzeMessage(
         _ message: ChatMessage,
         recentMessages: [ChatMessage],
-        projectPath: String
+        projectPath: String,
+        sessionId: String? = nil
     ) async {
         // Build context from the message and a few recent messages
         let context = recentMessages.suffix(3).map { msg -> String in
@@ -438,7 +440,7 @@ class ClaudeHelper: ObservableObject {
         }
 
         do {
-            let response = try await sendQuickQuery(prompt: prompt, projectPath: projectPath)
+            let response = try await sendQuickQuery(prompt: prompt, projectPath: projectPath, sessionId: sessionId)
             let actions = parseSuggestedActions(from: response)
             await MainActor.run {
                 suggestedActions = actions

@@ -25,6 +25,9 @@ struct CLIInputView: View {
     var onIdeasTap: () -> Void
     var onIdeasLongPress: () -> Void
 
+    // Session ID for AI file suggestions (avoids creating orphan sessions)
+    var sessionId: String?
+
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
     @StateObject private var speechManager = SpeechManager()
@@ -48,7 +51,8 @@ struct CLIInputView: View {
         claudeHelper: ClaudeHelper? = nil,
         ideaCount: Int = 0,
         onIdeasTap: @escaping () -> Void = {},
-        onIdeasLongPress: @escaping () -> Void = {}
+        onIdeasLongPress: @escaping () -> Void = {},
+        sessionId: String? = nil
     ) {
         self._text = text
         self._selectedImage = selectedImage
@@ -63,62 +67,52 @@ struct CLIInputView: View {
         self.ideaCount = ideaCount
         self.onIdeasTap = onIdeasTap
         self.onIdeasLongPress = onIdeasLongPress
+        self.sessionId = sessionId
     }
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            VStack(spacing: 0) {
-                // Recording indicator
-                if speechManager.isRecording {
-                    recordingIndicator
-                }
-
-                // Image preview
-                if let imageData = selectedImage, let uiImage = UIImage(data: imageData) {
-                    imagePreview(uiImage)
-                }
-
-                // Main input row
-                HStack(alignment: .bottom, spacing: 8) {
-                    // [+] Attachment menu button
-                    if !isProcessing {
-                        attachmentMenuButton
-                    }
-
-                    // Multi-line text input with iOS 26+ glass-ready styling
-                    TextField("Type a message...", text: $text, axis: .vertical)
-                        .font(settings.scaledFont(.body))
-                        .foregroundColor(CLITheme.primaryText(for: colorScheme))
-                        .focused($isFocused)
-                        .disabled(isProcessing)
-                        .lineLimit(1...8)
-                        .textFieldStyle(.plain)
-                        .submitLabel(.send)
-                        .onSubmit {
-                            if !isProcessing && (!text.isEmpty || selectedImage != nil) {
-                                onSend()
-                            }
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .glassBackground(cornerRadius: 20)
-
-                    // Send button
-                    sendButton
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(CLITheme.background(for: colorScheme))
+        VStack(spacing: 0) {
+            // Recording indicator
+            if speechManager.isRecording {
+                recordingIndicator
             }
 
-            // Ideas FAB - positioned above the status bar
-            IdeasFAB(
-                ideaCount: ideaCount,
-                onTap: onIdeasTap,
-                onLongPress: onIdeasLongPress
-            )
-            .padding(.trailing, 12)
-            .offset(y: -96)
+            // Image preview
+            if let imageData = selectedImage, let uiImage = UIImage(data: imageData) {
+                imagePreview(uiImage)
+            }
+
+            // Main input row
+            HStack(alignment: .bottom, spacing: 8) {
+                // [+] Attachment menu button
+                if !isProcessing {
+                    attachmentMenuButton
+                }
+
+                // Multi-line text input with iOS 26+ glass-ready styling
+                TextField("Type a message...", text: $text, axis: .vertical)
+                    .font(settings.scaledFont(.body))
+                    .foregroundColor(CLITheme.primaryText(for: colorScheme))
+                    .focused($isFocused)
+                    .disabled(isProcessing)
+                    .lineLimit(1...8)
+                    .textFieldStyle(.plain)
+                    .submitLabel(.send)
+                    .onSubmit {
+                        if !isProcessing && (!text.isEmpty || selectedImage != nil) {
+                            onSend()
+                        }
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 8)
+                    .glassBackground(cornerRadius: 20)
+
+                // Send button
+                sendButton
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(CLITheme.background(for: colorScheme))
         }
         // iPad keyboard shortcuts
         .background(keyboardShortcuts)
@@ -127,7 +121,8 @@ struct CLIInputView: View {
                 FilePickerSheet(
                     projectPath: projectPath,
                     recentMessages: recentMessages,
-                    claudeHelper: claudeHelper
+                    claudeHelper: claudeHelper,
+                    sessionId: sessionId
                 ) { selectedPath in
                     insertFileReference(selectedPath)
                 }
@@ -326,6 +321,10 @@ struct CLIInputView: View {
             } else {
                 text += " " + speechManager.transcribedText
             }
+        }
+        // Refocus input field after recording completes
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            isFocused = true
         }
     }
 

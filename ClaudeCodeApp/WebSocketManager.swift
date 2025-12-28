@@ -494,6 +494,7 @@ class WebSocketManager: ObservableObject {
         }
 
         currentText = ""
+        clearTextBuffer()  // Clear any leftover text from previous stream
         isProcessing = true
         lastError = nil
         startProcessingTimeout()
@@ -873,6 +874,7 @@ class WebSocketManager: ObservableObject {
 
                     // Clear stale state on disconnect
                     self.currentText = ""
+                    self.clearTextBuffer()
 
                     // Schedule reconnection with exponential backoff
                     self.scheduleReconnect()

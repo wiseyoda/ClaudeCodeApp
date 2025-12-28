@@ -21,13 +21,15 @@ struct FilePickerSheet: View {
 
     // AI file suggestions
     var claudeHelper: ClaudeHelper?
+    var sessionId: String?  // Current session ID to avoid creating orphan sessions
     @State private var suggestedFiles: [String] = []
     @State private var isLoadingSuggestions = false
 
-    init(projectPath: String, recentMessages: [ChatMessage] = [], claudeHelper: ClaudeHelper? = nil, onSelect: @escaping (String) -> Void) {
+    init(projectPath: String, recentMessages: [ChatMessage] = [], claudeHelper: ClaudeHelper? = nil, sessionId: String? = nil, onSelect: @escaping (String) -> Void) {
         self.projectPath = projectPath
         self.recentMessages = recentMessages
         self.claudeHelper = claudeHelper
+        self.sessionId = sessionId
         self.onSelect = onSelect
     }
 
@@ -233,7 +235,8 @@ struct FilePickerSheet: View {
                 await helper.suggestRelevantFiles(
                     recentMessages: recentMessages,
                     availableFiles: availableFilePaths,
-                    projectPath: projectPath
+                    projectPath: projectPath,
+                    sessionId: sessionId
                 )
                 suggestedFiles = helper.suggestedFiles
                 isLoadingSuggestions = false

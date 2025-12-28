@@ -326,19 +326,45 @@ struct SessionMessage: Codable {
 
         switch type {
         case "user":
+            guard let content = message?.content else { return nil }
+
             // Check if this is a tool result
-            if let content = message?.content, let first = content.first {
-                if first.type == "tool_result" {
-                    // Get tool result text
-                    if let resultText = toolUseResult?.stringValue {
-                        return ChatMessage(role: .toolResult, content: resultText, timestamp: date)
+            if let first = content.first, first.type == "tool_result" {
+                if let resultText = toolUseResult?.stringValue {
+                    return ChatMessage(role: .toolResult, content: resultText, timestamp: date)
+                }
+                return nil
+            }
+
+            // Look for text and image content in all items
+            var textContent: String?
+            var imageData: Data?
+
+            for item in content {
+                switch item.type {
+                case "text":
+                    if let text = item.text, !text.isEmpty {
+                        textContent = text
                     }
-                    return nil
+                case "image":
+                    // Decode base64 image data
+                    if let source = item.source,
+                       source.type == "base64",
+                       let base64Data = source.data,
+                       let data = Data(base64Encoded: base64Data) {
+                        imageData = data
+                    }
+                default:
+                    break
                 }
-                // Regular user message
-                if let text = first.text, !text.isEmpty {
-                    return ChatMessage(role: .user, content: text, timestamp: date)
-                }
+            }
+
+            // Return message if we have text or image
+            if let text = textContent {
+                return ChatMessage(role: .user, content: text, timestamp: date, imageData: imageData)
+            } else if imageData != nil {
+                // Image-only message
+                return ChatMessage(role: .user, content: "[Image]", timestamp: date, imageData: imageData)
             }
             return nil
 
@@ -402,6 +428,31 @@ struct SessionContentItem: Codable {
     let thinking: String?
     let name: String?  // For tool_use
     let input: [String: AnyCodableValue]?  // For tool_use
+    let source: ImageSource?  // For image content
+    let toolUseId: String?  // For tool_result
+    let content: AnyCodableValue?  // For tool_result (can be string or array)
+    let isError: Bool?  // For tool_result
+
+    enum CodingKeys: String, CodingKey {
+        case type, text, thinking, name, input, source, content
+        case toolUseId = "tool_use_id"
+        case isError = "is_error"
+    }
+}
+
+/// Image source in Claude API format
+struct ImageSource: Codable {
+    let type: String  // "base64" or "url"
+    let mediaType: String?  // e.g., "image/jpeg"
+    let data: String?  // base64 data
+    let url: String?  // URL for url type
+
+    enum CodingKeys: String, CodingKey {
+        case type
+        case mediaType = "media_type"
+        case data
+        case url
+    }
 }
 
 /// Flexible value type for JSON parsing

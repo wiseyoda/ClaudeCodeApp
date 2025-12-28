@@ -125,6 +125,9 @@ class SpeechManager: ObservableObject {
         recognitionRequest = nil
         audioEngine = nil
 
+        // Deactivate audio session to allow keyboard to work properly
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+
         isRecording = false
         log.info("Recording stopped, text: \(transcribedText)")
     }
