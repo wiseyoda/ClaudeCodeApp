@@ -52,6 +52,9 @@ class WebSocketManager: ObservableObject {
     private var webSocket: URLSessionWebSocketTask?
     private var settings: AppSettings
 
+    /// When true, parse messages synchronously (for tests). When false (default), parse async on background queue.
+    private let parseSynchronously: Bool
+
     /// Background queue for JSON parsing to avoid blocking main thread during streaming
     private static let parsingQueue = DispatchQueue(label: "com.claudecodeapp.websocket.parsing", qos: .userInitiated)
 
@@ -146,10 +149,14 @@ class WebSocketManager: ObservableObject {
     @Published var isReattaching = false
 
     /// Initialize with optional settings. Call updateSettings() in onAppear with the EnvironmentObject.
-    init(settings: AppSettings? = nil) {
+    /// - Parameters:
+    ///   - settings: Optional AppSettings. If nil, a temporary placeholder is created.
+    ///   - parseSynchronously: If true, parse messages synchronously (for unit tests). Defaults to false.
+    init(settings: AppSettings? = nil, parseSynchronously: Bool = false) {
         // Use provided settings or create temporary placeholder
         // The real settings should be provided via updateSettings() in onAppear
         self.settings = settings ?? AppSettings()
+        self.parseSynchronously = parseSynchronously
     }
 
     /// Update settings reference (call from onAppear with actual EnvironmentObject)
@@ -909,16 +916,28 @@ class WebSocketManager: ObservableObject {
 
         guard let data = text.data(using: .utf8) else { return }
 
-        // Decode JSON on background thread to avoid blocking main thread during rapid streaming
-        Task.detached(priority: .userInitiated) { [weak self] in
+        if parseSynchronously {
+            // Synchronous parsing for unit tests
             do {
                 let msg = try JSONDecoder().decode(WSMessage.self, from: data)
-                await self?.processDecodedMessage(msg, rawText: text)
+                processDecodedMessage(msg, rawText: text)
             } catch {
-                await MainActor.run { [weak self] in
-                    log.error("Parse error: \(error), text: \(text.prefix(200))")
-                    DebugLogStore.shared.logError("Parse error: \(error.localizedDescription)", details: text)
-                    self?.lastError = "Message parse error: \(error.localizedDescription)"
+                log.error("Parse error: \(error), text: \(text.prefix(200))")
+                DebugLogStore.shared.logError("Parse error: \(error.localizedDescription)", details: text)
+                lastError = "Message parse error: \(error.localizedDescription)"
+            }
+        } else {
+            // Decode JSON on background thread to avoid blocking main thread during rapid streaming
+            Task.detached(priority: .userInitiated) { [weak self] in
+                do {
+                    let msg = try JSONDecoder().decode(WSMessage.self, from: data)
+                    await self?.processDecodedMessage(msg, rawText: text)
+                } catch {
+                    await MainActor.run { [weak self] in
+                        log.error("Parse error: \(error), text: \(text.prefix(200))")
+                        DebugLogStore.shared.logError("Parse error: \(error.localizedDescription)", details: text)
+                        self?.lastError = "Message parse error: \(error.localizedDescription)"
+                    }
                 }
             }
         }
@@ -1144,15 +1163,20 @@ class WebSocketManager: ObservableObject {
     private func appendToTextBuffer(_ text: String) {
         textBuffer += text
 
-        // Cancel any pending flush
-        textFlushTask?.cancel()
+        if parseSynchronously {
+            // Flush immediately in synchronous mode (for tests)
+            flushTextBuffer()
+        } else {
+            // Cancel any pending flush
+            textFlushTask?.cancel()
 
-        // Schedule debounced flush
-        textFlushTask = Task { [weak self] in
-            guard let self else { return }
-            try? await Task.sleep(nanoseconds: self.textFlushDelay)
-            guard !Task.isCancelled else { return }
-            self.flushTextBuffer()
+            // Schedule debounced flush
+            textFlushTask = Task { [weak self] in
+                guard let self else { return }
+                try? await Task.sleep(nanoseconds: self.textFlushDelay)
+                guard !Task.isCancelled else { return }
+                self.flushTextBuffer()
+            }
         }
     }
 

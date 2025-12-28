@@ -1,5 +1,5 @@
 import XCTest
-@testable import ClaudeCodeApp
+@testable import CodingBridge
 
 final class NamesStoreTests: XCTestCase {
     private let projectKey = "project_custom_names"

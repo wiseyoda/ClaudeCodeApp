@@ -13,7 +13,7 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 }
 
 @main
-struct ClaudeCodeAppApp: App {
+struct CodingBridgeApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var settings = AppSettings()
     @Environment(\.scenePhase) private var scenePhase

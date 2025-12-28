@@ -1,5 +1,5 @@
 import XCTest
-@testable import ClaudeCodeApp
+@testable import CodingBridge
 
 final class AppErrorTests: XCTestCase {
     func testErrorDescriptionStrings() {

@@ -1,6 +1,6 @@
 import Combine
 import XCTest
-@testable import ClaudeCodeApp
+@testable import CodingBridge
 
 @MainActor
 final class ScrollStateManagerTests: XCTestCase {

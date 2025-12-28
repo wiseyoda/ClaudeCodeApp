@@ -1,6 +1,6 @@
 import XCTest
 import SwiftUI
-@testable import ClaudeCodeApp
+@testable import CodingBridge
 
 final class AppSettingsTests: XCTestCase {
 

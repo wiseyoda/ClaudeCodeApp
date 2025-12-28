@@ -1,5 +1,5 @@
 import XCTest
-@testable import ClaudeCodeApp
+@testable import CodingBridge
 
 final class ModelEnumTests: XCTestCase {
     func testClaudeModelLabelsAndAliases() {

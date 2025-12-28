@@ -1,10 +1,10 @@
 import XCTest
-@testable import ClaudeCodeApp
+@testable import CodingBridge
 
 @MainActor
 final class WebSocketManagerParsingTests: XCTestCase {
     func testSessionCreatedUpdatesSessionIdAndCallback() throws {
-        let manager = WebSocketManager()
+        let manager = WebSocketManager(parseSynchronously: true)
         var capturedSessionId: String?
         manager.onSessionCreated = { capturedSessionId = $0 }
 
@@ -16,7 +16,7 @@ final class WebSocketManagerParsingTests: XCTestCase {
     }
 
     func testTokenBudgetUpdatesTokenUsage() throws {
-        let manager = WebSocketManager()
+        let manager = WebSocketManager(parseSynchronously: true)
 
         let json = try makeMessage(type: "token-budget", data: ["used": 42, "total": 100])
         manager.processIncomingMessage(json)
@@ -26,7 +26,7 @@ final class WebSocketManagerParsingTests: XCTestCase {
     }
 
     func testAssistantTextAppendsAndCallsOnText() throws {
-        let manager = WebSocketManager()
+        let manager = WebSocketManager(parseSynchronously: true)
         var capturedText: String?
         manager.onText = { capturedText = $0 }
 
@@ -46,7 +46,7 @@ final class WebSocketManagerParsingTests: XCTestCase {
     }
 
     func testToolUseCommitsTextAndCallsToolUse() throws {
-        let manager = WebSocketManager()
+        let manager = WebSocketManager(parseSynchronously: true)
         var committedText: String?
         var toolName: String?
         var toolInput: String?
@@ -73,7 +73,7 @@ final class WebSocketManagerParsingTests: XCTestCase {
     }
 
     func testAskUserQuestionTriggersCallback() throws {
-        let manager = WebSocketManager()
+        let manager = WebSocketManager(parseSynchronously: true)
         var receivedData: AskUserQuestionData?
         manager.onAskUserQuestion = { receivedData = $0 }
 
@@ -103,7 +103,7 @@ final class WebSocketManagerParsingTests: XCTestCase {
     }
 
     func testModelSwitchConfirmationUpdatesModel() throws {
-        let manager = WebSocketManager()
+        let manager = WebSocketManager(parseSynchronously: true)
         manager.isSwitchingModel = true
         var capturedModelId: String?
         manager.onModelChanged = { _, modelId in
@@ -126,7 +126,7 @@ final class WebSocketManagerParsingTests: XCTestCase {
     }
 
     func testSessionErrorClearsSessionAndNotifiesRecovery() throws {
-        let manager = WebSocketManager()
+        let manager = WebSocketManager(parseSynchronously: true)
         manager.sessionId = "cbd6acb5-a212-4899-90c4-ab11937e21c0"
         var recovered = false
         var errorCalled = false

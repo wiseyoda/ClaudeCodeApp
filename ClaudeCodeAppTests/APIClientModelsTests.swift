@@ -1,5 +1,5 @@
 import XCTest
-@testable import ClaudeCodeApp
+@testable import CodingBridge
 
 final class APIClientModelsTests: XCTestCase {
 
@@ -57,7 +57,7 @@ final class APIClientModelsTests: XCTestCase {
     }
 
     func test_sessionMessage_toChatMessage_userText() {
-        let contentItem = SessionContentItem(type: "text", text: "Hello", thinking: nil, name: nil, input: nil)
+        let contentItem = SessionContentItem(type: "text", text: "Hello", thinking: nil, name: nil, input: nil, source: nil, toolUseId: nil, content: nil, isError: nil)
         let content = SessionMessageContent(role: "user", content: [contentItem])
         let message = SessionMessage(type: "user", timestamp: nil, message: content, toolUseResult: nil)
 
@@ -68,7 +68,7 @@ final class APIClientModelsTests: XCTestCase {
     }
 
     func test_sessionMessage_toChatMessage_userToolResult_usesToolUseResult() throws {
-        let contentItem = SessionContentItem(type: "tool_result", text: nil, thinking: nil, name: nil, input: nil)
+        let contentItem = SessionContentItem(type: "tool_result", text: nil, thinking: nil, name: nil, input: nil, source: nil, toolUseId: nil, content: nil, isError: nil)
         let content = SessionMessageContent(role: "user", content: [contentItem])
         let resultValue = try decodeAnyCodableValue("{\"stdout\":\"done\"}")
         let message = SessionMessage(type: "user", timestamp: nil, message: content, toolUseResult: resultValue)
@@ -80,7 +80,7 @@ final class APIClientModelsTests: XCTestCase {
     }
 
     func test_sessionMessage_toChatMessage_userToolResult_missingResult_returnsNil() {
-        let contentItem = SessionContentItem(type: "tool_result", text: nil, thinking: nil, name: nil, input: nil)
+        let contentItem = SessionContentItem(type: "tool_result", text: nil, thinking: nil, name: nil, input: nil, source: nil, toolUseId: nil, content: nil, isError: nil)
         let content = SessionMessageContent(role: "user", content: [contentItem])
         let message = SessionMessage(type: "user", timestamp: nil, message: content, toolUseResult: nil)
 
@@ -88,7 +88,7 @@ final class APIClientModelsTests: XCTestCase {
     }
 
     func test_sessionMessage_toChatMessage_assistantText() {
-        let contentItem = SessionContentItem(type: "text", text: "Hi", thinking: nil, name: nil, input: nil)
+        let contentItem = SessionContentItem(type: "text", text: "Hi", thinking: nil, name: nil, input: nil, source: nil, toolUseId: nil, content: nil, isError: nil)
         let content = SessionMessageContent(role: "assistant", content: [contentItem])
         let message = SessionMessage(type: "assistant", timestamp: nil, message: content, toolUseResult: nil)
 
@@ -99,7 +99,7 @@ final class APIClientModelsTests: XCTestCase {
     }
 
     func test_sessionMessage_toChatMessage_assistantThinking() {
-        let contentItem = SessionContentItem(type: "thinking", text: nil, thinking: "Reasoning", name: nil, input: nil)
+        let contentItem = SessionContentItem(type: "thinking", text: nil, thinking: "Reasoning", name: nil, input: nil, source: nil, toolUseId: nil, content: nil, isError: nil)
         let content = SessionMessageContent(role: "assistant", content: [contentItem])
         let message = SessionMessage(type: "assistant", timestamp: nil, message: content, toolUseResult: nil)
 
@@ -111,7 +111,7 @@ final class APIClientModelsTests: XCTestCase {
 
     func test_sessionMessage_toChatMessage_assistantToolUse() throws {
         let input = try decodeAnyCodableDictionary("{\"path\":\"/tmp\"}")
-        let contentItem = SessionContentItem(type: "tool_use", text: nil, thinking: nil, name: "ls", input: input)
+        let contentItem = SessionContentItem(type: "tool_use", text: nil, thinking: nil, name: "ls", input: input, source: nil, toolUseId: nil, content: nil, isError: nil)
         let content = SessionMessageContent(role: "assistant", content: [contentItem])
         let message = SessionMessage(type: "assistant", timestamp: nil, message: content, toolUseResult: nil)
 
@@ -124,7 +124,7 @@ final class APIClientModelsTests: XCTestCase {
     }
 
     func test_sessionMessage_toChatMessage_unknownType_returnsNil() {
-        let contentItem = SessionContentItem(type: "text", text: "System", thinking: nil, name: nil, input: nil)
+        let contentItem = SessionContentItem(type: "text", text: "System", thinking: nil, name: nil, input: nil, source: nil, toolUseId: nil, content: nil, isError: nil)
         let content = SessionMessageContent(role: "system", content: [contentItem])
         let message = SessionMessage(type: "system", timestamp: nil, message: content, toolUseResult: nil)
 
@@ -133,7 +133,7 @@ final class APIClientModelsTests: XCTestCase {
 
     func test_sessionMessage_toChatMessage_parsesFractionalTimestamp() {
         let timestamp = "2025-01-02T03:04:05.678Z"
-        let contentItem = SessionContentItem(type: "text", text: "Hello", thinking: nil, name: nil, input: nil)
+        let contentItem = SessionContentItem(type: "text", text: "Hello", thinking: nil, name: nil, input: nil, source: nil, toolUseId: nil, content: nil, isError: nil)
         let content = SessionMessageContent(role: "user", content: [contentItem])
         let message = SessionMessage(type: "user", timestamp: timestamp, message: content, toolUseResult: nil)
 
@@ -144,7 +144,7 @@ final class APIClientModelsTests: XCTestCase {
 
     func test_sessionMessage_toChatMessage_parsesNonFractionalTimestamp() {
         let timestamp = "2025-01-02T03:04:05Z"
-        let contentItem = SessionContentItem(type: "text", text: "Hello", thinking: nil, name: nil, input: nil)
+        let contentItem = SessionContentItem(type: "text", text: "Hello", thinking: nil, name: nil, input: nil, source: nil, toolUseId: nil, content: nil, isError: nil)
         let content = SessionMessageContent(role: "user", content: [contentItem])
         let message = SessionMessage(type: "user", timestamp: timestamp, message: content, toolUseResult: nil)
 

@@ -1,6 +1,6 @@
 import XCTest
 import Speech
-@testable import ClaudeCodeApp
+@testable import CodingBridge
 
 @MainActor
 final class SpeechManagerTests: XCTestCase {

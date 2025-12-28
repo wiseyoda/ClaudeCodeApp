@@ -38,6 +38,7 @@ class CommandStore: ObservableObject {
 
     private static let fileName = "commands.json"
     private let fileURL: URL
+    private let loadSynchronously: Bool
 
     /// Background queue for file I/O to avoid blocking main thread
     private static let fileQueue = DispatchQueue(label: "com.claudecodeapp.commandstore", qos: .userInitiated)
@@ -49,6 +50,8 @@ class CommandStore: ObservableObject {
 
     init(fileURL: URL? = nil) {
         self.fileURL = fileURL ?? Self.defaultFileURL
+        // Load synchronously when a custom URL is provided (for tests)
+        self.loadSynchronously = fileURL != nil
         load()
     }
 
@@ -126,28 +129,48 @@ class CommandStore: ObservableObject {
     private func load() {
         let url = fileURL
 
-        // Perform file I/O on background queue to avoid blocking main thread
-        CommandStore.fileQueue.async { [weak self] in
-            guard FileManager.default.fileExists(atPath: url.path) else {
-                // Create default commands for first launch on main thread
-                Task { @MainActor [weak self] in
-                    self?.createDefaultCommands()
+        if loadSynchronously {
+            // Synchronous load for tests
+            loadSync(from: url)
+        } else {
+            // Perform file I/O on background queue to avoid blocking main thread
+            CommandStore.fileQueue.async { [weak self] in
+                guard FileManager.default.fileExists(atPath: url.path) else {
+                    // Create default commands for first launch on main thread
+                    Task { @MainActor [weak self] in
+                        self?.createDefaultCommands()
+                    }
+                    return
                 }
-                return
-            }
 
-            do {
-                let data = try Data(contentsOf: url)
-                let loadedCommands = try JSONDecoder().decode([SavedCommand].self, from: data)
-                Task { @MainActor [weak self] in
-                    self?.commands = loadedCommands
-                }
-            } catch {
-                log.error("Failed to load commands: \(error)")
-                Task { @MainActor [weak self] in
-                    self?.commands = []
+                do {
+                    let data = try Data(contentsOf: url)
+                    let loadedCommands = try JSONDecoder().decode([SavedCommand].self, from: data)
+                    Task { @MainActor [weak self] in
+                        self?.commands = loadedCommands
+                    }
+                } catch {
+                    log.error("Failed to load commands: \(error)")
+                    Task { @MainActor [weak self] in
+                        self?.commands = []
+                    }
                 }
             }
+        }
+    }
+
+    private func loadSync(from url: URL) {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            createDefaultCommands()
+            return
+        }
+
+        do {
+            let data = try Data(contentsOf: url)
+            commands = try JSONDecoder().decode([SavedCommand].self, from: data)
+        } catch {
+            log.error("Failed to load commands: \(error)")
+            commands = []
         }
     }
 
@@ -156,13 +179,23 @@ class CommandStore: ObservableObject {
         let commandsToSave = commands
         let url = fileURL
 
-        // Perform file I/O on background queue to avoid blocking main thread
-        CommandStore.fileQueue.async {
+        if loadSynchronously {
+            // Synchronous save for tests
             do {
                 let data = try JSONEncoder().encode(commandsToSave)
                 try data.write(to: url, options: .atomic)
             } catch {
                 log.error("Failed to save commands: \(error)")
+            }
+        } else {
+            // Perform file I/O on background queue to avoid blocking main thread
+            CommandStore.fileQueue.async {
+                do {
+                    let data = try JSONEncoder().encode(commandsToSave)
+                    try data.write(to: url, options: .atomic)
+                } catch {
+                    log.error("Failed to save commands: \(error)")
+                }
             }
         }
     }

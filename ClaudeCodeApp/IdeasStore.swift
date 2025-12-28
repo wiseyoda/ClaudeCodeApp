@@ -88,6 +88,7 @@ class IdeasStore: ObservableObject {
     private let ideasDirectory = "ideas"
     private let baseDirectory: URL
     private let fileManager: FileManager
+    private let loadSynchronously: Bool
 
     /// Background queue for file I/O to avoid blocking main thread
     private static let fileQueue = DispatchQueue(label: "com.claudecodeapp.ideasstore", qos: .userInitiated)
@@ -107,14 +108,20 @@ class IdeasStore: ObservableObject {
         return ideasDirURL.appendingPathComponent("\(encodedPath).json")
     }
 
+    private static var defaultBaseDirectory: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    }
+
     init(
         projectPath: String,
-        baseDirectory: URL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0],
+        baseDirectory: URL? = nil,
         fileManager: FileManager = .default
     ) {
         self.projectPath = projectPath
-        self.baseDirectory = baseDirectory
+        self.baseDirectory = baseDirectory ?? Self.defaultBaseDirectory
         self.fileManager = fileManager
+        // Load synchronously when a custom baseDirectory is provided (for tests)
+        self.loadSynchronously = baseDirectory != nil
         load()
     }
 
@@ -262,27 +269,47 @@ class IdeasStore: ObservableObject {
         let url = fileURL
         let path = projectPath
 
-        // Perform file I/O on background queue to avoid blocking main thread
-        IdeasStore.fileQueue.async { [weak self] in
-            guard FileManager.default.fileExists(atPath: url.path) else {
-                Task { @MainActor [weak self] in
-                    self?.ideas = []
+        if loadSynchronously {
+            // Synchronous load for tests
+            loadSync(from: url, path: path)
+        } else {
+            // Perform file I/O on background queue to avoid blocking main thread
+            IdeasStore.fileQueue.async { [weak self] in
+                guard FileManager.default.fileExists(atPath: url.path) else {
+                    Task { @MainActor [weak self] in
+                        self?.ideas = []
+                    }
+                    return
                 }
-                return
-            }
 
-            do {
-                let data = try Data(contentsOf: url)
-                let loadedIdeas = try JSONDecoder().decode([Idea].self, from: data)
-                Task { @MainActor [weak self] in
-                    self?.ideas = loadedIdeas
-                }
-            } catch {
-                log.error("Failed to load ideas for \(path): \(error)")
-                Task { @MainActor [weak self] in
-                    self?.ideas = []
+                do {
+                    let data = try Data(contentsOf: url)
+                    let loadedIdeas = try JSONDecoder().decode([Idea].self, from: data)
+                    Task { @MainActor [weak self] in
+                        self?.ideas = loadedIdeas
+                    }
+                } catch {
+                    log.error("Failed to load ideas for \(path): \(error)")
+                    Task { @MainActor [weak self] in
+                        self?.ideas = []
+                    }
                 }
             }
+        }
+    }
+
+    private func loadSync(from url: URL, path: String) {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            ideas = []
+            return
+        }
+
+        do {
+            let data = try Data(contentsOf: url)
+            ideas = try JSONDecoder().decode([Idea].self, from: data)
+        } catch {
+            log.error("Failed to load ideas for \(path): \(error)")
+            ideas = []
         }
     }
 
@@ -292,13 +319,23 @@ class IdeasStore: ObservableObject {
         let url = fileURL
         let path = projectPath
 
-        // Perform file I/O on background queue to avoid blocking main thread
-        IdeasStore.fileQueue.async {
+        if loadSynchronously {
+            // Synchronous save for tests
             do {
                 let data = try JSONEncoder().encode(ideasToSave)
                 try data.write(to: url, options: .atomic)
             } catch {
                 log.error("Failed to save ideas for \(path): \(error)")
+            }
+        } else {
+            // Perform file I/O on background queue to avoid blocking main thread
+            IdeasStore.fileQueue.async {
+                do {
+                    let data = try JSONEncoder().encode(ideasToSave)
+                    try data.write(to: url, options: .atomic)
+                } catch {
+                    log.error("Failed to save ideas for \(path): \(error)")
+                }
             }
         }
     }

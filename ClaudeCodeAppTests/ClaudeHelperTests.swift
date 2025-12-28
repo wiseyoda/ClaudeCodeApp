@@ -1,5 +1,5 @@
 import XCTest
-@testable import ClaudeCodeApp
+@testable import CodingBridge
 
 @MainActor
 final class ClaudeHelperTests: XCTestCase {

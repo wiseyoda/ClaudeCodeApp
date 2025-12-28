@@ -567,7 +567,7 @@ struct SessionPickerSheet: View {
             markdown += "## Last Assistant Response\n\n\(lastAssistant)\n\n"
         }
 
-        markdown += "\n---\n\n*Exported from ClaudeCodeApp*\n"
+        markdown += "\n---\n\n*Exported from Coding Bridge*\n"
 
         exportedMarkdown = markdown
         showExportSheet = true

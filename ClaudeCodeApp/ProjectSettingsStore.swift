@@ -22,6 +22,7 @@ class ProjectSettingsStore: ObservableObject {
     private let settingsFile = "settings.json"
     private let baseDirectory: URL
     private let fileManager: FileManager
+    private let loadSynchronously: Bool
 
     /// Background queue for file I/O to avoid blocking main thread
     private static let fileQueue = DispatchQueue(label: "com.claudecodeapp.projectsettingsstore", qos: .userInitiated)
@@ -37,12 +38,18 @@ class ProjectSettingsStore: ObservableObject {
         return settingsDirURL.appendingPathComponent(settingsFile)
     }
 
+    private static var defaultBaseDirectory: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+    }
+
     init(
-        baseDirectory: URL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0],
+        baseDirectory: URL? = nil,
         fileManager: FileManager = .default
     ) {
-        self.baseDirectory = baseDirectory
+        self.baseDirectory = baseDirectory ?? Self.defaultBaseDirectory
         self.fileManager = fileManager
+        // Load synchronously when a custom baseDirectory is provided (for tests)
+        self.loadSynchronously = baseDirectory != nil
         load()
     }
 
@@ -101,27 +108,47 @@ class ProjectSettingsStore: ObservableObject {
     private func load() {
         let url = fileURL
 
-        // Perform file I/O on background queue to avoid blocking main thread
-        ProjectSettingsStore.fileQueue.async { [weak self] in
-            guard FileManager.default.fileExists(atPath: url.path) else {
-                Task { @MainActor [weak self] in
-                    self?.projectSettings = [:]
+        if loadSynchronously {
+            // Synchronous load for tests
+            loadSync(from: url)
+        } else {
+            // Perform file I/O on background queue to avoid blocking main thread
+            ProjectSettingsStore.fileQueue.async { [weak self] in
+                guard FileManager.default.fileExists(atPath: url.path) else {
+                    Task { @MainActor [weak self] in
+                        self?.projectSettings = [:]
+                    }
+                    return
                 }
-                return
-            }
 
-            do {
-                let data = try Data(contentsOf: url)
-                let loadedSettings = try JSONDecoder().decode([String: ProjectSettings].self, from: data)
-                Task { @MainActor [weak self] in
-                    self?.projectSettings = loadedSettings
-                }
-            } catch {
-                log.error("Failed to load project settings: \(error)")
-                Task { @MainActor [weak self] in
-                    self?.projectSettings = [:]
+                do {
+                    let data = try Data(contentsOf: url)
+                    let loadedSettings = try JSONDecoder().decode([String: ProjectSettings].self, from: data)
+                    Task { @MainActor [weak self] in
+                        self?.projectSettings = loadedSettings
+                    }
+                } catch {
+                    log.error("Failed to load project settings: \(error)")
+                    Task { @MainActor [weak self] in
+                        self?.projectSettings = [:]
+                    }
                 }
             }
+        }
+    }
+
+    private func loadSync(from url: URL) {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            projectSettings = [:]
+            return
+        }
+
+        do {
+            let data = try Data(contentsOf: url)
+            projectSettings = try JSONDecoder().decode([String: ProjectSettings].self, from: data)
+        } catch {
+            log.error("Failed to load project settings: \(error)")
+            projectSettings = [:]
         }
     }
 
@@ -130,13 +157,23 @@ class ProjectSettingsStore: ObservableObject {
         let settingsToSave = projectSettings
         let url = fileURL
 
-        // Perform file I/O on background queue to avoid blocking main thread
-        ProjectSettingsStore.fileQueue.async {
+        if loadSynchronously {
+            // Synchronous save for tests
             do {
                 let data = try JSONEncoder().encode(settingsToSave)
                 try data.write(to: url, options: .atomic)
             } catch {
                 log.error("Failed to save project settings: \(error)")
+            }
+        } else {
+            // Perform file I/O on background queue to avoid blocking main thread
+            ProjectSettingsStore.fileQueue.async {
+                do {
+                    let data = try JSONEncoder().encode(settingsToSave)
+                    try data.write(to: url, options: .atomic)
+                } catch {
+                    log.error("Failed to save project settings: \(error)")
+                }
             }
         }
     }
