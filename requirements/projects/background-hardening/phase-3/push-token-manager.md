@@ -1,6 +1,12 @@
 # FCMTokenManager
 
-> Firebase Cloud Messaging + APNs token registration.
+> Firebase Cloud Messaging + APNs token registration (iOS 26+ / Swift 6).
+
+## Requirements
+
+- **Firebase iOS SDK**: 12.7.0+ (latest as of Dec 2025)
+- **Xcode**: 16.2+ (Swift 6.0 toolchain required)
+- **iOS**: 16.1+ for Live Activities, 17.2+ for remote start
 
 ## Dependencies
 
@@ -14,7 +20,17 @@ Select packages:
 - FirebaseCore
 - FirebaseMessaging
 
-## Implementation
+## SwiftUI Configuration
+
+SwiftUI apps **must** disable method swizzling and manually handle APNs tokens:
+
+```xml
+<!-- Info.plist -->
+<key>FirebaseAppDelegateProxyEnabled</key>
+<false/>
+```
+
+## Implementation (Swift 6 / iOS 26+)
 
 ```swift
 // CodingBridge/Managers/FCMTokenManager.swift
@@ -24,12 +40,13 @@ import FirebaseCore
 import FirebaseMessaging
 
 @MainActor
-final class FCMTokenManager: NSObject, ObservableObject {
+final class FCMTokenManager: NSObject, ObservableObject, @unchecked Sendable {
     static let shared = FCMTokenManager()
 
     @Published private(set) var fcmToken: String?
-    @Published private(set) var apnsToken: Data?
     @Published private(set) var isRegistered = false
+
+    private var tokenTask: Task<Void, Never>?
 
     // MARK: - Initialization
 
@@ -38,13 +55,23 @@ final class FCMTokenManager: NSObject, ObservableObject {
     }
 
     func configure() {
-        // Set messaging delegate
-        Messaging.messaging().delegate = self
+        // Start observing token updates via AsyncStream (modern approach)
+        tokenTask = Task {
+            for await token in Messaging.messaging().tokenUpdates {
+                self.fcmToken = token
+                log.info("[FCM] Token received via stream: \(token.prefix(20))...")
+                await self.registerWithBackend(fcmToken: token)
+            }
+        }
 
         // Request notification permissions
         Task {
             await requestNotificationPermission()
         }
+    }
+
+    deinit {
+        tokenTask?.cancel()
     }
 
     private func requestNotificationPermission() async {
@@ -56,22 +83,32 @@ final class FCMTokenManager: NSObject, ObservableObject {
                     UIApplication.shared.registerForRemoteNotifications()
                 }
             }
+            log.info("[FCM] Notification permission: \(granted ? "granted" : "denied")")
         } catch {
             log.error("[FCM] Permission request failed: \(error)")
         }
     }
 
-    // MARK: - APNs Token (from AppDelegate)
+    // MARK: - APNs Token (required for SwiftUI - no swizzling)
 
     func handleAPNsToken(_ tokenData: Data) {
-        apnsToken = tokenData
-        // Pass APNs token to Firebase
+        // SwiftUI apps must manually pass APNs token to Firebase
         Messaging.messaging().apnsToken = tokenData
-        log.info("[FCM] APNs token received and passed to Firebase")
+        log.info("[FCM] APNs token passed to Firebase")
     }
 
     func handleAPNsRegistrationError(_ error: Error) {
         log.error("[FCM] APNs registration failed: \(error)")
+    }
+
+    // MARK: - Get Token (async/await)
+
+    func getToken() async throws -> String {
+        // Prefer cached token, otherwise fetch
+        if let token = fcmToken {
+            return token
+        }
+        return try await Messaging.messaging().token()
     }
 
     // MARK: - Backend Registration
@@ -122,7 +159,7 @@ final class FCMTokenManager: NSObject, ObservableObject {
         request.setValue("Bearer \(APIClient.shared.authToken ?? "")", forHTTPHeaderField: "Authorization")
 
         var body: [String: Any] = [
-            "apnsToken": apnsToken,  // Live Activities use APNs token directly
+            "apnsToken": apnsToken,
             "activityId": activityId,
             "platform": "ios",
             "environment": isProduction ? "production" : "sandbox"
@@ -172,24 +209,9 @@ final class FCMTokenManager: NSObject, ObservableObject {
         isRegistered = false
     }
 }
-
-// MARK: - MessagingDelegate
-
-extension FCMTokenManager: MessagingDelegate {
-    nonisolated func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
-        guard let fcmToken = fcmToken else { return }
-
-        Task { @MainActor in
-            self.fcmToken = fcmToken
-            log.info("[FCM] Token received: \(fcmToken.prefix(20))...")
-
-            await self.registerWithBackend(fcmToken: fcmToken)
-        }
-    }
-}
 ```
 
-## App Delegate Integration
+## App Delegate Integration (SwiftUI)
 
 ```swift
 // In AppDelegate
@@ -197,52 +219,64 @@ extension FCMTokenManager: MessagingDelegate {
 import FirebaseCore
 import FirebaseMessaging
 
-func application(
-    _ application: UIApplication,
-    didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
-) -> Bool {
-    // Initialize Firebase
-    FirebaseApp.configure()
+class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
+    ) -> Bool {
+        // Initialize Firebase FIRST
+        FirebaseApp.configure()
 
-    // Configure FCM token manager
-    FCMTokenManager.shared.configure()
-
-    // Register background tasks
-    BackgroundManager.shared.registerBackgroundTasksSync()
-
-    return true
-}
-
-func application(
-    _ application: UIApplication,
-    didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
-) {
-    FCMTokenManager.shared.handleAPNsToken(deviceToken)
-}
-
-func application(
-    _ application: UIApplication,
-    didFailToRegisterForRemoteNotificationsWithError error: Error
-) {
-    FCMTokenManager.shared.handleAPNsRegistrationError(error)
-}
-
-func application(
-    _ application: UIApplication,
-    didReceiveRemoteNotification userInfo: [AnyHashable: Any]
-) async -> UIBackgroundFetchResult {
-    // Handle silent push for clearing notifications
-    if let clearApprovalId = userInfo["clearApprovalId"] as? String {
-        await MainActor.run {
-            NotificationManager.shared.clearApprovalNotification(requestId: clearApprovalId)
+        // Configure FCM token manager (starts async stream)
+        Task { @MainActor in
+            FCMTokenManager.shared.configure()
         }
-        return .newData
+
+        // Register background tasks
+        BackgroundManager.shared.registerBackgroundTasksSync()
+
+        return true
     }
 
-    // Let Firebase handle FCM messages
-    Messaging.messaging().appDidReceiveMessage(userInfo)
+    // REQUIRED for SwiftUI (no method swizzling)
+    func application(
+        _ application: UIApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
+        FCMTokenManager.shared.handleAPNsToken(deviceToken)
+    }
 
-    return .noData
+    func application(
+        _ application: UIApplication,
+        didFailToRegisterForRemoteNotificationsWithError error: Error
+    ) {
+        FCMTokenManager.shared.handleAPNsRegistrationError(error)
+    }
+
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any]
+    ) async -> UIBackgroundFetchResult {
+        // Handle silent push for clearing notifications
+        if let clearApprovalId = userInfo["clearApprovalId"] as? String {
+            await MainActor.run {
+                NotificationManager.shared.clearApprovalNotification(requestId: clearApprovalId)
+            }
+            return .newData
+        }
+
+        // Let Firebase handle FCM messages
+        Messaging.messaging().appDidReceiveMessage(userInfo)
+
+        return .noData
+    }
+}
+
+// In CodingBridgeApp.swift
+@main
+struct CodingBridgeApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    // ...
 }
 ```
 
@@ -255,17 +289,28 @@ func application(
 5. Enable Cloud Messaging in Firebase Console
 6. Upload APNs key (.p8) to Firebase Console → Project Settings → Cloud Messaging
 
-## Live Activity Notes
+## Live Activities via FCM
 
-Firebase Cloud Messaging fully supports Live Activities via the HTTP v1 API:
+Firebase fully supports Live Activities via HTTP v1 API:
 
-- **Start** Live Activity (iOS 17.2+): Use push-to-start token with `event: "start"`
-- **Update** Live Activity: Use activity token with `event: "update"`
-- **End** Live Activity: Use activity token with `event: "end"` + `dismissal-date`
-
-Both regular notifications and Live Activity updates go through FCM - no direct APNs integration needed.
+- **Start** (iOS 17.2+): `event: "start"` with push-to-start token
+- **Update**: `event: "update"` with activity token
+- **End**: `event: "end"` + `dismissal-date`
 
 See: https://firebase.google.com/docs/cloud-messaging/customize-messages/live-activity
+
+## Swift 6 Notes
+
+- Firebase SDK 12.0.0+ requires Swift 6.0 toolchain
+- Most Firebase types now conform to `Sendable`
+- Use `@unchecked Sendable` if needed for ObservableObject
+- AsyncStream APIs are the modern alternative to delegates
+
+## Sources
+
+- [Firebase iOS SDK Release Notes](https://firebase.google.com/support/release-notes/ios)
+- [Firebase iOS SDK GitHub](https://github.com/firebase/firebase-ios-sdk)
+- [FCM Setup Guide](https://firebase.google.com/docs/cloud-messaging/ios/client)
 
 ---
 **Next:** [notification-actions](./notification-actions.md) | **Index:** [../00-INDEX.md](../00-INDEX.md)
