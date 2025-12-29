@@ -1,39 +1,62 @@
 # Backend API
 
-> New endpoints and APNs integration for claudecodeui.
+> Firebase Admin SDK integration for claudecodeui.
 
 ## Prerequisites
 
-1. **APNs Key (.p8)** from Apple Developer Portal
-2. **Key ID** and **Team ID** from Apple
-3. **Bundle ID** registered with push capability
+1. **Firebase Project** created at https://console.firebase.google.com
+2. **Service Account Key** (.json) from Firebase Console → Project Settings → Service Accounts
+3. **APNs Key (.p8)** uploaded to Firebase Console → Cloud Messaging → Apple app configuration
+4. **Bundle ID** registered with push capability in Apple Developer Portal
 
 ## Environment Variables
 
 ```bash
+# Firebase Admin SDK
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/serviceAccountKey.json
+
+# Or inline credentials (for containerized deployments)
+FIREBASE_PROJECT_ID=your-project-id
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxx@your-project.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+
+# APNs for Live Activities (Firebase Admin can send direct APNs)
 APNS_KEY_ID=ABC123DEFG
 APNS_TEAM_ID=TEAM123456
 APNS_KEY_PATH=/path/to/AuthKey_ABC123DEFG.p8
-APNS_BUNDLE_ID=com.codingbridge.CodingBridge
-APNS_ENVIRONMENT=development  # or "production"
+APNS_BUNDLE_ID=com.level.CodingBridge
 ```
 
 ## New Endpoints
 
-### Register Push Token
+### Register FCM Token
 
 ```
 POST /api/push/register
 Authorization: Bearer <jwt>
 
 {
-  "token": "abc123...",
-  "tokenType": "device",  // or "live_activity"
+  "fcmToken": "abc123...",
   "platform": "ios",
-  "environment": "development",
-  "activityId": "...",    // if live_activity
-  "sessionId": "...",     // if live_activity
-  "previousToken": "..."  // for token rotation
+  "environment": "sandbox"  // or "production"
+}
+
+Response: { "success": true }
+```
+
+### Register Live Activity Token
+
+```
+POST /api/push/live-activity
+Authorization: Bearer <jwt>
+
+{
+  "apnsToken": "abc123...",
+  "activityId": "activity-uuid",
+  "sessionId": "session-uuid",
+  "previousToken": "...",  // optional, for rotation
+  "platform": "ios",
+  "environment": "sandbox"
 }
 
 Response: { "success": true }
@@ -45,12 +68,12 @@ Response: { "success": true }
 DELETE /api/push/invalidate
 Authorization: Bearer <jwt>
 
-{ "token": "abc123..." }
+{ "fcmToken": "abc123..." }
 
 Response: { "success": true }
 ```
 
-### Get Push Status
+### Get Push Status (Debug)
 
 ```
 GET /api/push/status
@@ -58,7 +81,7 @@ Authorization: Bearer <jwt>
 
 Response:
 {
-  "deviceTokenRegistered": true,
+  "fcmTokenRegistered": true,
   "liveActivityTokens": [
     { "activityId": "...", "sessionId": "...", "registeredAt": "..." }
   ]
@@ -71,31 +94,129 @@ Response:
 CREATE TABLE push_tokens (
     id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
-    token TEXT NOT NULL UNIQUE,
-    token_type TEXT NOT NULL,  -- 'device' or 'live_activity'
+    fcm_token TEXT,
+    apns_token TEXT,
+    token_type TEXT NOT NULL,  -- 'fcm' or 'live_activity'
     activity_id TEXT,
     session_id TEXT,
     platform TEXT DEFAULT 'ios',
-    environment TEXT DEFAULT 'development',
+    environment TEXT DEFAULT 'sandbox',
     is_valid BOOLEAN DEFAULT TRUE,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
     INDEX idx_user_id (user_id),
-    INDEX idx_session_id (session_id)
+    INDEX idx_session_id (session_id),
+    INDEX idx_fcm_token (fcm_token)
 );
 ```
 
-## APNs Integration
+## Firebase Admin SDK Integration
 
 ### Node.js Service
 
 ```javascript
-// services/apns.js
+// services/firebase.js
+
+const admin = require('firebase-admin');
+
+class FirebaseService {
+  constructor() {
+    // Initialize with service account
+    if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+      admin.initializeApp({
+        credential: admin.credential.applicationDefault(),
+      });
+    } else {
+      admin.initializeApp({
+        credential: admin.credential.cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+        }),
+      });
+    }
+  }
+
+  // Send notification via FCM
+  async sendNotification(fcmToken, payload) {
+    const message = {
+      token: fcmToken,
+      notification: {
+        title: payload.title,
+        body: payload.body,
+      },
+      apns: {
+        headers: {
+          'apns-priority': '10',
+        },
+        payload: {
+          aps: {
+            sound: 'default',
+            category: payload.category,
+            'interruption-level': 'time-sensitive',
+          },
+          ...payload.data,
+        },
+      },
+    };
+
+    try {
+      const response = await admin.messaging().send(message);
+      return { success: true, messageId: response };
+    } catch (error) {
+      console.error('FCM send error:', error);
+
+      // Handle invalid token
+      if (error.code === 'messaging/registration-token-not-registered') {
+        await this.invalidateToken(fcmToken);
+      }
+
+      return { success: false, error: error.message };
+    }
+  }
+
+  // Send silent push to clear notifications
+  async sendSilentPush(fcmToken, data) {
+    const message = {
+      token: fcmToken,
+      apns: {
+        headers: {
+          'apns-priority': '5',
+          'apns-push-type': 'background',
+        },
+        payload: {
+          aps: {
+            'content-available': 1,
+          },
+          ...data,
+        },
+      },
+    };
+
+    return await admin.messaging().send(message);
+  }
+
+  // Invalidate token in database
+  async invalidateToken(fcmToken) {
+    // Update database to mark token as invalid
+    // Implementation depends on your database
+  }
+}
+
+module.exports = new FirebaseService();
+```
+
+### Live Activity Updates (Direct APNs)
+
+Firebase Admin SDK can also send direct APNs messages for Live Activities:
+
+```javascript
+// services/liveActivity.js
 
 const apn = require('@parse/node-apn');
 
-class APNSService {
+class LiveActivityService {
   constructor() {
     this.provider = new apn.Provider({
       token: {
@@ -103,29 +224,12 @@ class APNSService {
         keyId: process.env.APNS_KEY_ID,
         teamId: process.env.APNS_TEAM_ID,
       },
-      production: process.env.APNS_ENVIRONMENT === 'production',
+      production: process.env.NODE_ENV === 'production',
     });
     this.bundleId = process.env.APNS_BUNDLE_ID;
   }
 
-  async sendNotification(deviceToken, payload) {
-    const notification = new apn.Notification();
-    notification.topic = this.bundleId;
-    notification.expiry = Math.floor(Date.now() / 1000) + 3600;
-    notification.sound = payload.sound || 'default';
-    notification.alert = {
-      title: payload.title,
-      subtitle: payload.subtitle,
-      body: payload.body,
-    };
-    notification.category = payload.category;
-    notification.payload = payload.data || {};
-
-    const result = await this.provider.send(notification, deviceToken);
-    return { success: result.failed.length === 0 };
-  }
-
-  async sendLiveActivityUpdate(activityToken, contentState, event = 'update') {
+  async updateActivity(apnsToken, contentState, event = 'update') {
     const notification = new apn.Notification();
     notification.topic = `${this.bundleId}.push-type.liveactivity`;
     notification.pushType = 'liveactivity';
@@ -142,86 +246,95 @@ class APNSService {
       notification.aps['dismissal-date'] = Math.floor(Date.now() / 1000) + 900;
     }
 
-    return await this.provider.send(notification, activityToken);
+    return await this.provider.send(notification, apnsToken);
   }
 }
 
-module.exports = new APNSService();
+module.exports = new LiveActivityService();
 ```
 
 ## Push Payload Formats
 
-### Approval Request
+### Approval Request (via FCM)
 
-```json
-{
-  "aps": {
-    "alert": {
-      "title": "Approval Needed",
-      "subtitle": "Bash",
-      "body": "Execute: npm test"
-    },
-    "sound": "default",
-    "category": "APPROVAL_REQUEST",
-    "interruption-level": "time-sensitive"
+```javascript
+await firebase.sendNotification(fcmToken, {
+  title: 'Approval Needed',
+  body: 'Execute: npm test',
+  category: 'APPROVAL_REQUEST',
+  data: {
+    requestId: 'approval-123',
+    toolName: 'Bash',
+    type: 'approval',
   },
-  "requestId": "approval-123",
-  "toolName": "Bash",
-  "type": "approval"
-}
+});
 ```
 
-### Live Activity Update
+### Task Complete (via FCM)
 
-```json
-{
-  "aps": {
-    "timestamp": 1234567890,
-    "event": "update",
-    "content-state": {
-      "status": "processing",
-      "currentOperation": "Running tests...",
-      "elapsedSeconds": 120,
-      "todoProgress": {
-        "completed": 3,
-        "total": 7,
-        "currentTask": "Fix auth bug"
-      }
-    },
-    "stale-date": 1234568190
-  }
-}
+```javascript
+await firebase.sendNotification(fcmToken, {
+  title: 'Task Complete',
+  body: 'Claude finished working on your request.',
+  category: 'TASK_COMPLETE',
+  data: {
+    sessionId: 'session-123',
+    type: 'complete',
+  },
+});
 ```
 
-### Clear Notification (Silent)
+### Live Activity Update (Direct APNs)
 
-```json
-{
-  "aps": {
-    "content-available": 1
+```javascript
+await liveActivity.updateActivity(apnsToken, {
+  status: 'processing',
+  currentOperation: 'Running tests...',
+  elapsedSeconds: 120,
+  todoProgress: {
+    completed: 3,
+    total: 7,
+    currentTask: 'Fix auth bug',
   },
-  "clearApprovalId": "approval-123"
-}
+});
+```
+
+### Clear Notification (Silent Push via FCM)
+
+```javascript
+await firebase.sendSilentPush(fcmToken, {
+  clearApprovalId: 'approval-123',
+});
 ```
 
 ## Rate Limiting
 
-Throttle Live Activity updates (APNs limit):
+Throttle Live Activity updates to respect APNs limits:
 
 ```javascript
 const minInterval = 15000;  // 15 seconds
 const lastUpdate = new Map();
 
-async function throttledUpdate(token, contentState) {
+async function throttledActivityUpdate(token, contentState) {
   const lastTime = lastUpdate.get(token);
   if (lastTime && Date.now() - lastTime < minInterval) {
     return { success: false, reason: 'throttled' };
   }
 
   lastUpdate.set(token, Date.now());
-  return await apns.sendLiveActivityUpdate(token, contentState);
+  return await liveActivity.updateActivity(token, contentState);
 }
 ```
+
+## FCM vs Direct APNs
+
+| Use Case | Service | Why |
+|----------|---------|-----|
+| Approval notifications | FCM | Simpler, handles token rotation |
+| Question notifications | FCM | Simpler, handles token rotation |
+| Completion notifications | FCM | Simpler, handles token rotation |
+| Clear notifications | FCM (silent) | Background content-available |
+| Live Activity updates | Direct APNs | FCM doesn't support liveactivity push type |
 
 ---
 **Prev:** [notification-actions](./notification-actions.md) | **Next:** [backend-events](./backend-events.md) | **Index:** [../00-INDEX.md](../00-INDEX.md)

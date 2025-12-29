@@ -1,29 +1,35 @@
 # Phase 3 Checklist
 
-> Push Notifications + Actionable Approvals.
+> Push Notifications via Firebase + Actionable Approvals.
 
 ## Prerequisites
 
 - [ ] Phase 1 + 2 complete
-- [ ] APNs key (.p8) created in Apple Developer Portal
-- [ ] Key ID and Team ID noted
-- [ ] Backend environment configured
+- [ ] Apple Developer Account (for APNs key)
+- [ ] Firebase Project created at console.firebase.google.com
+- [ ] APNs key (.p8) uploaded to Firebase Console
+- [ ] Service Account key (.json) downloaded for backend
+- [ ] `GoogleService-Info.plist` added to iOS project
 
 ## Deliverables
 
-### iOS: PushTokenManager
-- [ ] Create `PushTokenManager.swift`
-- [ ] Handle device token registration
-- [ ] Handle Live Activity token registration
-- [ ] Implement token rotation (previousToken)
-- [ ] Handle registration errors gracefully
+### iOS: FCMTokenManager
+- [ ] Add Firebase SDK via SPM (FirebaseCore, FirebaseMessaging)
+- [ ] Create `FCMTokenManager.swift`
+- [ ] Configure Firebase in AppDelegate
+- [ ] Handle FCM token registration via MessagingDelegate
+- [ ] Pass APNs token to Firebase SDK
+- [ ] Register FCM token with backend
+- [ ] Handle Live Activity token registration (direct APNs)
+- [ ] Handle token invalidation
 
 ### iOS: App Delegate
-- [ ] Register for remote notifications at launch
+- [ ] Initialize Firebase (`FirebaseApp.configure()`)
+- [ ] Configure FCMTokenManager
 - [ ] Handle `didRegisterForRemoteNotificationsWithDeviceToken`
 - [ ] Handle `didFailToRegisterForRemoteNotificationsWithError`
-- [ ] Handle silent push for clear commands
-- [ ] Handle `didReceiveRemoteNotification` for background fetch
+- [ ] Handle `didReceiveRemoteNotification` for silent push
+- [ ] Pass messages to Firebase SDK
 
 ### iOS: Notification Actions
 - [ ] Implement Approve/Deny action handlers
@@ -34,24 +40,31 @@
 
 ### Backend: Database
 - [ ] Create `push_tokens` table migration
-- [ ] Add indexes for performance
+- [ ] Add indexes for FCM token lookup
 
 ### Backend: API Endpoints
-- [ ] `POST /api/push/register` - Token registration
+- [ ] `POST /api/push/register` - FCM token registration
+- [ ] `POST /api/push/live-activity` - Live Activity APNs token
 - [ ] `DELETE /api/push/invalidate` - Token invalidation
 - [ ] `GET /api/push/status` - Debug status
 
-### Backend: APNs Service
-- [ ] Create APNs service with .p8 key
-- [ ] Implement `sendNotification()` for alerts
-- [ ] Implement `sendLiveActivityUpdate()` for Live Activities
-- [ ] Handle token invalidation on `BadDeviceToken`
-- [ ] Add rate limiting for Live Activity updates
+### Backend: Firebase Admin SDK
+- [ ] Install `firebase-admin` package
+- [ ] Create FirebaseService with credential loading
+- [ ] Implement `sendNotification()` for FCM alerts
+- [ ] Implement `sendSilentPush()` for background updates
+- [ ] Handle `registration-token-not-registered` error
+
+### Backend: Live Activity Service
+- [ ] Install `@parse/node-apn` package
+- [ ] Create LiveActivityService with APNs key
+- [ ] Implement `updateActivity()` for Live Activity updates
+- [ ] Add rate limiting (15-second minimum)
 
 ### Backend: Event Triggers
-- [ ] Trigger push on approval request
-- [ ] Trigger push on question asked
-- [ ] Trigger push on task complete/error
+- [ ] Trigger FCM push on approval request
+- [ ] Trigger FCM push on question asked
+- [ ] Trigger FCM push on task complete/error
 - [ ] Trigger Live Activity updates on progress
 - [ ] Implement 60-second approval timeout
 
@@ -62,6 +75,7 @@
 
 ## Testing
 
+- [ ] Test FCM token registration
 - [ ] Test push notification delivery on device
 - [ ] Test Live Activity push updates
 - [ ] Test Approve action from Lock Screen
@@ -69,9 +83,9 @@
 - [ ] Test 60-second approval timeout
 - [ ] Test multi-device notification clearing
 - [ ] Test offline approval queueing
-- [ ] Test token refresh/rotation
-- [ ] Test with APNs sandbox environment
-- [ ] Test with APNs production environment
+- [ ] Test FCM token refresh
+- [ ] Test with Firebase sandbox environment
+- [ ] Test with Firebase production environment
 
 ## Acceptance Criteria
 
@@ -85,19 +99,22 @@
 
 | Risk | Mitigation |
 |------|------------|
-| APNs key security | Store securely, rotate annually |
-| Push delivery delays | Also send WebSocket for foreground |
-| Token invalidation | Handle gracefully, re-register |
+| Firebase service outage | Also send WebSocket for foreground |
+| FCM token invalidation | Handle gracefully, re-register |
+| APNs key expiration | Rotate annually, set calendar reminder |
 
 ## Deployment Checklist
 
+- [ ] Create Firebase project
 - [ ] Generate APNs key from Apple Developer Portal
-- [ ] Store .p8 file securely (not in repo)
-- [ ] Set environment variables
+- [ ] Upload APNs key to Firebase Console
+- [ ] Download Service Account key for backend
+- [ ] Download `GoogleService-Info.plist` for iOS
+- [ ] Set backend environment variables
 - [ ] Run database migrations
 - [ ] Deploy API endpoints
-- [ ] Test with sandbox APNs
-- [ ] Switch to production APNs for release
+- [ ] Test with Firebase sandbox
+- [ ] Switch to production for release
 
 ---
 **Prev:** [backend-events](./backend-events.md) | **Reference:** [../ref/](../ref/) | **Index:** [../00-INDEX.md](../00-INDEX.md)

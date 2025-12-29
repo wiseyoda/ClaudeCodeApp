@@ -16,27 +16,52 @@
 │  └─────────────────┘  └────────┬────────┘  └──────────┬──────────┘    │
 │                                │                       │                │
 │                       ┌────────▼────────┐  ┌──────────▼──────────┐    │
-│                       │ NotificationMgr │  │  PushTokenManager   │    │
-│                       │ (Local + Push)  │  │  (APNs Registration)│    │
+│                       │ NotificationMgr │  │  FCMTokenManager    │    │
+│                       │ (Local + Push)  │  │  (Firebase + APNs)  │    │
 │                       └─────────────────┘  └─────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
-                                    │ WebSocket / APNs
+                                    │ WebSocket
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                           claudecodeui Backend                          │
 │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────────────┐  │
-│  │  WebSocket      │  │  Session API    │  │   APNs Integration      │  │
+│  │  WebSocket      │  │  Session API    │  │   Firebase Admin SDK    │  │
 │  │  Handler        │  │  Endpoints      │  │   (Phase 3)             │  │
 │  └─────────────────┘  └─────────────────┘  └─────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
-                                    │ APNs HTTP/2
+                                    │ Firebase Cloud Messaging
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Firebase Cloud Messaging (FCM)                        │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    │ APNs (managed by Firebase)
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                    Apple Push Notification Service                       │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
+
+## Why Firebase?
+
+Using Firebase Cloud Messaging instead of direct APNs integration:
+
+| Benefit | Description |
+|---------|-------------|
+| Simpler backend | Firebase Admin SDK handles APNs protocol complexity |
+| Token management | FCM handles token refresh/rotation automatically |
+| Cross-platform ready | Same backend code works for Android if needed |
+| Free tier | Generous limits for personal/small-scale apps |
+| Analytics | Built-in delivery metrics and debugging |
+
+Trade-offs:
+- Adds ~100-300ms latency (extra hop through Firebase)
+- Requires FCM token + APNs token (2 tokens vs 1)
+- Google dependency
+
+For this use case (approval notifications, Live Activity updates), the trade-offs are acceptable.
 
 ## New Components
 
@@ -45,7 +70,7 @@
 | BackgroundManager | Central coordinator for background tasks | `Managers/BackgroundManager.swift` |
 | LiveActivityManager | ActivityKit lifecycle management | `Managers/LiveActivityManager.swift` |
 | NotificationManager | Push/local notifications | `Managers/NotificationManager.swift` |
-| PushTokenManager | APNs token handling | `Managers/PushTokenManager.swift` |
+| FCMTokenManager | Firebase + APNs token handling | `Managers/FCMTokenManager.swift` |
 | TaskState | Shared task state model | `Models/TaskState.swift` |
 
 ## File Structure
@@ -56,7 +81,7 @@ CodingBridge/
 │   ├── BackgroundManager.swift      # NEW - Central coordinator
 │   ├── LiveActivityManager.swift    # NEW - ActivityKit management
 │   ├── NotificationManager.swift    # NEW - Push/local notifications
-│   ├── PushTokenManager.swift       # NEW - APNs token handling
+│   ├── FCMTokenManager.swift        # NEW - Firebase + APNs tokens
 │   ├── WebSocketManager.swift       # MODIFIED - Add state callbacks
 │   └── SSHManager.swift             # UNCHANGED
 ├── Models/
@@ -68,7 +93,8 @@ CodingBridge/
 │   └── SharedContainer.swift            # NEW - App Group access
 ├── Utilities/
 │   └── NetworkMonitor.swift         # NEW
-└── CodingBridgeApp.swift            # MODIFIED - Register tasks
+├── GoogleService-Info.plist         # NEW - Firebase config (from console)
+└── CodingBridgeApp.swift            # MODIFIED - Register tasks, Firebase init
 
 CodingBridgeWidgets/                 # NEW - Widget extension target
 ├── CodingBridgeWidgets.swift
