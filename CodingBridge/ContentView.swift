@@ -28,10 +28,24 @@ struct ContentView: View {
     @State private var renameText = ""
 
     // Git status tracking per project path
+    // Local dict used during refresh to show .checking state
     @State private var gitStatuses: [String: GitStatus] = [:]
     @State private var isCheckingGitStatus = false
     @State private var gitRefreshError: String?
     @State private var showGitRefreshError = false
+
+    /// Returns the effective git status for a project path.
+    /// Prefers local state when .checking (during refresh), otherwise uses ProjectCache.
+    /// This ensures ChatView updates propagate back to the project list.
+    private func effectiveGitStatus(for path: String) -> GitStatus {
+        let localStatus = gitStatuses[path]
+        // During refresh, show .checking from local state
+        if localStatus == .checking {
+            return .checking
+        }
+        // Otherwise prefer cache (which ChatView updates)
+        return projectCache.cachedGitStatuses[path] ?? localStatus ?? .unknown
+    }
 
     // Multi-repo (monorepo) tracking
     @State private var multiRepoStatuses: [String: MultiRepoStatus] = [:]
@@ -137,7 +151,7 @@ struct ContentView: View {
                 ChatView(
                     project: project,
                     apiClient: apiClient,
-                    initialGitStatus: gitStatuses[project.path] ?? .unknown,
+                    initialGitStatus: effectiveGitStatus(for: project.path),
                     onSessionsChanged: {
                         Task { await loadProjects() }
                     }
@@ -532,7 +546,7 @@ struct ContentView: View {
 
         ProjectRow(
             project: project,
-            gitStatus: gitStatuses[project.path] ?? .unknown,
+            gitStatus: effectiveGitStatus(for: project.path),
             sessionCount: sessionStore.displaySessionCount(for: project.path),
             isSelected: selectedProject?.id == project.id,
             isArchived: isArchived,

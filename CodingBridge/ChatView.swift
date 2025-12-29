@@ -761,6 +761,8 @@ struct ChatView: View {
                         DragGesture(minimumDistance: 5)
                             .onChanged { _ in
                                 scrollManager.recordUserScrollGesture()
+                                // Dismiss keyboard when user scrolls
+                                isInputFocused = false
                             }
                     )
                     // Scroll to bottom button - appears when user has scrolled up
@@ -1692,6 +1694,9 @@ struct ChatView: View {
             await MainActor.run {
                 gitStatus = newStatus
 
+                // Sync to ProjectCache so ContentView sees the update
+                ProjectCache.shared.updateGitStatus(for: project.path, status: newStatus)
+
                 // Hide banner if now clean
                 if newStatus == .clean || newStatus == .notGitRepo {
                     showGitBanner = false
@@ -1716,6 +1721,9 @@ struct ChatView: View {
                 gitStatus = .clean
                 showGitBanner = false
 
+                // Sync to ProjectCache so ContentView sees the update
+                ProjectCache.shared.updateGitStatus(for: project.path, status: .clean)
+
                 // Add system message about the pull
                 messages.append(ChatMessage(
                     role: .system,
@@ -1724,7 +1732,9 @@ struct ChatView: View {
                 ))
             } else {
                 // Show error in banner
-                gitStatus = .error("Auto-pull failed")
+                let errorStatus = GitStatus.error("Auto-pull failed")
+                gitStatus = errorStatus
+                ProjectCache.shared.updateGitStatus(for: project.path, status: errorStatus)
             }
         }
     }
