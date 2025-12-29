@@ -4,6 +4,8 @@
 
 **Core question:** "Is Claude working, done, or waiting for me?"
 
+**Getting started?** See [PROMPTS.md](./PROMPTS.md) for copy/paste prompts.
+
 ## Quick Links
 
 | Doc | Purpose |
@@ -63,7 +65,7 @@
 
 | Phase | Status | Dependencies |
 |-------|--------|--------------|
-| Phase 1 | Not started | None |
+| Phase 1 | Deliverables complete, testing needed | None |
 | Phase 2 | Not started | Phase 1 |
 | Phase 3 | Not started | Phase 1+2, Backend APNs |
 

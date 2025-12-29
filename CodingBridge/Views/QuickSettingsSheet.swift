@@ -1,4 +1,6 @@
 import SwiftUI
+import ActivityKit
+import UserNotifications
 
 // MARK: - Quick Settings Sheet
 
@@ -6,12 +8,15 @@ import SwiftUI
 struct QuickSettingsSheet: View {
     @EnvironmentObject var settings: AppSettings
     @ObservedObject var debugStore = DebugLogStore.shared
+    @ObservedObject var notificationManager = NotificationManager.shared
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.dismiss) var dismiss
 
     let tokenUsage: (current: Int, max: Int)?
     @State private var showDebugLog = false
     @State private var showErrorInsights = false
+    @State private var notificationStatus: PermissionStatus = .notDetermined
+    @State private var liveActivityStatus: PermissionStatus = .notDetermined
     @ObservedObject private var errorAnalytics = ErrorAnalyticsStore.shared
 
     var body: some View {
@@ -90,6 +95,80 @@ struct QuickSettingsSheet: View {
                     Text("Display")
                 } footer: {
                     Text("Auto suggestions uses AI to suggest next actions after each response.")
+                }
+
+                // Background & Notifications Section
+                Section {
+                    Toggle(isOn: $settings.enableBackgroundNotifications) {
+                        Label("Background Notifications", systemImage: "bell.badge")
+                    }
+
+                    Toggle(isOn: $settings.showNotificationDetails) {
+                        Label("Show Details on Lock Screen", systemImage: "eye")
+                    }
+                    .disabled(!settings.enableBackgroundNotifications)
+
+                    Toggle(isOn: $settings.enableTimeSensitiveNotifications) {
+                        Label("Break Through Focus", systemImage: "moon.zzz")
+                    }
+                    .disabled(!settings.enableBackgroundNotifications)
+
+                    Toggle(isOn: $settings.enableLiveActivities) {
+                        Label("Live Activities", systemImage: "square.stack.3d.up")
+                    }
+
+                    Toggle(isOn: $settings.backgroundInLowPowerMode) {
+                        Label("Allow in Low Power Mode", systemImage: "battery.25")
+                    }
+                } header: {
+                    Text("Background & Notifications")
+                } footer: {
+                    Text("Notifications alert you when Claude needs attention while the app is backgrounded.")
+                }
+
+                // Permissions Section
+                Section {
+                    HStack {
+                        Label("Notifications", systemImage: "bell")
+                        Spacer()
+                        PermissionStatusBadge(status: notificationStatus)
+                    }
+
+                    HStack {
+                        Label("Live Activities", systemImage: "square.stack.3d.up")
+                        Spacer()
+                        PermissionStatusBadge(status: liveActivityStatus)
+                    }
+
+                    if notificationStatus == .denied || liveActivityStatus == .denied {
+                        Button {
+                            openAppSettings()
+                        } label: {
+                            HStack {
+                                Label("Open Settings", systemImage: "gear")
+                                Spacer()
+                                Image(systemName: "arrow.up.forward")
+                                    .font(.caption)
+                                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                            }
+                        }
+                    }
+
+                    Button {
+                        Task {
+                            await NotificationManager.shared.sendTestNotification()
+                        }
+                    } label: {
+                        Label("Send Test Notification", systemImage: "bell.badge")
+                    }
+                } header: {
+                    Text("Permissions")
+                } footer: {
+                    if notificationStatus == .denied {
+                        Text("Notifications are disabled in Settings. Enable them to receive alerts when Claude needs attention.")
+                    } else {
+                        Text("Test notification will appear in 3 seconds. Background the app to see it.")
+                    }
                 }
 
                 // Advanced Section
@@ -188,8 +267,94 @@ struct QuickSettingsSheet: View {
         .sheet(isPresented: $showErrorInsights) {
             ErrorInsightsView()
         }
+        .onAppear {
+            checkPermissionStatus()
+        }
     }
 
+    // MARK: - Permission Helpers
+
+    private func checkPermissionStatus() {
+        Task {
+            // Check notification permission
+            let settings = await UNUserNotificationCenter.current().notificationSettings()
+            await MainActor.run {
+                switch settings.authorizationStatus {
+                case .authorized, .provisional, .ephemeral:
+                    notificationStatus = .granted
+                case .denied:
+                    notificationStatus = .denied
+                case .notDetermined:
+                    notificationStatus = .notDetermined
+                @unknown default:
+                    notificationStatus = .notDetermined
+                }
+            }
+
+            // Check Live Activity availability
+            await MainActor.run {
+                let authInfo = ActivityAuthorizationInfo()
+                if authInfo.areActivitiesEnabled {
+                    liveActivityStatus = .granted
+                } else {
+                    // Can't distinguish denied vs not supported easily, treat as denied
+                    liveActivityStatus = .denied
+                }
+            }
+        }
+    }
+
+    private func openAppSettings() {
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
+    }
+}
+
+// MARK: - Permission Status
+
+enum PermissionStatus {
+    case granted, denied, notDetermined
+}
+
+// MARK: - Permission Status Badge
+
+struct PermissionStatusBadge: View {
+    let status: PermissionStatus
+    @Environment(\.colorScheme) var colorScheme
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: iconName)
+            Text(text)
+        }
+        .font(.caption)
+        .foregroundStyle(color)
+    }
+
+    private var iconName: String {
+        switch status {
+        case .granted: return "checkmark.circle.fill"
+        case .denied: return "xmark.circle.fill"
+        case .notDetermined: return "questionmark.circle.fill"
+        }
+    }
+
+    private var text: String {
+        switch status {
+        case .granted: return "Enabled"
+        case .denied: return "Disabled"
+        case .notDetermined: return "Not Set"
+        }
+    }
+
+    private var color: Color {
+        switch status {
+        case .granted: return CLITheme.green(for: colorScheme)
+        case .denied: return CLITheme.red(for: colorScheme)
+        case .notDetermined: return CLITheme.secondaryText(for: colorScheme)
+        }
+    }
 }
 
 // MARK: - Quick Settings Token View

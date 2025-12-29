@@ -29,7 +29,6 @@
 		A1000013 /* SpeechManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000012 /* SpeechManager.swift */; };
 		A1000014 /* UserQuestionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000013 /* UserQuestionsView.swift */; };
 		A1000015 /* ImageUtilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000014 /* ImageUtilities.swift */; };
-		HM000001 /* HapticManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = HM000002 /* HapticManager.swift */; };
 		A1000016 /* String+Markdown.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000015 /* String+Markdown.swift */; };
 		A1000017 /* CodeBlockView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000016 /* CodeBlockView.swift */; };
 		A1000018 /* DiffView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000017 /* DiffView.swift */; };
@@ -56,21 +55,29 @@
 		A1000039 /* CommandPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000038 /* CommandPickerSheet.swift */; };
 		A1000040 /* ApprovalBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000040 /* ApprovalBannerView.swift */; };
 		AA000040 /* MessageActionBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000041 /* MessageActionBar.swift */; };
+		B9000002 /* PermissionApprovalTestHarnessView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000001 /* PermissionApprovalTestHarnessView.swift */; };
+		BG000001 /* BackgroundManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BG000002 /* BackgroundManager.swift */; };
 		CCA13BBABC8E4725947D1011 /* ErrorInsightsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2CB9D357C2E4C4791DA828F /* ErrorInsightsView.swift */; };
 		DB000042 /* DebugLogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB000043 /* DebugLogStore.swift */; };
 		DB000044 /* DebugLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB000045 /* DebugLogView.swift */; };
+		DI000001 /* DraftInputPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = DI000002 /* DraftInputPersistence.swift */; };
 		EB000052 /* ErrorBanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = EB000053 /* ErrorBanner.swift */; };
 		ER000050 /* ErrorStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = ER000051 /* ErrorStore.swift */; };
 		F52215AB5E74451A8C111231 /* TagsFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2CE0280C4CD14A61A45D94D0 /* TagsFlowView.swift */; };
 		F651E84643F2460D8BA6DFB9 /* IdeasFAB.swift in Sources */ = {isa = PBXBuildFile; fileRef = D406B32A88A3423899A037FB /* IdeasFAB.swift */; };
+		HM000001 /* HapticManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = HM000002 /* HapticManager.swift */; };
+		MQ000001 /* MessageQueuePersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = MQ000002 /* MessageQueuePersistence.swift */; };
+		NM000001 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = NM000002 /* NotificationManager.swift */; };
+		NW000001 /* NetworkMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = NW000002 /* NetworkMonitor.swift */; };
 		ODL75VT1JDWVUKM5HVUEOJP8 /* ProjectNamesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39UUJ7I96JL1A5K32KNO0PXO /* ProjectNamesStore.swift */; };
+		OQ000001 /* OfflineActionQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = OQ000002 /* OfflineActionQueue.swift */; };
 		PC000001 /* ProjectCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = PC000002 /* ProjectCache.swift */; };
 		PS000046 /* ProjectSettingsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = PS000047 /* ProjectSettingsStore.swift */; };
 		SK000001 /* SkeletonView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SK000002 /* SkeletonView.swift */; };
 		SR000050 /* SessionRepository.swift in Sources */ = {isa = PBXBuildFile; fileRef = SR000051 /* SessionRepository.swift */; };
 		SS000048 /* ScrollStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = SS000049 /* ScrollStateManager.swift */; };
 		SST00052 /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = SST00053 /* SessionStore.swift */; };
-		B9000002 /* PermissionApprovalTestHarnessView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000001 /* PermissionApprovalTestHarnessView.swift */; };
+		TS000001 /* TaskState.swift in Sources */ = {isa = PBXBuildFile; fileRef = TS000002 /* TaskState.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -93,7 +100,6 @@
 /* Begin PBXFileReference section */
 		1F4D52190DB54B75A6081DAA /* QuickCaptureSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickCaptureSheet.swift; sourceTree = "<group>"; };
 		2509F4FB2EFF976200EAFBFE /* CodingBridgeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CodingBridgeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		B9000003 /* CodingBridgeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CodingBridgeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2CE0280C4CD14A61A45D94D0 /* TagsFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagsFlowView.swift; sourceTree = "<group>"; };
 		39UUJ7I96JL1A5K32KNO0PXO /* ProjectNamesStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectNamesStore.swift; sourceTree = "<group>"; };
 		4676361593D14ED18823954D /* IdeasStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeasStore.swift; sourceTree = "<group>"; };
@@ -115,7 +121,6 @@
 		A2000012 /* SpeechManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechManager.swift; sourceTree = "<group>"; };
 		A2000013 /* UserQuestionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserQuestionsView.swift; sourceTree = "<group>"; };
 		A2000014 /* ImageUtilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageUtilities.swift; sourceTree = "<group>"; };
-		HM000002 /* HapticManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManager.swift; sourceTree = "<group>"; };
 		A2000015 /* String+Markdown.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "String+Markdown.swift"; sourceTree = "<group>"; };
 		A2000016 /* CodeBlockView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodeBlockView.swift; sourceTree = "<group>"; };
 		A2000017 /* DiffView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiffView.swift; sourceTree = "<group>"; };
@@ -141,22 +146,31 @@
 		A2000037 /* CommandsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandsView.swift; sourceTree = "<group>"; };
 		A2000038 /* CommandPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandPickerSheet.swift; sourceTree = "<group>"; };
 		A2000040 /* ApprovalBannerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApprovalBannerView.swift; sourceTree = "<group>"; };
-		B9000001 /* PermissionApprovalTestHarnessView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionApprovalTestHarnessView.swift; sourceTree = "<group>"; };
 		A3000001 /* CodingBridge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CodingBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA000041 /* MessageActionBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageActionBar.swift; sourceTree = "<group>"; };
 		B423E7C7AA924BD1BA2E2418 /* IdeaEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeaEditorSheet.swift; sourceTree = "<group>"; };
+		B9000001 /* PermissionApprovalTestHarnessView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionApprovalTestHarnessView.swift; sourceTree = "<group>"; };
+		B9000003 /* CodingBridgeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CodingBridgeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		BG000002 /* BackgroundManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundManager.swift; sourceTree = "<group>"; };
 		D406B32A88A3423899A037FB /* IdeasFAB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeasFAB.swift; sourceTree = "<group>"; };
 		DB000043 /* DebugLogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogStore.swift; sourceTree = "<group>"; };
 		DB000045 /* DebugLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogView.swift; sourceTree = "<group>"; };
+		DI000002 /* DraftInputPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftInputPersistence.swift; sourceTree = "<group>"; };
 		EB000053 /* ErrorBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorBanner.swift; sourceTree = "<group>"; };
 		ER000051 /* ErrorStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorStore.swift; sourceTree = "<group>"; };
 		F2CB9D357C2E4C4791DA828F /* ErrorInsightsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorInsightsView.swift; sourceTree = "<group>"; };
+		HM000002 /* HapticManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticManager.swift; sourceTree = "<group>"; };
+		MQ000002 /* MessageQueuePersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageQueuePersistence.swift; sourceTree = "<group>"; };
+		NM000002 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
+		NW000002 /* NetworkMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkMonitor.swift; sourceTree = "<group>"; };
+		OQ000002 /* OfflineActionQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineActionQueue.swift; sourceTree = "<group>"; };
 		PC000002 /* ProjectCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCache.swift; sourceTree = "<group>"; };
 		PS000047 /* ProjectSettingsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSettingsStore.swift; sourceTree = "<group>"; };
 		SK000002 /* SkeletonView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkeletonView.swift; sourceTree = "<group>"; };
 		SR000051 /* SessionRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionRepository.swift; sourceTree = "<group>"; };
 		SS000049 /* ScrollStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollStateManager.swift; sourceTree = "<group>"; };
 		SST00053 /* SessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<group>"; };
+		TS000002 /* TaskState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskState.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -172,18 +186,18 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		B9000007 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		A4000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				A1000011 /* Citadel in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B9000007 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -227,6 +241,9 @@
 				A5000004 /* Utilities */,
 				A5000005 /* Extensions */,
 				A5000006 /* Views */,
+				GMAN0001 /* Managers */,
+				GPER0001 /* Persistence */,
+				GMOD0001 /* Models */,
 				A2000007 /* Assets.xcassets */,
 				7280E348A6154DEB85D30D3D /* ToolErrorClassification.swift */,
 				603895DCE0554062BCEC87F7 /* ErrorAnalyticsStore.swift */,
@@ -253,6 +270,7 @@
 				A2000024 /* Logger.swift */,
 				A2000025 /* AppError.swift */,
 				SS000049 /* ScrollStateManager.swift */,
+				NW000002 /* NetworkMonitor.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -304,6 +322,33 @@
 			path = Views;
 			sourceTree = "<group>";
 		};
+		GMAN0001 /* Managers */ = {
+			isa = PBXGroup;
+			children = (
+				BG000002 /* BackgroundManager.swift */,
+				NM000002 /* NotificationManager.swift */,
+				OQ000002 /* OfflineActionQueue.swift */,
+			);
+			path = Managers;
+			sourceTree = "<group>";
+		};
+		GMOD0001 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				TS000002 /* TaskState.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		GPER0001 /* Persistence */ = {
+			isa = PBXGroup;
+			children = (
+				MQ000002 /* MessageQueuePersistence.swift */,
+				DI000002 /* DraftInputPersistence.swift */,
+			);
+			path = Persistence;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -330,6 +375,26 @@
 			productReference = 2509F4FB2EFF976200EAFBFE /* CodingBridgeTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		A6000001 /* CodingBridge */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A7000003 /* Build configuration list for PBXNativeTarget "CodingBridge" */;
+			buildPhases = (
+				A4000002 /* Sources */,
+				A4000001 /* Frameworks */,
+				A4000003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CodingBridge;
+			packageProductDependencies = (
+				A1100001 /* Citadel */,
+			);
+			productName = CodingBridge;
+			productReference = A3000001 /* CodingBridge.app */;
+			productType = "com.apple.product-type.application";
+		};
 		B9000005 /* CodingBridgeUITests */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = B900000D /* Build configuration list for PBXNativeTarget "CodingBridgeUITests" */;
@@ -353,26 +418,6 @@
 			productReference = B9000003 /* CodingBridgeUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
-		A6000001 /* CodingBridge */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = A7000003 /* Build configuration list for PBXNativeTarget "CodingBridge" */;
-			buildPhases = (
-				A4000002 /* Sources */,
-				A4000001 /* Frameworks */,
-				A4000003 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			name = CodingBridge;
-			packageProductDependencies = (
-				A1100001 /* Citadel */,
-			);
-			productName = CodingBridge;
-			productReference = A3000001 /* CodingBridge.app */;
-			productType = "com.apple.product-type.application";
-		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -387,12 +432,12 @@
 						CreatedOnToolsVersion = 26.2;
 						TestTargetID = A6000001;
 					};
+					A6000001 = {
+						CreatedOnToolsVersion = 15.0;
+					};
 					B9000005 = {
 						CreatedOnToolsVersion = 26.2;
 						TestTargetID = A6000001;
-					};
-					A6000001 = {
-						CreatedOnToolsVersion = 15.0;
 					};
 				};
 			};
@@ -427,13 +472,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		B9000008 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		A4000003 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -442,17 +480,17 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-/* End PBXResourcesBuildPhase section */
-
-/* Begin PBXSourcesBuildPhase section */
-		2509F4F72EFF976200EAFBFE /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
+		B9000008 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		B9000006 /* Sources */ = {
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		2509F4F72EFF976200EAFBFE /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -525,6 +563,20 @@
 				PC000001 /* ProjectCache.swift in Sources */,
 				SK000001 /* SkeletonView.swift in Sources */,
 				B9000002 /* PermissionApprovalTestHarnessView.swift in Sources */,
+				BG000001 /* BackgroundManager.swift in Sources */,
+				NM000001 /* NotificationManager.swift in Sources */,
+				OQ000001 /* OfflineActionQueue.swift in Sources */,
+				MQ000001 /* MessageQueuePersistence.swift in Sources */,
+				DI000001 /* DraftInputPersistence.swift in Sources */,
+				TS000001 /* TaskState.swift in Sources */,
+				NW000001 /* NetworkMonitor.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B9000006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -583,46 +635,6 @@
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/CodingBridge.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/CodingBridge";
-			};
-			name = Release;
-		};
-		B900000B /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.level.CodingBridgeUITests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = CodingBridge;
-			};
-			name = Debug;
-		};
-		B900000C /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.level.CodingBridgeUITests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = CodingBridge;
 			};
 			name = Release;
 		};
@@ -819,6 +831,46 @@
 			};
 			name = Release;
 		};
+		B900000B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.level.CodingBridgeUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = CodingBridge;
+			};
+			name = Debug;
+		};
+		B900000C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.level.CodingBridgeUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = CodingBridge;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -827,15 +879,6 @@
 			buildConfigurations = (
 				2509F5012EFF976200EAFBFE /* Debug */,
 				2509F5022EFF976200EAFBFE /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		B900000D /* Build configuration list for PBXNativeTarget "CodingBridgeUITests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				B900000B /* Debug */,
-				B900000C /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -854,6 +897,15 @@
 			buildConfigurations = (
 				A9000003 /* Debug */,
 				A9000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B900000D /* Build configuration list for PBXNativeTarget "CodingBridgeUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B900000B /* Debug */,
+				B900000C /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

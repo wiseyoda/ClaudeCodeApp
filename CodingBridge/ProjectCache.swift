@@ -35,20 +35,15 @@ class ProjectCache: ObservableObject {
         let cacheFile = Self.cacheFile
 
         Self.fileQueue.async { [weak self] in
-            guard let data = try? Data(contentsOf: cacheFile) else {
-                log.debug("[ProjectCache] No cache file found")
-                return
-            }
+            guard let data = try? Data(contentsOf: cacheFile) else { return }
 
             do {
                 let cache = try JSONDecoder().decode(CachedProjectData.self, from: data)
-
                 Task { @MainActor [weak self] in
                     self?.cachedProjects = cache.projects
                     self?.cachedGitStatuses = cache.gitStatuses
                     self?.lastUpdated = cache.timestamp
                     self?.isStale = cache.isStale(threshold: Self.staleThreshold)
-                    log.info("[ProjectCache] Loaded \(cache.projects.count) projects from cache (stale: \(self?.isStale ?? true))")
                 }
             } catch {
                 log.error("[ProjectCache] Failed to decode cache: \(error)")
@@ -75,7 +70,6 @@ class ProjectCache: ObservableObject {
             do {
                 let data = try JSONEncoder().encode(cache)
                 try data.write(to: cacheFile, options: .atomic)
-                log.debug("[ProjectCache] Saved \(projects.count) projects to cache")
             } catch {
                 log.error("[ProjectCache] Failed to save cache: \(error)")
             }
@@ -106,7 +100,6 @@ class ProjectCache: ObservableObject {
         let cacheFile = Self.cacheFile
         Self.fileQueue.async {
             try? FileManager.default.removeItem(at: cacheFile)
-            log.debug("[ProjectCache] Cache cleared")
         }
     }
 }

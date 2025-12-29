@@ -729,7 +729,6 @@ class MessageStore {
                 return dto.toChatMessage(imageData: imageData)
             }
 
-            log.debug("Loaded \(messages.count) messages for \(projectPath)")
             return messages
         } catch {
             log.error("Failed to decode messages: \(error)")
@@ -773,10 +772,8 @@ class MessageStore {
                 }
             }
 
-            // Save JSON atomically (if this fails, images are still valid for next save)
             do {
                 try jsonData.write(to: file, options: .atomic)
-                log.debug("Saved \(dtos.count) messages for \(projectPath)")
             } catch {
                 log.error("Failed to save messages JSON: \(error)")
             }
@@ -791,7 +788,6 @@ class MessageStore {
         fileQueue.async {
             let projectDir = projectDirectory(for: projectPath)
             try? FileManager.default.removeItem(at: projectDir)
-            log.debug("Cleared messages for \(projectPath)")
         }
     }
 
@@ -809,14 +805,8 @@ class MessageStore {
 
         do {
             let messages = try JSONDecoder().decode([ChatMessage].self, from: data)
-            log.info("Migrating \(messages.count) messages from UserDefaults for \(projectPath)")
-
-            // Save to new file-based storage
             saveMessages(messages, for: projectPath)
-
-            // Remove from UserDefaults
             UserDefaults.standard.removeObject(forKey: oldKey)
-
             return messages
         } catch {
             log.error("Failed to migrate messages from UserDefaults: \(error)")
@@ -840,12 +830,7 @@ class MessageStore {
         for file in files {
             let filename = file.deletingPathExtension().lastPathComponent
             if let uuid = UUID(uuidString: filename), !validIds.contains(uuid) {
-                do {
-                    try FileManager.default.removeItem(at: file)
-                    log.debug("Cleaned up orphaned image: \(filename)")
-                } catch {
-                    log.warning("Failed to remove orphaned image \(filename): \(error)")
-                }
+                try? FileManager.default.removeItem(at: file)
             }
         }
     }
@@ -1068,14 +1053,12 @@ class BookmarkStore: ObservableObject {
     private func loadBookmarks() {
         let url = bookmarksFile
 
-        // Perform file I/O on background queue to avoid blocking main thread
         BookmarkStore.fileQueue.async { [weak self] in
             guard let data = try? Data(contentsOf: url) else { return }
             do {
                 let loadedBookmarks = try JSONDecoder().decode([BookmarkedMessage].self, from: data)
                 Task { @MainActor [weak self] in
                     self?.bookmarks = loadedBookmarks
-                    log.debug("Loaded \(loadedBookmarks.count) bookmarks")
                 }
             } catch {
                 log.error("Failed to load bookmarks: \(error)")
@@ -1084,16 +1067,13 @@ class BookmarkStore: ObservableObject {
     }
 
     private func saveBookmarks() {
-        // Capture data needed for background save
         let bookmarksToSave = bookmarks
         let url = bookmarksFile
 
-        // Perform file I/O on background queue to avoid blocking main thread
         BookmarkStore.fileQueue.async {
             do {
                 let data = try JSONEncoder().encode(bookmarksToSave)
                 try data.write(to: url, options: .atomic)
-                log.debug("Saved \(bookmarksToSave.count) bookmarks")
             } catch {
                 log.error("Failed to save bookmarks: \(error)")
             }

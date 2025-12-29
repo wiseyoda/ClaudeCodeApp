@@ -245,6 +245,9 @@ struct ContentView: View {
 
     /// Load projects with cache-first strategy for instant startup
     private func loadProjectsWithCache() async {
+        let startupStart = CFAbsoluteTimeGetCurrent()
+        log.info("[Startup] Beginning loadProjectsWithCache, hasCache=\(projectCache.hasCachedData)")
+
         // Step 1: Immediately show cached data if available
         if projectCache.hasCachedData {
             projects = projectCache.cachedProjects
@@ -252,26 +255,34 @@ struct ContentView: View {
             isLoading = false
             isFetchingFresh = true
             loadingStatus = "Updating..."
-            log.info("[Startup] Showing \(projects.count) cached projects instantly")
+            log.info("[Startup] Loaded \(projects.count) projects from cache")
         }
 
         // Step 2: Fetch fresh project list from server
+        let apiStart = CFAbsoluteTimeGetCurrent()
         await loadProjects()
+        log.info("[Startup] loadProjects() took \(String(format: "%.2f", (CFAbsoluteTimeGetCurrent() - apiStart) * 1000))ms")
 
         // Step 3: Defer heavy operations to after UI is shown
         // Use a small delay to let the UI render first
         if !projects.isEmpty {
             // Start git checks in background (progressive loading)
             loadingStatus = "Checking git..."
+            let gitStart = CFAbsoluteTimeGetCurrent()
             await checkAllGitStatusesProgressive()
+            log.info("[Startup] Git status checks took \(String(format: "%.2f", (CFAbsoluteTimeGetCurrent() - gitStart) * 1000))ms")
 
             // Discover sub-repos (lower priority)
             loadingStatus = "Scanning repos..."
+            let repoStart = CFAbsoluteTimeGetCurrent()
             await discoverAllSubRepos()
+            log.info("[Startup] Sub-repo discovery took \(String(format: "%.2f", (CFAbsoluteTimeGetCurrent() - repoStart) * 1000))ms")
 
             // Load session counts last
             loadingStatus = nil
+            let sessionStart = CFAbsoluteTimeGetCurrent()
             await loadAllSessionCounts()
+            log.info("[Startup] Session counts took \(String(format: "%.2f", (CFAbsoluteTimeGetCurrent() - sessionStart) * 1000))ms")
 
             // Save to cache for next startup
             projectCache.saveProjects(projects, gitStatuses: gitStatuses)
@@ -279,6 +290,7 @@ struct ContentView: View {
 
         isFetchingFresh = false
         loadingStatus = nil
+        log.info("[Startup] Total startup time: \(String(format: "%.2f", (CFAbsoluteTimeGetCurrent() - startupStart) * 1000))ms")
     }
 
     // MARK: - Sidebar Content
@@ -605,11 +617,6 @@ struct ContentView: View {
             let freshProjects = try await apiClient.fetchProjects()
             projects = freshProjects
             isLoading = false
-
-            // If we were showing cached data, log the update
-            if isFetchingFresh {
-                log.info("[Startup] Updated to \(freshProjects.count) fresh projects")
-            }
         } catch APIError.authenticationFailed {
             if !settings.apiKey.isEmpty {
                 errorMessage = "API Key authentication failed.\n\nCheck your API key in Settings."
@@ -945,7 +952,6 @@ struct ContentView: View {
     /// Individual sessions are loaded when entering ChatView.
     private func loadAllSessionCounts() async {
         // Session counts come from API Project response, no separate loading needed
-        log.debug("[ContentView] loadAllSessionCounts called - counts come from API Project response")
     }
 }
 

@@ -596,7 +596,6 @@ final class TOFUHostKeyValidator: NIOSSHClientServerAuthenticationDelegate, @unc
         if let storedFingerprint = KeychainHelper.shared.retrieveHostKeyFingerprint(host: host, port: port) {
             // Verify the fingerprint matches
             if storedFingerprint == fingerprint {
-                log.debug("SSH host key verified for \(host):\(port)")
                 validationCompletePromise.succeed(())  // Success - fingerprint matches
             } else {
                 // CRITICAL: Fingerprint mismatch - possible MITM attack
@@ -1134,17 +1133,13 @@ class SSHManager: ObservableObject {
         let homeDir = getRealHomeDirectory()
         let configPath = homeDir + "/.ssh/config"
 
-        log.debug("Looking for config at: \(configPath)")
-
         guard let content = try? String(contentsOfFile: configPath, encoding: .utf8) else {
             log.warning("Could not read SSH config")
             return
         }
 
-        log.debug("Found SSH config, parsing...")
         let hosts = Self.parseSSHConfig(content, homeDirectory: homeDir)
         availableHosts = hosts
-        log.debug("Found \(hosts.count) hosts: \(hosts.map { $0.host })")
     }
 
     // Connect using SSH config host alias (e.g., "claude-dev")
@@ -1179,11 +1174,9 @@ class SSHManager: ObservableObject {
         for keyName in defaultKeys {
             let keyPath = sshDir + "/" + keyName
             if FileManager.default.fileExists(atPath: keyPath) {
-                log.debug("Found default key: \(keyPath)")
                 return keyPath
             }
         }
-        log.debug("No default key found in \(sshDir)")
         return nil
     }
 
@@ -1218,11 +1211,18 @@ class SSHManager: ObservableObject {
         lastError = nil
         output = "Connecting to \(username)@\(host):\(port) with key...\n"
 
+        let connectionStart = CFAbsoluteTimeGetCurrent()
+        log.info("[SSH] Starting connection to \(host):\(port)")
+
         do {
             // Detect key type and create appropriate authentication method
+            let detectStart = CFAbsoluteTimeGetCurrent()
             let keyType = try SSHKeyDetection.detectPrivateKeyType(from: privateKeyString)
+            log.info("[SSH] Key detection took \(String(format: "%.2f", (CFAbsoluteTimeGetCurrent() - detectStart) * 1000))ms - type: \(keyType)")
+
             let authMethod: SSHAuthenticationMethod
 
+            let parseStart = CFAbsoluteTimeGetCurrent()
             switch keyType {
             case .ed25519:
                 let decryptKey = passphrase.flatMap { $0.data(using: .utf8) }
@@ -1240,9 +1240,12 @@ class SSHManager: ObservableObject {
                 // ECDSA keys (P-256, P-384, P-521) are detected but SSH key parsing may not be available
                 throw SSHError.unsupportedKeyType("\(keyType.description) - only Ed25519 and RSA are supported")
             }
+            log.info("[SSH] Key parsing took \(String(format: "%.2f", (CFAbsoluteTimeGetCurrent() - parseStart) * 1000))ms")
 
             // Connect with key authentication using TOFU host key validation
             let tofuValidator = TOFUHostKeyValidator(host: host, port: port)
+            let connectStart = CFAbsoluteTimeGetCurrent()
+            log.info("[SSH] Starting SSHClient.connect()...")
             let client = try await SSHClient.connect(
                 host: host,
                 port: port,
@@ -1250,12 +1253,14 @@ class SSHManager: ObservableObject {
                 hostKeyValidator: tofuValidator.validator(),
                 reconnect: .never
             )
+            log.info("[SSH] SSHClient.connect() took \(String(format: "%.2f", (CFAbsoluteTimeGetCurrent() - connectStart) * 1000))ms")
 
             self.client = client
             isConnected = true
             isConnecting = false
             currentDirectory = "~"  // Reset to home on new connection
             output += "Connected! Type commands below.\n\n"
+            log.info("[SSH] Total connection time: \(String(format: "%.2f", (CFAbsoluteTimeGetCurrent() - connectionStart) * 1000))ms")
 
         } catch let error as SSHError {
             isConnecting = false
@@ -1409,8 +1414,6 @@ class SSHManager: ObservableObject {
         let remoteDir = "/tmp/claude-images"
         let remotePath = "\(remoteDir)/\(actualFilename)"
 
-        log.debug("Starting upload of \(imageData.count) bytes to \(remotePath)")
-
         // Escape paths for safe shell command execution
         let escapedRemoteDir = shellEscape(remoteDir)
         let escapedRemotePath = shellEscape(remotePath)
@@ -1421,7 +1424,6 @@ class SSHManager: ObservableObject {
 
         // Convert image to base64 (no line wrapping)
         let base64String = imageData.base64EncodedString()
-        log.debug("Base64 length: \(base64String.count) chars")
 
         // Use printf with chunks to avoid command line limits
         // printf '%s' doesn't add newlines and handles base64 chars safely
@@ -1453,9 +1455,7 @@ class SSHManager: ObservableObject {
 
         // Verify the file was created and has content
         let verifyCmd = "stat -c '%s' \(escapedRemotePath) 2>/dev/null || stat -f '%z' \(escapedRemotePath) 2>/dev/null"
-        let verifyResult = try await client.executeCommand(verifyCmd)
-        let fileSize = String(buffer: verifyResult).trimmingCharacters(in: .whitespacesAndNewlines)
-        log.debug("Uploaded image to: \(remotePath) (\(fileSize) bytes)")
+        _ = try await client.executeCommand(verifyCmd)
 
         return remotePath
     }

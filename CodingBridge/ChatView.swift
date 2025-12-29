@@ -397,11 +397,10 @@ struct ChatView: View {
         .onChange(of: scenePhase) { _, newPhase in
             switch newPhase {
             case .active:
-                // App came to foreground
-                wsManager.isAppInForeground = true
-                // Reconnect if disconnected
+                // App came to foreground - reconnect if disconnected
+                // Note: isAppInForeground now reads from BackgroundManager
                 if !wsManager.isConnected {
-                    print("[ChatView] App active - reconnecting WebSocket")
+                    log.debug("[ChatView] App active - reconnecting WebSocket")
                     wsManager.connect()
                 }
             case .inactive:
@@ -409,8 +408,8 @@ struct ChatView: View {
                 break
             case .background:
                 // App went to background
-                wsManager.isAppInForeground = false
-                print("[ChatView] App backgrounded")
+                // Note: BackgroundManager handles isAppInBackground state
+                break
             @unknown default:
                 break
             }
@@ -827,6 +826,17 @@ struct ChatView: View {
                             }
                         }
                     }
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .backgroundRecoveryNeeded)) { notification in
+                    // Recover from background processing
+                    guard let userInfo = notification.userInfo,
+                          let sessionId = userInfo["sessionId"] as? String,
+                          let projectPath = userInfo["projectPath"] as? String,
+                          projectPath == project.path else {
+                        return
+                    }
+                    log.info("Background recovery requested for session: \(sessionId.prefix(8))...")
+                    wsManager.recoverFromBackground(sessionId: sessionId, projectPath: projectPath)
                 }
             }
         }

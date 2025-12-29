@@ -88,14 +88,9 @@ final class APISessionRepository: SessionRepository {
         }
 
         do {
-            let response = try JSONDecoder().decode(SessionsResponse.self, from: data)
-            log.debug("[SessionRepository] Fetched \(response.sessions.count) sessions (total: \(response.total), hasMore: \(response.hasMore))")
-            return response
+            return try JSONDecoder().decode(SessionsResponse.self, from: data)
         } catch {
             log.error("[SessionRepository] Failed to decode sessions response: \(error)")
-            if let json = String(data: data, encoding: .utf8) {
-                log.debug("[SessionRepository] Raw response: \(json.prefix(500))")
-            }
             throw error
         }
     }

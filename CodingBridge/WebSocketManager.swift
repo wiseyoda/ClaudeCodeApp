@@ -93,8 +93,10 @@ class WebSocketManager: ObservableObject {
     @Published var currentModelId: String?  // The full model ID (e.g., "claude-sonnet-4-5-20250929")
     @Published var isSwitchingModel = false
 
-    /// Track whether app is in foreground - set by ChatView
-    @Published var isAppInForeground = true
+    /// Track whether app is in foreground - reads from BackgroundManager for consistency
+    var isAppInForeground: Bool {
+        !BackgroundManager.shared.isAppInBackground
+    }
 
     // Reconnection state
     private var isReconnecting = false
@@ -182,7 +184,6 @@ class WebSocketManager: ObservableObject {
                 sessionId: sessionId
             )
             tokenUsage = TokenUsage(used: usage.used, total: usage.total)
-            log.debug("Token usage refreshed: \(usage.used)/\(usage.total)")
         } catch {
             log.warning("Failed to refresh token usage: \(error.localizedDescription)")
         }
@@ -288,10 +289,7 @@ class WebSocketManager: ObservableObject {
 
     /// Send a local notification (only when app is backgrounded)
     func sendLocalNotification(title: String, body: String) {
-        guard !isAppInForeground else {
-            log.debug("Skipping notification - app in foreground")
-            return
-        }
+        guard !isAppInForeground else { return }
 
         let content = UNMutableNotificationContent()
         content.title = title
@@ -352,22 +350,12 @@ class WebSocketManager: ObservableObject {
         webSocket?.sendPing { [weak self] error in
             Task { @MainActor in
                 guard let self = self else { return }
-                // Verify this ping is for the current connection (not a stale one)
-                guard self.connectionId == currentConnectionId else {
-                    log.debug("Ping callback from stale connection, ignoring")
-                    return
-                }
-                if let error = error {
-                    log.debug("Ping failed: \(error.localizedDescription)")
-                    // Don't treat ping failure as connection failure - wait for receive
-                } else {
-                    // Ping succeeded - connection is confirmed
-                    if self.connectionState != .connected {
-                        self.connectionState = .connected
-                        self.reconnectAttempt = 0
-                        log.info("WebSocket connected (confirmed by ping)")
-                        debugLog.logConnection("Connected (confirmed by ping)")
-                    }
+                guard self.connectionId == currentConnectionId else { return }
+                if error == nil && self.connectionState != .connected {
+                    self.connectionState = .connected
+                    self.reconnectAttempt = 0
+                    debugLog.logConnection("Connected (confirmed by ping)")
+                    self.completePendingRecovery()
                 }
             }
         }
@@ -413,7 +401,6 @@ class WebSocketManager: ObservableObject {
         do {
             let data = try JSONEncoder().encode(command)
             if let jsonString = String(data: data, encoding: .utf8) {
-                log.debug("Sending attach request: \(jsonString)")
                 debugLog.logSent(jsonString)
                 webSocket?.send(.string(jsonString)) { [weak self] error in
                     Task { @MainActor in
@@ -434,11 +421,57 @@ class WebSocketManager: ObservableObject {
         }
     }
 
+    /// Recover from background processing by reconnecting and reattaching to the session.
+    /// Called when app returns to foreground after being backgrounded during processing.
+    func recoverFromBackground(sessionId: String, projectPath: String) {
+        log.info("Recovering from background - session: \(sessionId.prefix(8))...")
+
+        // If already connected, just reattach
+        if connectionState == .connected {
+            attachToSession(sessionId: sessionId, projectPath: projectPath)
+            return
+        }
+
+        // If not connected, need to connect first then attach
+        // Store recovery info to use after connection
+        pendingRecoverySessionId = sessionId
+        pendingRecoveryProjectPath = projectPath
+
+        // Connect (or reconnect)
+        connect()
+    }
+
+    // Storage for pending recovery after reconnection
+    private var pendingRecoverySessionId: String?
+    private var pendingRecoveryProjectPath: String?
+
+    /// Called after successful connection to complete recovery if needed
+    private func completePendingRecovery() {
+        guard let sessionId = pendingRecoverySessionId,
+              let projectPath = pendingRecoveryProjectPath else {
+            return
+        }
+
+        log.info("Completing pending recovery for session: \(sessionId.prefix(8))...")
+        pendingRecoverySessionId = nil
+        pendingRecoveryProjectPath = nil
+
+        // Small delay to ensure connection is stable
+        Task {
+            try? await Task.sleep(nanoseconds: 200_000_000)  // 200ms
+            await MainActor.run {
+                self.attachToSession(sessionId: sessionId, projectPath: projectPath)
+            }
+        }
+    }
+
     func disconnect() {
         // Cancel any pending reconnection
         reconnectTask?.cancel()
         reconnectTask = nil
         isReconnecting = false
+        pendingRecoverySessionId = nil
+        pendingRecoveryProjectPath = nil
         reconnectAttempt = 0
         cancelProcessingTimeout()
 
@@ -451,10 +484,7 @@ class WebSocketManager: ObservableObject {
 
     /// Schedule a reconnection with exponential backoff
     private func scheduleReconnect() {
-        guard !isReconnecting else {
-            log.debug("Reconnection already scheduled, skipping")
-            return
-        }
+        guard !isReconnecting else { return }
 
         isReconnecting = true
         reconnectAttempt += 1
@@ -468,8 +498,6 @@ class WebSocketManager: ObservableObject {
         // Add jitter (0-500ms) to prevent thundering herd
         let jitter = Double.random(in: 0...0.5)
         let totalDelay = delay + jitter
-
-        log.info("Scheduling reconnect attempt \(reconnectAttempt) in \(String(format: "%.1f", totalDelay))s")
 
         reconnectTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(totalDelay * 1_000_000_000))
@@ -534,24 +562,12 @@ class WebSocketManager: ObservableObject {
         var images: [WSImage]? = nil
         if let imageData = pending.imageData {
             let base64String = imageData.base64EncodedString()
-            // Detect image type from data header
             let mediaType = ImageUtilities.detectMediaType(from: imageData)
             images = [WSImage(mediaType: mediaType, base64Data: base64String)]
-            log.debug("Attaching image: \(mediaType), \(base64String.count) chars base64")
         }
 
         // Validate session ID format before sending
         let validatedSessionId = Self.validateSessionId(pending.sessionId)
-        if pending.sessionId != nil && validatedSessionId == nil {
-            log.warning("Clearing invalid session ID, will start fresh session")
-        }
-
-        // Log session ID for debugging
-        if let sid = validatedSessionId {
-            log.info("[Session] Resuming session: \(sid.prefix(8))...")
-        } else {
-            log.warning("[Session] No session ID - backend will create new session!")
-        }
 
         let command = WSClaudeCommand(
             command: pending.message,
@@ -567,7 +583,6 @@ class WebSocketManager: ObservableObject {
         do {
             let data = try JSONEncoder().encode(command)
             if let jsonString = String(data: data, encoding: .utf8) {
-                log.debug("Sending (attempt \(pending.attempts + 1)): \(jsonString.prefix(300))")
                 debugLog.logSent(jsonString)
                 webSocket?.send(.string(jsonString)) { [weak self] error in
                     if let error = error {
@@ -624,8 +639,6 @@ class WebSocketManager: ObservableObject {
         let delayIndex = min(pending.attempts - 1, retryDelays.count - 1)
         let delay = retryDelays[delayIndex]
 
-        log.info("Retrying message in \(delay)s (attempt \(pending.attempts + 1)/\(maxRetries))")
-
         // Update error message to show retry is happening
         lastError = "Retrying... (attempt \(pending.attempts + 1)/\(maxRetries))"
 
@@ -661,11 +674,7 @@ class WebSocketManager: ObservableObject {
     /// Abort the current session/task
     /// This sends an abort message to the server and resets local state
     func abortSession() {
-        // Prevent double-abort
-        guard !isAborting else {
-            log.debug("Abort already in progress")
-            return
-        }
+        guard !isAborting else { return }
 
         guard let sid = sessionId, let validatedSid = Self.validateSessionId(sid) else {
             // Even without valid session ID, reset local state
@@ -734,8 +743,6 @@ class WebSocketManager: ObservableObject {
         do {
             let data = try JSONEncoder().encode(response)
             if let jsonString = String(data: data, encoding: .utf8) {
-                log.info("Sending permission response: \(allow ? "allow" : "deny")\(alwaysAllow ? " (always)" : "") for request \(requestId)")
-                log.debug("Permission response JSON: \(jsonString)")
                 debugLog.logSent(jsonString)
 
                 webSocket?.send(.string(jsonString)) { [weak self] error in
@@ -845,7 +852,7 @@ class WebSocketManager: ObservableObject {
         do {
             let data = try JSONEncoder().encode(wsCommand)
             if let jsonString = String(data: data, encoding: .utf8) {
-                log.debug("Sending model switch: \(jsonString)")
+                debugLog.logSent(jsonString)
                 webSocket?.send(.string(jsonString)) { [weak self] error in
                     Task { @MainActor in
                         if let error = error {
@@ -891,7 +898,6 @@ class WebSocketManager: ObservableObject {
             let modelId = String(text[start..<closeParen])
 
             let model = parseModelFromId(modelId)
-            log.info("Model switch confirmed: \(model.displayName) (\(modelId))")
 
             currentModel = model
             currentModelId = modelId
@@ -905,56 +911,34 @@ class WebSocketManager: ObservableObject {
     }
 
     private func receiveMessage(forConnection expectedConnectionId: UUID) {
-        // Check if we should stop receiving (disconnect was called or connection changed)
-        guard webSocket != nil, connectionState != .disconnected else {
-            log.debug("receiveMessage: stopping - webSocket nil or disconnected")
-            return
-        }
-
-        // Verify this is still the current connection
-        guard connectionId == expectedConnectionId else {
-            log.debug("receiveMessage: stopping - connection ID changed (stale receive loop)")
-            return
-        }
+        guard webSocket != nil, connectionState != .disconnected else { return }
+        guard connectionId == expectedConnectionId else { return }
 
         webSocket?.receive { [weak self] result in
-            Task { @MainActor in
-                // Check cancellation before processing
-                guard let self = self, self.webSocket != nil else {
-                    log.debug("receiveMessage callback: self or webSocket is nil, stopping")
-                    return
-                }
+            // Check for completion message BEFORE MainActor dispatch
+            // This ensures notifications are scheduled even if MainActor is suspended
+            if case .success(let message) = result {
+                self?.checkForCompletionAndNotify(message)
+            }
 
-                // Verify this callback is for the current connection (not a stale one)
-                guard self.connectionId == expectedConnectionId else {
-                    log.debug("receiveMessage callback: stale connection ID, ignoring")
-                    return
-                }
+            Task { @MainActor in
+                guard let self = self, self.webSocket != nil else { return }
+                guard self.connectionId == expectedConnectionId else { return }
 
                 switch result {
                 case .success(let message):
-                    // Mark as connected on first successful receive
                     if self.connectionState != .connected {
                         self.connectionState = .connected
-                        self.reconnectAttempt = 0  // Reset counter only on confirmed connection
-                        log.info("WebSocket connected (confirmed by first message)")
+                        self.reconnectAttempt = 0
                         debugLog.logConnection("Connected (confirmed)")
+                        self.completePendingRecovery()
                     }
                     self.handleMessage(message)
-                    self.receiveMessage(forConnection: expectedConnectionId)  // Continue listening
+                    self.receiveMessage(forConnection: expectedConnectionId)
 
                 case .failure(let error):
-                    // Don't log or handle if we intentionally disconnected
-                    guard self.connectionState != .disconnected else {
-                        log.debug("receiveMessage: ignoring error after disconnect")
-                        return
-                    }
-
-                    // Verify this is still the current connection before handling error
-                    guard self.connectionId == expectedConnectionId else {
-                        log.debug("receiveMessage error: stale connection, ignoring")
-                        return
-                    }
+                    guard self.connectionState != .disconnected else { return }
+                    guard self.connectionId == expectedConnectionId else { return }
 
                     log.error("Receive error: \(error)")
                     debugLog.logError("Receive error: \(error.localizedDescription)")
@@ -987,12 +971,58 @@ class WebSocketManager: ObservableObject {
         }
     }
 
+    /// Check for completion message and schedule notification immediately (from callback thread).
+    /// This runs BEFORE MainActor dispatch to ensure notification is scheduled even when backgrounded.
+    /// UNUserNotificationCenter.add() is thread-safe and can be called from any thread.
+    /// NOTE: Cannot access @MainActor properties here - use generic message only.
+    nonisolated private func checkForCompletionAndNotify(_ message: URLSessionWebSocketTask.Message) {
+        guard case .string(let text) = message,
+              let data = text.data(using: .utf8) else { return }
+
+        // Quick check before full parse
+        guard text.contains("claude-complete") else { return }
+
+        do {
+            let msg = try JSONDecoder().decode(WSMessage.self, from: data)
+            guard msg.type == "claude-complete" else { return }
+
+            log.info("[WebSocket] Completion received on callback thread, scheduling notification")
+
+            // Schedule notification directly without MainActor
+            // NOTE: Cannot access currentText or sessionId here (MainActor isolated)
+            // Use generic message - detailed notification sent via MainActor path
+            let content = UNMutableNotificationContent()
+            content.title = "Task Complete"
+            content.body = "Claude has finished processing."
+            content.sound = .default
+            content.categoryIdentifier = "completion"
+            content.userInfo = ["type": "completion"]
+
+            // Use a minimal time trigger - nil trigger may not work properly when backgrounded
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.1, repeats: false)
+            let request = UNNotificationRequest(
+                identifier: "completion-bg-\(Date().timeIntervalSince1970)",
+                content: content,
+                trigger: trigger
+            )
+
+            UNUserNotificationCenter.current().add(request) { error in
+                if let error = error {
+                    log.error("[Notification] Background schedule failed: \(error)")
+                } else {
+                    log.info("[Notification] Background notification scheduled")
+                }
+            }
+        } catch {
+            // Ignore parse errors - full parsing happens in handleMessage
+        }
+    }
+
     func processIncomingMessage(_ text: String) {
         parseMessage(text)
     }
 
     private func parseMessage(_ text: String) {
-        log.debug("Received: \(text.prefix(300))")
         debugLog.logReceived(text)
 
         // Reset timeout on any received message
@@ -1037,28 +1067,16 @@ class WebSocketManager: ObservableObject {
                 }
 
             case "claude-response":
-                // If we're reattaching and receive actual content, we've successfully attached
                 if isReattaching {
                     isReattaching = false
-                    log.info("Reattachment confirmed - receiving content")
                     onSessionAttached?()
                 }
 
                 if let responseData = msg.data?.dictValue {
-                    // SDK sends different message formats:
-                    // 1. System init: {type: "system", subtype: "init", session_id: ...}
-                    // 2. Assistant: {type: "assistant", message: {role: "assistant", content: [...]}}
-                    // 3. Result: {type: "result", ...}
-
                     let outerType = responseData["type"] as? String
-                    log.debug("claude-response outer type: \(outerType ?? "nil")")
-
                     if outerType == "assistant", let messageData = responseData["message"] as? [String: Any] {
-                        // For assistant messages, the content is in message.content
-                        log.debug("Processing assistant message wrapper")
                         processContent(messageData)
                     } else {
-                        // For system, result, and other types
                         handleClaudeResponse(responseData)
                     }
                 }
@@ -1071,13 +1089,10 @@ class WebSocketManager: ObservableObject {
                 }
 
             case "claude-complete":
-                // Flush any remaining buffered text before completing
                 flushTextBuffer()
 
-                // Check if we successfully reattached to an active session
                 if isReattaching {
                     isReattaching = false
-                    log.info("Session reattachment complete")
                     onSessionAttached?()
                 }
 
@@ -1101,12 +1116,10 @@ class WebSocketManager: ObservableObject {
                     }
                 }
 
-                // Send notification when task completes (only if backgrounded)
-                let preview = currentText.prefix(100)
-                sendLocalNotification(
-                    title: "Coding Bridge",
-                    body: preview.isEmpty ? "Task completed" : String(preview)
-                )
+                // Notification is sent via checkForCompletionAndNotify on callback thread
+                // which works reliably when backgrounded. Clear processing state here.
+                BackgroundManager.shared.clearProcessingState()
+
                 onComplete?(msg.sessionId)
 
             case "claude-error":
@@ -1120,18 +1133,10 @@ class WebSocketManager: ObservableObject {
 
                 // Check if this is a session-related error that we can recover from
                 if isSessionError(errorMsg) && sessionId != nil {
-                    log.warning("Session error detected, attempting recovery: \(errorMsg)")
                     debugLog.logError("Session error (recovering): \(errorMsg)")
-
-                    // Clear the invalid session
-                    let oldSessionId = sessionId
                     sessionId = nil
-
-                    // Notify UI that we're recovering
                     lastError = "Session expired, starting fresh..."
                     onSessionRecovered?()
-
-                    log.info("Cleared invalid session \(oldSessionId ?? "nil"), will start new session on next message")
                 } else {
                     // Regular error - pass to UI
                     lastError = errorMsg
@@ -1140,7 +1145,6 @@ class WebSocketManager: ObservableObject {
                 }
 
             case "session-aborted":
-                log.info("Session aborted confirmed by server")
                 resetProcessingState()
                 onAborted?()
 
@@ -1149,12 +1153,10 @@ class WebSocketManager: ObservableObject {
                 break
 
             case "sessions-updated":
-                // Session list changed for a project - notify SessionStore
                 if let dataDict = msg.data?.value as? [String: Any],
                    let projectName = dataDict["projectName"] as? String,
                    let sessionId = dataDict["sessionId"] as? String,
                    let action = dataDict["action"] as? String {
-                    log.debug("Sessions updated: \(projectName) - \(action) - \(sessionId.prefix(8))...")
                     Task {
                         await SessionStore.shared.handleSessionsUpdated(
                             projectName: projectName,
@@ -1165,52 +1167,41 @@ class WebSocketManager: ObservableObject {
                 }
 
             case "permission-request":
-                // Backend is requesting permission for a tool use
-                // Only sent when bypass permissions mode is OFF
                 if let dataDict = msg.data?.value as? [String: Any],
                    let request = ApprovalRequest.from(dataDict) {
-                    log.info("Permission request received for tool: \(request.toolName)")
-                    debugLog.log("Permission request: \(request.toolName) - \(request.displayDescription)", type: .info)
+                    debugLog.log("Permission request: \(request.toolName)", type: .info)
                     pendingApproval = request
+
+                    // Send approval notification for background
+                    Task {
+                        await NotificationManager.shared.sendApprovalNotification(
+                            requestId: request.id,
+                            toolName: request.toolName,
+                            summary: request.displayDescription
+                        )
+
+                        // Update task state
+                        if let sid = self.sessionId, let projectPath = BackgroundManager.shared.lastProjectPath {
+                            var state = TaskState(sessionId: sid, projectPath: projectPath)
+                            state.updateStatus(.awaitingApproval(request: BackgroundApprovalRequest(from: request)))
+                            BackgroundManager.shared.updateTaskState(state)
+                        }
+                    }
+
                     onApprovalRequest?(request)
-                } else {
-                    log.warning("Failed to parse permission-request message")
                 }
 
         default:
-            log.debug("Unknown message type: \(msg.type)")
+            break
         }
     }
 
     private func handleClaudeResponse(_ data: [String: Any]) {
-        // The SDK sends messages with different top-level types:
-        // - type: "system" (with subtype: "init", session_id, model, tools)
-        // - type: "assistant" (with content array)
-        // - type: "user" (with tool results)
-        // - type: "result" (final summary with modelUsage)
-
-        // Debug: log all keys and type
-        log.debug("handleClaudeResponse keys: \(data.keys.sorted())")
-        if let type = data["type"] {
-            log.debug("handleClaudeResponse type: \(type)")
-        }
-        if let role = data["role"] {
-            log.debug("handleClaudeResponse role: \(role)")
-        }
-        if let content = data["content"] {
-            log.debug("handleClaudeResponse content type: \(Swift.type(of: content))")
-        }
-
-        // Check for type field (SDK format) or role field (API format)
         let messageType = data["type"] as? String ?? data["role"] as? String
 
-        // If no type, but has content, process it directly (SDK sometimes omits type)
         guard let type = messageType else {
             if data["content"] != nil {
-                log.debug("No type but has content, processing directly")
                 processContent(data)
-            } else {
-                log.debug("No type/role in claude-response: \(data.keys)")
             }
             return
         }
@@ -1225,18 +1216,13 @@ class WebSocketManager: ObservableObject {
                     sessionId = sid
                     // Don't call onSessionCreated here - it's handled by session-created message
                 }
-                // Capture the model from system init
                 if let modelId = data["model"] as? String {
-                    let model = parseModelFromId(modelId)
-                    log.info("Session model from init: \(model.displayName) (\(modelId))")
-                    currentModel = model
+                    currentModel = parseModelFromId(modelId)
                     currentModelId = modelId
                 }
             }
 
         case "assistant":
-            // Assistant message with content array
-            log.debug("Processing assistant message")
             processContent(data)
 
         case "user":
@@ -1259,12 +1245,10 @@ class WebSocketManager: ObservableObject {
             }
 
         case "result":
-            // Final result message - contains modelUsage for token tracking
-            // Token budget is handled separately via token-budget message
             break
 
         default:
-            log.debug("Unknown SDK message type: \(type)")
+            break
         }
     }
 
@@ -1316,14 +1300,9 @@ class WebSocketManager: ObservableObject {
                 switch partType {
                 case "text":
                     if let text = part["text"] as? String, !text.isEmpty {
-                        log.debug("Found text in content array: \(text.prefix(100))")
-
-                        // Check for model switch confirmation: "Set model to sonnet (claude-sonnet-4-5-20250929)"
                         if isSwitchingModel, text.contains("Set model to") {
                             parseModelSwitchResponse(text)
                         }
-
-                        // Accumulate text in buffer (debounced update to currentText)
                         appendToTextBuffer(text)
                     }
 
@@ -1344,7 +1323,16 @@ class WebSocketManager: ObservableObject {
                     // Check for AskUserQuestion tool - needs special handling
                     if name == "AskUserQuestion", let input = input,
                        let questionData = AskUserQuestionData.from(input) {
-                        log.debug("Detected AskUserQuestion tool with \(questionData.questions.count) questions")
+                        // Send question notification for background
+                        if let firstQuestion = questionData.questions.first {
+                            Task {
+                                await NotificationManager.shared.sendQuestionNotification(
+                                    questionId: UUID().uuidString,
+                                    question: firstQuestion.question
+                                )
+                            }
+                        }
+
                         onAskUserQuestion?(questionData)
                     } else {
                         // Regular tool use
@@ -1356,27 +1344,19 @@ class WebSocketManager: ObservableObject {
                     }
 
                 case "thinking":
-                    // Extended thinking/reasoning block
                     if let thinking = part["thinking"] as? String, !thinking.isEmpty {
-                        log.debug("Found thinking block: \(thinking.prefix(100))")
                         onThinking?(thinking)
                     }
 
                 default:
-                    log.debug("Unknown content part type: \(partType)")
+                    break
                 }
             }
         }
-        // Handle string content
         else if let content = data["content"] as? String, !content.isEmpty {
-            log.debug("Found string content: \(content.prefix(100))")
-            // Accumulate text in buffer (debounced update to currentText)
             appendToTextBuffer(content)
         }
-        // Handle message.content nested structure
-        else if let message = data["message"] as? [String: Any],
-                message["content"] != nil {
-            log.debug("Found nested message.content")
+        else if let message = data["message"] as? [String: Any], message["content"] != nil {
             processContent(message)
         }
     }

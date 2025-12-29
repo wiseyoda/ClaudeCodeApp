@@ -218,6 +218,24 @@ class AppSettings: ObservableObject {
     // Default 5 minutes - long-running operations like code review can take time
     @AppStorage("processingTimeout") var processingTimeout: Int = 300
 
+    // MARK: - Background & Notifications
+
+    /// Enable background notifications when app not in foreground (default: true)
+    @AppStorage("enableBackgroundNotifications") var enableBackgroundNotifications: Bool = true
+
+    /// Show detailed content in notifications visible on Lock Screen (default: false)
+    /// When false, shows generic "Claude needs attention" instead of command details
+    @AppStorage("showNotificationDetails") var showNotificationDetails: Bool = false
+
+    /// Continue background processing in Low Power Mode (default: false)
+    @AppStorage("backgroundInLowPowerMode") var backgroundInLowPowerMode: Bool = false
+
+    /// Enable time-sensitive notifications that break through Focus modes (default: true)
+    @AppStorage("enableTimeSensitiveNotifications") var enableTimeSensitiveNotifications: Bool = true
+
+    /// Enable Live Activities for task progress (default: true, Phase 2)
+    @AppStorage("enableLiveActivities") var enableLiveActivities: Bool = true
+
     // Project List Settings
     @AppStorage("projectSortOrder") private var projectSortOrderRaw: String = ProjectSortOrder.name.rawValue
 

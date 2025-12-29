@@ -13,5 +13,16 @@
 	<string>Coding Bridge uses speech recognition to convert your voice to text.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Coding Bridge needs photo library access to attach images to messages.</string>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.level.CodingBridge.task.continued-processing</string>
+		<string>com.level.CodingBridge.task.refresh</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+		<string>processing</string>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>

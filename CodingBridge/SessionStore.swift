@@ -84,10 +84,6 @@ final class SessionStore: ObservableObject {
             // Store raw sessions - filtering happens at display time
             sessionsByProject[projectPath] = response.sessions
             metaByProject[projectPath] = response.toMeta
-
-            // Log both raw and filtered counts for debugging
-            let filteredCount = response.sessions.filterForDisplay(projectPath: projectPath, activeSessionId: activeSessionIds[projectPath]).count
-            log.debug("[SessionStore] Loaded \(response.sessions.count) sessions for \(projectPath) (filtered: \(filteredCount))")
         } catch {
             log.error("[SessionStore] Failed to load sessions: \(error)")
             errorByProject[projectPath] = error
@@ -120,8 +116,6 @@ final class SessionStore: ObservableObject {
             sessionsByProject[projectPath] = sessions
 
             metaByProject[projectPath] = response.toMeta
-
-            log.debug("[SessionStore] Loaded more: now \(sessions.count)/\(response.total) sessions")
         } catch {
             log.error("[SessionStore] Failed to load more sessions: \(error)")
             errorByProject[projectPath] = error
@@ -157,7 +151,6 @@ final class SessionStore: ObservableObject {
 
         do {
             try await repository.deleteSession(projectName: projectName, sessionId: session.id)
-            log.debug("[SessionStore] Deleted session: \(session.id.prefix(8))...")
             return true
         } catch {
             log.error("[SessionStore] Failed to delete session: \(error)")
@@ -205,7 +198,6 @@ final class SessionStore: ObservableObject {
                 metaByProject[projectPath] = meta
             }
 
-            log.debug("[SessionStore] Added session: \(session.id.prefix(8))...")
             return true
         }
         return false
@@ -216,9 +208,6 @@ final class SessionStore: ObservableObject {
     /// Set the active session for a project
     func setActiveSession(_ sessionId: String?, for projectPath: String) {
         activeSessionIds[projectPath] = sessionId
-        if let sid = sessionId {
-            log.debug("[SessionStore] Active session: \(sid.prefix(8))...")
-        }
     }
 
     /// Save active session ID to UserDefaults
@@ -301,14 +290,10 @@ final class SessionStore: ObservableObject {
             encodeProjectPath(path) == projectName
         }
 
-        guard let projectPath = matchingPath else {
-            log.debug("[SessionStore] No loaded project matches: \(projectName)")
-            return
-        }
+        guard let projectPath = matchingPath else { return }
 
         switch action {
         case "deleted":
-            // Remove from local state
             if var sessions = sessionsByProject[projectPath] {
                 sessions.removeAll { $0.id == sessionId }
                 sessionsByProject[projectPath] = sessions
@@ -318,11 +303,10 @@ final class SessionStore: ObservableObject {
             }
 
         case "created", "updated":
-            // Refresh from API to get latest data
             await loadSessions(for: projectPath, forceRefresh: true)
 
         default:
-            log.debug("[SessionStore] Unknown session action: \(action)")
+            break
         }
     }
 

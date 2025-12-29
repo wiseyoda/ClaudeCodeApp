@@ -80,6 +80,22 @@ When reporting a bug, include:
   - Re-run the tests and update `requirements/projects/claudecode-fork/implementation-plan.md` checklist.
 - **Location**: `CodingBridgeTests/SessionAPIIntegrationTests.swift`, `CodingBridgeTests/SessionWebSocketIntegrationTests.swift`
 
+### #29: BGTaskScheduler "Unrecognized Identifier" on Simulator (Low Priority)
+- **What happened**: BGTaskScheduler reports "Unrecognized Identifier" error even with correct bundle ID prefix and synchronous registration
+- **Expected**: Background tasks should register without errors
+- **Error**: `BGTaskSchedulerErrorDomain Code=3 "Unrecognized Identifier=com.level.CodingBridge.task.refresh"`
+- **Location**: `BackgroundManager.swift:106`
+- **Investigation done**:
+  - ✅ Task IDs use bundle ID prefix (com.level.CodingBridge.task.*)
+  - ✅ Info.plist BGTaskSchedulerPermittedIdentifiers match
+  - ✅ Registration is synchronous in didFinishLaunchingWithOptions
+  - ✅ UIBackgroundModes includes "fetch" and "processing"
+- **Notes**:
+  - May be simulator-specific limitation
+  - Core background notification flow works regardless (tested on device)
+  - iOS 26+ BGContinuedProcessingTask is the primary mechanism anyway
+- **Priority**: Low - doesn't block functionality
+
 ### #28: `xcodebuild test` (all targets) fails to load CodingBridgeTests bundle
 - **What happened**: Running the default scheme test command fails with `Failed to create a bundle instance representing .../CodingBridgeTests.xctest`.
 - **Expected**: `xcodebuild test -project CodingBridge.xcodeproj -scheme CodingBridge ...` runs unit + UI tests without bundle load errors.

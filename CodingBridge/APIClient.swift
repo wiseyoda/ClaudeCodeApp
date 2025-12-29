@@ -109,37 +109,21 @@ class APIClient: ObservableObject {
             throw APIError.invalidURL
         }
 
-        let request = authorizedRequest(for: url)
-        log.debug("Fetching projects from: \(url)")
-        // Redact the actual token value for security - only log presence/type
-        let authHeaderStatus: String
-        if let authHeader = request.value(forHTTPHeaderField: "Authorization") {
-            if authHeader.hasPrefix("Bearer ") {
-                authHeaderStatus = "Bearer [REDACTED]"
-            } else {
-                authHeaderStatus = "[REDACTED]"
-            }
-        } else {
-            authHeaderStatus = "none"
-        }
-        log.debug("Auth header: \(authHeaderStatus)")
+        let fetchStart = CFAbsoluteTimeGetCurrent()
+        log.info("[API] Fetching projects from \(url.absoluteString)")
 
+        let request = authorizedRequest(for: url)
         let (data, response) = try await URLSession.shared.data(for: request)
+        log.info("[API] Projects fetch took \(String(format: "%.2f", (CFAbsoluteTimeGetCurrent() - fetchStart) * 1000))ms")
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.serverError
         }
 
-        log.debug("Projects response status: \(httpResponse.statusCode)")
-
         if httpResponse.statusCode == 401 {
-            // Only retry once to prevent infinite loop
             guard retryCount < 1 else {
-                log.error("Auth retry limit reached, giving up")
                 throw APIError.authenticationFailed
             }
-            // Try to login with username/password and retry
-            log.debug("Got 401, attempting login (retry \(retryCount + 1)/1)...")
             try await login()
             return try await fetchProjects(retryCount: retryCount + 1)
         }
@@ -152,23 +136,7 @@ class APIClient: ObservableObject {
             throw APIError.serverError
         }
 
-        // New API returns array directly, not wrapped
         let projects = try JSONDecoder().decode([Project].self, from: data)
-
-        // Debug: Log session counts for each project
-        for project in projects {
-            let sessionCount = project.sessions?.count ?? 0
-            log.debug("Project '\(project.name)' has \(sessionCount) sessions from API")
-            if sessionCount > 0, let sessions = project.sessions {
-                for session in sessions.prefix(3) {
-                    log.debug("  - Session \(session.id.prefix(8)): '\(session.summary ?? "nil")' (\(session.messageCount ?? 0) msgs)")
-                }
-                if sessionCount > 3 {
-                    log.debug("  ... and \(sessionCount - 3) more sessions")
-                }
-            }
-        }
-
         return projects
     }
 
