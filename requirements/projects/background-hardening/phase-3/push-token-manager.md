@@ -257,12 +257,15 @@ func application(
 
 ## Live Activity Notes
 
-Live Activities require direct APNs tokens (not FCM tokens) because Firebase doesn't yet support the special `liveactivity` push type. The backend will:
+Firebase Cloud Messaging fully supports Live Activities via the HTTP v1 API:
 
-1. Use FCM for regular push notifications (approval, completion, etc.)
-2. Use direct APNs (via Firebase Admin SDK) for Live Activity updates
+- **Start** Live Activity (iOS 17.2+): Use push-to-start token with `event: "start"`
+- **Update** Live Activity: Use activity token with `event: "update"`
+- **End** Live Activity: Use activity token with `event: "end"` + `dismissal-date`
 
-Firebase Admin SDK can send both FCM messages and direct APNs messages.
+Both regular notifications and Live Activity updates go through FCM - no direct APNs integration needed.
+
+See: https://firebase.google.com/docs/cloud-messaging/customize-messages/live-activity
 
 ---
 **Next:** [notification-actions](./notification-actions.md) | **Index:** [../00-INDEX.md](../00-INDEX.md)

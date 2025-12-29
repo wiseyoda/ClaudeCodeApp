@@ -53,13 +53,10 @@
 - [ ] Create FirebaseService with credential loading
 - [ ] Implement `sendNotification()` for FCM alerts
 - [ ] Implement `sendSilentPush()` for background updates
+- [ ] Implement `startLiveActivity()` for remote start (iOS 17.2+)
+- [ ] Implement `updateLiveActivity()` for Live Activity updates
 - [ ] Handle `registration-token-not-registered` error
-
-### Backend: Live Activity Service
-- [ ] Install `@parse/node-apn` package
-- [ ] Create LiveActivityService with APNs key
-- [ ] Implement `updateActivity()` for Live Activity updates
-- [ ] Add rate limiting (15-second minimum)
+- [ ] Add rate limiting for Live Activity updates (15-second minimum)
 
 ### Backend: Event Triggers
 - [ ] Trigger FCM push on approval request

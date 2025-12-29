@@ -19,13 +19,9 @@ GOOGLE_APPLICATION_CREDENTIALS=/path/to/serviceAccountKey.json
 FIREBASE_PROJECT_ID=your-project-id
 FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxx@your-project.iam.gserviceaccount.com
 FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-
-# APNs for Live Activities (Firebase Admin can send direct APNs)
-APNS_KEY_ID=ABC123DEFG
-APNS_TEAM_ID=TEAM123456
-APNS_KEY_PATH=/path/to/AuthKey_ABC123DEFG.p8
-APNS_BUNDLE_ID=com.level.CodingBridge
 ```
+
+No direct APNs configuration needed - Firebase handles everything including Live Activities.
 
 ## New Endpoints
 
@@ -207,51 +203,68 @@ class FirebaseService {
 module.exports = new FirebaseService();
 ```
 
-### Live Activity Updates (Direct APNs)
+### Live Activity Updates (via FCM HTTP v1 API)
 
-Firebase Admin SDK can also send direct APNs messages for Live Activities:
+Firebase fully supports Live Activities - no direct APNs needed:
 
 ```javascript
-// services/liveActivity.js
+// In FirebaseService class
 
-const apn = require('@parse/node-apn');
-
-class LiveActivityService {
-  constructor() {
-    this.provider = new apn.Provider({
-      token: {
-        key: fs.readFileSync(process.env.APNS_KEY_PATH),
-        keyId: process.env.APNS_KEY_ID,
-        teamId: process.env.APNS_TEAM_ID,
+async updateLiveActivity(liveActivityToken, contentState, event = 'update') {
+  const message = {
+    token: liveActivityToken,
+    apns: {
+      headers: {
+        'apns-priority': '10',
+        'apns-push-type': 'liveactivity',
       },
-      production: process.env.NODE_ENV === 'production',
-    });
-    this.bundleId = process.env.APNS_BUNDLE_ID;
+      payload: {
+        aps: {
+          timestamp: Math.floor(Date.now() / 1000),
+          event: event,
+          'content-state': contentState,
+          'stale-date': Math.floor(Date.now() / 1000) + 300,
+        },
+      },
+    },
+  };
+
+  if (event === 'end') {
+    message.apns.payload.aps['dismissal-date'] = Math.floor(Date.now() / 1000) + 900;
   }
 
-  async updateActivity(apnsToken, contentState, event = 'update') {
-    const notification = new apn.Notification();
-    notification.topic = `${this.bundleId}.push-type.liveactivity`;
-    notification.pushType = 'liveactivity';
-    notification.expiry = Math.floor(Date.now() / 1000) + 300;
-
-    notification.aps = {
-      timestamp: Math.floor(Date.now() / 1000),
-      event: event,
-      'content-state': contentState,
-      'stale-date': Math.floor(Date.now() / 1000) + 300,
-    };
-
-    if (event === 'end') {
-      notification.aps['dismissal-date'] = Math.floor(Date.now() / 1000) + 900;
-    }
-
-    return await this.provider.send(notification, apnsToken);
-  }
+  return await admin.messaging().send(message);
 }
 
-module.exports = new LiveActivityService();
+async startLiveActivity(pushToStartToken, attributes, contentState) {
+  const message = {
+    token: pushToStartToken,
+    apns: {
+      headers: {
+        'apns-priority': '10',
+        'apns-push-type': 'liveactivity',
+      },
+      payload: {
+        aps: {
+          timestamp: Math.floor(Date.now() / 1000),
+          event: 'start',
+          'content-state': contentState,
+          'attributes-type': 'CodingBridgeActivityAttributes',
+          'attributes': attributes,
+          alert: {
+            title: 'Claude is working',
+            body: 'Tap to view progress',
+          },
+        },
+      },
+    },
+  };
+
+  return await admin.messaging().send(message);
+}
 ```
+
+See: https://firebase.google.com/docs/cloud-messaging/customize-messages/live-activity
 
 ## Push Payload Formats
 
@@ -284,10 +297,10 @@ await firebase.sendNotification(fcmToken, {
 });
 ```
 
-### Live Activity Update (Direct APNs)
+### Live Activity Update (via FCM)
 
 ```javascript
-await liveActivity.updateActivity(apnsToken, {
+await firebase.updateLiveActivity(liveActivityToken, {
   status: 'processing',
   currentOperation: 'Running tests...',
   elapsedSeconds: 120,
@@ -326,15 +339,19 @@ async function throttledActivityUpdate(token, contentState) {
 }
 ```
 
-## FCM vs Direct APNs
+## All Push via FCM
 
-| Use Case | Service | Why |
-|----------|---------|-----|
-| Approval notifications | FCM | Simpler, handles token rotation |
-| Question notifications | FCM | Simpler, handles token rotation |
-| Completion notifications | FCM | Simpler, handles token rotation |
-| Clear notifications | FCM (silent) | Background content-available |
-| Live Activity updates | Direct APNs | FCM doesn't support liveactivity push type |
+| Use Case | FCM Method |
+|----------|------------|
+| Approval notifications | `sendNotification()` |
+| Question notifications | `sendNotification()` |
+| Completion notifications | `sendNotification()` |
+| Clear notifications | `sendSilentPush()` |
+| Live Activity start | `startLiveActivity()` |
+| Live Activity update | `updateLiveActivity()` |
+| Live Activity end | `updateLiveActivity(..., 'end')` |
+
+No direct APNs integration needed - Firebase handles everything via the HTTP v1 API.
 
 ---
 **Prev:** [notification-actions](./notification-actions.md) | **Next:** [backend-events](./backend-events.md) | **Index:** [../00-INDEX.md](../00-INDEX.md)
