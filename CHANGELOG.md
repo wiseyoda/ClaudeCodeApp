@@ -35,6 +35,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.6.3] - 2025-12-30
+
+### Added
+
+- **ChatViewModel Extraction**: Major architecture refactoring (Phase 4.1)
+  - `ChatView.swift` reduced from 2288 → 695 lines (70% reduction)
+  - New `ChatViewModel.swift` (1358 lines) handles all state and logic
+  - Clean separation between view layer and business logic
+
+### Fixed
+
+- **Keyboard Lag Elimination**: Comprehensive performance optimization
+  - Changed `.onChange(of: messages)` from O(n) array comparison to O(1) count check
+  - Isolated `HealthMonitorService` observation to `StatusIndicatorDot` subview
+  - Removed unnecessary `@ObservedObject` on singleton stores
+- **Formatter Allocation**: Eliminated per-render formatter allocations
+  - Static shared formatters in `CLIMessageView`, `HomeView`, `SessionPickerViews`
+  - Cached timestamps and percentages at init time
+  - Static formatters in `CLIBridgeTypes` for session metadata parsing
+- **View Rendering**: Optimized text truncation components
+  - `TruncatableText`: Cache lines array, totalLines, truncatedContent at init
+  - `ThinkingBlockText`: Same caching strategy for thinking blocks
+- **Memory Management**: Better message history handling
+  - Added `pruneMessagesIfNeeded()` with 20% buffer threshold
+  - Added `cleanupAfterProcessingComplete()` to clear transient state
+  - Apply history limit when loading saved/session messages
+
+---
+
 ## [0.6.2] - 2025-12-30
 
 ### Added
