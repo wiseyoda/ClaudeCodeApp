@@ -161,24 +161,21 @@ struct CloneProjectSheet: View {
         do {
             let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
 
-            // TODO: Replace with cli-bridge API endpoint when available
-            // POST /projects/clone { url: string }
-            // For now, show error that this feature requires cli-bridge support
-            throw CLIBridgeAPIError.endpointNotAvailable(
-                "Clone repository requires cli-bridge API support. " +
-                "See CLI-BRIDGE-FEATURE-REQUEST.md for details."
+            let response = try await apiClient.cloneProject(
+                url: gitURL,
+                initializeClaude: true
             )
 
-            // When API is available:
-            // let response = try await apiClient.cloneProject(url: gitURL)
-            //
-            // progress = "Clone complete!"
-            // try await Task.sleep(nanoseconds: 500_000_000)
-            //
-            // await MainActor.run {
-            //     onComplete()
-            //     dismiss()
-            // }
+            await MainActor.run {
+                progress = "Cloned to \(response.path)"
+            }
+
+            try await Task.sleep(nanoseconds: 500_000_000)
+
+            await MainActor.run {
+                onComplete()
+                dismiss()
+            }
 
         } catch {
             await MainActor.run {

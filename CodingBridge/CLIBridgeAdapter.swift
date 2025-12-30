@@ -21,6 +21,7 @@ class CLIBridgeAdapter: ObservableObject {
     @Published var currentModelId: String?
     @Published var isSwitchingModel: Bool = false
     @Published var pendingApproval: ApprovalRequest?
+    @Published var pendingQuestion: AskUserQuestionData?
     @Published var isReattaching: Bool = false
 
     // MARK: - CLI Bridge-Specific State (new features)
@@ -44,8 +45,8 @@ class CLIBridgeAdapter: ObservableObject {
 
     var onText: ((String) -> Void)?
     var onTextCommit: ((String) -> Void)?
-    var onToolUse: ((String, String) -> Void)?
-    var onToolResult: ((String) -> Void)?
+    var onToolUse: ((String, String, String) -> Void)?  // (id, tool, input)
+    var onToolResult: ((String, String, String) -> Void)?  // (id, tool, output)
     var onThinking: ((String) -> Void)?
     var onComplete: ((String?) -> Void)?
     var onAskUserQuestion: ((AskUserQuestionData) -> Void)?
@@ -353,6 +354,25 @@ class CLIBridgeAdapter: ObservableObject {
         }
     }
 
+    /// Respond to a pending question with user's answers
+    func respondToQuestion(requestId: String, answers: [String: Any]) {
+        Task {
+            do {
+                try await manager.respondToQuestion(id: requestId, answers: answers)
+                await MainActor.run {
+                    pendingQuestion = nil
+                }
+            } catch {
+                lastError = error.localizedDescription
+            }
+        }
+    }
+
+    /// Clear pending question without responding (e.g., when cancelled)
+    func clearPendingQuestion() {
+        pendingQuestion = nil
+    }
+
     func switchModel(to model: ClaudeModel) {
         isSwitchingModel = true
         Task {
@@ -501,11 +521,11 @@ class CLIBridgeAdapter: ObservableObject {
                 // Fallback: try to produce a JSON-like string manually
                 inputString = Self.toJSONLikeString(input)
             }
-            self?.onToolUse?(tool, inputString)
+            self?.onToolUse?(id, tool, inputString)
         }
 
         manager.onToolResult = { [weak self] id, tool, output, success in
-            self?.onToolResult?(output)
+            self?.onToolResult?(id, tool, output)
         }
 
         manager.onStopped = { [weak self] reason in
@@ -568,6 +588,7 @@ class CLIBridgeAdapter: ObservableObject {
         manager.onQuestionRequest = { [weak self] request in
             guard let self = self else { return }
             // Convert to AskUserQuestionData for compatibility (uses existing Models.swift types)
+            // Preserve the request ID for respondToQuestion API call
             let questions = request.questions.map { q in
                 UserQuestion(
                     question: q.question,
@@ -576,7 +597,9 @@ class CLIBridgeAdapter: ObservableObject {
                     multiSelect: q.multiSelect
                 )
             }
-            let data = AskUserQuestionData(questions: questions)
+            let data = AskUserQuestionData(requestId: request.id, questions: questions)
+            // Set published property (like pendingApproval) for reliable UI binding
+            self.pendingQuestion = data
             self.onAskUserQuestion?(data)
         }
 

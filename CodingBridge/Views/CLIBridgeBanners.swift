@@ -71,9 +71,11 @@ struct InputQueuedBanner: View {
 /// Shows when a subagent (Task tool) is running
 struct SubagentBanner: View {
   let subagent: CLISubagentStartContent
+  var onDismiss: (() -> Void)? = nil
 
   @EnvironmentObject var settings: AppSettings
   @Environment(\.colorScheme) var colorScheme
+  @State private var offset: CGFloat = 0
 
   var body: some View {
     HStack(spacing: 10) {
@@ -122,9 +124,34 @@ struct SubagentBanner: View {
     )
     .padding(.horizontal, 12)
     .padding(.bottom, 4)
+    .offset(y: offset)
+    .gesture(
+      DragGesture()
+        .onChanged { value in
+          // Only allow downward drag
+          if value.translation.height > 0 {
+            offset = value.translation.height
+          }
+        }
+        .onEnded { value in
+          if value.translation.height > 50 {
+            // Dismiss if dragged down enough
+            withAnimation(.easeOut(duration: 0.2)) {
+              offset = 200
+            }
+            onDismiss?()
+          } else {
+            // Spring back
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+              offset = 0
+            }
+          }
+        }
+    )
     .transition(.move(edge: .bottom).combined(with: .opacity))
     .accessibilityElement(children: .contain)
     .accessibilityLabel("Subagent \(subagent.displayAgentType) running: \(subagent.description)")
+    .accessibilityHint(onDismiss != nil ? "Swipe down to dismiss" : "")
   }
 }
 
@@ -133,9 +160,11 @@ struct SubagentBanner: View {
 /// Shows progress for long-running tools
 struct ToolProgressBanner: View {
   let progress: CLIProgressContent
+  var onDismiss: (() -> Void)? = nil
 
   @EnvironmentObject var settings: AppSettings
   @Environment(\.colorScheme) var colorScheme
+  @State private var offset: CGFloat = 0
 
   private var progressPercent: Double {
     guard let p = progress.progress else { return 0 }
@@ -220,9 +249,34 @@ struct ToolProgressBanner: View {
     )
     .padding(.horizontal, 12)
     .padding(.bottom, 4)
+    .offset(y: offset)
+    .gesture(
+      DragGesture()
+        .onChanged { value in
+          // Only allow downward drag
+          if value.translation.height > 0 {
+            offset = value.translation.height
+          }
+        }
+        .onEnded { value in
+          if value.translation.height > 50 {
+            // Dismiss if dragged down enough
+            withAnimation(.easeOut(duration: 0.2)) {
+              offset = 200
+            }
+            onDismiss?()
+          } else {
+            // Spring back
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.7)) {
+              offset = 0
+            }
+          }
+        }
+    )
     .transition(.move(edge: .bottom).combined(with: .opacity))
     .accessibilityElement(children: .combine)
     .accessibilityLabel("\(progress.tool) progress: \(progress.progress ?? 0) percent, elapsed \(progress.elapsed) seconds")
+    .accessibilityHint(onDismiss != nil ? "Swipe down to dismiss" : "")
   }
 }
 

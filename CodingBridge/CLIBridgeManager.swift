@@ -707,11 +707,15 @@ class CLIBridgeManager: ObservableObject {
         // Top-level control messages (not inside stream)
         case .stopped(let payload):
             agentState = .idle
+            activeSubagent = nil  // Clear in case subagent_complete wasn't received
+            toolProgress = nil
             flushTextBuffer()
             onStopped?(payload.reason)
 
         case .interrupted:
             agentState = .idle
+            activeSubagent = nil  // Clear in case subagent_complete wasn't received
+            toolProgress = nil
             flushTextBuffer()
             onStopped?("interrupted")
         }

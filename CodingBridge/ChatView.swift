@@ -36,11 +36,15 @@ struct ChatView: View {
     @State private var isUploadingImage = false
     @State private var isLoadingHistory = false
     @State private var scrollToBottomTrigger = false
-    @State private var pendingQuestions: AskUserQuestionData?
 
     // MARK: - Streaming Message Cache (prevents view thrashing during streaming)
     @State private var streamingMessageId = UUID()
     @State private var streamingMessageTimestamp = Date()
+
+    // MARK: - Tool Use Tracking (maps tool_use_id to tool name for result filtering)
+    @State private var toolUseMap: [String: String] = [:]
+    /// Tool IDs created while a subagent was active - results for these should be filtered
+    @State private var subagentToolIds: Set<String> = []
 
     // MARK: - Search State
     @State private var isSearching = false
@@ -80,6 +84,7 @@ struct ChatView: View {
     @State private var disconnectTask: Task<Void, Never>?
     @State private var analyzeTask: Task<Void, Never>?
     @State private var saveDebounceTask: Task<Void, Never>?
+    @State private var draftDebounceTask: Task<Void, Never>?
 
     // MARK: - Display Messages Cache (prevents recomputation on every render)
     @State private var cachedDisplayMessages: [ChatMessage] = []
@@ -256,12 +261,12 @@ struct ChatView: View {
                 await sessionStore.loadSessions(for: project.path, forceRefresh: true)
 
                 await MainActor.run {
-                    // Now select the most recent session
-                    autoSelectMostRecentSession()
+                    // Select session (pre-selected from navigation, or auto-select most recent)
+                    selectInitialSession()
 
                     // Connect based on selected session
                     if let session = selectedSession {
-                        print("[ChatView] Opening project with most recent session: \(session.id.prefix(8))...")
+                        print("[ChatView] Opening project with session: \(session.id.prefix(8))...")
                         wsManager.sessionId = session.id
                         wsManager.connect(projectPath: project.path, sessionId: session.id)
                         MessageStore.saveSessionId(session.id, for: project.path)
@@ -290,11 +295,6 @@ struct ChatView: View {
                 inputText = savedDraft
             }
 
-            // Auto-focus input field after view loads
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                isInputFocused = true
-            }
-
             // Handle git status from ContentView
             gitStatus = initialGitStatus
             handleGitStatusOnLoad()
@@ -314,10 +314,13 @@ struct ChatView: View {
             }
         }
         .onDisappear {
-            // Cancel debounce and save messages immediately when leaving
+            // Cancel debounce and save messages/draft immediately when leaving
             saveDebounceTask?.cancel()
             saveDebounceTask = nil
+            draftDebounceTask?.cancel()
+            draftDebounceTask = nil
             MessageStore.saveMessages(messages, for: project.path, maxMessages: settings.historyLimit.rawValue)
+            MessageStore.saveDraft(inputText, for: project.path)
 
             // Cancel git refresh task
             gitRefreshTask?.cancel()
@@ -367,11 +370,17 @@ struct ChatView: View {
             wsManager.switchModel(to: newModel)
         }
         .onChange(of: inputText) { _, newText in
-            // Auto-save draft input
-            MessageStore.saveDraft(newText, for: project.path)
+            // Debounce draft saving to avoid disk I/O on every keystroke (causes keyboard lag)
+            draftDebounceTask?.cancel()
+            let projectPath = project.path
+            draftDebounceTask = Task {
+                try? await Task.sleep(nanoseconds: 300_000_000)  // 300ms debounce
+                guard !Task.isCancelled else { return }
+                MessageStore.saveDraft(newText, for: projectPath)
+            }
 
-            // Clear suggestions when user starts typing
-            if !newText.isEmpty {
+            // Clear suggestions when user starts typing (lightweight, no debounce needed)
+            if !newText.isEmpty && !claudeHelper.suggestedActions.isEmpty {
                 claudeHelper.clearSuggestions()
             }
         }
@@ -385,8 +394,9 @@ struct ChatView: View {
                 streamingMessageTimestamp = Date()
             }
 
-            // Refocus input when processing completes
-            if !isProcessing {
+            // Refocus input when processing completes (not on initial connection)
+            // oldValue check prevents focus during .starting → .idle connection transition
+            if oldValue && !isProcessing {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
                     isInputFocused = true
                 }
@@ -412,7 +422,7 @@ struct ChatView: View {
                 break
             }
         }
-        .sheet(item: $pendingQuestions) { questionData in
+        .sheet(item: $wsManager.pendingQuestion) { questionData in
             userQuestionsSheet(questionData)
         }
         .sheet(isPresented: $showingHelpSheet) {
@@ -551,8 +561,8 @@ struct ChatView: View {
         // This avoids binding issues that can cause the sheet to freeze
         UserQuestionsSheetWrapper(
             initialData: questionData,
-            onSubmit: { answer in
-                handleQuestionAnswer(answer)
+            onSubmit: { answeredData in
+                handleQuestionAnswer(answeredData)
             },
             onCancel: {
                 handleQuestionCancel()
@@ -561,30 +571,28 @@ struct ChatView: View {
     }
 
     /// Handle submission of question answers
-    private func handleQuestionAnswer(_ answer: String) {
+    private func handleQuestionAnswer(_ questionData: AskUserQuestionData) {
+        // Add user's formatted answer to chat for display
         let answerMessage = ChatMessage(
             role: .user,
-            content: answer,
+            content: questionData.formatAnswers(),
             timestamp: Date()
         )
         messages.append(answerMessage)
 
-        // Use effectiveSessionToResume which filters out ephemeral sessions
-        wsManager.sendMessage(
-            answer,
-            projectPath: project.path,
-            resumeSessionId: effectiveSessionToResume,
-            permissionMode: effectivePermissionMode,
-            model: effectiveModelId
+        // Send the structured answers back to cli-bridge
+        // This uses the request ID from the server and formats answers as a dict
+        wsManager.respondToQuestion(
+            requestId: questionData.requestId,
+            answers: questionData.answersDict()
         )
         processingStartTime = Date()
-        pendingQuestions = nil
     }
 
     /// Handle cancellation of question dialog
     private func handleQuestionCancel() {
         wsManager.abortSession()
-        pendingQuestions = nil
+        wsManager.clearPendingQuestion()
     }
 
     /// Compute session ID to resume, filtering out ephemeral sessions
@@ -838,6 +846,7 @@ struct ChatView: View {
                 .onAppear {
                     // Only scroll on appear if not loading history (history load handles its own scroll)
                     guard !isLoadingHistory else { return }
+                    // Brief delay to ensure view layout settles before scrolling
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                         scrollManager.forceScrollToBottom()
                     }
@@ -1099,12 +1108,16 @@ struct ChatView: View {
 
             // Subagent banner (shown when a Task tool subagent is running)
             if let subagent = wsManager.activeSubagent {
-                SubagentBanner(subagent: subagent)
+                SubagentBanner(subagent: subagent) {
+                    wsManager.activeSubagent = nil
+                }
             }
 
             // Tool progress banner (shown when tool reports progress and NOT waiting for approval/question)
-            if let progress = wsManager.toolProgress, wsManager.pendingApproval == nil, pendingQuestions == nil {
-                ToolProgressBanner(progress: progress)
+            if let progress = wsManager.toolProgress, wsManager.pendingApproval == nil, wsManager.pendingQuestion == nil {
+                ToolProgressBanner(progress: progress) {
+                    wsManager.toolProgress = nil
+                }
             }
 
             // Unified status bar with quick settings access
@@ -1167,7 +1180,18 @@ struct ChatView: View {
             messages.append(assistantMsg)
         }
 
-        wsManager.onToolUse = { name, input in
+        wsManager.onToolUse = { id, name, input in
+            // Track tool_use_id → tool name for result filtering
+            toolUseMap[id] = name
+
+            // Track tool IDs created while a subagent is active
+            // Results for these IDs should be filtered even after subagent completes
+            if wsManager.activeSubagent != nil && name != "Task" {
+                subagentToolIds.insert(id)
+                log.debug("[ChatView] Tracking subagent tool: \(name) (id: \(id.prefix(8)))")
+                return  // Don't show the tool_use message either
+            }
+
             let toolMsg = ChatMessage(
                 role: .toolUse,
                 content: "\(name)(\(input))",
@@ -1194,7 +1218,25 @@ struct ChatView: View {
             }
         }
 
-        wsManager.onToolResult = { result in
+        wsManager.onToolResult = { id, tool, result in
+            // Look up the original tool name from our tracking map
+            // The 'tool' from result may be "unknown" if cli-bridge doesn't provide it
+            let toolName = toolUseMap[id] ?? tool
+
+            // Skip results for tools that were created while a subagent was active
+            // Results may arrive AFTER subagent completes due to coalescing
+            if subagentToolIds.contains(id) {
+                log.debug("[ChatView] Filtering subagent tool result: \(toolName) (id: \(id.prefix(8)))")
+                subagentToolIds.remove(id)  // Clean up after filtering
+                return
+            }
+
+            // Also skip the Task tool's own result (when subagent completes)
+            if toolName == "Task" {
+                log.debug("[ChatView] Filtering Task tool result (id: \(id.prefix(8)))")
+                return
+            }
+
             // Store full result - truncation is handled in display
             let resultMsg = ChatMessage(
                 role: .toolResult,
@@ -1214,6 +1256,10 @@ struct ChatView: View {
         }
 
         wsManager.onComplete = { _ in
+            // Clear tool use tracking to prevent memory growth
+            toolUseMap.removeAll()
+            subagentToolIds.removeAll()
+
             // Add final assistant message with execution time and token count
             if !wsManager.currentText.isEmpty {
                 // Calculate execution time
@@ -1314,16 +1360,8 @@ struct ChatView: View {
             selectedSession = newSession
         }
 
-        wsManager.onAskUserQuestion = { questionData in
-            // Show the question UI sheet
-            // Only set if we don't already have pending questions (prevents duplicate dialogs)
-            if pendingQuestions == nil {
-                print("[ChatView] Received AskUserQuestion with \(questionData.questions.count) questions")
-                pendingQuestions = questionData
-            } else {
-                print("[ChatView] Ignoring duplicate AskUserQuestion - already showing dialog")
-            }
-        }
+        // Note: AskUserQuestion is handled via $wsManager.pendingQuestion binding
+        // The adapter sets pendingQuestion directly, triggering the sheet
 
         wsManager.onAborted = {
             // Show feedback that the task was aborted
@@ -1574,6 +1612,35 @@ struct ChatView: View {
 
     // MARK: - Session Auto-Selection
 
+    /// Select initial session: pre-selected from navigation, or fall back to most recent
+    private func selectInitialSession() {
+        // Check for a pre-selected session (from Recent Sessions navigation)
+        if let preSelectedId = sessionStore.loadActiveSessionId(for: project.path) {
+            // Try to find session in loaded sessions
+            if let preSelectedSession = sessionStore.sessions(for: project.path).first(where: { $0.id == preSelectedId }) {
+                print("[ChatView] Using pre-selected session: \(preSelectedId.prefix(8))...")
+                selectedSession = preSelectedSession
+            } else {
+                // Session not in list - create ephemeral session to load it
+                print("[ChatView] Pre-selected session \(preSelectedId.prefix(8)) not in list, creating ephemeral...")
+                let ephemeralSession = ProjectSession(
+                    id: preSelectedId,
+                    summary: nil,
+                    messageCount: nil,
+                    lastActivity: nil,
+                    lastUserMessage: nil,
+                    lastAssistantMessage: nil
+                )
+                selectedSession = ephemeralSession
+            }
+            // Clear the pre-selection so next visit uses auto-select
+            sessionStore.clearActiveSessionId(for: project.path)
+        } else {
+            // Fall back to auto-selecting most recent session
+            autoSelectMostRecentSession()
+        }
+    }
+
     /// Auto-select the most recent session from project.sessions by lastActivityAt
     /// Does NOT load history or connect - caller is responsible for that
     private func autoSelectMostRecentSession() {
@@ -1683,7 +1750,7 @@ struct ChatView: View {
                     }
                     // Show error message
                     messages.append(ChatMessage(role: .system, content: "Could not load history: \(error.localizedDescription)", timestamp: Date()))
-                    // Mark loading complete and scroll once
+                    // Mark loading complete and scroll once after layout settles
                     isLoadingHistory = false
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                         scrollManager.forceScrollToBottom()
@@ -1782,6 +1849,16 @@ struct ChatView: View {
 
             // Plain text content
             if let content = json["content"] as? String, !content.isEmpty {
+                // Filter out "Caveat:" messages (CLI metadata about local commands)
+                if content.hasPrefix("Caveat: The messages below were generated") {
+                    return []
+                }
+
+                // Parse local command XML format: <command-name>/resume</command-name>...
+                if let localCommand = parseLocalCommandXML(content) {
+                    return [localCommand.toChatMessage(timestamp: timestamp)]
+                }
+
                 let role: ChatMessage.Role
                 switch type {
                 case "user": role = .user
@@ -1825,6 +1902,58 @@ struct ChatView: View {
         }
 
         return messages
+    }
+
+    // MARK: - Local Command Parsing
+
+    /// Parsed local command from CLI session history
+    struct LocalCommand {
+        let name: String      // e.g., "/resume", "/exit"
+        let args: String      // command arguments
+        let stdout: String    // command output
+
+        /// Convert to ChatMessage for display
+        /// Format: "> /command\n└ output"
+        func toChatMessage(timestamp: Date) -> ChatMessage {
+            var content = name
+            if !args.isEmpty {
+                content += " \(args)"
+            }
+            if !stdout.isEmpty {
+                content += "\n└ \(stdout)"
+            }
+            return ChatMessage(role: .system, content: content, timestamp: timestamp)
+        }
+    }
+
+    /// Parse local command XML format from CLI session history
+    /// Format: <command-name>/resume</command-name><command-message>resume</command-message><command-args></command-args><local-command-stdout>No conversations found</local-command-stdout>
+    private func parseLocalCommandXML(_ content: String) -> LocalCommand? {
+        // Quick check - must contain command-name tag
+        guard content.contains("<command-name>") else { return nil }
+
+        // Extract command name
+        guard let nameStart = content.range(of: "<command-name>"),
+              let nameEnd = content.range(of: "</command-name>") else {
+            return nil
+        }
+        let name = String(content[nameStart.upperBound..<nameEnd.lowerBound])
+
+        // Extract args (may be empty)
+        var args = ""
+        if let argsStart = content.range(of: "<command-args>"),
+           let argsEnd = content.range(of: "</command-args>") {
+            args = String(content[argsStart.upperBound..<argsEnd.lowerBound])
+        }
+
+        // Extract stdout (may be empty)
+        var stdout = ""
+        if let stdoutStart = content.range(of: "<local-command-stdout>"),
+           let stdoutEnd = content.range(of: "</local-command-stdout>") {
+            stdout = String(content[stdoutStart.upperBound..<stdoutEnd.lowerBound])
+        }
+
+        return LocalCommand(name: name, args: args, stdout: stdout)
     }
 
     /// Delete a session from the server
@@ -1950,40 +2079,38 @@ struct ChatView: View {
     private func performAutoPull() async {
         isAutoPulling = true
 
-        // TODO: Replace with cli-bridge API endpoint when available
-        // POST /projects/{path}/git/pull
-        // For now, show error that this feature requires cli-bridge support
-        await MainActor.run {
-            isAutoPulling = false
-            let errorStatus = GitStatus.error("Git pull requires cli-bridge API support. See CLI-BRIDGE-FEATURE-REQUEST.md")
-            gitStatus = errorStatus
-            ProjectCache.shared.updateGitStatus(for: project.path, status: errorStatus)
-        }
+        do {
+            let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
+            let response = try await apiClient.gitPull(projectPath: project.path)
 
-        // When API is available:
-        // do {
-        //     let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
-        //     try await apiClient.gitPull(projectPath: project.path)
-        //
-        //     await MainActor.run {
-        //         isAutoPulling = false
-        //         gitStatus = .clean
-        //         showGitBanner = false
-        //         ProjectCache.shared.updateGitStatus(for: project.path, status: .clean)
-        //         messages.append(ChatMessage(
-        //             role: .system,
-        //             content: "✓ Auto-pulled latest changes from remote",
-        //             timestamp: Date()
-        //         ))
-        //     }
-        // } catch {
-        //     await MainActor.run {
-        //         isAutoPulling = false
-        //         let errorStatus = GitStatus.error("Auto-pull failed: \(error.localizedDescription)")
-        //         gitStatus = errorStatus
-        //         ProjectCache.shared.updateGitStatus(for: project.path, status: errorStatus)
-        //     }
-        // }
+            await MainActor.run {
+                isAutoPulling = false
+                if response.commits > 0 {
+                    gitStatus = .clean
+                    showGitBanner = false
+                    ProjectCache.shared.updateGitStatus(for: project.path, status: .clean)
+
+                    let filesDesc = response.files.map { " (\($0.count) files)" } ?? ""
+                    messages.append(ChatMessage(
+                        role: .system,
+                        content: "✓ Pulled \(response.commits) commit\(response.commits == 1 ? "" : "s")\(filesDesc)",
+                        timestamp: Date()
+                    ))
+                } else {
+                    // Already up to date
+                    gitStatus = .clean
+                    showGitBanner = false
+                    ProjectCache.shared.updateGitStatus(for: project.path, status: .clean)
+                }
+            }
+        } catch {
+            await MainActor.run {
+                isAutoPulling = false
+                let errorStatus = GitStatus.error("Auto-pull failed: \(error.localizedDescription)")
+                gitStatus = errorStatus
+                ProjectCache.shared.updateGitStatus(for: project.path, status: errorStatus)
+            }
+        }
     }
 
     /// Send a message to Claude asking to help with local changes

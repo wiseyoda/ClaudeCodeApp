@@ -37,21 +37,11 @@ struct UnifiedStatusBar: View {
         HStack(spacing: 12) {
             // Connection status dot + Model name
             HStack(spacing: 6) {
-                ZStack {
-                    // Static base circle (always present for stable layout)
-                    Circle()
-                        .fill(statusColor)
-                        .frame(width: 8, height: 8)
-
-                    // Pulsing overlay when: checking health, reconnecting, or processing
-                    if shouldPulse {
-                        Circle()
-                            .fill(statusColor)
-                            .frame(width: 8, height: 8)
-                            .modifier(PulsingOpacity())
-                    }
-                }
-                .frame(width: 8, height: 8)  // Fixed frame prevents layout shifts
+                // Single status dot with conditional pulsing opacity
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 8, height: 8)
+                    .modifier(ConditionalPulse(isActive: shouldPulse))
 
                 // Show model name (tappable) - always visible for consistent layout
                 Button {
@@ -206,21 +196,35 @@ struct UnifiedStatusBar: View {
     }
 }
 
-// MARK: - Pulsing Opacity Animation
+// MARK: - Conditional Pulse Animation
 
-private struct PulsingOpacity: ViewModifier {
-    @State private var isPulsing = false
+/// A modifier that pulses opacity when active, but keeps the view stable (no layout shifts)
+private struct ConditionalPulse: ViewModifier {
+    let isActive: Bool
+    @State private var animationPhase: CGFloat = 1.0
 
     func body(content: Content) -> some View {
         content
-            .opacity(isPulsing ? 0.3 : 1.0)
+            .opacity(isActive ? animationPhase : 1.0)
             .animation(
-                .easeInOut(duration: 0.8)
-                .repeatForever(autoreverses: true),
-                value: isPulsing
+                isActive
+                    ? .easeInOut(duration: 0.8).repeatForever(autoreverses: true)
+                    : .default,
+                value: animationPhase
             )
+            .onChange(of: isActive) { _, newValue in
+                if newValue {
+                    // Start pulsing
+                    animationPhase = 0.3
+                } else {
+                    // Stop pulsing, return to full opacity
+                    animationPhase = 1.0
+                }
+            }
             .onAppear {
-                isPulsing = true
+                if isActive {
+                    animationPhase = 0.3
+                }
             }
     }
 }

@@ -32,6 +32,7 @@ struct ContentView: View {
     // Git status tracking per project path
     // Local dict used during refresh to show .checking state
     @State private var gitStatuses: [String: GitStatus] = [:]
+    @State private var branchNames: [String: String] = [:]
     @State private var isCheckingGitStatus = false
     @State private var gitRefreshError: String?
     @State private var showGitRefreshError = false
@@ -61,107 +62,16 @@ struct ContentView: View {
     @State private var loadingStatus: String?
 
     var body: some View {
-        NavigationSplitView(columnVisibility: $columnVisibility) {
-            // Sidebar: Project list
-            sidebarContent
-                .navigationTitle("Coding Bridge")
-                // iOS 26+: Use Material for glass-compatible toolbar
-                .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
-                .toolbarBackground(.visible, for: .navigationBar)
-                .toolbar {
-                    // iOS 26+: ToolbarSpacer can be used between items for flexible layout
-                    ToolbarItem(placement: .navigationBarTrailing) {
-                        HStack(spacing: 16) {
-                            Button {
-                                showGlobalSearch = true
-                            } label: {
-                                Image(systemName: "magnifyingglass")
-                                    .foregroundColor(CLITheme.secondaryText(for: colorScheme))
-                            }
-                            .accessibilityLabel("Search all sessions")
-                            .accessibilityHint("Search across all projects and sessions")
-
-                            Button {
-                                showCommands = true
-                            } label: {
-                                Image(systemName: "text.book.closed")
-                                    .foregroundColor(CLITheme.yellow(for: colorScheme))
-                            }
-                            .accessibilityLabel("Saved commands")
-                            .accessibilityHint("Open saved commands library")
-
-                            Menu {
-                                Button {
-                                    showNewProject = true
-                                } label: {
-                                    Label("Create Empty Project", systemImage: "folder.badge.plus")
-                                }
-                                Button {
-                                    showCloneProject = true
-                                } label: {
-                                    Label("Clone from GitHub", systemImage: "arrow.down.doc")
-                                }
-                            } label: {
-                                Image(systemName: "plus")
-                                    .foregroundColor(CLITheme.green(for: colorScheme))
-                            }
-                            .accessibilityLabel("New project")
-                            .accessibilityHint("Create or clone a project")
-
-                            Button {
-                                showTerminal = true
-                            } label: {
-                                Image(systemName: "terminal")
-                                    .foregroundColor(CLITheme.cyan(for: colorScheme))
-                            }
-                            .accessibilityLabel("SSH Terminal")
-                            .accessibilityHint("Open SSH terminal to connect to server")
-
-                            Button {
-                                showSettings = true
-                            } label: {
-                                Image(systemName: "gear")
-                                    .foregroundColor(CLITheme.secondaryText(for: colorScheme))
-                            }
-                            .accessibilityLabel("Settings")
-                            .accessibilityHint("Open app settings")
-                        }
-                    }
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button {
-                            Task {
-                                await loadProjects()
-                                if !projects.isEmpty {
-                                    await checkAllGitStatuses()
-                                    await loadAllSessionCounts()
-                                }
-                            }
-                        } label: {
-                            Image(systemName: "arrow.clockwise")
-                                .foregroundColor(CLITheme.secondaryText(for: colorScheme))
-                        }
-                        .accessibilityLabel("Refresh projects")
-                        .accessibilityHint("Reload project list and git statuses")
-                    }
-                }
-        } detail: {
-            // Detail: Chat view or placeholder
-            if isLoading && !projectCache.hasCachedData {
-                // Show loading in detail pane too (iPhone shows detail first)
-                loadingView
-            } else if let project = selectedProject {
-                ChatView(
-                    project: project,
-                    initialGitStatus: effectiveGitStatus(for: project.path),
-                    onSessionsChanged: {
-                        Task { await loadProjects() }
-                    }
-                )
+        // Adaptive layout: iPhone uses HomeView, iPad uses NavigationSplitView
+        Group {
+            if horizontalSizeClass == .compact {
+                // iPhone: New glass card grid layout
+                compactLayout
             } else {
-                noProjectSelectedView
+                // iPad: Keep NavigationSplitView
+                regularLayout
             }
         }
-        .navigationSplitViewStyle(.balanced)
         .sheet(isPresented: $showSettings) {
             SettingsView()
         }
@@ -275,6 +185,190 @@ struct ContentView: View {
         }
     }
 
+    // MARK: - Adaptive Layout Views
+
+    /// iPhone layout: HomeView with glass card grid
+    @ViewBuilder
+    private var compactLayout: some View {
+        NavigationStack {
+            HomeView(
+                projects: projects,
+                gitStatuses: gitStatuses,
+                branchNames: projectCache.cachedBranchNames.merging(branchNames) { _, new in new },
+                isLoading: isLoading,
+                onRefresh: {
+                    await loadProjects()
+                    if !projects.isEmpty {
+                        await checkAllGitStatuses()
+                        await loadAllSessionCounts()
+                    }
+                },
+                onSelectProject: { project in
+                    selectedProject = project
+                },
+                onSelectSession: { session in
+                    // Find or create project for this session
+                    if let project = projects.first(where: { $0.path == session.projectPath }) {
+                        // Set session so ChatView loads it
+                        sessionStore.setSelectedSession(session.id, for: project.path)
+                        selectedProject = project
+                    } else {
+                        // Project not in list - create temporary one
+                        let projectName = (session.projectPath as NSString).lastPathComponent
+                        let project = Project(
+                            name: projectName,
+                            path: session.projectPath,
+                            displayName: nil,
+                            fullPath: session.projectPath,
+                            sessions: nil,
+                            sessionMeta: nil
+                        )
+                        sessionStore.setSelectedSession(session.id, for: project.path)
+                        selectedProject = project
+                    }
+                }
+            )
+            .navigationDestination(for: Project.self) { project in
+                ChatView(
+                    project: project,
+                    initialGitStatus: effectiveGitStatus(for: project.path),
+                    onSessionsChanged: {
+                        Task { await loadProjects() }
+                    }
+                )
+                .toolbar(.hidden, for: .tabBar)
+            }
+            .navigationDestination(isPresented: Binding(
+                get: { selectedProject != nil },
+                set: { if !$0 { selectedProject = nil } }
+            )) {
+                if let project = selectedProject {
+                    ChatView(
+                        project: project,
+                        initialGitStatus: effectiveGitStatus(for: project.path),
+                        onSessionsChanged: {
+                            Task { await loadProjects() }
+                        }
+                    )
+                    .toolbar(.hidden, for: .tabBar)
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        showGlobalSearch = true
+                    } label: {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+                    }
+                }
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        Task {
+                            await loadProjects()
+                            if !projects.isEmpty {
+                                await checkAllGitStatuses()
+                                await loadAllSessionCounts()
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+                    }
+                }
+            }
+        }
+    }
+
+    /// iPad layout: NavigationSplitView with sidebar
+    @ViewBuilder
+    private var regularLayout: some View {
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            sidebarContent
+                .navigationTitle("Coding Bridge")
+                .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+                .toolbarBackground(.visible, for: .navigationBar)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        HStack(spacing: 16) {
+                            Button {
+                                showGlobalSearch = true
+                            } label: {
+                                Image(systemName: "magnifyingglass")
+                                    .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+                            }
+
+                            Button {
+                                showCommands = true
+                            } label: {
+                                Image(systemName: "text.book.closed")
+                                    .foregroundColor(CLITheme.yellow(for: colorScheme))
+                            }
+
+                            Menu {
+                                Button {
+                                    showNewProject = true
+                                } label: {
+                                    Label("Create Empty Project", systemImage: "folder.badge.plus")
+                                }
+                                Button {
+                                    showCloneProject = true
+                                } label: {
+                                    Label("Clone from GitHub", systemImage: "arrow.down.doc")
+                                }
+                            } label: {
+                                Image(systemName: "plus")
+                                    .foregroundColor(CLITheme.green(for: colorScheme))
+                            }
+
+                            Button {
+                                showTerminal = true
+                            } label: {
+                                Image(systemName: "terminal")
+                                    .foregroundColor(CLITheme.cyan(for: colorScheme))
+                            }
+
+                            Button {
+                                showSettings = true
+                            } label: {
+                                Image(systemName: "gear")
+                                    .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+                            }
+                        }
+                    }
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button {
+                            Task {
+                                await loadProjects()
+                                if !projects.isEmpty {
+                                    await checkAllGitStatuses()
+                                    await loadAllSessionCounts()
+                                }
+                            }
+                        } label: {
+                            Image(systemName: "arrow.clockwise")
+                                .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+                        }
+                    }
+                }
+        } detail: {
+            if isLoading && !projectCache.hasCachedData {
+                loadingView
+            } else if let project = selectedProject {
+                ChatView(
+                    project: project,
+                    initialGitStatus: effectiveGitStatus(for: project.path),
+                    onSessionsChanged: {
+                        Task { await loadProjects() }
+                    }
+                )
+            } else {
+                noProjectSelectedView
+            }
+        }
+        .navigationSplitViewStyle(.balanced)
+    }
+
     // MARK: - Cached Loading Flow
 
     /// Load projects with cache-first strategy for instant startup
@@ -286,6 +380,7 @@ struct ContentView: View {
         if projectCache.hasCachedData {
             projects = projectCache.cachedProjects
             gitStatuses = projectCache.cachedGitStatuses
+            branchNames = projectCache.cachedBranchNames
             isLoading = false
             isFetchingFresh = true
             loadingStatus = "Updating..."
@@ -319,7 +414,7 @@ struct ContentView: View {
             log.info("[Startup] Session counts took \(String(format: "%.2f", (CFAbsoluteTimeGetCurrent() - sessionStart) * 1000))ms")
 
             // Save to cache for next startup
-            projectCache.saveProjects(projects, gitStatuses: gitStatuses)
+            projectCache.saveProjects(projects, gitStatuses: gitStatuses, branchNames: branchNames)
         }
 
         isFetchingFresh = false
@@ -660,14 +755,19 @@ struct ContentView: View {
                     displayName: nil,
                     fullPath: cliProject.path,
                     sessions: nil,
-                    sessionMeta: nil
+                    sessionMeta: cliProject.sessionCount.map {
+                        ProjectSessionMeta(hasMore: false, total: $0)
+                    }
                 )
             }
 
-            // Extract git statuses from cli-bridge response
+            // Extract git statuses and branch names from cli-bridge response
             for cliProject in cliProjects {
                 if let git = cliProject.git {
                     gitStatuses[cliProject.path] = git.toGitStatus
+                    if let branch = git.branch {
+                        branchNames[cliProject.path] = branch
+                    }
                 }
             }
 
@@ -692,28 +792,16 @@ struct ContentView: View {
     }
 
     private func deleteProject(_ project: Project) async {
-        // TODO: Replace with cli-bridge API endpoint when available
-        // DELETE /projects/{path}
         do {
             let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
+            try await apiClient.deleteProject(projectPath: project.path, deleteFiles: true)
 
-            // cli-bridge doesn't have delete project endpoint yet
-            // For now, just remove from local UI and show it will reappear on refresh
-            throw CLIBridgeAPIError.endpointNotAvailable(
-                "Delete project requires cli-bridge API support. " +
-                "See CLI-BRIDGE-FEATURE-REQUEST.md for details."
-            )
-
-            // When API is available:
-            // try await apiClient.deleteProject(projectPath: project.path)
-            //
-            // await MainActor.run {
-            //     projects.removeAll { $0.id == project.id }
-            //     gitStatuses.removeValue(forKey: project.path)
-            //     projectToDelete = nil
-            // }
+            await MainActor.run {
+                projects.removeAll { $0.id == project.id }
+                gitStatuses.removeValue(forKey: project.path)
+                projectToDelete = nil
+            }
         } catch {
-            // Show error but don't block UI
             log.error("[Projects] Failed to delete project: \(error)")
             await MainActor.run {
                 projectToDelete = nil
@@ -738,11 +826,14 @@ struct ContentView: View {
             let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
             let cliProjects = try await apiClient.fetchProjects()
 
-            // Extract git statuses from cli-bridge response
+            // Extract git statuses and branch names from cli-bridge response
             for cliProject in cliProjects {
                 if let git = cliProject.git {
                     gitStatuses[cliProject.path] = git.toGitStatus
-                    projectCache.updateGitStatus(for: cliProject.path, status: git.toGitStatus)
+                    projectCache.updateGitStatus(for: cliProject.path, status: git.toGitStatus, branchName: git.branch)
+                    if let branch = git.branch {
+                        branchNames[cliProject.path] = branch
+                    }
                 }
             }
         } catch {
@@ -771,7 +862,10 @@ struct ContentView: View {
             if let cliProject = cliProjects.first(where: { $0.path == project.path }),
                let git = cliProject.git {
                 gitStatuses[project.path] = git.toGitStatus
-                projectCache.updateGitStatus(for: project.path, status: git.toGitStatus)
+                projectCache.updateGitStatus(for: project.path, status: git.toGitStatus, branchName: git.branch)
+                if let branch = git.branch {
+                    branchNames[project.path] = branch
+                }
             } else {
                 gitStatuses[project.path] = .notGitRepo
             }
@@ -782,44 +876,142 @@ struct ContentView: View {
     }
 
     // MARK: - Multi-Repo (Monorepo) Support
-    // TODO: These features require cli-bridge API support
-    // See CLI-BRIDGE-FEATURE-REQUEST.md for details
 
-    /// Discover sub-repos for all projects in background
-    /// Stubbed - requires cli-bridge API: GET /projects/{path}/subrepos
+    /// Discover sub-repos for all projects in parallel
     private func discoverAllSubRepos() async {
-        // Multi-repo discovery not yet supported via API
-        // When available, will call: GET /projects/{path}/subrepos
+        let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
+
+        // Mark all as scanning
+        await MainActor.run {
+            for project in projects {
+                multiRepoStatuses[project.path] = MultiRepoStatus(isScanning: true)
+            }
+        }
+
+        // Discover in parallel using TaskGroup
+        await withTaskGroup(of: (String, [SubRepo]?).self) { group in
+            for project in projects {
+                group.addTask {
+                    do {
+                        let subRepoInfos = try await apiClient.discoverSubRepos(projectPath: project.path)
+                        let subRepos = subRepoInfos.map { info in
+                            SubRepo(
+                                relativePath: info.relativePath,
+                                fullPath: "\(project.path)/\(info.relativePath)",
+                                status: info.git.toGitStatus
+                            )
+                        }
+                        return (project.path, subRepos)
+                    } catch {
+                        log.error("[MultiRepo] Failed to discover sub-repos for \(project.path): \(error)")
+                        return (project.path, nil)
+                    }
+                }
+            }
+
+            // Collect results
+            for await (projectPath, subRepos) in group {
+                await MainActor.run {
+                    if let subRepos = subRepos {
+                        multiRepoStatuses[projectPath] = MultiRepoStatus(subRepos: subRepos)
+                    } else {
+                        multiRepoStatuses[projectPath] = MultiRepoStatus()
+                    }
+                }
+            }
+        }
     }
 
-    /// Check git status for all sub-repos of a project
-    /// Stubbed - requires cli-bridge API: GET /projects/{path}/subrepos/status
+    /// Check git status for all sub-repos of a project (refreshes via discovery)
     private func checkSubRepoStatuses(for projectPath: String, subRepoPaths: [String]) async {
-        // Sub-repo status checking not yet supported via API
+        let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
+
+        do {
+            let subRepoInfos = try await apiClient.discoverSubRepos(projectPath: projectPath)
+            let subRepos = subRepoInfos.map { info in
+                SubRepo(
+                    relativePath: info.relativePath,
+                    fullPath: "\(projectPath)/\(info.relativePath)",
+                    status: info.git.toGitStatus
+                )
+            }
+
+            await MainActor.run {
+                multiRepoStatuses[projectPath] = MultiRepoStatus(subRepos: subRepos)
+            }
+        } catch {
+            log.error("[MultiRepo] Failed to check sub-repo statuses for \(projectPath): \(error)")
+        }
     }
 
-    /// Refresh a single sub-repo's status
-    /// Stubbed - requires cli-bridge API
+    /// Refresh a single sub-repo's status (refreshes all sub-repos for the project)
     private func refreshSubRepoStatus(project: Project, subRepo: SubRepo) async {
-        // Sub-repo status refresh not yet supported via API
+        await refreshAllSubRepos(project: project)
     }
 
     /// Refresh all sub-repos for a project
-    /// Stubbed - requires cli-bridge API
     private func refreshAllSubRepos(project: Project) async {
-        // Sub-repo refresh not yet supported via API
+        let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
+
+        await MainActor.run {
+            if var status = multiRepoStatuses[project.path] {
+                status.isScanning = true
+                multiRepoStatuses[project.path] = status
+            }
+        }
+
+        do {
+            let subRepoInfos = try await apiClient.discoverSubRepos(projectPath: project.path)
+            let subRepos = subRepoInfos.map { info in
+                SubRepo(
+                    relativePath: info.relativePath,
+                    fullPath: "\(project.path)/\(info.relativePath)",
+                    status: info.git.toGitStatus
+                )
+            }
+
+            await MainActor.run {
+                multiRepoStatuses[project.path] = MultiRepoStatus(subRepos: subRepos)
+            }
+        } catch {
+            log.error("[MultiRepo] Failed to refresh sub-repos for \(project.path): \(error)")
+            await MainActor.run {
+                if var status = multiRepoStatuses[project.path] {
+                    status.isScanning = false
+                    multiRepoStatuses[project.path] = status
+                }
+            }
+        }
     }
 
     /// Pull a single sub-repo
-    /// Stubbed - requires cli-bridge API: POST /projects/{path}/subrepos/{subpath}/pull
     private func pullSubRepo(project: Project, subRepo: SubRepo) async {
-        // Sub-repo pull not yet supported via API
+        let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
+
+        do {
+            let _ = try await apiClient.pullSubRepo(
+                projectPath: project.path,
+                relativePath: subRepo.relativePath
+            )
+            // Refresh status after pull
+            await refreshAllSubRepos(project: project)
+        } catch {
+            log.error("[MultiRepo] Failed to pull sub-repo \(subRepo.relativePath): \(error)")
+        }
     }
 
     /// Pull all sub-repos that are behind
-    /// Stubbed - requires cli-bridge API
     private func pullAllBehindSubRepos(project: Project) async {
-        // Batch sub-repo pull not yet supported via API
+        guard let multiRepoStatus = multiRepoStatuses[project.path] else { return }
+
+        let behindSubRepos = multiRepoStatus.subRepos.filter { subRepo in
+            if case .behind = subRepo.status { return true }
+            return false
+        }
+
+        for subRepo in behindSubRepos {
+            await pullSubRepo(project: project, subRepo: subRepo)
+        }
     }
 
     // MARK: - Session Count Loading

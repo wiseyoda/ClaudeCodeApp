@@ -134,11 +134,11 @@ struct CodingBridgeApp: App {
                     PermissionApprovalTestHarnessView()
                         .environmentObject(settings)
                 } else {
-                    ContentView()
+                    MainTabView()
                         .environmentObject(settings)
                 }
                 #else
-                ContentView()
+                MainTabView()
                     .environmentObject(settings)
                 #endif
 

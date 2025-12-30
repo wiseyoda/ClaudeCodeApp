@@ -88,6 +88,15 @@ class CLIBridgeAPIClient: ObservableObject {
         return try await delete("/projects/\(encodedPath)/sessions", queryItems: queryItems)
     }
 
+    /// Fetch recent sessions across all projects (for home screen activity feed)
+    func fetchRecentSessions(limit: Int = 5) async throws -> [CLISessionMetadata] {
+        let queryItems = [
+            URLQueryItem(name: "limit", value: String(limit))
+        ]
+        let response: CLISessionsResponse = try await get("/sessions/recent", queryItems: queryItems)
+        return response.sessions
+    }
+
     /// Fetch session messages (history)
     /// Note: This endpoint doesn't exist in cli-bridge. Use exportSession() instead.
     func fetchSessionMessages(projectPath: String, sessionId: String) async throws -> [CLISessionMessage] {
@@ -322,6 +331,51 @@ class CLIBridgeAPIClient: ObservableObject {
         return try await get("/api/push/status")
     }
 
+    // MARK: - Project Management
+
+    /// Create a new project directory
+    func createProject(name: String, baseDir: String? = nil, initializeClaude: Bool = true) async throws -> CLICreateProjectResponse {
+        let body = CLICreateProjectRequest(name: name, baseDir: baseDir, initializeClaude: initializeClaude)
+        return try await postWithBody("/projects/create", body: body)
+    }
+
+    /// Clone a git repository
+    func cloneProject(url: String, baseDir: String? = nil, initializeClaude: Bool = true) async throws -> CLICloneProjectResponse {
+        let body = CLICloneProjectRequest(url: url, baseDir: baseDir, initializeClaude: initializeClaude)
+        return try await postWithBody("/projects/clone", body: body)
+    }
+
+    /// Delete a project
+    func deleteProject(projectPath: String, deleteFiles: Bool = false) async throws {
+        let encodedPath = encodeProjectPath(projectPath)
+        var queryItems: [URLQueryItem] = []
+        if deleteFiles {
+            queryItems.append(URLQueryItem(name: "deleteFiles", value: "true"))
+        }
+        let _: CLIDeleteProjectResponse = try await delete("/projects/\(encodedPath)", queryItems: queryItems.isEmpty ? nil : queryItems)
+    }
+
+    /// Git pull for a project
+    func gitPull(projectPath: String) async throws -> CLIGitPullResponse {
+        let encodedPath = encodeProjectPath(projectPath)
+        return try await post("/projects/\(encodedPath)/git/pull")
+    }
+
+    /// Discover sub-repositories in a project
+    func discoverSubRepos(projectPath: String, maxDepth: Int = 2) async throws -> [CLISubRepoInfo] {
+        let encodedPath = encodeProjectPath(projectPath)
+        let queryItems = [URLQueryItem(name: "maxDepth", value: String(maxDepth))]
+        let response: CLISubReposResponse = try await get("/projects/\(encodedPath)/subrepos", queryItems: queryItems)
+        return response.subrepos
+    }
+
+    /// Git pull for a sub-repository
+    func pullSubRepo(projectPath: String, relativePath: String) async throws -> CLIGitPullResponse {
+        let encodedPath = encodeProjectPath(projectPath)
+        let encodedRelative = relativePath.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? relativePath
+        return try await post("/projects/\(encodedPath)/subrepos/\(encodedRelative)/pull")
+    }
+
     // MARK: - Private Helpers
 
     private func encodeProjectPath(_ path: String) -> String {
@@ -350,7 +404,10 @@ class CLIBridgeAPIClient: ObservableObject {
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
+        let start = CFAbsoluteTimeGetCurrent()
+        log.debug("[API] GET \(url.absoluteString)")
         let (data, response) = try await session.data(for: request)
+        log.debug("[API] GET \(endpoint) completed in \(String(format: "%.0f", (CFAbsoluteTimeGetCurrent() - start) * 1000))ms")
         try validateResponse(response)
         return try JSONDecoder().decode(T.self, from: data)
     }
@@ -643,6 +700,54 @@ struct CLIThinkingModeInfo: Decodable, Identifiable {
 }
 
 struct EmptyResponse: Decodable {}
+
+// MARK: - Project Management Types
+
+struct CLICreateProjectRequest: Encodable {
+    let name: String
+    let baseDir: String?
+    let initializeClaude: Bool?
+}
+
+struct CLICreateProjectResponse: Decodable {
+    let success: Bool
+    let path: String
+    let initialized: Bool
+}
+
+struct CLICloneProjectRequest: Encodable {
+    let url: String
+    let baseDir: String?
+    let initializeClaude: Bool?
+}
+
+struct CLICloneProjectResponse: Decodable {
+    let success: Bool
+    let path: String
+    let initialized: Bool
+}
+
+struct CLIDeleteProjectResponse: Decodable {
+    let success: Bool
+}
+
+struct CLIGitPullResponse: Decodable {
+    let success: Bool
+    let message: String
+    let commits: Int
+    let files: [String]?
+}
+
+struct CLISubRepoInfo: Decodable, Identifiable {
+    let relativePath: String
+    let git: CLIGitStatus
+
+    var id: String { relativePath }
+}
+
+struct CLISubReposResponse: Decodable {
+    let subrepos: [CLISubRepoInfo]
+}
 
 // MARK: - Errors
 

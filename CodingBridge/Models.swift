@@ -1036,14 +1036,17 @@ struct UserQuestion: Identifiable {
 /// Represents the full AskUserQuestion tool input
 struct AskUserQuestionData: Identifiable {
     let id = UUID()
+    /// The server's request ID - needed for respondToQuestion API call
+    let requestId: String
     var questions: [UserQuestion]
 
-    init(questions: [UserQuestion]) {
+    init(requestId: String, questions: [UserQuestion]) {
+        self.requestId = requestId
         self.questions = questions
     }
 
     /// Parse from the tool input dictionary
-    static func from(_ input: [String: Any]) -> AskUserQuestionData? {
+    static func from(_ input: [String: Any], requestId: String) -> AskUserQuestionData? {
         guard let questionsArray = input["questions"] as? [[String: Any]] else {
             return nil
         }
@@ -1051,10 +1054,10 @@ struct AskUserQuestionData: Identifiable {
         let questions = questionsArray.compactMap { UserQuestion.from($0) }
         guard !questions.isEmpty else { return nil }
 
-        return AskUserQuestionData(questions: questions)
+        return AskUserQuestionData(requestId: requestId, questions: questions)
     }
 
-    /// Format answers as a user-friendly response string
+    /// Format answers as a user-friendly response string (for display in chat)
     func formatAnswers() -> String {
         var lines: [String] = []
 
@@ -1076,6 +1079,29 @@ struct AskUserQuestionData: Identifiable {
         }
 
         return lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Format answers as a dictionary for the respondToQuestion API
+    /// Returns dict keyed by question index (as string) with answer value
+    func answersDict() -> [String: Any] {
+        var result: [String: Any] = [:]
+
+        for (index, question) in questions.enumerated() {
+            let key = String(index)
+
+            if !question.customAnswer.isEmpty {
+                // User provided custom "Other" answer
+                result[key] = question.customAnswer
+            } else if question.multiSelect {
+                // Multi-select: return array of selected options
+                result[key] = Array(question.selectedOptions)
+            } else if let first = question.selectedOptions.first {
+                // Single select: return the selected option
+                result[key] = first
+            }
+        }
+
+        return result
     }
 }
 

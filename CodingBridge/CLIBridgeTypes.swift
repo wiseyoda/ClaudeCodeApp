@@ -970,11 +970,16 @@ enum CLIAgentState: String, Decodable, Equatable {
 
     var isProcessing: Bool {
         switch self {
-        case .thinking, .executing, .starting:
+        case .thinking, .executing:
             return true
         default:
             return false
         }
+    }
+
+    /// True during connection phase (before agent is ready)
+    var isConnecting: Bool {
+        self == .starting
     }
 
     var isWaiting: Bool {
@@ -1417,7 +1422,7 @@ struct CLIGitStatus: Decodable {
 
 struct CLIFileEntry: Decodable, Identifiable {
     let name: String
-    let path: String
+    var path: String             // Full path (computed from directory + name during decode)
     let type: String?            // "file" or "directory"
     let size: Int?
     let modified: String?
@@ -1425,6 +1430,32 @@ struct CLIFileEntry: Decodable, Identifiable {
     let childCount: Int?         // Number of children (for directories)
 
     var id: String { path }
+
+    // Custom decoding - path is NOT in JSON, will be set by CLIFileListResponse
+    private enum CodingKeys: String, CodingKey {
+        case name, type, size, modified, `extension`, childCount
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        path = ""  // Placeholder - will be filled in by CLIFileListResponse
+        type = try container.decodeIfPresent(String.self, forKey: .type)
+        size = try container.decodeIfPresent(Int.self, forKey: .size)
+        modified = try container.decodeIfPresent(String.self, forKey: .modified)
+        `extension` = try container.decodeIfPresent(String.self, forKey: .extension)
+        childCount = try container.decodeIfPresent(Int.self, forKey: .childCount)
+    }
+
+    init(name: String, path: String, type: String?, size: Int?, modified: String?, extension ext: String?, childCount: Int?) {
+        self.name = name
+        self.path = path
+        self.type = type
+        self.size = size
+        self.modified = modified
+        self.`extension` = ext
+        self.childCount = childCount
+    }
 
     /// Whether this entry is a directory
     var isDir: Bool {
@@ -1474,8 +1505,29 @@ struct CLIFileEntry: Decodable, Identifiable {
 
 struct CLIFileListResponse: Decodable {
     let path: String
-    let entries: [CLIFileEntry]
+    var entries: [CLIFileEntry]
     let parent: String?          // Parent directory (null if at root)
+
+    private enum CodingKeys: String, CodingKey {
+        case path, entries, parent
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        path = try container.decode(String.self, forKey: .path)
+        parent = try container.decodeIfPresent(String.self, forKey: .parent)
+
+        // Decode entries and fill in their full paths
+        var decodedEntries = try container.decode([CLIFileEntry].self, forKey: .entries)
+        for i in decodedEntries.indices {
+            // Construct full path: directory + "/" + name
+            let dirPath = path.hasSuffix("/") ? String(path.dropLast()) : path
+            decodedEntries[i].path = dirPath.isEmpty || dirPath == "/"
+                ? "/\(decodedEntries[i].name)"
+                : "\(dirPath)/\(decodedEntries[i].name)"
+        }
+        entries = decodedEntries
+    }
 }
 
 struct CLIFileContentResponse: Decodable {

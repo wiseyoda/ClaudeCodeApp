@@ -152,27 +152,21 @@ struct NewProjectSheet: View {
         do {
             let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
 
-            // TODO: Replace with cli-bridge API endpoint when available
-            // POST /projects/create { name: string, initializeClaude: bool }
-            // For now, show error that this feature requires cli-bridge support
-            throw CLIBridgeAPIError.endpointNotAvailable(
-                "Create project requires cli-bridge API support. " +
-                "See CLI-BRIDGE-FEATURE-REQUEST.md for details."
+            let response = try await apiClient.createProject(
+                name: sanitizedName,
+                initializeClaude: initializeClaude
             )
 
-            // When API is available:
-            // let response = try await apiClient.createProject(
-            //     name: sanitizedName,
-            //     initializeClaude: initializeClaude
-            // )
-            //
-            // progress = "Project created!"
-            // try await Task.sleep(nanoseconds: 500_000_000)
-            //
-            // await MainActor.run {
-            //     onComplete()
-            //     dismiss()
-            // }
+            await MainActor.run {
+                progress = "Project created at \(response.path)"
+            }
+
+            try await Task.sleep(nanoseconds: 500_000_000)
+
+            await MainActor.run {
+                onComplete()
+                dismiss()
+            }
 
         } catch {
             await MainActor.run {

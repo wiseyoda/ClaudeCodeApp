@@ -5,8 +5,12 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject var settings: AppSettings
     @Environment(\.dismiss) var dismiss
+    @Environment(\.colorScheme) var colorScheme
     @State private var showSSHKeyImport = false
     @State private var hasSSHKey = KeychainHelper.shared.hasSSHKey
+
+    /// When false, hides the Done button (for tab embedding vs sheet presentation)
+    var showDismissButton: Bool = true
 
     // Binding for font size picker
     private var fontSizeBinding: Binding<FontSizePreset> {
@@ -214,13 +218,34 @@ struct SettingsView: View {
                         Text("Configure SSH host for direct terminal access. Leave blank to use cli-bridge APIs only.")
                     }
                 }
+
+                // Section 9: About
+                Section("About") {
+                    HStack {
+                        Text("Version")
+                        Spacer()
+                        Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    HStack {
+                        Text("Build")
+                        Spacer()
+                        Text(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "Unknown")
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+            .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
+                if showDismissButton {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("Done") {
+                            dismiss()
+                        }
                     }
                 }
             }

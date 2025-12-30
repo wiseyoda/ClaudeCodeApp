@@ -8,6 +8,7 @@ class ProjectCache: ObservableObject {
 
     @Published private(set) var cachedProjects: [Project] = []
     @Published private(set) var cachedGitStatuses: [String: GitStatus] = [:]
+    @Published private(set) var cachedBranchNames: [String: String] = [:]
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var isStale: Bool = true
 
@@ -42,6 +43,7 @@ class ProjectCache: ObservableObject {
                 Task { @MainActor [weak self] in
                     self?.cachedProjects = cache.projects
                     self?.cachedGitStatuses = cache.gitStatuses
+                    self?.cachedBranchNames = cache.branchNames
                     self?.lastUpdated = cache.timestamp
                     self?.isStale = cache.isStale(threshold: Self.staleThreshold)
                 }
@@ -52,15 +54,17 @@ class ProjectCache: ObservableObject {
     }
 
     /// Save projects to cache
-    func saveProjects(_ projects: [Project], gitStatuses: [String: GitStatus] = [:]) {
+    func saveProjects(_ projects: [Project], gitStatuses: [String: GitStatus] = [:], branchNames: [String: String] = [:]) {
         cachedProjects = projects
         cachedGitStatuses = gitStatuses
+        cachedBranchNames = branchNames
         lastUpdated = Date()
         isStale = false
 
         let cache = CachedProjectData(
             projects: projects,
             gitStatuses: gitStatuses,
+            branchNames: branchNames,
             timestamp: Date()
         )
 
@@ -77,23 +81,35 @@ class ProjectCache: ObservableObject {
     }
 
     /// Update git status for a single project (progressive loading)
-    func updateGitStatus(for projectPath: String, status: GitStatus) {
+    func updateGitStatus(for projectPath: String, status: GitStatus, branchName: String? = nil) {
         cachedGitStatuses[projectPath] = status
+        if let branch = branchName {
+            cachedBranchNames[projectPath] = branch
+        }
+    }
+
+    /// Update branch name for a single project
+    func updateBranchName(for projectPath: String, branch: String) {
+        cachedBranchNames[projectPath] = branch
     }
 
     /// Batch update git statuses
-    func updateGitStatuses(_ statuses: [String: GitStatus]) {
+    func updateGitStatuses(_ statuses: [String: GitStatus], branchNames: [String: String] = [:]) {
         for (path, status) in statuses {
             cachedGitStatuses[path] = status
         }
+        for (path, branch) in branchNames {
+            cachedBranchNames[path] = branch
+        }
         // Save updated statuses to cache
-        saveProjects(cachedProjects, gitStatuses: cachedGitStatuses)
+        saveProjects(cachedProjects, gitStatuses: cachedGitStatuses, branchNames: cachedBranchNames)
     }
 
     /// Clear the cache
     func clearCache() {
         cachedProjects = []
         cachedGitStatuses = [:]
+        cachedBranchNames = [:]
         lastUpdated = nil
         isStale = true
 
@@ -109,17 +125,20 @@ class ProjectCache: ObservableObject {
 private struct CachedProjectData: Codable {
     let projects: [Project]
     let storedGitStatuses: [String: CodableGitStatus]
+    let storedBranchNames: [String: String]?
     let timestamp: Date
 
     enum CodingKeys: String, CodingKey {
         case projects
         case storedGitStatuses = "gitStatuses"
+        case storedBranchNames = "branchNames"
         case timestamp
     }
 
-    init(projects: [Project], gitStatuses: [String: GitStatus], timestamp: Date) {
+    init(projects: [Project], gitStatuses: [String: GitStatus], branchNames: [String: String], timestamp: Date) {
         self.projects = projects
         self.storedGitStatuses = gitStatuses.mapValues { CodableGitStatus(from: $0) }
+        self.storedBranchNames = branchNames
         self.timestamp = timestamp
     }
 
@@ -131,6 +150,11 @@ private struct CachedProjectData: Codable {
     /// Get git statuses as [String: GitStatus]
     var gitStatuses: [String: GitStatus] {
         storedGitStatuses.mapValues { $0.toGitStatus }
+    }
+
+    /// Get branch names (optional for backwards compatibility)
+    var branchNames: [String: String] {
+        storedBranchNames ?? [:]
     }
 }
 

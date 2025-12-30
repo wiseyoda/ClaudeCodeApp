@@ -4,12 +4,13 @@ import SwiftUI
 /// This fixes binding issues that caused the sheet to freeze
 struct UserQuestionsSheetWrapper: View {
     let initialData: AskUserQuestionData
-    let onSubmit: (String) -> Void
+    /// Callback receives the full questionData with user selections
+    let onSubmit: (AskUserQuestionData) -> Void
     let onCancel: () -> Void
 
     @State private var questionData: AskUserQuestionData
 
-    init(initialData: AskUserQuestionData, onSubmit: @escaping (String) -> Void, onCancel: @escaping () -> Void) {
+    init(initialData: AskUserQuestionData, onSubmit: @escaping (AskUserQuestionData) -> Void, onCancel: @escaping () -> Void) {
         self.initialData = initialData
         self.onSubmit = onSubmit
         self.onCancel = onCancel
@@ -19,7 +20,10 @@ struct UserQuestionsSheetWrapper: View {
     var body: some View {
         UserQuestionsView(
             questionData: $questionData,
-            onSubmit: onSubmit,
+            onSubmit: { _ in
+                // Pass the full questionData back (with user selections)
+                onSubmit(questionData)
+            },
             onCancel: onCancel
         )
     }
@@ -262,28 +266,31 @@ struct OtherOptionButton: View {
 }
 
 #Preview {
-    let sampleData = AskUserQuestionData(questions: [
-        UserQuestion(
-            question: "Which library should we use for date formatting?",
-            header: "Library",
-            options: [
-                QuestionOption(label: "date-fns", description: "Lightweight and modular"),
-                QuestionOption(label: "moment.js", description: "Feature-rich but larger bundle"),
-                QuestionOption(label: "dayjs", description: "Similar API to moment, smaller size")
-            ],
-            multiSelect: false
-        ),
-        UserQuestion(
-            question: "Which features do you want to enable?",
-            header: "Features",
-            options: [
-                QuestionOption(label: "Caching", description: "Cache API responses"),
-                QuestionOption(label: "Logging", description: "Debug output"),
-                QuestionOption(label: "Analytics", description: "Usage tracking")
-            ],
-            multiSelect: true
-        )
-    ])
+    let sampleData = AskUserQuestionData(
+        requestId: "preview-request-id",
+        questions: [
+            UserQuestion(
+                question: "Which library should we use for date formatting?",
+                header: "Library",
+                options: [
+                    QuestionOption(label: "date-fns", description: "Lightweight and modular"),
+                    QuestionOption(label: "moment.js", description: "Feature-rich but larger bundle"),
+                    QuestionOption(label: "dayjs", description: "Similar API to moment, smaller size")
+                ],
+                multiSelect: false
+            ),
+            UserQuestion(
+                question: "Which features do you want to enable?",
+                header: "Features",
+                options: [
+                    QuestionOption(label: "Caching", description: "Cache API responses"),
+                    QuestionOption(label: "Logging", description: "Debug output"),
+                    QuestionOption(label: "Analytics", description: "Usage tracking")
+                ],
+                multiSelect: true
+            )
+        ]
+    )
 
     return UserQuestionsView(
         questionData: .constant(sampleData),

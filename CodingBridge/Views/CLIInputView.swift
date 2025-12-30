@@ -143,15 +143,15 @@ struct CLIInputView: View {
     private var recordingIndicator: some View {
         HStack(spacing: 8) {
             Circle()
-                .fill(CLITheme.red(for: colorScheme))
+                .fill(.white)
                 .frame(width: 8, height: 8)
             Text("Recording...")
                 .font(settings.scaledFont(.small))
-                .foregroundColor(CLITheme.red(for: colorScheme))
+                .foregroundColor(.white)
             if !speechManager.transcribedText.isEmpty {
                 Text(speechManager.transcribedText)
                     .font(settings.scaledFont(.small))
-                    .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+                    .foregroundColor(.white.opacity(0.9))
                     .lineLimit(1)
             }
             Spacer()
@@ -159,7 +159,8 @@ struct CLIInputView: View {
                 finishRecording()
             }
             .font(settings.scaledFont(.small))
-            .foregroundColor(CLITheme.blue(for: colorScheme))
+            .fontWeight(.semibold)
+            .foregroundColor(.white)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
