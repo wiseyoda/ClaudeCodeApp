@@ -81,11 +81,11 @@ Connection state handled via `ConnectionState` enum with clear transitions.
 | Guard message sends | `CLIBridgeAdapter.swift` | Complete - Validates before send |
 
 ### 3.3 SSH Command Serialization
-Citadel SSH library doesn't handle concurrent commands reliably.
+~~Citadel SSH library doesn't handle concurrent commands reliably.~~
 
-| Task | File | Action |
+| Task | File | Status |
 |------|------|--------|
-| Serialize git status checks | `ContentView.swift` | Use async queue or sequential execution |
+| Serialize git status checks | `ContentView.swift` | N/A - SSH removed, git status via cli-bridge API |
 
 ---
 
@@ -178,7 +178,7 @@ ChatView has 25+ @State properties and ~1968 lines.
 | Security tests | Shell escaping edge cases, command injection vectors |
 | URL encoding tests | Project paths with spaces, special chars, Unicode |
 | CLI Bridge tests | SSE parsing, connection state, error handling |
-| Integration tests | API endpoints, SSH command execution |
+| Integration tests | API endpoints, cli-bridge REST calls |
 | UI tests | SwiftUI views, accessibility |
 
 ### Run Tests
@@ -216,4 +216,4 @@ Phase 7 (Tests)        =========================================>
 
 ---
 
-_Last updated: December 29, 2025_
+_Last updated: December 30, 2025_
