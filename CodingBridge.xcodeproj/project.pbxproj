@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		CVMB0001 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CVMF0001 /* ChatViewModel.swift */; };
 		1205495BA2434BF79B906228 /* ErrorAnalyticsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 603895DCE0554062BCEC87F7 /* ErrorAnalyticsStore.swift */; };
 		1597F6A073B1490D948C46FE /* QuickCaptureSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F4D52190DB54B75A6081DAA /* QuickCaptureSheet.swift */; };
 		1D727765964448C0BF0B34A9 /* IdeasStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4676361593D14ED18823954D /* IdeasStore.swift */; };
@@ -132,6 +133,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		CVMF0001 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
 		1F4D52190DB54B75A6081DAA /* QuickCaptureSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickCaptureSheet.swift; sourceTree = "<group>"; };
 		2509F4FB2EFF976200EAFBFE /* CodingBridgeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CodingBridgeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2CE0280C4CD14A61A45D94D0 /* TagsFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagsFlowView.swift; sourceTree = "<group>"; };
@@ -314,6 +316,7 @@
 				GMAN0001 /* Managers */,
 				GPER0001 /* Persistence */,
 				GMOD0001 /* Models */,
+				GVMO0001 /* ViewModels */,
 				A2000007 /* Assets.xcassets */,
 				7280E348A6154DEB85D30D3D /* ToolErrorClassification.swift */,
 				603895DCE0554062BCEC87F7 /* ErrorAnalyticsStore.swift */,
@@ -448,6 +451,14 @@
 				DI000002 /* DraftInputPersistence.swift */,
 			);
 			path = Persistence;
+			sourceTree = "<group>";
+		};
+		GVMO0001 /* ViewModels */ = {
+			isa = PBXGroup;
+			children = (
+				CVMF0001 /* ChatViewModel.swift */,
+			);
+			path = ViewModels;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -626,6 +637,7 @@
 				A1000001 /* CodingBridgeApp.swift in Sources */,
 				A1000002 /* ContentView.swift in Sources */,
 				A1000003 /* ChatView.swift in Sources */,
+				CVMB0001 /* ChatViewModel.swift in Sources */,
 				A1000004 /* Models.swift in Sources */,
 				A1000006 /* AppSettings.swift in Sources */,
 				A1000008 /* Theme.swift in Sources */,
