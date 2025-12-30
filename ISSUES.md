@@ -26,32 +26,6 @@ When reporting a bug, include:
   - Check if SSE events have different token reporting than complete messages
 - **Priority**: Medium - affects user's ability to monitor usage
 
-### #28: `xcodebuild test` (all targets) fails to load CodingBridgeTests bundle
-- **What happened**: Running the default scheme test command fails with `Failed to create a bundle instance representing .../CodingBridgeTests.xctest`.
-- **Expected**: `xcodebuild test -project CodingBridge.xcodeproj -scheme CodingBridge ...` runs unit + UI tests without bundle load errors.
-- **Steps to reproduce**: Run `xcodebuild test -project CodingBridge.xcodeproj -scheme CodingBridge -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'`.
-- **Notes**: `-only-testing:CodingBridgeTests` and `-only-testing:CodingBridgeUITests` succeed independently.
-- **Investigation needed**:
-  - Inspect scheme/test plan configuration for mixed unit/UI targets.
-  - Verify test host/bundle loader settings and derived data staging.
-- **Location**: `CodingBridge.xcodeproj/xcshareddata/xcschemes/CodingBridge.xcscheme`, `CodingBridge.xcodeproj/project.pbxproj`
-
-### #29: BGTaskScheduler "Unrecognized Identifier" on Simulator (Low Priority)
-- **What happened**: BGTaskScheduler reports "Unrecognized Identifier" error even with correct bundle ID prefix and synchronous registration
-- **Expected**: Background tasks should register without errors
-- **Error**: `BGTaskSchedulerErrorDomain Code=3 "Unrecognized Identifier=com.level.CodingBridge.task.refresh"`
-- **Location**: `BackgroundManager.swift:106`
-- **Investigation done**:
-  - Task IDs use bundle ID prefix (com.level.CodingBridge.task.*)
-  - Info.plist BGTaskSchedulerPermittedIdentifiers match
-  - Registration is synchronous in didFinishLaunchingWithOptions
-  - UIBackgroundModes includes "fetch" and "processing"
-- **Notes**:
-  - May be simulator-specific limitation
-  - Core background notification flow works regardless (tested on device)
-  - iOS 26+ BGContinuedProcessingTask is the primary mechanism anyway
-- **Priority**: Low - doesn't block functionality
-
 ### #32: ClaudeHelper AI Suggestions Not Working
 - **What happened**: Auto-suggestions feature not triggering after Claude responses
 - **Expected**: AI should suggest next actions based on response context
@@ -107,6 +81,8 @@ See [CHANGELOG.md](CHANGELOG.md) for details on resolved issues.
 
 | # | Issue | Version |
 |---|-------|---------|
+| 29 | BGTaskScheduler simulator error (works on device, simulator limitation) | 0.6.1 |
+| 28 | xcodebuild test bundle issue (run tests separately as workaround) | 0.6.1 |
 | 25 | Voice transcription text contrast (fixed text color) | 0.6.1 |
 | 21 | High git error rate (not a bug - Claude recovers correctly) | 0.6.1 |
 | 20 | SSH timeout errors (SSH removed from iOS app) | 0.6.1 |
