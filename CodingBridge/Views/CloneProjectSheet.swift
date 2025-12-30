@@ -6,7 +6,6 @@ struct CloneProjectSheet: View {
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
-    @ObservedObject private var sshManager = SSHManager.shared
 
     @State private var gitURL = ""
     @State private var isCloning = false

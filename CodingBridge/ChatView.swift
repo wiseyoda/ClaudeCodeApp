@@ -23,7 +23,6 @@ struct ChatView: View {
     @StateObject private var ideasStore: IdeasStore
     @StateObject private var scrollManager = ScrollStateManager()
     @ObservedObject private var sessionStore = SessionStore.shared
-    @ObservedObject private var sshManager = SSHManager.shared
     @ObservedObject private var projectSettingsStore = ProjectSettingsStore.shared
 
     // MARK: - Chat State (messages, input, session)

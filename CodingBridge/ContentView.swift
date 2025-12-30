@@ -17,7 +17,6 @@ struct ContentView: View {
     @State private var projectToDelete: Project?
     @State private var showGlobalSearch = false
     @State private var showCommands = false
-    @ObservedObject private var sshManager = SSHManager.shared
     @ObservedObject private var sessionStore = SessionStore.shared
     @StateObject private var commandStore = CommandStore.shared
     @ObservedObject private var archivedStore = ArchivedProjectsStore.shared

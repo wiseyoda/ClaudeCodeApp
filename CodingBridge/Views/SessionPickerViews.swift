@@ -184,7 +184,6 @@ struct SessionPickerSheet: View {
     @State private var bulkDeleteConfirmation: BulkDeleteType? = nil
     @State private var isDeletingBulk = false
 
-    @ObservedObject private var sshManager = SSHManager.shared
     @ObservedObject private var sessionStore = SessionStore.shared
 
     /// Types of bulk delete operations for confirmation dialogs
