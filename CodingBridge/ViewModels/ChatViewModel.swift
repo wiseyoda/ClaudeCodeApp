@@ -121,7 +121,11 @@ class ChatViewModel: ObservableObject {
         Task {
             let savedMessages = await MessageStore.loadMessages(for: project.path)
             if !savedMessages.isEmpty {
-                messages = savedMessages
+                // Apply history limit on load for safety
+                let limit = settings.historyLimit.rawValue
+                messages = savedMessages.count > limit
+                    ? Array(savedMessages.suffix(limit))
+                    : savedMessages
                 refreshDisplayMessagesCache()
             } else {
                 refreshDisplayMessagesCache()
@@ -209,6 +213,13 @@ class ChatViewModel: ObservableObject {
         // Cancel any running message analysis
         analyzeTask?.cancel()
         analyzeTask = nil
+
+        // Cancel todo hide timer
+        todoHideTimer?.cancel()
+        todoHideTimer = nil
+
+        // Stop health monitoring when leaving chat (reduces background polling)
+        HealthMonitorService.shared.stopPolling()
 
         // Delay disconnect to handle NavigationSplitView layout recreations
         disconnectTask = Task {
@@ -384,8 +395,15 @@ class ChatViewModel: ObservableObject {
                         messages.append(ChatMessage(role: .assistant, content: lastMsg, timestamp: Date()))
                     }
                 } else {
-                    messages = historyMessages
-                    print("[ChatViewModel] Loaded \(historyMessages.count) messages from session export")
+                    // Apply history limit when loading to avoid memory bloat from large sessions
+                    let limit = settings.historyLimit.rawValue
+                    if historyMessages.count > limit {
+                        messages = Array(historyMessages.suffix(limit))
+                        print("[ChatViewModel] Loaded \(historyMessages.count) messages, pruned to \(limit)")
+                    } else {
+                        messages = historyMessages
+                        print("[ChatViewModel] Loaded \(historyMessages.count) messages from session export")
+                    }
                 }
                 isLoadingHistory = false
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
@@ -706,6 +724,12 @@ class ChatViewModel: ObservableObject {
                     }
                 }
             }
+
+            // Prune old messages to maintain performance in long sessions
+            self.pruneMessagesIfNeeded()
+
+            // Clear any lingering transient state from this processing cycle
+            self.cleanupAfterProcessingComplete()
         }
 
         wsManager.onError = { [weak self] error in
@@ -800,6 +824,8 @@ class ChatViewModel: ObservableObject {
             let historyMessages = payload.messages.map { $0.toChatMessage() }
             if !historyMessages.isEmpty {
                 self.messages.insert(contentsOf: historyMessages, at: 0)
+                // Prune after inserting history to stay within limit
+                self.pruneMessagesIfNeeded()
                 self.refreshDisplayMessagesCache()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                     self.scrollToBottomTrigger = true
@@ -1356,6 +1382,7 @@ class ChatViewModel: ObservableObject {
     // MARK: - Change Handlers
 
     func handleMessagesChange() {
+        // Debounce both save and display cache refresh to avoid rapid updates during streaming
         saveDebounceTask?.cancel()
         let projectPath = project.path
         let maxMessages = settings.historyLimit.rawValue
@@ -1364,7 +1391,41 @@ class ChatViewModel: ObservableObject {
             guard !Task.isCancelled else { return }
             MessageStore.saveMessages(messages, for: projectPath, maxMessages: maxMessages)
         }
+        // Cache refresh is guarded by invalidation key, so call is cheap if key unchanged
+        // But we still want to refresh to pick up new messages for display
         refreshDisplayMessagesCache()
+    }
+
+    // MARK: - Message Pruning
+
+    /// Prunes the messages array to maintain performance during long streaming sessions.
+    /// Uses a buffer above the history limit to avoid pruning on every single message.
+    private func pruneMessagesIfNeeded() {
+        let limit = settings.historyLimit.rawValue
+        // Use 20% buffer above limit before pruning to avoid constant array resizing
+        let pruneThreshold = limit + max(20, limit / 5)
+
+        guard messages.count > pruneThreshold else { return }
+
+        // Prune down to the limit
+        let oldCount = messages.count
+        messages = Array(messages.suffix(limit))
+        log.debug("[ChatViewModel] Pruned messages from \(oldCount) to \(messages.count)")
+    }
+
+    /// Cleanup transient state after a processing cycle completes.
+    /// Called from onComplete to prevent accumulation of lingering tasks/state.
+    private func cleanupAfterProcessingComplete() {
+        // Cancel any pending analyze task from previous response
+        analyzeTask?.cancel()
+        analyzeTask = nil
+
+        // Clear tool tracking maps that may have grown during session
+        toolUseMap.removeAll(keepingCapacity: true)
+        subagentToolIds.removeAll(keepingCapacity: true)
+
+        // Ensure streaming state is reset
+        wsManager.clearCurrentText()
     }
 
     func handleInputTextChange(_ newText: String) {

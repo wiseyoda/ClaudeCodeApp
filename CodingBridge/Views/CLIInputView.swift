@@ -31,7 +31,6 @@ struct CLIInputView: View {
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
     @StateObject private var speechManager = SpeechManager()
-    @ObservedObject private var commandStore = CommandStore.shared
     @State private var showAttachmentMenu = false
     @State private var showFilePicker = false
     @State private var showCommandPicker = false
@@ -130,7 +129,7 @@ struct CLIInputView: View {
         }
         .sheet(isPresented: $showCommandPicker) {
             CommandPickerSheet(
-                commandStore: commandStore,
+                commandStore: CommandStore.shared,
                 onSelect: { command in
                     insertCommandContent(command.content)
                 }
@@ -237,13 +236,11 @@ struct CLIInputView: View {
 
     private var attachmentMenuButton: some View {
         Menu {
-            // Saved Commands
-            if !commandStore.commands.isEmpty {
-                Button {
-                    showCommandPicker = true
-                } label: {
-                    Label("Saved Commands", systemImage: "text.book.closed")
-                }
+            // Saved Commands - always show option, picker handles empty state
+            Button {
+                showCommandPicker = true
+            } label: {
+                Label("Saved Commands", systemImage: "text.book.closed")
             }
 
             // File reference

@@ -468,13 +468,40 @@ class CLIBridgeManager: ObservableObject {
         }
 
         currentText = ""
+        textBuffer = ""
         pendingPermission = nil
         pendingQuestion = nil
         isInputQueued = false
         activeSubagent = nil
         toolProgress = nil
 
+        // Clear callbacks to break potential retain cycles
+        clearCallbacks()
+
         log.debug("[CLIBridge] Disconnected (preserveSession: \(preserveSession))")
+    }
+
+    /// Clear all callbacks to prevent retain cycles
+    private func clearCallbacks() {
+        onText = nil
+        onThinking = nil
+        onToolStart = nil
+        onToolResult = nil
+        onStopped = nil
+        onError = nil
+        onSessionConnected = nil
+        onModelChanged = nil
+        onPermissionRequest = nil
+        onQuestionRequest = nil
+        onPermissionModeChanged = nil
+        onSessionEvent = nil
+        onHistory = nil
+        onSubagentStart = nil
+        onSubagentComplete = nil
+        onConnectionReplaced = nil
+        onReconnecting = nil
+        onConnectionError = nil
+        onNetworkStatusChanged = nil
     }
 
     /// Disconnect but preserve session for later reconnection
@@ -974,6 +1001,8 @@ class CLIBridgeManager: ObservableObject {
     func clearCurrentText() {
         currentText = ""
         textBuffer = ""
+        textFlushTask?.cancel()
+        textFlushTask = nil
     }
 }
 

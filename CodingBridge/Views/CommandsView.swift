@@ -439,9 +439,14 @@ struct CommandEditorSheet: View {
 // MARK: - Date Extension
 
 extension Date {
-    var relativeFormatted: String {
+    // Shared formatter - expensive to create, so reuse
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .short
-        return formatter.localizedString(for: self, relativeTo: Date())
+        return formatter
+    }()
+
+    var relativeFormatted: String {
+        Self.relativeFormatter.localizedString(for: self, relativeTo: Date())
     }
 }

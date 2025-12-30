@@ -20,6 +20,24 @@ struct CLIMessageView: View {
     private let cachedToolHeaderText: String
     private let cachedResultCountBadge: String?
     private let cachedToolErrorInfo: ToolErrorInfo?
+    private let cachedTimestamp: String
+
+    // MARK: - Shared Formatters (expensive to create, so share across all instances)
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter
+    }()
+
+    private static let staticFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    /// Threshold for switching from relative to static time (1 hour)
+    private static let relativeTimeThreshold: TimeInterval = 3600
 
     init(message: ChatMessage, projectPath: String? = nil, projectTitle: String? = nil, onAnalyze: ((ChatMessage) -> Void)? = nil, hideTodoInline: Bool = false) {
         self.message = message
@@ -37,6 +55,16 @@ struct CLIMessageView: View {
             ? ToolResultParser.parse(message.content, toolName: nil)
             : nil
 
+        // Cache timestamp string - use static format for old messages, relative for recent
+        let age = Date().timeIntervalSince(message.timestamp)
+        if age > Self.relativeTimeThreshold {
+            // Old message: use static format (doesn't need updating)
+            self.cachedTimestamp = Self.staticFormatter.string(from: message.timestamp)
+        } else {
+            // Recent message: use relative format
+            self.cachedTimestamp = Self.relativeFormatter.localizedString(for: message.timestamp, relativeTo: Date())
+        }
+
         // Collapse result messages, common tool uses (Bash/Read/Grep/Glob), and thinking blocks by default
         let shouldStartCollapsed = message.role == .resultSuccess ||
             message.role == .toolResult ||
@@ -47,13 +75,6 @@ struct CLIMessageView: View {
 
     private var isBookmarked: Bool {
         bookmarkStore.isBookmarked(messageId: message.id)
-    }
-
-    /// Relative timestamp like "2m ago" or "1h ago"
-    private var relativeTimestamp: String {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: message.timestamp, relativeTo: Date())
     }
 
     var body: some View {
@@ -106,7 +127,7 @@ struct CLIMessageView: View {
 
                 // Relative timestamp (skip for toolUse, assistant, error - they show time below content)
                 if message.role != .toolUse && message.role != .assistant && message.role != .error {
-                    Text(relativeTimestamp)
+                    Text(cachedTimestamp)
                         .font(.system(size: 10))
                         .foregroundColor(CLITheme.mutedText(for: colorScheme).opacity(0.7))
 
@@ -172,7 +193,7 @@ struct CLIMessageView: View {
             // Footer for assistant messages: timestamp + copy button
             if message.role == .assistant && !message.content.isEmpty {
                 HStack(spacing: 6) {
-                    Text(relativeTimestamp)
+                    Text(cachedTimestamp)
                         .font(.system(size: 10))
                         .foregroundColor(CLITheme.mutedText(for: colorScheme).opacity(0.7))
 
@@ -226,7 +247,7 @@ struct CLIMessageView: View {
             // Footer for error messages: timestamp + copy button + ellipsis
             if message.role == .error && !message.content.isEmpty {
                 HStack(spacing: 6) {
-                    Text(relativeTimestamp)
+                    Text(cachedTimestamp)
                         .font(.system(size: 10))
                         .foregroundColor(CLITheme.mutedText(for: colorScheme).opacity(0.7))
 

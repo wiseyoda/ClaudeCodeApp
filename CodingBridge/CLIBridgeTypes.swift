@@ -1087,14 +1087,17 @@ struct CLISessionMetadata: Decodable {
         case helper
     }
 
+    // Shared formatter to avoid allocation on each property access
+    private static let isoFormatter = ISO8601DateFormatter()
+
     /// Parse createdAt as Date
     var createdDate: Date? {
-        ISO8601DateFormatter().date(from: createdAt)
+        Self.isoFormatter.date(from: createdAt)
     }
 
     /// Parse lastActivityAt as Date
     var lastActivityDate: Date? {
-        ISO8601DateFormatter().date(from: lastActivityAt)
+        Self.isoFormatter.date(from: lastActivityAt)
     }
 
     /// Display title - prefers customTitle over auto-generated title
@@ -1462,9 +1465,12 @@ struct CLIFileEntry: Decodable, Identifiable {
         type == "directory"
     }
 
+    // Shared formatter to avoid allocation on each property access
+    private static let isoFormatter = ISO8601DateFormatter()
+
     var modifiedDate: Date? {
         guard let modified = modified else { return nil }
-        return ISO8601DateFormatter().date(from: modified)
+        return Self.isoFormatter.date(from: modified)
     }
 
     /// SF Symbol icon for this file type
@@ -1540,6 +1546,14 @@ struct CLIFileContentResponse: Decodable {
     let language: String?        // Detected language for syntax highlighting
     let lineCount: Int?
 
+    // Shared formatters to avoid allocation on each property access
+    private static let isoFormatter = ISO8601DateFormatter()
+    private static let byteFormatter: ByteCountFormatter = {
+        let formatter = ByteCountFormatter()
+        formatter.countStyle = .file
+        return formatter
+    }()
+
     /// File name extracted from path
     var fileName: String {
         name ?? (path as NSString).lastPathComponent
@@ -1548,15 +1562,13 @@ struct CLIFileContentResponse: Decodable {
     /// Formatted file size
     var formattedSize: String? {
         guard let size = size else { return nil }
-        let formatter = ByteCountFormatter()
-        formatter.countStyle = .file
-        return formatter.string(fromByteCount: Int64(size))
+        return Self.byteFormatter.string(fromByteCount: Int64(size))
     }
 
     /// Modified date
     var modifiedDate: Date? {
         guard let modified = modified else { return nil }
-        return ISO8601DateFormatter().date(from: modified)
+        return Self.isoFormatter.date(from: modified)
     }
 }
 
@@ -1614,9 +1626,17 @@ struct CLISearchResult: Codable, Identifiable, Equatable {
 
     var id: String { sessionId }
 
+    // Shared formatters (expensive to create)
+    private static let isoFormatter = ISO8601DateFormatter()
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter
+    }()
+
     /// Parsed timestamp as Date
     var date: Date? {
-        ISO8601DateFormatter().date(from: timestamp)
+        Self.isoFormatter.date(from: timestamp)
     }
 
     /// Project name extracted from path
@@ -1627,9 +1647,7 @@ struct CLISearchResult: Codable, Identifiable, Equatable {
     /// Formatted relative date
     var formattedDate: String {
         guard let date = date else { return timestamp }
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: date, relativeTo: Date())
+        return Self.relativeFormatter.localizedString(for: date, relativeTo: Date())
     }
 
     /// Convenience accessor for the first snippet's text

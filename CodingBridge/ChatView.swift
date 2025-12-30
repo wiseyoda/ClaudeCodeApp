@@ -164,7 +164,9 @@ struct ChatView: View {
         .onDisappear {
             viewModel.onDisappear()
         }
-        .onChange(of: viewModel.messages) { _, newMessages in
+        .onChange(of: viewModel.messages.count) { _, _ in
+            // Only trigger on count changes (not content changes during streaming)
+            // This reduces onChange overhead from O(n) array comparison to O(1) int comparison
             viewModel.handleMessagesChange()
         }
         .onChange(of: viewModel.searchText) { _, _ in

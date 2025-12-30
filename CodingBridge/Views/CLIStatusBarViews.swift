@@ -12,7 +12,6 @@ struct UnifiedStatusBar: View {
     @Binding var showQuickSettings: Bool
     @EnvironmentObject var settings: AppSettings
     @ObservedObject private var projectSettingsStore = ProjectSettingsStore.shared
-    @ObservedObject private var healthService = HealthMonitorService.shared
     @Environment(\.colorScheme) var colorScheme
 
     /// Initializer with basic parameters
@@ -37,11 +36,9 @@ struct UnifiedStatusBar: View {
         HStack(spacing: 12) {
             // Connection status dot + Model name
             HStack(spacing: 6) {
-                // Single status dot with conditional pulsing opacity
-                Circle()
-                    .fill(statusColor)
-                    .frame(width: 8, height: 8)
-                    .modifier(ConditionalPulse(isActive: shouldPulse))
+                // Isolated status indicator - observes HealthMonitorService independently
+                // This prevents health check updates from re-rendering the entire status bar
+                StatusIndicatorDot(isProcessing: isProcessing)
 
                 // Show model name (tappable) - always visible for consistent layout
                 Button {
@@ -130,42 +127,6 @@ struct UnifiedStatusBar: View {
         .background(CLITheme.secondaryBackground(for: colorScheme))
     }
 
-    /// Status color based on server health and processing state
-    /// - Red: Server is down or unreachable
-    /// - Yellow: Server is up, agent is working
-    /// - Green: Server is up, idle/ready
-    private var statusColor: Color {
-        switch healthService.serverStatus {
-        case .disconnected:
-            // Red - server is down or unreachable
-            return CLITheme.red(for: colorScheme)
-        case .checking:
-            // Red while checking (will pulse)
-            return CLITheme.red(for: colorScheme)
-        case .connected:
-            if isProcessing {
-                // Yellow - agent is working
-                return CLITheme.yellow(for: colorScheme)
-            } else {
-                // Green - server up, ready
-                return CLITheme.green(for: colorScheme)
-            }
-        }
-    }
-
-    /// Whether the status indicator should pulse
-    /// - Pulses red when: checking connection or server is down and retrying
-    /// - Pulses yellow when: agent is processing
-    private var shouldPulse: Bool {
-        if isProcessing {
-            return true  // Pulse yellow while working
-        }
-        if healthService.serverStatus == .checking {
-            return true  // Pulse red while checking
-        }
-        return false
-    }
-
     /// Whether this project has a specific override (vs using global setting)
     private var hasProjectOverride: Bool {
         guard let path = projectPath else { return false }
@@ -193,6 +154,41 @@ struct UnifiedStatusBar: View {
             // Clear override to use global
             projectSettingsStore.setPermissionModeOverride(for: path, mode: nil)
         }
+    }
+}
+
+// MARK: - Status Indicator Dot (Isolated)
+
+/// Isolated view that observes HealthMonitorService independently.
+/// This prevents health check updates (every 30s) from re-rendering the parent status bar,
+/// which would cause unnecessary work during keyboard input.
+private struct StatusIndicatorDot: View {
+    let isProcessing: Bool
+    @ObservedObject private var healthService = HealthMonitorService.shared
+    @Environment(\.colorScheme) var colorScheme
+
+    var body: some View {
+        Circle()
+            .fill(statusColor)
+            .frame(width: 8, height: 8)
+            .modifier(ConditionalPulse(isActive: shouldPulse))
+    }
+
+    /// Status color based on server health and processing state
+    private var statusColor: Color {
+        switch healthService.serverStatus {
+        case .disconnected:
+            return CLITheme.red(for: colorScheme)
+        case .checking:
+            return CLITheme.red(for: colorScheme)
+        case .connected:
+            return isProcessing ? CLITheme.yellow(for: colorScheme) : CLITheme.green(for: colorScheme)
+        }
+    }
+
+    /// Whether the status indicator should pulse
+    private var shouldPulse: Bool {
+        isProcessing || healthService.serverStatus == .checking
     }
 }
 
@@ -294,12 +290,17 @@ private struct CompactTokenView: View {
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
 
-    private var percentage: Double {
-        guard total > 0 else { return 0 }
-        return Double(used) / Double(total)
+    /// Cached percentage (computed once per init, not on every body call)
+    private let percentage: Double
+
+    init(used: Int, total: Int) {
+        self.used = used
+        self.total = total
+        self.percentage = total > 0 ? Double(used) / Double(total) : 0
     }
 
     private var color: Color {
+        // Use cached percentage to avoid recalculating
         if percentage > 0.8 {
             return CLITheme.red(for: colorScheme)
         } else if percentage > 0.6 {

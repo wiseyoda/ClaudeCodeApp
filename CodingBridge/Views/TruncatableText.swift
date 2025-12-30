@@ -12,33 +12,32 @@ struct TruncatableText: View {
 
     @State private var showCopied = false
 
+    // Cached line data computed once at init (not on every body call)
+    private let cachedLines: [String]
+    private let totalLines: Int
+    private let isTruncatable: Bool
+    private let truncatedContent: String
+    private let hiddenLineCount: Int
+
     init(content: String, defaultLineLimit: Int = 8, isExpanded: Binding<Bool>) {
         self.content = content
         self.defaultLineLimit = defaultLineLimit
         self._isExpanded = isExpanded
-    }
 
-    private var lines: [String] {
-        content.components(separatedBy: "\n")
-    }
-
-    private var totalLines: Int {
-        lines.count
-    }
-
-    private var isTruncatable: Bool {
-        totalLines > defaultLineLimit
+        // Pre-compute line data once
+        let lines = content.components(separatedBy: "\n")
+        self.cachedLines = lines
+        self.totalLines = lines.count
+        self.isTruncatable = lines.count > defaultLineLimit
+        self.truncatedContent = lines.prefix(defaultLineLimit).joined(separator: "\n")
+        self.hiddenLineCount = max(0, lines.count - defaultLineLimit)
     }
 
     private var visibleContent: String {
         if isExpanded || !isTruncatable {
             return content
         }
-        return lines.prefix(defaultLineLimit).joined(separator: "\n")
-    }
-
-    private var hiddenLineCount: Int {
-        max(0, totalLines - defaultLineLimit)
+        return truncatedContent
     }
 
     var body: some View {
@@ -197,27 +196,29 @@ struct ThinkingBlockText: View {
 
     private let defaultLineLimit = 12
 
-    private var lines: [String] {
-        content.components(separatedBy: "\n")
-    }
+    // Cached line data computed once at init (not on every body call)
+    private let totalLines: Int
+    private let isTruncatable: Bool
+    private let truncatedContent: String
+    private let hiddenLineCount: Int
 
-    private var totalLines: Int {
-        lines.count
-    }
+    init(content: String, isExpanded: Binding<Bool>) {
+        self.content = content
+        self._isExpanded = isExpanded
 
-    private var isTruncatable: Bool {
-        totalLines > defaultLineLimit
+        // Pre-compute line data once
+        let lines = content.components(separatedBy: "\n")
+        self.totalLines = lines.count
+        self.isTruncatable = lines.count > defaultLineLimit
+        self.truncatedContent = lines.prefix(defaultLineLimit).joined(separator: "\n")
+        self.hiddenLineCount = max(0, lines.count - defaultLineLimit)
     }
 
     private var visibleContent: String {
         if isExpanded || !isTruncatable {
             return content
         }
-        return lines.prefix(defaultLineLimit).joined(separator: "\n")
-    }
-
-    private var hiddenLineCount: Int {
-        max(0, totalLines - defaultLineLimit)
+        return truncatedContent
     }
 
     var body: some View {

@@ -255,11 +255,16 @@ final class HealthMonitorService: ObservableObject {
         case poor      // > 500ms - red
     }
 
+    // Shared formatter for relative time (expensive to create)
+    private static let relativeFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter
+    }()
+
     /// Time since last check as relative string
     var lastCheckRelative: String? {
         guard let lastCheck = lastCheck else { return nil }
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: lastCheck, relativeTo: Date())
+        return Self.relativeFormatter.localizedString(for: lastCheck, relativeTo: Date())
     }
 }

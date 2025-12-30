@@ -130,6 +130,18 @@ Connection state handled via `ConnectionState` enum with clear transitions.
 |------|------|--------|
 | Async message loading | `Models.swift` | Pending |
 | Lazy image loading | `Models.swift` | Pending |
+| Message array pruning | `ChatViewModel.swift` | Complete - Prunes during streaming to historyLimit |
+| Display cache optimization | `ChatViewModel.swift` | Complete - Cached groupedDisplayItems |
+| Avoid nested ObservableObject | `ChatViewModel.swift` | Complete - WebSocket state accessors |
+| Cleanup after processing complete | `ChatViewModel.swift` | Complete - Clears tasks/maps on onComplete |
+| Stop health polling on disappear | `ChatViewModel.swift` | Complete - Stops HealthMonitorService |
+| Clear callbacks on disconnect | `CLIBridgeManager.swift` | Complete - Breaks retain cycles |
+| Cancel textFlushTask properly | `CLIBridgeManager.swift` | Complete - Cleared on clearCurrentText |
+| Optimize messages onChange | `ChatView.swift` | Complete - Changed from O(n) array to O(1) count comparison |
+| Isolate status indicator dot | `CLIStatusBarViews.swift` | Complete - HealthMonitorService observed in isolated subview |
+| Remove CLIInputView singleton observation | `CLIInputView.swift` | Complete - Removed CommandStore @ObservedObject |
+| Cache DateFormatter instances | Multiple files | Complete - Static shared formatters instead of creating on every call |
+| Cache timestamp strings in init | `CLIMessageView.swift` | Complete - Cached + static format for old (>1hr) messages |
 
 ### 5.2 Input Validation
 
