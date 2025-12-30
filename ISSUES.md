@@ -14,23 +14,6 @@ When reporting a bug, include:
 
 ## Open Issues
 
-### #20: SSH Timeout Errors (To Investigate)
-- **What happened**: Session analysis found 12 occurrences of exit code 254 (SSH timeout/connection issues)
-- **Expected**: SSH commands should complete or fail gracefully with clear error messaging
-- **Location**: `SSHManager.swift`
-- **Investigation needed**:
-  - Identify which commands trigger timeouts most frequently
-  - Check if Citadel SSH library has configurable timeout settings
-  - Consider retry logic for transient connection failures
-- **Source**: Session analysis 2025-12-28
-
-### #21: High Git Error Rate (Informational)
-- **What happened**: Session analysis found 62 exit code 128 errors (git not a repository)
-- **Expected**: N/A - Claude recovers by using `-C /path` flag
-- **Location**: Backend/Claude Code behavior
-- **Note**: Not a bug - documenting that Claude's git error recovery is working as expected
-- **Source**: Session analysis 2025-12-28
-
 ### #24: Token Usage Calculation Wildly Inaccurate (To Investigate)
 - **What happened**: Token counts displayed in the app are significantly wrong compared to actual usage
 - **Expected**: Token usage should reflect actual consumption accurately
@@ -42,15 +25,6 @@ When reporting a bug, include:
   - Consider client-side token estimation as fallback/validation
   - Check if SSE events have different token reporting than complete messages
 - **Priority**: Medium - affects user's ability to monitor usage
-
-### #25: Voice Transcription Bar Text Unreadable in Dark Mode
-- **What happened**: Gray text on red background during voice-to-text makes transcription text very hard to read, especially in dark mode
-- **Expected**: Text should have sufficient contrast against the red recording indicator background
-- **Location**: Voice transcription status bar UI (likely `SpeechManager` related views)
-- **Fix needed**:
-  - Change text color to white or light color when on red background
-  - Ensure WCAG AA contrast ratio (4.5:1 minimum) for accessibility
-- **Priority**: Medium - affects usability of voice input feature
 
 ### #28: `xcodebuild test` (all targets) fails to load CodingBridgeTests bundle
 - **What happened**: Running the default scheme test command fails with `Failed to create a bundle instance representing .../CodingBridgeTests.xctest`.
@@ -133,6 +107,9 @@ See [CHANGELOG.md](CHANGELOG.md) for details on resolved issues.
 
 | # | Issue | Version |
 |---|-------|---------|
+| 25 | Voice transcription text contrast (fixed text color) | 0.6.1 |
+| 21 | High git error rate (not a bug - Claude recovers correctly) | 0.6.1 |
+| 20 | SSH timeout errors (SSH removed from iOS app) | 0.6.1 |
 | 34 | Context menu missing from HomeView ProjectCards | 0.6.1 |
 | 33 | Session Manager not showing all sessions (blocking) | 0.6.1 |
 | 31 | PermissionMode dropdown missing from QuickSettingsSheet | 0.6.1 |
