@@ -351,6 +351,13 @@ class ChatViewModel: ObservableObject {
         }
     }
 
+    func selectSession(_ session: ProjectSession) {
+        selectedSession = session
+        wsManager.sessionId = session.id
+        MessageStore.saveSessionId(session.id, for: project.path)
+        loadSessionHistory(session)
+    }
+
     func loadSessionHistory(_ session: ProjectSession) {
         messages = []
         isLoadingHistory = true
@@ -1130,6 +1137,31 @@ class ChatViewModel: ObservableObject {
             self?.scrollToBottomTrigger = true
         }
     }
+
+    // MARK: - WebSocket State Accessors
+    // These expose wsManager properties to avoid nested ObservableObject observation
+    // which can cause unnecessary SwiftUI re-renders
+
+    var isProcessing: Bool { wsManager.isProcessing }
+    var isAborting: Bool { wsManager.isAborting }
+    var isConnected: Bool { wsManager.isConnected }
+    var isReattaching: Bool { wsManager.isReattaching }
+    var currentStreamingText: String { wsManager.currentText }
+    var tokenUsage: TokenUsage? { wsManager.tokenUsage }
+    var pendingApproval: ApprovalRequest? { wsManager.pendingApproval }
+    var pendingQuestion: AskUserQuestionData? { wsManager.pendingQuestion }
+    var isInputQueued: Bool { wsManager.isInputQueued }
+    var queuePosition: Int { wsManager.queuePosition }
+    var activeSubagent: CLISubagentStartContent? { wsManager.activeSubagent }
+    var toolProgress: CLIProgressContent? { wsManager.toolProgress }
+    var activeSessionId: String? { wsManager.sessionId }
+
+    func abortSession() { wsManager.abortSession() }
+    func approvePendingRequest(alwaysAllow: Bool) { wsManager.approvePendingRequest(alwaysAllow: alwaysAllow) }
+    func denyPendingRequest() { wsManager.denyPendingRequest() }
+    func cancelQueuedInput() { wsManager.cancelQueuedInput() }
+    func clearActiveSubagent() { wsManager.activeSubagent = nil }
+    func clearToolProgress() { wsManager.toolProgress = nil }
 
     // MARK: - Model Selection
 

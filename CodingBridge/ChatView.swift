@@ -140,9 +140,9 @@ struct ChatView: View {
                             Label("Bookmarks", systemImage: "bookmark")
                         }
 
-                        if viewModel.wsManager.isProcessing {
+                        if viewModel.isProcessing {
                             Button(role: .destructive) {
-                                viewModel.wsManager.abortSession()
+                                viewModel.abortSession()
                             } label: {
                                 Label("Abort", systemImage: "stop.circle")
                             }
@@ -179,7 +179,7 @@ struct ChatView: View {
         .onChange(of: viewModel.inputText) { _, newText in
             viewModel.handleInputTextChange(newText)
         }
-        .onChange(of: viewModel.wsManager.isProcessing) { oldValue, isProcessing in
+        .onChange(of: viewModel.isProcessing) { oldValue, isProcessing in
             viewModel.handleProcessingChange(oldValue: oldValue, isProcessing: isProcessing)
 
             // Refocus input when processing completes
@@ -192,9 +192,9 @@ struct ChatView: View {
         .onChange(of: scenePhase) { _, newPhase in
             switch newPhase {
             case .active:
-                if !viewModel.wsManager.isConnected {
+                if !viewModel.isConnected {
                     log.debug("[ChatView] App active - reconnecting WebSocket")
-                    viewModel.wsManager.connect()
+                    viewModel.wsManager.connect()  // Keep direct access for connect()
                 }
             case .inactive, .background:
                 break
@@ -202,7 +202,10 @@ struct ChatView: View {
                 break
             }
         }
-        .sheet(item: $viewModel.wsManager.pendingQuestion) { questionData in
+        .sheet(item: Binding(
+            get: { viewModel.pendingQuestion },
+            set: { _ in }  // Handled by wsManager
+        )) { questionData in
             userQuestionsSheet(questionData)
         }
         .sheet(isPresented: $viewModel.showingHelpSheet) {
@@ -214,10 +217,7 @@ struct ChatView: View {
                 sessions: viewModel.localSessionsBinding,
                 onSelect: { session in
                     viewModel.showingSessionPicker = false
-                    viewModel.selectedSession = session
-                    viewModel.wsManager.sessionId = session.id
-                    MessageStore.saveSessionId(session.id, for: project.path)
-                    viewModel.loadSessionHistory(session)
+                    viewModel.selectSession(session)
                 },
                 onCancel: {
                     viewModel.showingSessionPicker = false
@@ -250,7 +250,7 @@ struct ChatView: View {
                 ideasStore: viewModel.ideasStore,
                 claudeHelper: viewModel.claudeHelper,
                 projectPath: project.path,
-                currentSessionId: viewModel.wsManager.sessionId,
+                currentSessionId: viewModel.activeSessionId,
                 onSendIdea: { idea in
                     viewModel.appendToInput(idea.formattedPrompt)
                 }
@@ -294,9 +294,9 @@ struct ChatView: View {
 
         // Cmd+.: Abort current request
         Button("") {
-            if viewModel.wsManager.isProcessing {
+            if viewModel.isProcessing {
                 HapticManager.rigid()
-                viewModel.wsManager.abortSession()
+                viewModel.abortSession()
             }
         }
         .keyboardShortcut(".", modifiers: .command)
@@ -340,12 +340,10 @@ struct ChatView: View {
             sessions: viewModel.localSessionsBinding,
             selected: $viewModel.selectedSession,
             isLoading: viewModel.isLoadingHistory,
-            isProcessing: viewModel.wsManager.isProcessing,
-            activeSessionId: viewModel.wsManager.sessionId,
+            isProcessing: viewModel.isProcessing,
+            activeSessionId: viewModel.activeSessionId,
             onSelect: { session in
-                viewModel.wsManager.sessionId = session.id
-                MessageStore.saveSessionId(session.id, for: project.path)
-                viewModel.loadSessionHistory(session)
+                viewModel.selectSession(session)
             },
             onNew: {
                 viewModel.startNewSession()
@@ -475,7 +473,7 @@ struct ChatView: View {
                     guard settings.autoScrollEnabled else { return }
                     viewModel.scrollManager.requestScrollToBottom()
                 }
-                .onChange(of: viewModel.wsManager.isProcessing) { _, isProcessing in
+                .onChange(of: viewModel.isProcessing) { _, isProcessing in
                     guard settings.autoScrollEnabled else { return }
                     viewModel.scrollManager.requestScrollToBottom()
                 }
@@ -525,7 +523,7 @@ struct ChatView: View {
                 .id(item.id)
             }
 
-            if viewModel.wsManager.isProcessing {
+            if viewModel.isProcessing {
                 streamingIndicatorView
             }
 
@@ -540,7 +538,7 @@ struct ChatView: View {
 
     @ViewBuilder
     private var streamingIndicatorView: some View {
-        if viewModel.wsManager.isReattaching {
+        if viewModel.isReattaching {
             HStack(spacing: 6) {
                 ProgressView()
                     .scaleEffect(0.7)
@@ -551,7 +549,7 @@ struct ChatView: View {
             .font(settings.scaledFont(.body))
             .padding(.vertical, 4)
             .id("reattaching")
-        } else if viewModel.wsManager.currentText.isEmpty {
+        } else if viewModel.currentStreamingText.isEmpty {
             HStack(spacing: 6) {
                 Text("+")
                     .foregroundColor(CLITheme.yellow(for: colorScheme))
@@ -567,7 +565,7 @@ struct ChatView: View {
                 message: ChatMessage(
                     id: viewModel.streamingMessageId,
                     role: .assistant,
-                    content: viewModel.wsManager.currentText,
+                    content: viewModel.currentStreamingText,
                     timestamp: viewModel.streamingMessageTimestamp,
                     isStreaming: true
                 ),
@@ -593,56 +591,56 @@ struct ChatView: View {
             }
 
             // Permission approval banner
-            if let approval = viewModel.wsManager.pendingApproval {
+            if let approval = viewModel.pendingApproval {
                 ApprovalBannerView(
                     request: approval,
                     onApprove: {
-                        viewModel.wsManager.approvePendingRequest(alwaysAllow: false)
+                        viewModel.approvePendingRequest(alwaysAllow: false)
                     },
                     onAlwaysAllow: {
-                        viewModel.wsManager.approvePendingRequest(alwaysAllow: true)
+                        viewModel.approvePendingRequest(alwaysAllow: true)
                     },
                     onDeny: {
-                        viewModel.wsManager.denyPendingRequest()
+                        viewModel.denyPendingRequest()
                     }
                 )
             }
 
             // Input queued banner
-            if viewModel.wsManager.isInputQueued {
+            if viewModel.isInputQueued {
                 InputQueuedBanner(
-                    position: viewModel.wsManager.queuePosition,
+                    position: viewModel.queuePosition,
                     onCancel: {
-                        viewModel.wsManager.cancelQueuedInput()
+                        viewModel.cancelQueuedInput()
                     }
                 )
             }
 
             // Subagent banner
-            if let subagent = viewModel.wsManager.activeSubagent {
+            if let subagent = viewModel.activeSubagent {
                 SubagentBanner(subagent: subagent) {
-                    viewModel.wsManager.activeSubagent = nil
+                    viewModel.clearActiveSubagent()
                 }
             }
 
             // Tool progress banner
-            if let progress = viewModel.wsManager.toolProgress, viewModel.wsManager.pendingApproval == nil, viewModel.wsManager.pendingQuestion == nil {
+            if let progress = viewModel.toolProgress, viewModel.pendingApproval == nil, viewModel.pendingQuestion == nil {
                 ToolProgressBanner(progress: progress) {
-                    viewModel.wsManager.toolProgress = nil
+                    viewModel.clearToolProgress()
                 }
             }
 
             // Unified status bar
             UnifiedStatusBar(
-                isProcessing: viewModel.wsManager.isProcessing,
-                tokenUsage: viewModel.wsManager.tokenUsage,
+                isProcessing: viewModel.isProcessing,
+                tokenUsage: viewModel.tokenUsage,
                 effectivePermissionMode: viewModel.effectivePermissionModeValue,
                 projectPath: project.path,
                 showQuickSettings: $viewModel.showQuickSettings
             )
 
             // AI-powered suggestion chips
-            if settings.autoSuggestionsEnabled && !viewModel.wsManager.isProcessing && viewModel.inputText.isEmpty && !viewModel.claudeHelper.suggestedActions.isEmpty {
+            if settings.autoSuggestionsEnabled && !viewModel.isProcessing && viewModel.inputText.isEmpty && !viewModel.claudeHelper.suggestedActions.isEmpty {
                 SuggestionChipsView(
                     suggestions: viewModel.claudeHelper.suggestedActions,
                     isLoading: viewModel.claudeHelper.isLoading,
@@ -657,21 +655,21 @@ struct ChatView: View {
             CLIInputView(
                 text: $viewModel.inputText,
                 selectedImages: $viewModel.selectedImages,
-                isProcessing: viewModel.wsManager.isProcessing,
-                isAborting: viewModel.wsManager.isAborting,
+                isProcessing: viewModel.isProcessing,
+                isAborting: viewModel.isAborting,
                 projectPath: project.path,
                 isFocused: _isInputFocused,
                 onSend: viewModel.sendMessage,
-                onAbort: { viewModel.wsManager.abortSession() },
+                onAbort: { viewModel.abortSession() },
                 recentMessages: viewModel.messages,
                 claudeHelper: viewModel.claudeHelper,
-                sessionId: viewModel.wsManager.sessionId
+                sessionId: viewModel.activeSessionId
             )
             .id("input-view")
         }
         .sheet(isPresented: $viewModel.showQuickSettings) {
             QuickSettingsSheet(
-                tokenUsage: viewModel.wsManager.tokenUsage.map { (current: $0.used, max: $0.total) }
+                tokenUsage: viewModel.tokenUsage.map { (current: $0.used, max: $0.total) }
             )
         }
     }
