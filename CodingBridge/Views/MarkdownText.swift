@@ -473,7 +473,8 @@ struct MarkdownText: View {
             ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
                 HStack(spacing: 0) {
                     ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
-                        Text(cell)
+                        // Parse inline markdown (bold, code, etc.) within table cells
+                        Text(parseInlineFormatting(cell))
                             .font(settings.scaledFont(.small))
                             .foregroundColor(rowIndex == 0 ? CLITheme.cyan(for: colorScheme) : CLITheme.primaryText(for: colorScheme))
                             .fontWeight(rowIndex == 0 ? .semibold : .regular)

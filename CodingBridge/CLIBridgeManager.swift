@@ -760,7 +760,11 @@ class CLIBridgeManager: ObservableObject {
             onToolResult?(resultContent.id, resultContent.tool, resultContent.output, resultContent.success)
 
         case .progress(let progressContent):
-            toolProgress = progressContent
+            // Only update progress if NOT waiting for user input or permission approval
+            // (server continues sending progress while waiting, but we want to hide the banner)
+            if agentState != .waitingInput && agentState != .waitingPermission {
+                toolProgress = progressContent
+            }
 
         case .usage(let usageContent):
             tokenUsage = usageContent
@@ -775,6 +779,14 @@ class CLIBridgeManager: ObservableObject {
         case .subagentComplete(let subagentContent):
             activeSubagent = nil
             onSubagentComplete?(subagentContent)
+
+        case .question(let request):
+            // Question came via stream wrapper - handle same as top-level
+            handleQuestionRequest(request)
+
+        case .permission(let request):
+            // Permission came via stream wrapper - handle same as top-level
+            handlePermissionRequest(request)
         }
     }
 
@@ -788,6 +800,7 @@ class CLIBridgeManager: ObservableObject {
     private func handleQuestionRequest(_ request: CLIQuestionRequest) {
         pendingQuestion = request
         agentState = .waitingInput
+        toolProgress = nil  // Clear progress - tool is waiting for input, not running
         onQuestionRequest?(request)
     }
 
@@ -921,15 +934,15 @@ class CLIBridgeManager: ObservableObject {
 
     private func appendText(_ text: String, isFinal: Bool) {
         if isFinal {
-            // Final message contains the complete accumulated text (not a delta)
-            // Clear buffer and use the complete text directly
+            // cli-bridge sends delta=false with the COMPLETE accumulated text (not a delta)
+            // Clear buffer since the final message has the complete text
             textBuffer = ""
             textFlushTask?.cancel()
             textFlushTask = nil
-            currentText = text
+            currentText = text  // SET to complete text (replaces any accumulated text)
             onText?(text, true)
         } else {
-            // Delta message - append to buffer
+            // Delta message - append to buffer for UI display
             textBuffer += text
 
             // Debounce UI updates

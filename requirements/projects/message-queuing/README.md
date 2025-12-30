@@ -43,9 +43,9 @@ The app is considered "busy" (queuing active) when ANY of these are true:
 
 ## Research Findings
 
-**Backend**: Does NOT support concurrent message processing. Single-stream model expects one message at a time with `claude-complete` response before next.
+**Backend**: Does NOT support concurrent message processing. Single-stream model expects one message at a time with response before next.
 
-**Existing Code**: `WebSocketManager.swift` already has a `messageQueue` array (lines 115-131) used for retry logic. This can be extended for user-facing queuing.
+**Existing Code**: `CLIBridgeManager.swift` and `MessageQueuePersistence.swift` handle message sending. Queuing logic can be added to support user-facing message queuing.
 
 **Current Behavior**: UI completely blocks input via `isProcessing` flag. Need to change this to allow input that queues instead.
 

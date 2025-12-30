@@ -11,13 +11,13 @@ Client-side message queue implemented entirely in the iOS app. The backend and C
 │                         iOS App                                  │
 │                                                                 │
 │  ┌─────────────┐    ┌──────────────┐    ┌──────────────────┐   │
-│  │  ChatView   │───▶│ MessageQueue │───▶│ WebSocketManager │   │
+│  │  ChatView   │───▶│ MessageQueue │───▶│ CLIBridgeAdapter │   │
 │  │  (Input)    │    │   Manager    │    │   (Send)         │   │
 │  └─────────────┘    └──────────────┘    └──────────────────┘   │
 │         │                  │                     │              │
 │         │                  │                     ▼              │
 │         │                  │            ┌──────────────┐        │
-│         │                  │            │  WebSocket   │        │
+│         │                  │            │  SSE Stream  │        │
 │         │                  │            └──────────────┘        │
 │         │                  ▼                     │              │
 │         │          ┌──────────────┐              │              │
@@ -27,7 +27,7 @@ Client-side message queue implemented entirely in the iOS app. The backend and C
 │         │                                        │              │
 │         ▼                                        ▼              │
 │  ┌─────────────┐                        ┌──────────────┐        │
-│  │ QueuePanel  │                        │   Backend    │        │
+│  │ QueuePanel  │                        │  cli-bridge  │        │
 │  │   (UI)      │                        │ (unchanged)  │        │
 │  └─────────────┘                        └──────────────┘        │
 │                                                                 │
@@ -38,7 +38,7 @@ Client-side message queue implemented entirely in the iOS app. The backend and C
 
 ### MessageQueueManager
 
-New `@MainActor` class that owns the queue state and coordinates between UI and WebSocket.
+New `@MainActor` class that owns the queue state and coordinates between UI and SSE streaming.
 
 ```swift
 @MainActor
@@ -52,7 +52,7 @@ class MessageQueueManager: ObservableObject {
     var maxQueueSize: Int = 10
 
     // Dependencies
-    private let wsManager: WebSocketManager
+    private let bridgeAdapter: CLIBridgeAdapter
     private let persistence: QueuePersistence
 
     // Core operations
@@ -125,7 +125,7 @@ User types message
     ▼       ▼
 ┌───────┐ ┌────────────────┐
 │ Queue │ │ Send directly  │
-│ it    │ │ via WebSocket  │
+│ it    │ │ via SSE stream │
 └───────┘ └────────────────┘
     │
     ▼
@@ -162,7 +162,7 @@ Agent becomes idle (claude-complete received)
                 ▼
         ┌───────────────────┐
         │ Send via          │
-        │ WebSocket         │
+        │ SSE stream        │
         └───────────────────┘
                 │
                 ▼
@@ -207,7 +207,8 @@ Agent becomes idle (claude-complete received)
 
 | File | Changes |
 |------|---------|
-| `WebSocketManager.swift` | Expose busy signals, add queue integration hooks |
+| `CLIBridgeAdapter.swift` | Expose busy signals, add queue integration hooks |
+| `CLIBridgeManager.swift` | Add callbacks for processing completion |
 | `ChatView.swift` | Replace direct send with queue-aware send |
 | `CLIInputView.swift` | Remove `isProcessing` disable, add urgent toggle |
 | `AppSettings.swift` | Add `maxQueueSize` setting |
@@ -215,10 +216,10 @@ Agent becomes idle (claude-complete received)
 
 ## Integration Points
 
-### WebSocketManager Integration
+### CLIBridgeAdapter Integration
 
 ```swift
-// WebSocketManager.swift additions
+// CLIBridgeAdapter.swift additions
 
 // Expose busy state signals
 @Published var isToolExecuting: Bool = false
@@ -227,18 +228,18 @@ Agent becomes idle (claude-complete received)
 // Callback when processing completes (success or error)
 var onProcessingComplete: ((Result<Void, Error>) -> Void)?
 
-// In handleMessage():
-case "tool-start":
+// In SSE event handlers:
+// tool_use event:
     isToolExecuting = true
-case "tool-end":
+// tool_result event:
     isToolExecuting = false
-case "approval-required":
+// permission_request event:
     isPendingApproval = true
-case "approval-response":
+// permission_response:
     isPendingApproval = false
-case "claude-complete":
+// result event:
     onProcessingComplete?(.success(()))
-case "claude-error":
+// error event:
     onProcessingComplete?(.failure(error))
 ```
 
@@ -260,7 +261,7 @@ func sendMessage(_ content: String, urgent: Bool = false) {
     if busyState.isBusy {
         try? queueManager.enqueue(message)
     } else {
-        wsManager.sendMessage(content, ...)
+        bridgeAdapter.sendMessage(content, ...)
     }
 }
 ```
@@ -338,5 +339,5 @@ throw QueueError.queueFull(current: queue.count, max: maxQueueSize)
 | Unit | Queue operations (enqueue, dequeue, reorder, priority) |
 | Unit | Persistence save/load/corruption handling |
 | Unit | Busy state aggregation |
-| Integration | Queue + WebSocket flow |
+| Integration | Queue + SSE stream flow |
 | UI | Queue panel interactions |

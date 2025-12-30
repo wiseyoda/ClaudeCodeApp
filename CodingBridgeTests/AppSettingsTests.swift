@@ -198,4 +198,33 @@ final class AppSettingsTests: XCTestCase {
 
         XCTAssertEqual(settings.effectivePermissionMode, "acceptEdits")
     }
+
+    // MARK: - Push Notification Settings Tests
+
+    func test_enablePushNotifications_defaultsToFalse() {
+        let settings = AppSettings()
+        // Push notifications should be OFF by default (experimental feature)
+        XCTAssertFalse(settings.enablePushNotifications)
+    }
+
+    func test_enableBackgroundNotifications_defaultsToTrue() {
+        let settings = AppSettings()
+        XCTAssertTrue(settings.enableBackgroundNotifications)
+    }
+
+    func test_enableLiveActivities_defaultsToTrue() {
+        let settings = AppSettings()
+        XCTAssertTrue(settings.enableLiveActivities)
+    }
+
+    func test_enableTimeSensitiveNotifications_defaultsToTrue() {
+        let settings = AppSettings()
+        XCTAssertTrue(settings.enableTimeSensitiveNotifications)
+    }
+
+    func test_showNotificationDetails_defaultsToFalse() {
+        let settings = AppSettings()
+        // Notification details are hidden by default for privacy
+        XCTAssertFalse(settings.showNotificationDetails)
+    }
 }

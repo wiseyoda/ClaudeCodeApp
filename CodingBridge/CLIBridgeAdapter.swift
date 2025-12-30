@@ -474,8 +474,14 @@ class CLIBridgeAdapter: ObservableObject {
             guard let self = self else { return }
             self.currentText = self.manager.currentText
             self.onText?(content)
+
             if isFinal {
-                self.onTextCommit?(self.currentText)
+                // Capture text and clear BEFORE callback to prevent streaming view showing same text
+                // SwiftUI may render immediately after messages.append(), so currentText must be empty
+                let textToCommit = self.currentText
+                self.manager.clearCurrentText()
+                self.currentText = ""
+                self.onTextCommit?(textToCommit)
             }
         }
 
@@ -485,12 +491,15 @@ class CLIBridgeAdapter: ObservableObject {
 
         manager.onToolStart = { [weak self] id, tool, input in
             // Convert input dict to JSON string for compatibility
+            // First, recursively convert to ensure all values are JSON-serializable
+            let sanitizedInput = Self.sanitizeForJSON(input)
             let inputString: String
-            if let data = try? JSONSerialization.data(withJSONObject: input),
+            if let data = try? JSONSerialization.data(withJSONObject: sanitizedInput),
                let str = String(data: data, encoding: .utf8) {
                 inputString = str
             } else {
-                inputString = String(describing: input)
+                // Fallback: try to produce a JSON-like string manually
+                inputString = Self.toJSONLikeString(input)
             }
             self?.onToolUse?(tool, inputString)
         }
@@ -544,6 +553,7 @@ class CLIBridgeAdapter: ObservableObject {
 
         manager.onPermissionRequest = { [weak self] request in
             guard let self = self else { return }
+
             // Convert to ApprovalRequest for compatibility
             let approval = ApprovalRequest(
                 id: request.id,
@@ -768,6 +778,74 @@ class CLIBridgeAdapter: ObservableObject {
         if desiredLower.contains(serverLower) { return true }
 
         return false
+    }
+
+    // MARK: - JSON Serialization Helpers
+
+    /// Recursively convert a value to ensure it's JSON-serializable
+    /// This handles nested arrays/dicts that might contain non-Foundation types
+    private static func sanitizeForJSON(_ value: Any) -> Any {
+        switch value {
+        case let array as [Any]:
+            return array.map { sanitizeForJSON($0) }
+        case let dict as [String: Any]:
+            return dict.mapValues { sanitizeForJSON($0) }
+        case let string as String:
+            return string
+        case let number as NSNumber:
+            return number
+        case let bool as Bool:
+            return bool
+        case let int as Int:
+            return int
+        case let double as Double:
+            return double
+        case is NSNull:
+            return NSNull()
+        default:
+            // Convert unknown types to string representation
+            return String(describing: value)
+        }
+    }
+
+    /// Produce a JSON-like string for a dictionary when JSONSerialization fails
+    /// This is a fallback that produces parseable output for TodoListView
+    private static func toJSONLikeString(_ value: Any) -> String {
+        switch value {
+        case let array as [Any]:
+            let elements = array.map { toJSONLikeString($0) }
+            return "[\(elements.joined(separator: ", "))]"
+        case let dict as [String: Any]:
+            let pairs = dict.map { key, val in
+                "\"\(escapeJSON(key))\": \(toJSONLikeString(val))"
+            }
+            return "{\(pairs.joined(separator: ", "))}"
+        case let string as String:
+            return "\"\(escapeJSON(string))\""
+        case let number as NSNumber:
+            return "\(number)"
+        case let bool as Bool:
+            return bool ? "true" : "false"
+        case let int as Int:
+            return "\(int)"
+        case let double as Double:
+            return "\(double)"
+        case is NSNull:
+            return "null"
+        default:
+            return "\"\(escapeJSON(String(describing: value)))\""
+        }
+    }
+
+    /// Escape special characters for JSON strings
+    private static func escapeJSON(_ string: String) -> String {
+        var result = string
+        result = result.replacingOccurrences(of: "\\", with: "\\\\")
+        result = result.replacingOccurrences(of: "\"", with: "\\\"")
+        result = result.replacingOccurrences(of: "\n", with: "\\n")
+        result = result.replacingOccurrences(of: "\r", with: "\\r")
+        result = result.replacingOccurrences(of: "\t", with: "\\t")
+        return result
     }
 
     // MARK: - State Synchronization

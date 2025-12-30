@@ -6,6 +6,91 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.6.1] - 2025-12-29
+
+### Fixed
+
+- **Session History Tool Rendering**: History now displays tool usage with proper styling
+  - Added `includeStructuredContent` parameter to `exportSession()` API call
+  - Updated `parseExportMessage()` to handle structured content arrays from cli-bridge
+  - Added `parseStructuredContent()` to parse `tool_use`, `tool_result`, and `thinking` blocks
+  - Tool calls now render with tool name badges and formatted input/output
+  - Thinking blocks display with distinct purple styling
+
+### Changed
+
+- Unified all target versions to 0.6.1 in project settings
+
+---
+
+## [0.6.0] - 2025-12-29
+
+### Added
+
+- **cli-bridge Migration**: Complete migration from WebSocket to REST API with SSE streaming
+  - `CLIBridgeManager.swift` - Core REST API client, SSE stream handling
+  - `CLIBridgeAdapter.swift` - Callback-style interface adapter for existing code
+  - `CLIBridgeAPIClient.swift` - HTTP client for health checks and project/session listing
+  - `CLIBridgeTypes.swift` - All message types and protocol models
+- **Permission System**: New permission management components
+  - `PermissionManager.swift` - Permission state and history tracking
+  - `PermissionTypes.swift` - Permission type definitions
+- **Background Infrastructure**: Live Activity and push notification support
+  - `LiveActivityManager.swift` - Live Activity updates
+  - `LiveActivityAttributes.swift` - Activity attribute models
+  - `PushNotificationManager.swift` - Push notification handling
+- **New Utilities**:
+  - `HealthMonitorService.swift` - Backend connectivity monitoring
+  - `KeychainHelper.swift` - Secure credential storage
+  - `SSHKeyDetection.swift` - SSH key type detection and validation
+  - `SearchHistoryStore.swift` - Search query persistence
+- **New Views**:
+  - `SettingsView.swift` - App settings UI
+  - `DiagnosticsView.swift` - Debug diagnostics
+  - `ServerHealthView.swift` - Backend health display
+  - `PermissionSettingsView.swift` - Permission configuration
+  - `FileBrowserView.swift` - File system navigation
+  - `FileContentViewer.swift` - File content display
+  - `GitStatusIndicator.swift` - Git status icons
+  - `GitSyncBanner.swift` - Git sync notifications
+  - `SSHKeyImportSheet.swift` - SSH key import UI
+  - `CustomModelPickerSheet.swift` - Custom model selection
+  - `SlashCommandHelpSheet.swift` - Slash command reference
+  - `MetricsDashboardView.swift` - Metrics display
+  - `ProjectDetailView.swift` - Project details
+  - `ProjectListViews.swift` - Project list components
+  - `CLIBridgeBanners.swift` - Status banners
+  - `ChatViewExtensions.swift` - Chat view extensions
+- **New Models**:
+  - `GitModels.swift` - Git status and operations models
+  - `ImageAttachment.swift` - Image attachment handling
+
+### Removed
+
+- **WebSocket Architecture**: Superseded by cli-bridge REST API with SSE
+  - `WebSocketManager.swift` (1,363 lines)
+  - `APIClient.swift` (608 lines)
+  - `WebSocketManagerParsingTests.swift`
+  - `WebSocketManagerSessionIdTests.swift`
+  - `WebSocketModelsTests.swift`
+  - `ConnectionStateTests.swift`
+  - `SessionWebSocketIntegrationTests.swift`
+- **Obsolete Documentation**:
+  - `.claude/rules/websocket-patterns.md`
+  - `requirements/projects/background-hardening/` (moved to separate planning)
+  - `requirements/projects/claudecode-fork/implementation-plan.md`
+  - `requirements/projects/xcode-suggestions.md`
+
+### Changed
+
+- **Architecture**: REST API with SSE streaming replaces WebSocket for all Claude communication
+- **Code Reduction**: Net reduction of ~9,000 lines through consolidation
+- **Documentation**: Updated all requirements docs for cli-bridge architecture
+- Default server URL changed from port 8080 to 3100 (cli-bridge default)
+- Simplified connection state management
+
+---
+
 ## [0.5.1] - 2025-12-28
 
 ### Added
@@ -358,3 +443,4 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | 0.4.0   | Message action bar, critical bug fixes, test suite     |
 | 0.5.0   | Session API migration, permission approval, iOS 26 UI  |
 | 0.5.1   | Message queuing docs, haptics, scroll UX, bug fixes    |
+| 0.6.0   | **cli-bridge migration** - REST API with SSE streaming |

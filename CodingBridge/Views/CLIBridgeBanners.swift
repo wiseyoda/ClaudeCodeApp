@@ -183,7 +183,7 @@ struct ToolProgressBanner: View {
             .font(.system(size: 11, weight: .medium, design: .monospaced))
             .foregroundColor(CLITheme.secondaryText(for: colorScheme))
         } else {
-          Text("\(progress.elapsed)s")
+          Text("\(progress.elapsedSeconds)s")
             .font(.system(size: 11, weight: .medium, design: .monospaced))
             .foregroundColor(CLITheme.secondaryText(for: colorScheme))
         }

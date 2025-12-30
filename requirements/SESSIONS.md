@@ -1,6 +1,6 @@
 # Session Management
 
-> Comprehensive guide to how Claude Code sessions work, including file formats, API limitations, and iOS app implementation details.
+> Comprehensive guide to how Claude Code sessions work, including file formats, API, and iOS app implementation details.
 
 ## Overview
 
@@ -19,7 +19,7 @@ $HOME/.claude/projects/{encoded-path}/{session-id}.jsonl
 > **Note**: Use `$HOME` instead of `~` in SSH commands. Tilde expansion doesn't work reliably inside quoted strings. See `.claude/rules/ssh-security.md` for details.
 
 **Path Encoding**: Project paths are encoded by replacing `/` with `-`:
-- `/home/dev/workspace/ClaudeCodeApp` → `-home-dev-workspace-ClaudeCodeApp`
+- `/home/dev/workspace/ClaudeCodeApp` -> `-home-dev-workspace-ClaudeCodeApp`
 
 **Session ID Format**: Standard UUID v4:
 - `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`
@@ -117,65 +117,6 @@ Each line in a session file is a JSON object. Common message types:
 }
 ```
 
-## Session API (Fork Enhancement)
-
-### Backend API (wiseyoda/claudecodeui fork)
-
-Our fork adds a proper session listing endpoint with pagination:
-
-```
-GET /api/projects/:name/sessions?limit=100&offset=0&type=display
-Authorization: Bearer <token>
-```
-
-Response:
-```json
-{
-  "sessions": [
-    {"id": "uuid", "summary": "...", "messageCount": 42, "lastActivity": "...", "sessionType": "display"}
-  ],
-  "pagination": {"total": 85, "limit": 100, "offset": 0, "hasMore": false}
-}
-```
-
-**Parameters:**
-- `limit` - Sessions per page (default: 100, max: 1000)
-- `offset` - Pagination offset
-- `type` - Filter: `display` (user sessions), `agent`, `helper`, or `all`
-
-**Session Types:**
-| Type | Description |
-|------|-------------|
-| `display` | Regular user sessions (shown in picker) |
-| `agent` | Sub-agent sessions from Task tool |
-| `helper` | ClaudeHelper suggestion sessions |
-
-### WebSocket Push Events
-
-The fork sends real-time updates when sessions change:
-
-```json
-{
-  "type": "sessions-updated",
-  "action": "created|updated|deleted",
-  "projectPath": "/home/dev/workspace/ClaudeCodeApp",
-  "session": {"id": "uuid", "summary": "...", ...}
-}
-```
-
-### Upstream Limitations
-
-The original siteboon/claudecodeui backend returns only ~5 sessions per project. Our fork fixes this with proper pagination.
-
-### Fallback: SSH-Based Loading
-
-For session message history (individual session content), SSH is still used:
-
-```swift
-// SSHManager.loadSessionMessages() - loads messages from .jsonl file
-// (API history endpoint still has CORS issues)
-```
-
 ## iOS App Session Management
 
 ### Clean Architecture
@@ -183,15 +124,15 @@ For session message history (individual session content), SSH is still used:
 The session system follows Clean Architecture principles:
 
 ```
-Views → SessionStore → SessionRepository → APIClient → Backend
-         (state)       (data layer)        (HTTP)
+Views -> SessionStore -> SessionRepository -> CLIBridgeAPIClient -> Backend
+         (state)       (data layer)          (HTTP)
 ```
 
 | Layer | Component | Purpose |
 |-------|-----------|---------|
 | State | `SessionStore` | Single source of truth, pagination, filtering |
 | Data | `SessionRepository` | Protocol abstraction + API implementation |
-| Network | `APIClient` | HTTP requests with JWT auth |
+| Network | `CLIBridgeAPIClient` | HTTP requests |
 | View | `SessionPickerViews` | UI for session list |
 
 ### SessionStore (Singleton)
@@ -209,23 +150,22 @@ Access via `SessionStore.shared`. Manages all session state:
 - `loadSessions(for:)` - Fetch from API
 - `loadMore(for:)` - Pagination
 - `deleteSession(_:for:)` - Optimistic delete with rollback
-- `handleSessionsUpdated(...)` - Process WebSocket push events
 - `displaySessions(for:)` - Filtered/sorted for UI
 
 ### Session ID Sources
 
 | Source | Where Used | Notes |
 |--------|-----------|-------|
-| `wsManager.sessionId` | Active WebSocket session | Set on `session-created` callback |
+| `bridgeAdapter.sessionId` | Active session | Set on `result` SSE event |
 | `SessionStore.shared` | All session state | Single source of truth |
 | `activeSessionIds[path]` | Currently open session | Per-project tracking |
 
 ### Session Creation Flow
 
-1. **User clicks "New"** → Clears `wsManager.sessionId` and `selectedSession`
-2. **User sends first message** → Backend creates session → `session-created` WebSocket message
-3. **`onSessionCreated` callback** → Sets `wsManager.sessionId`, saves to `MessageStore`
-4. **Session appears in picker** → Added to `localSessions`, filter passes it through
+1. **User clicks "New"** -> Clears `bridgeAdapter.sessionId` and `selectedSession`
+2. **User sends first message** -> Backend creates session -> `result` SSE event
+3. **`onComplete` callback** -> Sets `bridgeAdapter.sessionId`, saves to `MessageStore`
+4. **Session appears in picker** -> Added to `localSessions`, filter passes it through
 
 ### ClaudeHelper Sessions
 
@@ -234,7 +174,7 @@ ClaudeHelper (suggestions, file analysis) uses a deterministic session ID per pr
 ```swift
 // ClaudeHelper.createHelperSessionId(for:)
 // Generates consistent UUID from project path hash
-// Example: /home/dev/workspace/ClaudeCodeApp → always same UUID
+// Example: /home/dev/workspace/ClaudeCodeApp -> always same UUID
 ```
 
 This prevents session pollution (previously created new session for every helper call).
@@ -301,8 +241,8 @@ head -1 | head -c 80
 |------|---------|
 | `SessionStore.swift` | Centralized state management, pagination, filtering |
 | `SessionRepository.swift` | Protocol + API implementation + Mock |
-| `WebSocketManager.swift` | Session creation, `sessions-updated` handling |
-| `APIClient.swift` | HTTP requests for session API |
+| `CLIBridgeAdapter.swift` | Session creation via SSE `result` event |
+| `CLIBridgeAPIClient.swift` | HTTP requests for session API |
 | `ChatView.swift` | Session selection UI |
 | `SSHManager.swift` | Session message loading (JSONL parsing) |
 | `Models.swift` | `ProjectSession`, `ProjectSessionMeta` |
@@ -316,23 +256,21 @@ head -1 | head -c 80
 ### Sessions Not Appearing in Picker
 1. Check `SessionStore.shared.sessionsByProject` has data
 2. Verify `displaySessions(for:)` isn't filtering too aggressively
-3. Ensure WebSocket `sessions-updated` events are being handled
+3. Ensure SSE `result` events are being handled
 4. Check `activeSessionIds[path]` is passed to filter
 
 ### Session List Not Updating
-1. Verify WebSocket is connected and receiving `sessions-updated` events
-2. Check `SessionStore.handleSessionsUpdated()` is being called
+1. Verify CLI Bridge is connected and receiving SSE events
+2. Check `SessionStore` methods are being called
 3. Look for errors in debug logs
 
 ### Wrong Session Counts
 1. Check `SessionStore.metaByProject[path]?.total`
 2. Verify API is returning correct pagination data
-3. Ensure fork is deployed (upstream has 5-session limit)
 
 ### ClaudeHelper Creating Many Sessions
 1. Ensure `createHelperSessionId()` returns valid UUID format
 2. Verify helper session ID is consistent for same project path
-3. Backend should filter helper sessions with `type=display` parameter
 
 ### Session Titles Missing
 1. Check `jq` is installed on server (for SSH fallback)

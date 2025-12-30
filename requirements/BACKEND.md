@@ -2,7 +2,7 @@
 
 ## Overview
 
-The iOS app connects to [cli-bridge](https://github.com/anthropics/claude-code) backend via REST API with SSE streaming. Optional SSH access for file operations.
+The iOS app connects to [cli-bridge](https://github.com/anthropics/claude-code/tree/main/packages/cli-bridge) backend via REST API with SSE streaming. Optional SSH access for file operations.
 
 ## Prerequisites
 
@@ -67,125 +67,82 @@ Production authentication will be documented once cli-bridge is deployed to QNAP
 
 ## API Reference
 
-### Authentication
+### Health Check
 
 ```
-POST /api/auth/login
+GET /health
+```
+
+Response:
+```json
+{
+  "status": "ok",
+  "agents": 0,
+  "uptime": 12345
+}
+```
+
+### Create Agent
+
+```
+POST /agents
+Content-Type: application/json
 ```
 
 Request:
 ```json
-{"username": "admin", "password": "yourpassword"}
-```
-
-Response:
-```json
-{"success": true, "token": "eyJhbGciOiJIUzI1NiIs..."}
-```
-
-### Projects
-
-```
-GET /api/projects
-Authorization: Bearer <token>
-```
-
-Response:
-```json
 {
-  "projects": [
-    {
-      "path": "/home/dev/workspace/my-project",
-      "encodedName": "-home-dev-workspace-my-project"
-    }
-  ]
+  "cwd": "/home/dev/workspace/my-project"
 }
 ```
 
-### WebSocket Chat
-
-Connect to: `ws://host:port/ws?token=<jwt_token>`
-
-**Send Message:**
+Response:
 ```json
 {
-  "type": "claude-command",
+  "id": "agent-uuid-here"
+}
+```
+
+### Send Message (SSE Streaming)
+
+```
+POST /agents/:id/message
+Content-Type: application/json
+Accept: text/event-stream
+```
+
+Request:
+```json
+{
   "message": "Help me fix this bug",
-  "cwd": "/home/dev/workspace/my-project",
   "sessionId": "optional-session-id",
-  "permissionMode": "default",
   "options": {
     "model": "claude-sonnet-4-20250514"
   }
 }
 ```
 
-**Response Types:**
-| Type | Purpose |
-|------|---------|
-| `claude-response` | Streaming content |
-| `claude-complete` | Task finished |
-| `token-budget` | Usage stats |
-| `sessions-updated` | Session list changed (create/update/delete) |
-| `permission-request` | Tool approval request (when bypass disabled) |
-| `error` | Error message |
+Response: Server-Sent Events stream
 
-**Permission Response (iOS → Backend):**
-```json
-{
-  "type": "permission-response",
-  "requestId": "req-123",
-  "approved": true,
-  "alwaysAllow": false
-}
-```
+**SSE Event Types:**
+| Event | Data | Purpose |
+|-------|------|---------|
+| `assistant` | `{"text": "..."}` | Streaming text content |
+| `tool_use` | `{"name": "...", "input": {...}}` | Tool invocation |
+| `tool_result` | `{"output": "..."}` | Tool output |
+| `thinking` | `{"text": "..."}` | Reasoning block |
+| `result` | `{"sessionId": "...", "usage": {...}}` | Task complete |
+| `error` | `{"message": "..."}` | Error message |
 
 ### Abort Request
 
 ```
-POST /api/abort/:requestId
+POST /agents/:id/abort
 ```
 
-### Session API (Fork Enhancement)
+### List Projects
 
-The fork adds proper session listing with pagination:
-
-```
-GET /api/projects/:name/sessions?limit=100&offset=0&type=display
-Authorization: Bearer <token>
-```
-
-Response:
-```json
-{
-  "sessions": [
-    {"id": "uuid", "summary": "...", "messageCount": 42, "lastActivity": "...", "sessionType": "display"}
-  ],
-  "pagination": {"total": 85, "limit": 100, "offset": 0, "hasMore": false}
-}
-```
-
-**Parameters:**
-- `limit` - Sessions per page (default: 100, max: 1000)
-- `offset` - Pagination offset
-- `type` - Filter: `display` (user sessions), `agent`, `helper`, or `all`
-
-### Known API Limitations (Upstream)
-
-**Note:** These limitations apply to the upstream siteboon/claudecodeui. Our fork fixes some of these.
-
-| Endpoint | Upstream Status | Fork Status |
-|----------|-----------------|-------------|
-| `GET /api/projects` | Works (limited sessions) | Works (full pagination) |
-| `GET /api/projects/:name/sessions` | N/A | ✅ Added in fork |
-| `GET /api/projects/:project/histories` | CORS blocks | Still broken |
-| Session message history | Returns HTML | Use SSH workaround |
-
-**Workaround:** The iOS app loads session message history via SSH for individual sessions.
-
-## Project Registration
-
-Projects appear in the iOS app when they have session files in `$HOME/.claude/projects/`.
+Projects are discovered from session files in `$HOME/.claude/projects/`.
 
 ### Session File Location
 
@@ -236,7 +193,7 @@ Each line in a session file is a JSON object:
 
 The iOS app uses SSH for:
 - File browser functionality
-- Session history loading (workaround for CORS issues)
+- Session history loading (optional, API preferred)
 - Git clone operations
 - Project creation and deletion
 - Global search across sessions
@@ -280,17 +237,10 @@ Supported key types:
 
 ### "Failed to connect to server"
 
-1. Verify backend is running: `curl http://<host>:8080/api/projects`
-2. Check firewall allows port 8080
+1. Verify backend is running: `curl http://<host>:3100/health`
+2. Check firewall allows port 3100
 3. Verify Tailscale connection if using remote access
 4. Check the server URL in app settings (no trailing slash)
-
-### "Authentication failed"
-
-1. Verify username/password are correct
-2. Ensure you're using username/password, NOT API key
-3. Try logging in via web UI to confirm credentials
-4. Check the JWT token hasn't expired
 
 ### "No projects found"
 
@@ -301,9 +251,9 @@ Supported key types:
 
 ### Streaming not working
 
-1. Ensure backend is using `--output-format stream-json`
+1. Ensure the response is being consumed as SSE stream
 2. Check for proxy/load balancer buffering issues
-3. Verify WebSocket connection is established
+3. Verify the Accept header includes `text/event-stream`
 
 ### SSH connection fails
 

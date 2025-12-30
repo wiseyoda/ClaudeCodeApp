@@ -2,6 +2,26 @@
 
 > Complete documentation for the Claude Code development container running on QNAP NAS.
 
+---
+
+## ⚠️ Migration Notice: cli-bridge
+
+**As of v0.6.0, the iOS app uses [cli-bridge](https://github.com/anthropics/claude-code/tree/main/packages/cli-bridge) instead of claudecodeui for backend communication.**
+
+The claudecodeui documentation below is retained for reference during migration. For new deployments, use cli-bridge:
+
+```bash
+# Install cli-bridge
+cd ~/workspace
+git clone https://github.com/anthropics/claude-code.git
+cd claude-code/packages/cli-bridge
+
+# Run with Deno
+deno task dev  # Runs on http://localhost:3100
+```
+
+---
+
 ## Quick Reference
 
 | Item | Value |

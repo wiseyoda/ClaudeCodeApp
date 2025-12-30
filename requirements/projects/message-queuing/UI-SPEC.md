@@ -387,7 +387,7 @@ Add to Settings sheet:
 
 ### App Backgrounded
 - Queue persists to disk
-- Processing pauses (WebSocket disconnects)
+- Processing pauses (connection disconnects)
 - Resumes on foreground
 
 ### Rapid Queuing

@@ -278,6 +278,23 @@ struct CLIMessageView: View {
         }
     }
 
+    /// Extract question headers from AskUserQuestion content
+    private static func extractQuestionsHeaders(from content: String) -> [String]? {
+        guard let jsonStart = content.firstIndex(of: "{"),
+              let jsonEnd = content.lastIndex(of: "}") else {
+            return nil
+        }
+
+        let jsonString = String(content[jsonStart...jsonEnd])
+        guard let data = jsonString.data(using: .utf8),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let questions = dict["questions"] as? [[String: Any]] else {
+            return nil
+        }
+
+        return questions.compactMap { $0["header"] as? String }
+    }
+
     /// Format tool use content for display (converts JSON to readable format)
     private static func formatToolContent(_ content: String) -> String {
         // Extract tool name and JSON
@@ -353,6 +370,26 @@ struct CLIMessageView: View {
             if let prompt = dict["prompt"] as? String {
                 let preview = prompt.count > 300 ? String(prompt.prefix(300)) + "..." : prompt
                 lines.append("Prompt:\n\(preview)")
+            }
+        case "AskUserQuestion":
+            // Format question data nicely
+            if let questions = dict["questions"] as? [[String: Any]] {
+                for (index, question) in questions.enumerated() {
+                    let header = question["header"] as? String ?? "Question \(index + 1)"
+                    let questionText = question["question"] as? String ?? ""
+                    lines.append("❓ \(header)")
+                    if !questionText.isEmpty {
+                        let preview = questionText.count > 100 ? String(questionText.prefix(100)) + "..." : questionText
+                        lines.append("   \(preview)")
+                    }
+                    // Show options if available
+                    if let options = question["options"] as? [[String: Any]] {
+                        let optionLabels = options.compactMap { $0["label"] as? String }
+                        if !optionLabels.isEmpty {
+                            lines.append("   Options: \(optionLabels.joined(separator: ", "))")
+                        }
+                    }
+                }
             }
         default:
             // Generic formatting for other tools
@@ -505,6 +542,12 @@ struct CLIMessageView: View {
                 return "\(displayName): \"\(shortQuery)\""
             }
         case .askUser:
+            // Extract question headers from the questions array
+            if let questions = extractQuestionsHeaders(from: content), !questions.isEmpty {
+                let headers = questions.joined(separator: ", ")
+                let shortHeaders = headers.count > 40 ? String(headers.prefix(40)) + "..." : headers
+                return "\(displayName): \(shortHeaders)"
+            }
             return displayName
         case .lsp:
             if let operation = extractParam(from: content, key: "operation"),

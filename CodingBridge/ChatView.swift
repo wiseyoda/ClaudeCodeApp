@@ -1064,15 +1064,7 @@ struct ChatView: View {
 
     private var statusAndInputView: some View {
         VStack(spacing: 0) {
-            // Unified status bar with quick settings access
-            UnifiedStatusBar(
-                isProcessing: wsManager.isProcessing,
-                connectionState: wsManager.connectionState,
-                tokenUsage: wsManager.tokenUsage,
-                effectivePermissionMode: effectivePermissionModeValue,
-                projectPath: project.path,
-                showQuickSettings: $showQuickSettings
-            )
+            // Banners appear ABOVE the status bar for better visibility
 
             // Permission approval banner (shown when bypass permissions is OFF and approval needed)
             if let approval = wsManager.pendingApproval {
@@ -1105,10 +1097,20 @@ struct ChatView: View {
                 SubagentBanner(subagent: subagent)
             }
 
-            // Tool progress banner (shown when tool reports progress)
-            if let progress = wsManager.toolProgress {
+            // Tool progress banner (shown when tool reports progress and NOT waiting for approval/question)
+            if let progress = wsManager.toolProgress, wsManager.pendingApproval == nil, pendingQuestions == nil {
                 ToolProgressBanner(progress: progress)
             }
+
+            // Unified status bar with quick settings access
+            UnifiedStatusBar(
+                isProcessing: wsManager.isProcessing,
+                connectionState: wsManager.connectionState,
+                tokenUsage: wsManager.tokenUsage,
+                effectivePermissionMode: effectivePermissionModeValue,
+                projectPath: project.path,
+                showQuickSettings: $showQuickSettings
+            )
 
             // AI-powered suggestion chips (shown when enabled, not processing, and not typing)
             if settings.autoSuggestionsEnabled && !wsManager.isProcessing && inputText.isEmpty && !claudeHelper.suggestedActions.isEmpty {
@@ -1587,12 +1589,13 @@ struct ChatView: View {
             do {
                 print("[ChatView] Loading session history via export API for: \(session.id)")
 
-                // Export session as JSON (returns JSONL content)
+                // Export session as JSON with structured content (preserves tool_use, tool_result, thinking)
                 let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
                 let exportResponse = try await apiClient.exportSession(
                     projectPath: project.path,
                     sessionId: session.id,
-                    format: .json
+                    format: .json,
+                    includeStructuredContent: true
                 )
 
                 // Fetch token usage for this session
@@ -1645,7 +1648,8 @@ struct ChatView: View {
     }
 
     /// Parse session export JSON into ChatMessages
-    /// Format: { "session": {...}, "messages": [{ "type": "user", "content": "...", "timestamp": "..." }, ...] }
+    /// Format: { "session": {...}, "messages": [{ "type": "user", "content": "..." | [...], "timestamp": "..." }, ...] }
+    /// With includeStructuredContent=true, content is an array of blocks (text, tool_use, tool_result, thinking)
     private func parseJSONLToMessages(_ jsonContent: String) -> [ChatMessage] {
         guard let data = jsonContent.data(using: .utf8) else {
             print("[ChatView] Failed to convert export content to data")
@@ -1657,7 +1661,8 @@ struct ChatView: View {
             if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                let messagesArray = json["messages"] as? [[String: Any]] {
                 print("[ChatView] Found \(messagesArray.count) messages in export")
-                return messagesArray.compactMap { parseExportMessage($0) }
+                // flatMap because each export message can produce multiple ChatMessages
+                return messagesArray.flatMap { parseExportMessage($0) }
             }
         } catch {
             print("[ChatView] Failed to parse export JSON: \(error)")
@@ -1667,9 +1672,10 @@ struct ChatView: View {
     }
 
     /// Parse a message from the export format
-    /// Format: { "id": "...", "type": "user|assistant", "content": "plain text", "timestamp": "..." }
-    private func parseExportMessage(_ json: [String: Any]) -> ChatMessage? {
-        guard let type = json["type"] as? String else { return nil }
+    /// Handles both plain text content (legacy) and structured content arrays (includeStructuredContent=true)
+    /// Returns multiple ChatMessages when content contains multiple blocks (text + tool_use, etc.)
+    private func parseExportMessage(_ json: [String: Any]) -> [ChatMessage] {
+        guard let type = json["type"] as? String else { return [] }
 
         // Extract timestamp
         var timestamp = Date()
@@ -1684,21 +1690,79 @@ struct ChatView: View {
             }
         }
 
-        // Content is plain text in export format
-        guard let content = json["content"] as? String, !content.isEmpty else {
-            return nil
+        // Check if content is structured (array) or plain text (string)
+        if let contentArray = json["content"] as? [[String: Any]] {
+            // Structured content - parse each block
+            return parseStructuredContent(contentArray, messageType: type, timestamp: timestamp)
+        } else if let content = json["content"] as? String, !content.isEmpty {
+            // Plain text content (legacy format)
+            let role: ChatMessage.Role
+            switch type {
+            case "user":
+                role = .user
+            case "assistant":
+                role = .assistant
+            case "system":
+                role = .system
+            default:
+                return []
+            }
+            return [ChatMessage(role: role, content: content, timestamp: timestamp)]
         }
 
-        switch type {
-        case "user":
-            return ChatMessage(role: .user, content: content, timestamp: timestamp)
-        case "assistant":
-            return ChatMessage(role: .assistant, content: content, timestamp: timestamp)
-        case "system":
-            return ChatMessage(role: .system, content: content, timestamp: timestamp)
-        default:
-            return nil
+        return []
+    }
+
+    /// Parse structured content array into ChatMessages
+    /// Each block becomes a separate ChatMessage with appropriate role
+    private func parseStructuredContent(_ blocks: [[String: Any]], messageType: String, timestamp: Date) -> [ChatMessage] {
+        var messages: [ChatMessage] = []
+
+        for block in blocks {
+            guard let blockType = block["type"] as? String else { continue }
+
+            switch blockType {
+            case "text":
+                if let text = block["text"] as? String, !text.isEmpty {
+                    let role: ChatMessage.Role = messageType == "user" ? .user : .assistant
+                    messages.append(ChatMessage(role: role, content: text, timestamp: timestamp))
+                }
+
+            case "tool_use":
+                if let name = block["name"] as? String {
+                    // Format tool use for display
+                    var content = "Tool: \(name)"
+                    if let input = block["input"] {
+                        if let inputDict = input as? [String: Any],
+                           let inputData = try? JSONSerialization.data(withJSONObject: inputDict, options: [.prettyPrinted, .sortedKeys]),
+                           let inputStr = String(data: inputData, encoding: .utf8) {
+                            content += "\n\(inputStr)"
+                        } else {
+                            content += "\n\(input)"
+                        }
+                    }
+                    messages.append(ChatMessage(role: .toolUse, content: content, timestamp: timestamp))
+                }
+
+            case "tool_result":
+                if let resultContent = block["content"] as? String {
+                    let isError = block["is_error"] as? Bool ?? false
+                    let role: ChatMessage.Role = isError ? .error : .toolResult
+                    messages.append(ChatMessage(role: role, content: resultContent, timestamp: timestamp))
+                }
+
+            case "thinking":
+                if let thinking = block["thinking"] as? String, !thinking.isEmpty {
+                    messages.append(ChatMessage(role: .thinking, content: thinking, timestamp: timestamp))
+                }
+
+            default:
+                // Unknown block type - skip
+                print("[ChatView] Unknown content block type: \(blockType)")
+            }
         }
+
+        return messages
     }
 
     /// Delete a session from the server

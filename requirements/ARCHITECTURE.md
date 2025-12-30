@@ -1,25 +1,92 @@
 # Architecture Documentation
 
+## System Architecture
+
+```
++------------------------------------------------------------------------------+
+|                              iOS Device                                       |
+|  +------------------------------------------------------------------------+  |
+|  |                         CodingBridge                                    |  |
+|  |                                                                         |  |
+|  |  +------------------+  +------------------+  +------------------------+ |  |
+|  |  |   ContentView    |--|    ChatView      |--|   CLIBridgeAdapter     | |  |
+|  |  |   (Projects)     |  |   (Messages)     |  |   (SSE Streaming)      | |  |
+|  |  +------------------+  +------------------+  +------------------------+ |  |
+|  |         |                     |                      |                  |  |
+|  |         |              +------+------+        +------+------+          |  |
+|  |         |              |SpeechManager|        |ClaudeHelper |          |  |
+|  |         |              |(Voice Input)|        |(AI Suggest) |          |  |
+|  |         |              +-------------+        +-------------+          |  |
+|  |         |                                                               |  |
+|  |  +------+------+  +-------------+  +-------------+  +--------------+   |  |
+|  |  |TerminalView |--|  SSHManager |  |MessageStore |  | BookmarkStore|   |  |
+|  |  | (SSH Shell) |  |  (Citadel)  |  | (File-based)|  | (Bookmarks)  |   |  |
+|  |  +-------------+  +-------------+  +-------------+  +--------------+   |  |
+|  |                          |                                              |  |
+|  |  +-------------+  +------+------+  +-------------+  +--------------+   |  |
+|  |  | AppSettings |  |CommandStore |  |   Logger    |  |SessionNames  |   |  |
+|  |  | (Config)    |  | (Prompts)   |  |  (Logging)  |  |Store (Names) |   |  |
+|  |  +-------------+  +-------------+  +-------------+  +--------------+   |  |
+|  |                          |                                              |  |
+|  |                   +------+------+                                       |  |
+|  |                   | IdeasStore  |                                       |  |
+|  |                   | (Ideas)     |                                       |  |
+|  |                   +-------------+                                       |  |
+|  +------------------------------------------------------------------------+  |
++------------------------------------------------------------------------------+
+                              |
+                              | REST API + SSE / SSH
+                              | (via Tailscale)
+                              v
++------------------------------------------------------------------------------+
+|                        Backend Server (NAS/Cloud)                             |
+|  +------------------------------------------------------------------------+  |
+|  |                          cli-bridge                                     |  |
+|  |  +-------------+  +-------------+  +-----------------------------+     |  |
+|  |  |  REST API   |--|   Agent     |--|        Claude Code CLI      |     |  |
+|  |  |  SSE Stream |  |   Manager   |  |        (Subprocess)         |     |  |
+|  |  +-------------+  +-------------+  +-----------------------------+     |  |
+|  +------------------------------------------------------------------------+  |
+|                              |                                                |
+|                              v                                                |
+|  +------------------------------------------------------------------------+  |
+|  |                          Claude CLI                                     |  |
+|  |  - Authenticated with Anthropic                                         |  |
+|  |  - Access to workspace files                                            |  |
+|  |  - Tool execution capabilities                                          |  |
+|  +------------------------------------------------------------------------+  |
+|                                                                               |
+|  +------------------------------------------------------------------------+  |
+|  |                            sshd                                         |  |
+|  |  - Standard SSH daemon                                                  |  |
+|  |  - Terminal access for TerminalView                                     |  |
+|  |  - File listing for FilePickerSheet                                     |  |
+|  |  - Git operations for CloneProjectSheet                                 |  |
+|  |  - Session history for GlobalSearchView                                 |  |
+|  +------------------------------------------------------------------------+  |
++------------------------------------------------------------------------------+
+```
+
 ## Clean Architecture: Session Management
 
 The session management system uses a Clean Architecture pattern separating concerns into distinct layers:
 
 ```
-┌─────────────────┐     ┌──────────────────┐     ┌──────────────────┐
-│     Views       │────▶│   SessionStore   │◀───▶│ SessionRepository│
-│                 │     │  (State Mgmt)    │     │   (Data Layer)   │
-└─────────────────┘     └──────────────────┘     └──────────────────┘
-                               ▲                         │
-                               │                         ▼
-                       ┌───────┴────────┐        ┌──────────────────┐
-                       │ WebSocketMgr   │        │   APIClient      │
-                       │ (Push Events)  │        │   (HTTP)         │
-                       └────────────────┘        └──────────────────┘
-                               ▲                         │
-                               │                         ▼
-                       ┌───────┴─────────────────────────┴───────┐
-                       │          claudecodeui Backend           │
-                       └─────────────────────────────────────────┘
++------------------+     +-------------------+     +--------------------+
+|     Views        |---->|   SessionStore    |<--->| SessionRepository  |
+|                  |     |  (State Mgmt)     |     |   (Data Layer)     |
++------------------+     +-------------------+     +--------------------+
+                               ^                          |
+                               |                          v
+                       +-------+--------+        +-------------------+
+                       | CLIBridgeAdapter|        |  CLIBridgeAPI     |
+                       | (SSE Events)   |        |   Client (HTTP)   |
+                       +----------------+        +-------------------+
+                               ^                          |
+                               |                          v
+                       +-------+--------------------------+-------+
+                       |          cli-bridge Backend              |
+                       +------------------------------------------+
 ```
 
 ### Layers
@@ -51,7 +118,6 @@ Singleton source of truth accessed via `SessionStore.shared`.
 | `loadMore(for:)` | Pagination - fetch next page |
 | `deleteSession(_:for:)` | Optimistic delete with rollback |
 | `addSession(_:for:)` | Add newly created session |
-| `handleSessionsUpdated(...)` | Process WebSocket push events |
 | `displaySessions(for:)` | Filtered/sorted sessions for UI |
 
 ### SessionRepository (Data Layer)
@@ -71,38 +137,58 @@ protocol SessionRepository {
 
 ### Data Flow
 
-1. **Initial Load**: View → `SessionStore.loadSessions()` → Repository → APIClient → Backend
-2. **Pagination**: View (Load More) → `SessionStore.loadMore()` → Repository → APIClient
-3. **Push Update**: Backend → WebSocket → `WebSocketManager` → `SessionStore.handleSessionsUpdated()` → Views
-4. **Delete**: View → `SessionStore.deleteSession()` → (optimistic update) → Repository → Backend
+1. **Initial Load**: View -> `SessionStore.loadSessions()` -> Repository -> CLIBridgeAPIClient -> Backend
+2. **Pagination**: View (Load More) -> `SessionStore.loadMore()` -> Repository -> CLIBridgeAPIClient
+3. **SSE Update**: Backend -> SSE Stream -> `CLIBridgeAdapter` -> `SessionStore` -> Views
+4. **Delete**: View -> `SessionStore.deleteSession()` -> (optimistic update) -> Repository -> Backend
 
-### Configuration
+---
 
-Configure SessionStore at app startup:
+## CLI Bridge Architecture
 
-```swift
-// In ContentView.onAppear or CodingBridgeApp
-let repository = APISessionRepository(
-    apiClient: APIClient(settings: settings),
-    settings: settings
-)
-SessionStore.shared.configure(with: repository)
+The app connects to [cli-bridge](https://github.com/anthropics/claude-code/tree/main/packages/cli-bridge) backend via REST API with Server-Sent Events (SSE) for streaming.
+
+### Core Components
+
+| Component | File | Purpose |
+|-----------|------|---------|
+| `CLIBridgeManager` | `CLIBridgeManager.swift` | Core REST API client, SSE stream handling |
+| `CLIBridgeAdapter` | `CLIBridgeAdapter.swift` | Adapts CLIBridgeManager to callback-style interface |
+| `CLIBridgeAPIClient` | `CLIBridgeAPIClient.swift` | HTTP client for health checks, project/session listing |
+| `CLIBridgeTypes` | `CLIBridgeTypes.swift` | All message types and protocol models |
+
+### Message Flow
+
+```
+Send:    ChatView -> CLIBridgeAdapter.sendMessage() -> POST /agents/:id/message
+Receive: SSE Stream -> CLIBridgeManager.handleSSEEvent() -> Callbacks -> ChatView
 ```
 
-### Filtering & Display
+### SSE Event Types
 
-Sessions are stored raw. Filtering for display happens at read time:
+| Event | Purpose |
+|-------|---------|
+| `assistant` | Streaming text content |
+| `tool_use` | Tool invocation (name, input) |
+| `tool_result` | Tool output |
+| `thinking` | Reasoning blocks |
+| `result` | Task complete (includes session info) |
+| `error` | Error message |
 
-```swift
-// filterForDisplay() excludes:
-// - Helper sessions (ClaudeHelper.isHelperSession)
-// - Empty sessions (messageCount == 0) unless active
-// - Agent/task sessions (isAgentSession)
+### CLIBridgeAdapter Callbacks
 
-// filterAndSortForDisplay() additionally:
-// - Sorts by lastActivity descending
-// - Always includes active session
-```
+| Callback | Purpose |
+|----------|---------|
+| `onText()` | Streaming assistant text |
+| `onTextCommit()` | Text segment complete |
+| `onToolUse(name, input)` | Tool invocation |
+| `onToolResult()` | Tool output |
+| `onThinking()` | Reasoning blocks |
+| `onComplete(sessionId)` | Task finished |
+| `onAskUserQuestion()` | Interactive questions |
+| `onError()` | Error handling |
+| `onModelChanged()` | Model switch |
+| `onPermissionRequest()` | Tool approval request |
 
 ---
 
@@ -111,13 +197,13 @@ Sessions are stored raw. Filtering for display happens at read time:
 When bypass permissions is OFF, tool executions require user approval:
 
 ```
-┌─────────────────┐     ┌──────────────────┐     ┌──────────────────┐
-│  Claude CLI     │────▶│  claudecodeui    │────▶│   iOS App        │
-│  (canUseTool)   │     │  (WebSocket)     │     │  (Approval UI)   │
-└─────────────────┘     └──────────────────┘     └──────────────────┘
-                               │                         │
-                               ◀─────────────────────────┘
-                            permission-response
++------------------+     +-------------------+     +--------------------+
+|  Claude CLI      |---->|  cli-bridge       |---->|   iOS App          |
+|  (canUseTool)    |     |  (SSE Stream)     |     |  (Approval UI)     |
++------------------+     +-------------------+     +--------------------+
+                               |                         |
+                               <-------------------------+
+                            permission-response (POST)
 ```
 
 ### Components
@@ -125,87 +211,21 @@ When bypass permissions is OFF, tool executions require user approval:
 | Component | File | Purpose |
 |-----------|------|---------|
 | `ApprovalBannerView` | `Views/ApprovalBannerView.swift` | Compact banner with Approve/Always Allow/Deny |
-| `ApprovalRequest` | `Models.swift` | Request model (tool, requestId, input) |
-| `ApprovalResponse` | `Models.swift` | Response model (approved, alwaysAllow) |
+| `ApprovalRequest` | `CLIBridgeTypes.swift` | Request model (tool, requestId, input) |
+| `ApprovalResponse` | `CLIBridgeTypes.swift` | Response model (approved, alwaysAllow) |
 | `ProjectSettingsStore` | `ProjectSettingsStore.swift` | Per-project permission overrides |
+| `PermissionManager` | `PermissionManager.swift` | Permission state and history tracking |
 
 ### Flow
 
 1. Backend receives tool call from Claude CLI
-2. `canUseTool` callback triggers `permission-request` WebSocket event
+2. `canUseTool` callback triggers SSE permission request event
 3. iOS shows `ApprovalBannerView` with tool details
 4. User taps Approve/Always Allow/Deny
-5. iOS sends `permission-response` back to backend
+5. iOS sends POST to backend with approval response
 6. Backend allows/denies tool execution
 
 ---
-
-## System Architecture
-
-```
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                              iOS Device                                       │
-│  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │                         CodingBridge                                    │  │
-│  │                                                                         │  │
-│  │  ┌─────────────────┐  ┌─────────────────┐  ┌───────────────────────┐   │  │
-│  │  │   ContentView   │──│    ChatView     │──│   WebSocketManager    │   │  │
-│  │  │   (Projects)    │  │   (Messages)    │  │   (Streaming)         │   │  │
-│  │  └─────────────────┘  └─────────────────┘  └───────────────────────┘   │  │
-│  │         │                     │                      │                  │  │
-│  │         │              ┌──────┴──────┐        ┌──────┴──────┐          │  │
-│  │         │              │SpeechManager│        │ClaudeHelper │          │  │
-│  │         │              │(Voice Input)│        │(AI Suggest) │          │  │
-│  │         │              └─────────────┘        └─────────────┘          │  │
-│  │         │                                                               │  │
-│  │  ┌──────┴──────┐  ┌─────────────┐  ┌─────────────┐  ┌───────────────┐  │  │
-│  │  │TerminalView │──│ SSHManager  │  │MessageStore │  │  BookmarkStore│  │  │
-│  │  │ (SSH Shell) │  │ (Citadel)   │  │ (File-based)│  │  (Bookmarks)  │  │  │
-│  │  └─────────────┘  └─────────────┘  └─────────────┘  └───────────────┘  │  │
-│  │                          │                                              │  │
-│  │  ┌─────────────┐  ┌──────┴──────┐  ┌─────────────┐  ┌───────────────┐  │  │
-│  │  │ AppSettings │  │CommandStore │  │   Logger    │  │SessionNames   │  │  │
-│  │  │ (Config)    │  │ (Prompts)   │  │  (Logging)  │  │Store (Names)  │  │  │
-│  │  └─────────────┘  └─────────────┘  └─────────────┘  └───────────────┘  │  │
-│  │                          │                                              │  │
-│  │                   ┌──────┴──────┐                                       │  │
-│  │                   │ IdeasStore  │                                       │  │
-│  │                   │ (Ideas)     │                                       │  │
-│  │                   └─────────────┘                                       │  │
-│  └────────────────────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────────────────────┘
-                              │
-                              │ WebSocket / SSH
-                              │ (via Tailscale)
-                              ▼
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                        Backend Server (NAS/Cloud)                             │
-│  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │                          claudecodeui                                   │  │
-│  │  ┌─────────────┐  ┌─────────────┐  ┌───────────────────────────────┐   │  │
-│  │  │  WebSocket  │──│   Message   │──│        Claude CLI             │   │  │
-│  │  │   Server    │  │   Handler   │  │        Wrapper                │   │  │
-│  │  └─────────────┘  └─────────────┘  └───────────────────────────────┘   │  │
-│  └────────────────────────────────────────────────────────────────────────┘  │
-│                              │                                                │
-│                              ▼                                                │
-│  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │                          Claude CLI                                     │  │
-│  │  - Authenticated with Anthropic                                         │  │
-│  │  - Access to workspace files                                            │  │
-│  │  - Tool execution capabilities                                          │  │
-│  └────────────────────────────────────────────────────────────────────────┘  │
-│                                                                               │
-│  ┌────────────────────────────────────────────────────────────────────────┐  │
-│  │                            sshd                                         │  │
-│  │  - Standard SSH daemon                                                  │  │
-│  │  - Terminal access for TerminalView                                     │  │
-│  │  - File listing for FilePickerSheet                                     │  │
-│  │  - Git operations for CloneProjectSheet                                 │  │
-│  │  - Session history for GlobalSearchView                                 │  │
-│  └────────────────────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────────────────────┘
-```
 
 ## iOS App Components
 
@@ -216,13 +236,14 @@ When bypass permissions is OFF, tool executions require user approval:
 - Creates shared AppSettings instance
 - Injects settings into environment
 - Requests notification permissions
+- Registers background tasks
 
 #### AppSettings.swift
 Stores all user configuration using @AppStorage:
 
 | Category | Settings |
 |----------|----------|
-| Server | URL, username, password, JWT token |
+| Server | URL (defaults to localhost:3100) |
 | Claude | Mode (normal/plan), thinking mode (5 levels), skipPermissions |
 | Model | defaultModel, customModelId |
 | Display | fontSize, appTheme, showThinkingBlocks, autoScrollEnabled |
@@ -231,7 +252,6 @@ Stores all user configuration using @AppStorage:
 
 Key computed properties:
 - `effectivePermissionMode` - Resolves bypass vs mode setting
-- `webSocketURL` - Derives ws:// from serverURL with token
 - `effectiveSSHHost` - Falls back to server URL host
 - `scaledFont()` - Font scaling for accessibility
 
@@ -256,8 +276,6 @@ Key computed properties:
 | `ChatMessage` | role, content, timestamp, imageData, isStreaming |
 | `BookmarkedMessage` | messageId, role, content, project context |
 | `SavedCommand` | name, content, category, timestamps |
-| `WSClaudeCommand` | WebSocket send format |
-| `WSMessage` | WebSocket response types |
 
 **Storage Classes:**
 | Class | Storage | Purpose |
@@ -268,13 +286,13 @@ Key computed properties:
 | `SessionHistoryLoader` | SSH/JSONL | Load session from server |
 | `IdeasStore` | Documents/ideas-{path}.json | Per-project idea persistence |
 
-#### WebSocketManager.swift
+#### CLIBridgeManager.swift
 
 **Connection Management:**
-- `ConnectionState` enum (disconnected/connecting/connected/reconnecting)
-- Exponential backoff reconnection (1s -> 2s -> 4s -> 8s max + jitter)
-- 30-second processing timeout with auto-reset
-- Message retry queue with max 3 attempts
+- `ConnectionState` enum (disconnected/connecting/connected/error)
+- REST API with SSE streaming for responses
+- Agent lifecycle management (create, message, abort)
+- Health check endpoint monitoring
 
 **Published State:**
 | Property | Type | Purpose |
@@ -287,27 +305,11 @@ Key computed properties:
 | `tokenUsage` | (current, max) | Token budget |
 | `currentModel` | ClaudeModel | Active model |
 
-**Streaming Callbacks:**
-| Callback | Purpose |
-|----------|---------|
-| `onText()` | Streaming assistant text |
-| `onTextCommit()` | Text segment complete |
-| `onToolUse(name, input)` | Tool invocation |
-| `onToolResult()` | Tool output |
-| `onThinking()` | Reasoning blocks |
-| `onComplete(sessionId)` | Task finished |
-| `onAskUserQuestion()` | Interactive questions |
-| `onError()` | Error handling |
-| `onModelChanged()` | Model switch |
-| `onPermissionRequest()` | Tool approval request |
-| `onSessionsUpdated()` | Session list changed |
-
 #### SpeechManager.swift
 - iOS Speech framework integration (SFSpeechRecognizer)
 - AVAudioEngine for recording
 - Real-time partial results
 - Authorization status tracking
-- **Known Issue:** Missing deinit for cleanup
 
 #### SSHManager.swift
 
@@ -319,10 +321,6 @@ Key computed properties:
 | Key Storage | iOS Keychain |
 | Operations | Terminal I/O, file listing, command execution |
 | Auto-connect | Saved credentials priority |
-
-**Known Issues:**
-- Command injection vulnerabilities (unescaped paths)
-- Password stored in UserDefaults (should use Keychain)
 
 #### CommandStore.swift
 - Singleton with JSON persistence (Documents/commands.json)
@@ -343,20 +341,14 @@ Key computed properties:
 - `SuggestedAction` model (label, prompt, icon)
 - Generate 3 suggestions based on conversation
 - Suggested files in file picker
-- Separate WebSocket with 15-second timeout
-
-#### APIClient.swift
-- @MainActor class for thread-safe UI updates
-- HTTP client with JWT authentication
-- Project listing endpoint (GET /api/projects)
-- Session listing with pagination (GET /api/projects/:name/sessions)
-- Session deletion (DELETE /api/projects/:name/sessions/:id)
+- Separate API call with 15-second timeout
 
 #### Theme.swift
 - `CLITheme` with colorScheme-aware colors
 - Light and dark mode variants
 - Tool-specific colors
 - Diff colors (added/removed)
+- iOS 26 Liquid Glass support
 
 #### Utilities
 | File | Purpose |
@@ -364,6 +356,19 @@ Key computed properties:
 | `Logger.swift` | Structured logging (debug/info/warning/error) |
 | `AppError.swift` | Unified error handling |
 | `ImageUtilities.swift` | MIME type detection (PNG, JPEG, GIF, WebP) |
+| `KeychainHelper.swift` | Secure credential storage |
+| `HealthMonitorService.swift` | Backend connectivity monitoring |
+| `SearchHistoryStore.swift` | Search query persistence |
+| `SSHKeyDetection.swift` | SSH key type detection and validation |
+
+### Managers
+| File | Purpose |
+|------|---------|
+| `BackgroundManager.swift` | Background task scheduling |
+| `LiveActivityManager.swift` | Live Activity updates |
+| `NotificationManager.swift` | Local notifications |
+| `PushNotificationManager.swift` | Push notification handling |
+| `OfflineActionQueue.swift` | Queued actions for offline |
 
 ### Main Views
 
@@ -379,7 +384,7 @@ Key computed properties:
 #### ChatView.swift
 Core chat UI with responsibilities:
 - Message list with auto-scroll
-- WebSocket streaming integration
+- SSE streaming integration via CLIBridgeAdapter
 - Slash command handling
 - Tool use/result collapsible sections
 - Thinking block display
@@ -396,43 +401,65 @@ Core chat UI with responsibilities:
 - Auto-scroll to bottom
 - CLI theme styling
 
-### Views/ Folder
+### Views/ Folder (48 files)
 
 | File | Lines | Purpose |
 |------|-------|---------|
-| `MarkdownText.swift` | 490 | Full markdown rendering with math, tables, code |
-| `CLIMessageView.swift` | 575 | Message bubble with role styling, context menu |
-| `CLIInputView.swift` | 302 | Multi-line input, attachments, voice, [+] menu |
-| `DiffView.swift` | 358 | Edit tool diff with line numbers, context collapse |
-| `TodoListView.swift` | 173 | TodoWrite checklist with status colors |
-| `CodeBlockView.swift` | 109 | Code display with copy button |
-| `TruncatableText.swift` | 275 | Truncated text with expand button |
-| `CLIStatusBarViews.swift` | 395 | Unified status bar components |
-| `SessionPickerViews.swift` | 410 | Session picker, rename, export |
-| `FilePickerSheet.swift` | 311 | File browser with AI suggestions |
-| `CloneProjectSheet.swift` | 235 | Git clone with progress |
-| `NewProjectSheet.swift` | 209 | Create empty project |
+| `CLIMessageView.swift` | 977 | Message bubble with role styling, context menu |
+| `SessionPickerViews.swift` | 758 | Session picker, rename, export |
+| `GlobalSearchView.swift` | 687 | Cross-session search |
+| `MarkdownText.swift` | 508 | Full markdown rendering with math, tables, code |
 | `CommandsView.swift` | 447 | Command library CRUD |
+| `QuickSettingsSheet.swift` | 433 | Fast settings access |
+| `DiagnosticsView.swift` | 411 | Debug diagnostics |
+| `DiffView.swift` | 408 | Edit tool diff with line numbers, context collapse |
+| `ProjectDetailView.swift` | 406 | Project details view |
+| `CLIInputView.swift` | 404 | Multi-line input, attachments, voice, [+] menu |
+| `IdeasDrawerSheet.swift` | 401 | Ideas drawer management |
+| `FileBrowserView.swift` | 396 | File system navigation |
+| `DebugLogView.swift` | 396 | Debug log viewer |
+| `MetricsDashboardView.swift` | 387 | Metrics display |
+| `CLIStatusBarViews.swift` | 367 | Unified status bar components |
+| `ServerHealthView.swift` | 345 | Backend health display |
+| `ErrorInsightsView.swift` | 326 | Error analytics |
+| `FileContentViewer.swift` | 325 | File content display |
+| `FilePickerSheet.swift` | 324 | File browser with AI suggestions |
+| `PermissionSettingsView.swift` | 323 | Permission configuration |
+| `ApprovalBannerView.swift` | 297 | Permission approval UI |
+| `IdeaRowView.swift` | 285 | Idea list item display |
+| `TruncatableText.swift` | 275 | Truncated text with expand button |
+| `IdeaEditorSheet.swift` | 233 | Individual idea editing |
+| `CloneProjectSheet.swift` | 274 | Git clone with progress |
+| `NewProjectSheet.swift` | 246 | Create empty project |
+| `CodeBlockView.swift` | 213 | Code display with copy button |
+| `ProjectListViews.swift` | 238 | Project list components |
+| `SSHKeyImportSheet.swift` | 200 | SSH key import UI |
+| `GitSyncBanner.swift` | 188 | Git sync notifications |
+| `CLIBridgeBanners.swift` | 212 | Status banners |
 | `CommandPickerSheet.swift` | 171 | Quick command selection |
-| `BookmarksView.swift` | 150 | Bookmark list with search |
-| `GlobalSearchView.swift` | 375 | Cross-session search |
-| `SearchFilterViews.swift` | 232 | Message filters and search bar |
 | `SuggestionChipsView.swift` | 202 | AI suggestion chips |
-| `QuickSettingsSheet.swift` | 270 | Fast settings access |
-| `IdeasDrawerSheet.swift` | 375 | Ideas drawer management |
-| `IdeaEditorSheet.swift` | 260 | Individual idea editing |
-| `IdeaRowView.swift` | 320 | Idea list item display |
-| `IdeasFAB.swift` | 95 | Floating action button for ideas |
+| `TodoListView.swift` | 173 | TodoWrite checklist with status colors |
+| `BookmarksView.swift` | 144 | Bookmark list with search |
+| `SearchFilterViews.swift` | 145 | Message filters and search bar |
 | `QuickCaptureSheet.swift` | 88 | Quick idea capture |
 | `TagsFlowView.swift` | 113 | Tag flow layout for ideas |
+| `IdeasFAB.swift` | 95 | Floating action button for ideas |
+| `ErrorBanner.swift` | 135 | Error display banner |
+| `GitStatusIndicator.swift` | 38 | Git status icons |
+| `CustomModelPickerSheet.swift` | 52 | Custom model selection |
+| `SlashCommandHelpSheet.swift` | 47 | Slash command reference |
+| `ChatViewExtensions.swift` | 23 | Chat view extensions |
+| `SkeletonView.swift` | 80 | Loading placeholder |
+| `MessageActionBar.swift` | 128 | Message action buttons |
+| `PermissionApprovalTestHarnessView.swift` | 58 | Test harness for approvals |
 
 ## Data Flow
 
 ### Loading Projects
 ```
 1. App launches
-2. ContentView.task calls APIClient.fetchProjects()
-3. HTTP GET /api/projects with JWT token
+2. ContentView.task calls CLIBridgeAPIClient.fetchProjects()
+3. HTTP GET /projects
 4. Response decoded to [Project]
 5. Projects sorted by user preference
 6. UI updates with project list
@@ -455,20 +482,20 @@ Core chat UI with responsibilities:
 1. User types/speaks/attaches and taps send
 2. ThinkingMode trigger appended if active
 3. ChatView adds user message to list
-4. WebSocketManager.sendMessage() called with:
+4. CLIBridgeAdapter.sendMessage() called with:
    - message text
    - project path (cwd)
    - sessionId (optional)
    - permissionMode
    - model options
-5. WebSocket sends claude-command message
-6. Response streamed via claude-response messages
+5. POST /agents/:id/message initiates SSE stream
+6. Response streamed via SSE events
 7. Callbacks update UI:
    - onText: streaming assistant text
    - onToolUse: tool invocation display
    - onToolResult: tool output display
    - onThinking: reasoning block display
-8. claude-complete signals end
+8. result event signals end
 9. MessageStore saves history to file
 10. AI suggestions generated via ClaudeHelper
 11. Local notification sent (if backgrounded)
@@ -479,9 +506,9 @@ Core chat UI with responsibilities:
 1. User taps /resume or session picker
 2. SessionPickerSheet shows with sessions
 3. User can:
-   - Select session -> loads history via SSH
+   - Select session -> loads history via API/SSH
    - Rename -> SessionNamesStore saves custom name
-   - Delete -> removes session file via SSH
+   - Delete -> removes session file via API
    - Export -> generates markdown, shows share sheet
 4. Selected session's history loaded
 5. Conversation continues with session context
@@ -564,12 +591,11 @@ Global Search:
 
 | Layer | Implementation |
 |-------|---------------|
-| Authentication | JWT tokens via username/password |
-| Network | Tailscale encrypted tunnel |
+| Network | Tailscale encrypted tunnel (recommended) |
 | Storage | Messages in Documents (device only) |
 | SSH Keys | iOS Keychain storage via `KeychainHelper` |
-| SSH Password | iOS Keychain storage (migrated from UserDefaults in v0.4.0) |
-| Command Escaping | `shellEscape()` function for SSH paths (added in v0.4.0) |
+| SSH Password | iOS Keychain storage |
+| Command Escaping | `shellEscape()` function for SSH paths |
 | HTTP | ATS disabled for local/Tailscale IPs |
 
 See `.claude/rules/ssh-security.md` for SSH security patterns and shell escaping requirements.
@@ -584,7 +610,7 @@ See `.claude/rules/ssh-security.md` for SSH security patterns and shell escaping
 | `DiffViewTests` | Edit tool diff parsing |
 | `TodoListViewTests` | TodoWrite JSON parsing |
 | `ImageUtilitiesTests` | MIME type detection |
-| `ModelsTests` | WebSocket message handling |
+| `ModelsTests` | Message handling |
 | `MessageStoreTests` | Message persistence |
 | `DebugLogStoreTests` | Debug logging |
 | `ProjectSettingsStoreTests` | Project settings |
@@ -601,16 +627,13 @@ xcodebuild test -project CodingBridge.xcodeproj -scheme CodingBridge \
 
 See [ROADMAP.md](../ROADMAP.md) for remaining work and [ISSUES.md](../ISSUES.md) for investigation items.
 
-**Resolved in Recent Releases:**
-- ✅ Missing @MainActor on APIClient and BookmarkStore (v0.4.0)
-- ✅ SpeechManager resource leak (v0.4.0)
-- ✅ SSH password storage - migrated to Keychain (v0.4.0)
-- ✅ Command injection - added shell escaping (v0.4.0)
-- ✅ WebSocket state race - fixed connection state timing (v0.4.0)
+**Resolved in v0.6.0:**
+- Full migration from WebSocket to cli-bridge REST API with SSE
+- Removed WebSocketManager.swift (1,363 lines)
+- Removed APIClient.swift (608 lines)
+- New CLIBridgeManager, CLIBridgeAdapter, CLIBridgeAPIClient, CLIBridgeTypes
 
 **Remaining Issues:**
 | Issue | Location | Priority |
 |-------|----------|----------|
-| WebSocket state serialization | WebSocketManager.swift | High |
-| @MainActor on BookmarkStore | Models.swift | High |
 | SSH timeout handling | SSHManager.swift | Medium |

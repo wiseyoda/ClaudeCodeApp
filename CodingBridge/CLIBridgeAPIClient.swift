@@ -98,11 +98,14 @@ class CLIBridgeAPIClient: ObservableObject {
 
     /// Export a session as Markdown or JSON
     /// Note: cli-bridge returns raw content, not JSON wrapper
+    /// - Parameters:
+    ///   - includeStructuredContent: When true with JSON format, preserves content arrays with tool_use, tool_result, thinking blocks
     func exportSession(
         projectPath: String,
         sessionId: String,
         format: CLIExportFormat = .markdown,
-        excludeThinking: Bool = false
+        excludeThinking: Bool = false,
+        includeStructuredContent: Bool = false
     ) async throws -> CLIExportResponse {
         let encodedPath = encodeProjectPath(projectPath)
         var queryItems = [
@@ -110,6 +113,9 @@ class CLIBridgeAPIClient: ObservableObject {
         ]
         if excludeThinking {
             queryItems.append(URLQueryItem(name: "excludeThinking", value: "true"))
+        }
+        if includeStructuredContent && format == .json {
+            queryItems.append(URLQueryItem(name: "includeStructuredContent", value: "true"))
         }
 
         guard let url = buildURL("/projects/\(encodedPath)/sessions/\(sessionId)/export", queryItems: queryItems) else {

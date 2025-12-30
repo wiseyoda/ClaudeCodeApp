@@ -6,9 +6,7 @@ Create a native iOS application that provides a full-featured mobile interface t
 
 ## Background
 
-The [claudecodeui](https://github.com/wiseyoda/claudecodeui) project (our fork) provides a web-based interface for Claude Code. This iOS app acts as a native client for that same backend, providing a polished mobile experience with native features like voice input, keyboard shortcuts, and Keychain storage.
-
-> **Note**: We use a fork of siteboon/claudecodeui that adds session filtering, permission callbacks, and message batching.
+The [cli-bridge](https://github.com/anthropics/claude-code/tree/main/packages/cli-bridge) package provides a REST API with SSE streaming for Claude Code. This iOS app acts as a native client for that backend, providing a polished mobile experience with native features like voice input, keyboard shortcuts, and Keychain storage.
 
 ## Target Users
 
@@ -35,18 +33,17 @@ The [claudecodeui](https://github.com/wiseyoda/claudecodeui) project (our fork) 
 #### 2. Session Management
 - Session selection for resuming conversations
 - Full-screen session picker with summaries and timestamps
-- Real-time session updates via WebSocket push events
 - Pagination with "Load More" for large session lists
 - Bulk operations: delete all, older than N days, keep last N
 - Rename sessions with custom names (persisted via SessionNamesStore)
 - Delete sessions with swipe-to-delete (optimistic UI with rollback)
 - Export sessions as markdown with share sheet
 - Session history loaded via API (with SSH fallback for messages)
-- Clean Architecture: SessionStore (state) → SessionRepository (data) → APIClient (HTTP)
+- Clean Architecture: SessionStore (state) -> SessionRepository (data) -> CLIBridgeAPIClient (HTTP)
 
 #### 3. Chat Interface
 - Send messages to Claude (text, voice, or with images)
-- Receive streaming responses in real-time via WebSocket
+- Receive streaming responses in real-time via SSE
 - Display tool usage with collapsible sections (12+ tool types)
 - Display tool results (truncated with expand option)
 - Show thinking/reasoning blocks (purple, collapsible)
@@ -61,7 +58,7 @@ The [claudecodeui](https://github.com/wiseyoda/claudecodeui) project (our fork) 
 #### 4. Model Selection
 - Opus 4, Sonnet 4, Haiku 3.5, Custom model support
 - Model selector in unified status bar
-- Model passed via WebSocket options
+- Model passed via API options
 - Per-session model switching
 
 #### 5. Thinking Modes
@@ -155,14 +152,13 @@ The [claudecodeui](https://github.com/wiseyoda/claudecodeui) project (our fork) 
 - Interactive approval banner when bypass permissions is OFF
 - Approve / Always Allow / Deny buttons for each tool request
 - Per-project permission mode overrides (ProjectSettingsStore)
-- Real-time WebSocket protocol for permission requests/responses
+- Real-time SSE protocol for permission requests/responses
 - "Always Allow" remembers decisions per tool type
 
 #### 18. Configuration
 | Setting | Options |
 |---------|---------|
-| Server URL | Backend address |
-| Auth | Username/password (JWT) |
+| Server URL | Backend address (default: localhost:3100) |
 | SSH | Host, port, username, auth method |
 | Font Size | XS / S / M / L / XL |
 | Theme | System / Dark / Light |
@@ -181,11 +177,9 @@ The [claudecodeui](https://github.com/wiseyoda/claudecodeui) project (our fork) 
 #### 1. Performance
 - Streaming responses must feel responsive
 - App should handle long conversations without lag
-- Exponential backoff reconnection (1s->2s->4s->8s + jitter)
-- 30-second processing timeout with auto-reset
+- Health check monitoring for backend connectivity
 
 #### 2. Security
-- JWT token-based authentication
 - SSH key and password storage in iOS Keychain (via KeychainHelper)
 - Shell command escaping via `shellEscape()` function
 - Network-level security via Tailscale
@@ -202,12 +196,12 @@ The [claudecodeui](https://github.com/wiseyoda/claudecodeui) project (our fork) 
 - 300+ unit tests for parsers, utilities, stores, and models
 - Structured logging via Logger utility
 - Unified error handling via AppError
-- Debug log viewer for WebSocket traffic troubleshooting
+- Debug log viewer for troubleshooting
 
 ## Completed Features
 
 ### Core
-- Real-time streaming chat via WebSocket
+- Real-time streaming chat via SSE
 - Tool use visualization with 12+ tool types
 - Diff viewer for Edit tool with line numbers
 - TodoWrite visual checklist
@@ -265,13 +259,7 @@ The [claudecodeui](https://github.com/wiseyoda/claudecodeui) project (our fork) 
 
 See [ROADMAP.md](../ROADMAP.md) for remaining work and [ISSUES.md](../ISSUES.md) for investigation items.
 
-**Resolved in v0.4.0:**
-- ✅ @MainActor added to APIClient and BookmarkStore
-- ✅ SpeechManager resource leak fixed with proper deinit
-- ✅ SSH password migrated to Keychain (via KeychainHelper)
-- ✅ Command injection fixed with shell escaping
-- ✅ WebSocket state race fixed (connection state timing)
-
-**Remaining:**
-- WebSocket state serialization (concurrent state access)
-- @MainActor on BookmarkStore in Models.swift
+**Resolved in v0.6.0:**
+- Full migration from WebSocket to cli-bridge REST API with SSE
+- Removed WebSocketManager.swift and APIClient.swift
+- New CLIBridgeManager, CLIBridgeAdapter, CLIBridgeAPIClient architecture

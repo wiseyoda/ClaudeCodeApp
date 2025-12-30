@@ -744,6 +744,8 @@ enum CLIStreamContent: Decodable {
     case state(CLIStateContent)          // Agent state changes
     case subagentStart(CLISubagentStartContent)
     case subagentComplete(CLISubagentCompleteContent)
+    case question(CLIQuestionRequest)    // AskUserQuestion request (can come via stream)
+    case permission(CLIPermissionRequest)  // Permission request (can come via stream)
     // Note: stopped/interrupted are now top-level CLIServerMessage types
 
     private enum CodingKeys: String, CodingKey {
@@ -777,6 +779,10 @@ enum CLIStreamContent: Decodable {
             self = .subagentStart(try CLISubagentStartContent(from: decoder))
         case "subagent_complete":
             self = .subagentComplete(try CLISubagentCompleteContent(from: decoder))
+        case "question":
+            self = .question(try CLIQuestionRequest(from: decoder))
+        case "permission":
+            self = .permission(try CLIPermissionRequest(from: decoder))
         default:
             throw DecodingError.dataCorruptedError(
                 forKey: .type,
@@ -795,8 +801,24 @@ struct CLIAssistantContent: Decodable {
     let delta: Bool?  // True for streaming chunks, nil/false for complete
 
     /// Convenience: returns true if this is not a streaming delta
+    /// NOTE: When delta is nil (missing from JSON), we treat it as final.
+    /// This matches cli-bridge behavior where delta=true means streaming chunk.
     var isFinal: Bool {
         !(delta ?? false)
+    }
+
+    // Custom decoding to capture the raw delta value for debugging
+    private enum CodingKeys: String, CodingKey {
+        case content
+        case delta
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        content = try container.decode(String.self, forKey: .content)
+        delta = try container.decodeIfPresent(Bool.self, forKey: .delta)
+        // DEBUG: Log raw delta value
+        // print("[CLIAssistantContent] Decoded: delta=\(String(describing: delta)), content.count=\(content.count)")
     }
 }
 
@@ -1333,9 +1355,18 @@ struct CLIGitStatus: Decodable {
     let hasUncommitted: Bool?    // Has staged or unstaged changes
     let hasUntracked: Bool?      // Has untracked files
 
-    /// Whether the repository is clean
-    var isClean: Bool {
-        status == "clean"
+    // cli-bridge specific fields (different from legacy format)
+    let isClean: Bool?           // Server sends this directly
+    let uncommittedCount: Int?   // Number of uncommitted changes
+
+    /// Whether the repository is clean (checks server field first, then status)
+    var repoIsClean: Bool {
+        // Prefer server's isClean field if available
+        if let serverIsClean = isClean {
+            return serverIsClean
+        }
+        // Fall back to status check for legacy format
+        return status == "clean"
     }
 
     /// Convert to existing GitStatus enum for UI compatibility
@@ -1352,7 +1383,16 @@ struct CLIGitStatus: Decodable {
         // Check ahead/behind status
         let aheadCount = ahead ?? 0
         let behindCount = behind ?? 0
-        let isDirty = hasUncommitted ?? !isClean
+
+        // Determine if dirty: check uncommittedCount, hasUncommitted, or isClean
+        let isDirty: Bool
+        if let count = uncommittedCount {
+            isDirty = count > 0
+        } else if let hasUncommitted = hasUncommitted {
+            isDirty = hasUncommitted
+        } else {
+            isDirty = !repoIsClean
+        }
 
         if isDirty && aheadCount > 0 {
             return .dirtyAndAhead

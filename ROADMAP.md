@@ -10,94 +10,77 @@
 
 | Phase | Focus | Priority | Status |
 |-------|-------|----------|--------|
-| 1 | Security Hardening | Critical | ✅ Complete |
-| 2 | Data Correctness | High | In Progress |
-| 3 | Stability & Thread Safety | High | In Progress |
-| 4 | Architecture Refactoring | Medium | Pending |
+| 1 | Security Hardening | Critical | Complete |
+| 2 | Data Correctness | High | Complete |
+| 3 | Stability & Thread Safety | High | Complete |
+| 4 | Architecture Refactoring | Medium | In Progress |
 | 5 | Performance & Polish | Medium | Partial |
 | 6 | iOS 26 Adoption | Medium | Pending |
 | 7 | Test Coverage | Ongoing | Pending |
 
 ---
 
-## Active Projects
+## Completed: v0.6.0 cli-bridge Migration
 
-### claudecodeui Fork Integration
+Full migration from WebSocket to cli-bridge REST API with SSE streaming:
 
-See: [requirements/projects/claudecode-fork/implementation-plan.md](requirements/projects/claudecode-fork/implementation-plan.md)
-
-**Remaining iOS work:**
-- Use `sessionType` API field instead of local filtering
-- Use `textContent` field for message rendering
-- Enable `?batch=<ms>` WebSocket parameter
-- Retest "Always Allow" permission
+- New architecture: `CLIBridgeManager`, `CLIBridgeAdapter`, `CLIBridgeAPIClient`, `CLIBridgeTypes`
+- Removed: `WebSocketManager.swift` (1,363 lines), `APIClient.swift` (608 lines)
+- Net reduction of ~9,000 lines through consolidation
+- Simplified connection state management
+- All requirements docs updated
 
 ---
 
 ## Phase 2: Data Correctness
 
-> **Priority**: High | **Status**: Mostly Complete
+> **Priority**: High | **Status**: Complete
 
-### 2.1 Read Tool File Extension Labels ✅
-
+### 2.1 Read Tool File Extension Labels
 Session analysis shows Read dominates at 40% of tool usage. Add file extension context to headers.
 
 | Task | File | Status |
 |------|------|--------|
-| Add extension labels | `CLIMessageView.swift` | ✅ Complete - Shows language name (Swift, TypeScript, etc.) |
+| Add extension labels | `CLIMessageView.swift` | Complete - Shows language name (Swift, TypeScript, etc.) |
 
-### 2.2 API URL Encoding ✅
-
+### 2.2 API URL Encoding
 API paths built with raw strings fail for project names with spaces/special characters.
 
 | Task | File | Status |
 |------|------|--------|
-| Encode session path | `APIClient.swift` | ✅ Complete - Uses `addingPercentEncoding` |
-| Encode token path | `APIClient.swift` | ✅ Complete - Uses `addingPercentEncoding` |
-| Encode upload path | `APIClient.swift` | ✅ Complete - Uses `addingPercentEncoding` |
+| Encode session path | `CLIBridgeAPIClient.swift` | Complete - Uses `addingPercentEncoding` |
+| Encode token path | `CLIBridgeAPIClient.swift` | Complete - Uses `addingPercentEncoding` |
 
-### 2.3 Session History Completeness
-
-Session history parsing returns on first content item, dropping multi-part messages.
-
-| Task | File | Action |
-|------|------|--------|
-| Aggregate content parts | `APIClient.swift` | Collect all text/tool_use items instead of returning on first |
-
-### 2.4 Auth Retry Handling ✅
-
+### 2.3 Auth Retry Handling
 Recursive `fetchProjects()` after `login()` with no retry cap risks infinite loops.
 
 | Task | File | Status |
 |------|------|--------|
-| Add retry limit | `APIClient.swift` | ✅ Complete - `retryCount` parameter, max 1 retry |
+| Add retry limit | `CLIBridgeAPIClient.swift` | Complete - `retryCount` parameter, max 1 retry |
 
 ---
 
 ## Phase 3: Stability & Thread Safety
 
-> **Priority**: High
+> **Priority**: High | **Status**: Complete
 
-### 3.1 @MainActor Annotations ✅
-
+### 3.1 @MainActor Annotations
 ObservableObject classes missing @MainActor can cause cross-thread crashes.
 
 | Task | File | Status |
 |------|------|--------|
-| Add @MainActor to BookmarkStore | `Models.swift` | ✅ Complete - Already present |
-| Add @MainActor to AppSettings | `AppSettings.swift` | ✅ Complete - Added annotation |
+| Add @MainActor to BookmarkStore | `Models.swift` | Complete - Already present |
+| Add @MainActor to AppSettings | `AppSettings.swift` | Complete - Added annotation |
 
-### 3.2 WebSocket State Machine
+### 3.2 CLI Bridge State Management
+Connection state handled via `ConnectionState` enum with clear transitions.
 
-Connection state transitions can race between ping/receive callbacks.
-
-| Task | File | Action |
+| Task | File | Status |
 |------|------|--------|
-| Serialize state transitions | `WebSocketManager.swift` | Use actor or serial queue for state |
-| Guard message sends | `WebSocketManager.swift` | Ensure connection fully established before send |
+| State management | `CLIBridgeManager.swift` | Complete - Uses enum with clear states |
+| Guard message sends | `CLIBridgeAdapter.swift` | Complete - Validates before send |
 
 ### 3.3 SSH Command Serialization
-
 Citadel SSH library doesn't handle concurrent commands reliably.
 
 | Task | File | Action |
@@ -111,7 +94,6 @@ Citadel SSH library doesn't handle concurrent commands reliably.
 > **Priority**: Medium
 
 ### 4.1 ChatView Decomposition
-
 ChatView has 25+ @State properties and ~1968 lines.
 
 | Task | Files | Action |
@@ -126,8 +108,7 @@ ChatView has 25+ @State properties and ~1968 lines.
 | Task | File | Lines | Extract To |
 |------|------|-------|------------|
 | Split CLIMessageView | `CLIMessageView.swift` | 692 | ToolUseView, ToolResultView, MessageActionBar |
-| Split ContentView | `ContentView.swift` | 1558 | ProjectListView, SearchCoordinator |
-| Split WebSocketManager | `WebSocketManager.swift` | 1112 | MessageParser, ConnectionManager |
+| Split ContentView | `ContentView.swift` | ~1000 | ProjectListView, SearchCoordinator |
 
 ### 4.3 Error Handling Standardization
 
@@ -150,33 +131,26 @@ ChatView has 25+ @State properties and ~1968 lines.
 | Async message loading | `Models.swift` | Pending |
 | Lazy image loading | `Models.swift` | Pending |
 
-### 5.2 Code Quality Fixes
-
-| Task | File | Status |
-|------|------|--------|
-| Remove force unwrap | `WebSocketManager.swift` | ✅ Complete - Uses guard-let |
-| Flatten nested parsing | `WebSocketManager.swift` | Pending - Extract to typed parse functions |
-
-### 5.3 Input Validation
+### 5.2 Input Validation
 
 | Task | Location | Status |
 |------|----------|--------|
 | Validate slash commands | ChatView | Pending - Sanitize /resume, /model input |
-| Validate session IDs | WebSocket sends | ✅ Complete - UUID validation in attachToSession, abortSession, switchModel |
+| Validate session IDs | API sends | Complete - UUID validation |
 
-### 5.4 Accessibility ✅
-
-| Task | Files | Status |
-|------|-------|--------|
-| Add accessibilityLabel | Toolbar items | ✅ Complete - Git status, search, ideas, menu |
-| Add accessibilityHint | Complex controls | ✅ Complete - Describes actions |
-| Add accessibilityValue | Dynamic state | ✅ Complete - Git status, ideas count |
-
-### 5.5 Chat Scroll UX ✅
+### 5.3 Accessibility
 
 | Task | Files | Status |
 |------|-------|--------|
-| Scroll-to-bottom button visibility | `ChatView.swift`, `ScrollStateManager.swift` | ✅ Complete - Shows when scrolled up, hides at bottom |
+| Add accessibilityLabel | Toolbar items | Complete - Git status, search, ideas, menu |
+| Add accessibilityHint | Complex controls | Complete - Describes actions |
+| Add accessibilityValue | Dynamic state | Complete - Git status, ideas count |
+
+### 5.4 Chat Scroll UX
+
+| Task | Files | Status |
+|------|-------|--------|
+| Scroll-to-bottom button visibility | `ChatView.swift`, `ScrollStateManager.swift` | Complete - Shows when scrolled up, hides at bottom |
 
 ---
 
@@ -203,8 +177,8 @@ ChatView has 25+ @State properties and ~1968 lines.
 |------------|----------|
 | Security tests | Shell escaping edge cases, command injection vectors |
 | URL encoding tests | Project paths with spaces, special chars, Unicode |
-| Session history tests | Multi-part content flattening, tool_use aggregation |
-| Integration tests | WebSocket connection, SSH command execution |
+| CLI Bridge tests | SSE parsing, connection state, error handling |
+| Integration tests | API endpoints, SSH command execution |
 | UI tests | SwiftUI views, accessibility |
 
 ### Run Tests
@@ -222,24 +196,24 @@ xcodebuild test -project CodingBridge.xcodeproj \
 
 | File | Issues | Primary Concerns |
 |------|--------|------------------|
-| `CLIMessageView.swift` | 1 | Size (700+ lines) - extension labels ✅ |
-| `APIClient.swift` | 1 | History parsing - URL encoding ✅, retry loop ✅ |
-| `ChatView.swift` | 2 | @State sprawl, size - accessibility ✅ |
-| `WebSocketManager.swift` | 2 | State races, parsing - force unwrap ✅, session ID validation ✅ |
-| `Models.swift` | 0 | @MainActor ✅ |
+| `CLIMessageView.swift` | 0 | Size (700+ lines) - extension labels complete |
+| `CLIBridgeAPIClient.swift` | 0 | URL encoding complete, retry loop complete |
+| `ChatView.swift` | 1 | @State sprawl, size - accessibility complete |
+| `CLIBridgeManager.swift` | 0 | Clean state management |
+| `Models.swift` | 0 | @MainActor complete |
 
 ### Implementation Order
 
 ```
-Phase 1 (Security)     ████████████████████ COMPLETE ✅
-Phase 2 (Data)              ━━━━━━━━━━━━━►
-Phase 3 (Stability)              ━━━━━━━━━►
-Phase 4 (Architecture)                ━━━━━━━━━━━━━━►
-Phase 5 (Polish)                           ━━━━━━━━━━━━►
-Phase 6 (iOS 26)                                ━━━━━━━━►
-Phase 7 (Tests)        ═══════════════════════════════════►
+Phase 1 (Security)          COMPLETE
+Phase 2 (Data)              COMPLETE
+Phase 3 (Stability)         COMPLETE
+Phase 4 (Architecture)           --------->
+Phase 5 (Polish)                      --------->
+Phase 6 (iOS 26)                           --------->
+Phase 7 (Tests)        =========================================>
 ```
 
 ---
 
-_Last updated: December 28, 2025_
+_Last updated: December 29, 2025_

@@ -89,9 +89,12 @@ App → CLIBridgeAdapter → cli-bridge backend → Claude Code CLI
 App → SSHManager → sshd (file ops, git, session history)
 ```
 
-- **Views/**: 26 UI components (sheets, pickers, message views)
-- **Utilities/**: Logger, AppError, ImageUtilities
+- **Views/**: 48 UI components (sheets, pickers, message views)
+- **Utilities/**: Logger, AppError, ImageUtilities, KeychainHelper, etc. (10 files)
+- **Managers/**: BackgroundManager, LiveActivityManager, NotificationManager, etc. (5 files)
+- **Models/**: GitModels, ImageAttachment, LiveActivityAttributes, TaskState (4 files)
 - **Extensions/**: String+Markdown
+- **Persistence/**: DraftInputPersistence, MessageQueuePersistence
 
 See `requirements/ARCHITECTURE.md` for full structure and data flows.
 
