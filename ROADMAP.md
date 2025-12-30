@@ -94,14 +94,14 @@ Connection state handled via `ConnectionState` enum with clear transitions.
 > **Priority**: Medium
 
 ### 4.1 ChatView Decomposition
-ChatView has 25+ @State properties and ~1968 lines.
+~~ChatView has 25+ @State properties and ~1968 lines.~~
 
-| Task | Files | Action |
+| Task | Files | Status |
 |------|-------|--------|
-| Extract ChatViewModel | `ChatView.swift` | Move state to ObservableObject |
-| Extract ChatSearchView | `ChatView.swift` | Separate search UI and logic |
-| Extract ChatToolbar | `ChatView.swift` | Toolbar as separate component |
-| Extract GitStatusCoordinator | `ChatView.swift` | Git refresh logic to coordinator |
+| Extract ChatViewModel | `ChatViewModel.swift` | Complete - 2288→695 lines (70% reduction) |
+| Extract ChatSearchView | `ChatView.swift` | Pending - search UI in ChatView |
+| Extract ChatToolbar | `ChatView.swift` | Pending - toolbar in ChatView |
+| Extract GitStatusCoordinator | `ChatViewModel.swift` | Complete - git logic in ViewModel |
 
 ### 4.2 Large File Splits
 
