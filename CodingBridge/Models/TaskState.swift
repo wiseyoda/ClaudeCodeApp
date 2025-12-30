@@ -21,7 +21,7 @@ enum TaskStatus: Codable, Equatable {
             return operation ?? "Working..."
         case .awaitingApproval(let request):
             return "Needs approval: \(request.toolName)"
-        case .awaitingAnswer(let question):
+        case .awaitingAnswer:
             return "Question pending"
         case .completed(let result):
             switch result {

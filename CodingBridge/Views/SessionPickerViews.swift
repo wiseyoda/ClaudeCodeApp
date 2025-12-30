@@ -53,6 +53,10 @@ struct SessionBar: View {
             if let summary = session.summary, !summary.isEmpty {
                 return String(summary.prefix(40))
             }
+            // Fallback to last user message if no summary
+            if let lastUser = session.lastUserMessage, !lastUser.isEmpty {
+                return String(lastUser.prefix(40))
+            }
             return "Session \(session.id.prefix(6))..."
         }
         return "No Session"
@@ -659,6 +663,10 @@ struct SessionRow: View {
         }
         if let summary = session.summary, !summary.isEmpty {
             return summary
+        }
+        // Fallback to last user message if no summary
+        if let lastUser = session.lastUserMessage, !lastUser.isEmpty {
+            return lastUser
         }
         return "Session \(session.id.prefix(8))..."
     }

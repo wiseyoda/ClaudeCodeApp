@@ -10,6 +10,11 @@ struct MarkdownText: View {
     // MARK: - Block Cache (prevents expensive reparsing on every render during streaming)
     @State private var cachedBlocks: [Block] = []
     @State private var contentHash: Int = 0
+    @State private var parseTask: Task<Void, Never>?
+    @State private var lastParseTime: Date = .distantPast
+
+    /// Minimum interval between block parsing during streaming (prevents UI freeze)
+    private static let parseThrottleInterval: TimeInterval = 0.15  // 150ms
 
     init(_ content: String) {
         // Apply HTML entity decoding on initialization
@@ -23,19 +28,62 @@ struct MarkdownText: View {
             }
         }
         .onAppear {
-            refreshBlocksIfNeeded()
+            refreshBlocksIfNeeded(immediate: true)
         }
         .onChange(of: content) { _, _ in
-            refreshBlocksIfNeeded()
+            refreshBlocksIfNeeded(immediate: false)
+        }
+        .onDisappear {
+            parseTask?.cancel()
         }
     }
 
     /// Only reparse blocks when content actually changes (prevents UI freeze during streaming)
-    private func refreshBlocksIfNeeded() {
+    /// Uses throttling to avoid expensive parsing during rapid streaming
+    private func refreshBlocksIfNeeded(immediate: Bool) {
         let newHash = content.hashValue
         guard newHash != contentHash else { return }
-        contentHash = newHash
-        cachedBlocks = parseBlocks()
+
+        // For immediate requests (onAppear), parse synchronously
+        if immediate {
+            contentHash = newHash
+            cachedBlocks = parseBlocks()
+            lastParseTime = Date()
+            return
+        }
+
+        // During streaming, throttle parsing to avoid blocking keyboard input
+        let now = Date()
+        let timeSinceLastParse = now.timeIntervalSince(lastParseTime)
+
+        if timeSinceLastParse >= Self.parseThrottleInterval {
+            // Enough time has passed, parse immediately
+            contentHash = newHash
+            cachedBlocks = parseBlocks()
+            lastParseTime = now
+        } else {
+            // Schedule deferred parse if not already scheduled
+            if parseTask == nil {
+                parseTask = Task { @MainActor in
+                    // Wait for throttle interval
+                    let delay = Self.parseThrottleInterval - timeSinceLastParse
+                    try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                    guard !Task.isCancelled else { return }
+
+                    // Re-check hash in case content changed again
+                    let currentHash = content.hashValue
+                    guard currentHash != contentHash else {
+                        parseTask = nil
+                        return
+                    }
+
+                    contentHash = currentHash
+                    cachedBlocks = parseBlocks()
+                    lastParseTime = Date()
+                    parseTask = nil
+                }
+            }
+        }
     }
 
     private enum Block {
@@ -239,6 +287,7 @@ struct MarkdownText: View {
                             .font(settings.scaledFont(.body))
                             .foregroundColor(CLITheme.green(for: colorScheme))
                         renderInlineMarkdown(item)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
             }
@@ -311,7 +360,8 @@ struct MarkdownText: View {
     private func parseInlineFormatting(_ text: String) -> AttributedString {
         var result = AttributedString()
         var remaining = text[...]
-        let fontSize = UIFont.preferredFont(forTextStyle: .body).pointSize
+        // Use settings font size to match scaledFont(.body) - NOT system preferred font
+        let fontSize = CGFloat(settings.fontSize)
 
         while !remaining.isEmpty {
             // Find the earliest formatting marker
@@ -438,8 +488,9 @@ struct MarkdownText: View {
                 .frame(minWidth: 24, alignment: .trailing)
 
             VStack(alignment: .leading, spacing: 4) {
-                // Main item text
+                // Main item text - allow word wrap
                 renderInlineMarkdown(mainLine)
+                    .fixedSize(horizontal: false, vertical: true)
 
                 // Sub-items (indented bullets)
                 if !subLines.isEmpty {
@@ -454,11 +505,13 @@ struct MarkdownText: View {
                                         .foregroundColor(CLITheme.mutedText(for: colorScheme))
                                     renderInlineMarkdown(String(trimmed.dropFirst(2)))
                                         .font(settings.scaledFont(.small))
+                                        .fixedSize(horizontal: false, vertical: true)
                                 }
                             } else if !trimmed.isEmpty {
                                 // Continuation text
                                 renderInlineMarkdown(trimmed)
                                     .font(settings.scaledFont(.small))
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
                     }

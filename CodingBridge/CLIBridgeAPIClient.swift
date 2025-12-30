@@ -330,7 +330,7 @@ class CLIBridgeAPIClient: ObservableObject {
     }
 
     private func buildURL(_ endpoint: String, queryItems: [URLQueryItem]? = nil) -> URL? {
-        var urlString = serverURL + endpoint
+        let urlString = serverURL + endpoint
 
         if let queryItems = queryItems, !queryItems.isEmpty {
             var components = URLComponents(string: urlString)

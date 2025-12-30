@@ -87,8 +87,10 @@ struct DiffView: View {
 
     /// Compute line-by-line diff using simple LCS-based approach
     private func computeDiff() -> [DiffLine] {
-        let oldLines = oldString.components(separatedBy: "\n")
-        let newLines = newString.components(separatedBy: "\n")
+        // Normalize indentation for mobile readability (normalize together for consistent indent)
+        let rawOldLines = oldString.components(separatedBy: "\n")
+        let rawNewLines = newString.components(separatedBy: "\n")
+        let (oldLines, newLines) = normalizeIndentationTogether(rawOldLines, rawNewLines)
 
         // Simple diff: find common prefix and suffix, treat middle as changed
         // For MVP, use a simpler approach since full LCS is complex
@@ -210,14 +212,60 @@ struct DiffView: View {
         return result
     }
 
+    /// Normalize indentation for mobile readability:
+    /// 1. Convert tabs to 2 spaces
+    /// 2. Strip common leading whitespace
+    /// 3. Compress remaining indentation (4 spaces → 2 spaces per level)
+    private func normalizeIndentationTogether(_ oldLines: [String], _ newLines: [String]) -> ([String], [String]) {
+        // Convert tabs to 2 spaces
+        let oldTabNorm = oldLines.map { $0.replacingOccurrences(of: "\t", with: "  ") }
+        let newTabNorm = newLines.map { $0.replacingOccurrences(of: "\t", with: "  ") }
+
+        // Find minimum leading whitespace across ALL lines (both old and new)
+        var minIndent = Int.max
+        for line in oldTabNorm + newTabNorm {
+            guard !line.trimmingCharacters(in: .whitespaces).isEmpty else { continue }
+            let leadingSpaces = line.prefix(while: { $0 == " " }).count
+            minIndent = min(minIndent, leadingSpaces)
+        }
+
+        if minIndent == Int.max { minIndent = 0 }
+
+        // Compress indentation: strip common prefix, then halve remaining indent
+        let compressIndent: (String) -> String = { line in
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { return "" }
+
+            let currentIndent = line.prefix(while: { $0 == " " }).count
+            let relativeIndent = currentIndent - minIndent
+            // Compress: 4 spaces → 2 spaces (halve the indent)
+            let newIndent = max(0, relativeIndent / 2)
+            return String(repeating: " ", count: newIndent) + trimmed
+        }
+
+        return (oldTabNorm.map(compressIndent), newTabNorm.map(compressIndent))
+    }
+
     /// Parse old_string and new_string from Edit tool content
     static func parseEditContent(_ content: String) -> (old: String, new: String)? {
         guard content.hasPrefix("Edit") else { return nil }
 
+        // Try JSON format first: Edit({"file_path":"...","old_string":"...","new_string":"..."})
+        if let jsonStart = content.firstIndex(of: "{"),
+           let jsonEnd = content.lastIndex(of: "}") {
+            let jsonString = String(content[jsonStart...jsonEnd])
+            if let data = jsonString.data(using: .utf8),
+               let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let oldString = dict["old_string"] as? String,
+               let newString = dict["new_string"] as? String {
+                return (cleanAnyCodableWrapper(oldString), cleanAnyCodableWrapper(newString))
+            }
+        }
+
+        // Fallback to legacy text format: Edit(old_string: ..., new_string: ...)
         var oldString = ""
         var newString = ""
 
-        // Extract old_string value
         if let oldRange = content.range(of: "old_string: ") {
             let afterOld = content[oldRange.upperBound...]
             if let endRange = afterOld.range(of: ", new_string: ") {
@@ -225,7 +273,6 @@ struct DiffView: View {
             }
         }
 
-        // Extract new_string value
         if let newRange = content.range(of: "new_string: ") {
             let afterNew = content[newRange.upperBound...]
             if let endRange = afterNew.range(of: ", replace_all:") {
@@ -241,11 +288,7 @@ struct DiffView: View {
             return nil
         }
 
-        // Clean any AnyCodableValue wrappers from cached/corrupted content
-        oldString = cleanAnyCodableWrapper(oldString)
-        newString = cleanAnyCodableWrapper(newString)
-
-        return (oldString, newString)
+        return (cleanAnyCodableWrapper(oldString), cleanAnyCodableWrapper(newString))
     }
 
     /// Remove AnyCodableValue(value: "...") wrapper if present
@@ -277,8 +320,6 @@ struct DiffLineView: View {
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
 
-    private let lineNumberWidth: CGFloat = 32
-
     var body: some View {
         if line.type == .collapsed && !isExpanded {
             collapsedView
@@ -290,13 +331,12 @@ struct DiffLineView: View {
     private var collapsedView: some View {
         Button(action: onToggleExpand) {
             HStack(spacing: 0) {
-                // Empty line number columns
-                Text("┈")
-                    .frame(width: lineNumberWidth, alignment: .trailing)
+                // Placeholder for line number column
+                Text("┈┈")
+                    .font(.system(size: 10, design: .monospaced))
+                    .frame(width: 36, alignment: .trailing)
                     .foregroundColor(CLITheme.mutedText(for: colorScheme))
-                Text("┈")
-                    .frame(width: lineNumberWidth, alignment: .trailing)
-                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                    .padding(.trailing, 6)
 
                 // Collapsed indicator
                 HStack(spacing: 4) {
@@ -306,7 +346,7 @@ struct DiffLineView: View {
                 }
                 .font(settings.scaledFont(.small))
                 .foregroundColor(CLITheme.mutedText(for: colorScheme))
-                .padding(.horizontal, 8)
+                .padding(.horizontal, 4)
                 .padding(.vertical, 4)
 
                 Spacer()
@@ -318,25 +358,12 @@ struct DiffLineView: View {
 
     private var regularLineView: some View {
         HStack(spacing: 0) {
-            // Old line number
-            Text(line.oldLineNumber.map { String($0) } ?? "")
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundColor(CLITheme.mutedText(for: colorScheme))
-                .frame(width: lineNumberWidth, alignment: .trailing)
-                .padding(.trailing, 4)
-
-            // New line number
-            Text(line.newLineNumber.map { String($0) } ?? "")
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundColor(CLITheme.mutedText(for: colorScheme))
-                .frame(width: lineNumberWidth, alignment: .trailing)
-                .padding(.trailing, 4)
-
-            // Change indicator
-            Text(changeIndicator)
+            // Combined line number + indicator (e.g., "5 -", "6 +", "7")
+            Text(lineNumberText)
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundColor(indicatorColor)
-                .frame(width: 14)
+                .frame(width: 36, alignment: .trailing)
+                .padding(.trailing, 6)
 
             // Content
             Text(line.content.isEmpty ? " " : line.content)
@@ -349,11 +376,17 @@ struct DiffLineView: View {
         .background(backgroundColor)
     }
 
-    private var changeIndicator: String {
+    /// Combined line number with indicator: "5 -" for removed, "6 +" for added, "7" for context
+    private var lineNumberText: String {
         switch line.type {
-        case .removed: return "-"
-        case .added: return "+"
-        case .context, .collapsed: return " "
+        case .removed:
+            return line.oldLineNumber.map { "\($0) -" } ?? "-"
+        case .added:
+            return line.newLineNumber.map { "\($0) +" } ?? "+"
+        case .context:
+            return line.oldLineNumber.map { String($0) } ?? ""
+        case .collapsed:
+            return ""
         }
     }
 

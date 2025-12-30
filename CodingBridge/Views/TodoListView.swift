@@ -122,9 +122,10 @@ struct TodoListView: View {
         guard content.hasPrefix("TodoWrite") else { return nil }
 
         // Extract the todos array part
-        // Format: TodoWrite(todos: [{...}, {...}]) or TodoWrite(todos:[{...}])
-        // Try both with and without space after colon
-        let todosPatterns = ["todos: [", "todos:["]
+        // Format variations:
+        // - JSON: TodoWrite({"todos":[{...}]})  (quoted key)
+        // - Legacy: TodoWrite(todos: [{...}])   (unquoted key)
+        let todosPatterns = ["\"todos\":[", "\"todos\": [", "todos: [", "todos:["]
         var todosStart: Range<String.Index>?
         for pattern in todosPatterns {
             if let range = content.range(of: pattern) {
@@ -191,14 +192,20 @@ struct TodoListView: View {
         return items
     }
 
+    // MARK: - Static Regex Cache (avoid recompilation on every call)
+
+    /// Cached regex for parsing JSON key-value pairs - compiled once, reused forever
+    /// Pattern matches: "key": "value" with proper escape handling
+    private static let keyValueRegex: NSRegularExpression? = {
+        try? NSRegularExpression(pattern: #""([a-zA-Z_][a-zA-Z0-9_]*)"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)""#)
+    }()
+
     private static func parseItem(_ itemString: String) -> TodoItem? {
         // Parse key-value pairs from format: "key": "value", "key2": "value2"
         var dict: [String: String] = [:]
 
-        // Simple regex-like parsing for "key": "value" pairs
-        // Handle both camelCase and snake_case keys
-        let pattern = #""([a-zA-Z_][a-zA-Z0-9_]*)"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)""#
-        guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
+        // Use cached regex to avoid recompilation on every call (major perf improvement)
+        guard let regex = keyValueRegex else { return nil }
 
         let range = NSRange(itemString.startIndex..., in: itemString)
         let matches = regex.matches(in: itemString, range: range)

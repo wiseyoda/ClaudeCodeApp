@@ -1,10 +1,12 @@
 # Test Coverage
 
 ## Summary
-- **Last Updated**: 2025-12-28
-- **Total Test Files**: 42
-- **Total Test Cases**: 375
+- **Last Updated**: 2025-12-30
+- **Total Test Files**: 39
+- **Total Test Cases**: ~350
 - **Estimated Coverage**: ~50% (models, stores, utilities, persistence, session filtering; managers partially covered)
+
+> **Note**: WebSocket-related tests were removed in v0.6.0 when migrating to cli-bridge REST API with SSE streaming.
 
 ## Current Coverage
 Most tests are unit tests in `CodingBridgeTests/` using XCTest. Coverage spans parsing, enums, and store logic:
@@ -37,11 +39,10 @@ Most tests are unit tests in `CodingBridgeTests/` using XCTest. Coverage spans p
 - `CodingBridgeTests/APIClientModelsTests.swift`: `SessionMessage` conversions, `AnyCodableValue` string extraction, `UploadedImage` parsing, and `APIError` descriptions (18 tests).
 - `CodingBridgeTests/SearchFilterViewsTests.swift`: `MessageFilter` icon/matching logic and `String.searchRanges` behavior (10 tests).
 - `CodingBridgeTests/ProjectSettingsStoreTests.swift`: per-project override persistence, effective setting resolution, and storage key encoding (9 tests).
-- `CodingBridgeTests/SessionManagerTests.swift`: session insertion, display filtering/sorting, active session persistence, and deletion counts.
-- `CodingBridgeTests/WebSocketModelsTests.swift`: WebSocket message encoding/decoding and `AnyCodable` array/double handling (10 tests).
-- `CodingBridgeTests/WebSocketManagerSessionIdTests.swift`: session ID validation logic.
-- `CodingBridgeTests/WebSocketManagerParsingTests.swift`: WebSocketManager parsing for session events, token budgets, assistant/tool content, model switch confirmations, and session recovery (7 tests).
+- `CodingBridgeTests/SessionStoreTests.swift`: session state management, filtering, and real-time updates.
 - `CodingBridgeTests/ScrollStateManagerTests.swift`: scroll debouncing, reset behavior, and auto-scroll flags (4 tests).
+- `CodingBridgeTests/LiveActivityTypesTests.swift`: Live Activity attribute models and state transitions.
+- `CodingBridgeTests/PushNotificationTypesTests.swift`: Push notification payload parsing.
 - `CodingBridgeTests/SSHManagerTests.swift`: SSH config parsing, command building for `cd`, and ANSI stripping (6 tests).
 - `CodingBridgeTests/SpeechManagerTests.swift`: authorization gating, availability, and recording toggles (3 tests).
 - `CodingBridgeTests/CodingBridgeTests.swift`: Swift Testing stub; currently no assertions.
@@ -75,33 +76,34 @@ UI tests use `CODINGBRIDGE_UITEST_MODE=1` automatically via the UI test target.
 
 ## Roadmap for Future Tests
 Priority additions to improve coverage and regression safety:
-- **WebSocket + backend**: `WebSocketManager` state transitions, reconnect backoff, streaming assembly, tool-use message ordering, error handling. Requires mocking `URLSessionWebSocketTask`.
+- **CLI Bridge**: `CLIBridgeManager` SSE parsing, connection state, error handling. Requires mocking URL session.
 - **SSH + file operations**: `SSHManager` path escaping, ls output parsing, git status parsing. Requires mocking SSH client.
 - **MessageStore edge cases**: corrupted file handling, image cleanup, UserDefaults migration paths. Current tests cover happy paths.
 - **UI flows**: expand beyond approval banner harness to cover chat rendering (Markdown, diff, todo list), attachments, and project/session pickers.
 - **Performance**: large message histories, long streaming responses, and file browser pagination.
 
-## Recent Additions (2025-12-28)
+## Recent Additions
 
-### Session 11 (Latest)
+### v0.6.0 Migration (2025-12-29)
+- Removed WebSocket-related tests (WebSocketManagerParsingTests, WebSocketManagerSessionIdTests, WebSocketModelsTests, ConnectionStateTests, SessionWebSocketIntegrationTests)
+- Added **LiveActivityTypesTests.swift**: Live Activity attribute models and state transitions
+- Added **PushNotificationTypesTests.swift**: Push notification payload parsing
+
+### Session 11 (2025-12-28)
 - **ApprovalResponseTests.swift**: 3 tests covering approval response encoding for allow/deny/always allow.
 - **SessionAPIIntegrationTests.swift**: env-gated checks for session API pagination, summaries, and deletion.
-- **SessionWebSocketIntegrationTests.swift**: env-gated `sessions-updated` push on deletion.
 - **PermissionApprovalUITests.swift**: UI harness coverage for approval banner actions and timeout.
-- **SessionStoreTests.swift**: 2 tests covering sessions-updated created/updated reload behavior.
-- **ProjectSessionFilterTests.swift**: 1 test covering agent session filtering.
-- **WebSocketManagerParsingTests.swift**: 1 test covering permission-request parsing.
+- **SessionStoreTests.swift**: tests covering session state management and filtering.
+- **ProjectSessionFilterTests.swift**: tests covering agent session filtering.
 
-### Session 10
-- **WebSocketManagerParsingTests.swift**: 7 tests covering session creation, token budgets, assistant/tool content parsing, model switch confirmations, and session error recovery.
+### Session 10 (2025-12-28)
 - **SSHManagerTests.swift**: 6 tests covering SSH config parsing, `cd` command building, and ANSI stripping.
 - **SpeechManagerTests.swift**: 3 tests covering authorization gating, availability, and recording toggles.
 
-### Session 9
+### Session 9 (2025-12-28)
 - **NamesStoreTests.swift**: 5 tests covering project/session custom name persistence and clearing.
-- **SessionManagerTests.swift**: 11 tests covering session insertion, display filtering/sorting, active session persistence, and deletion counts.
+- **SessionStoreTests.swift**: tests covering session insertion, display filtering/sorting, active session persistence, and deletion counts.
 - **ProjectSessionFilterTests.swift**: 6 tests covering helper/empty filtering, active inclusion, and display sorting.
-- **WebSocketManagerSessionIdTests.swift**: 4 tests covering session ID validation for UUID formats.
 - **ClaudeHelperSessionIdTests.swift**: 3 tests covering helper session ID determinism and UUID formatting.
 
 ### Session 8

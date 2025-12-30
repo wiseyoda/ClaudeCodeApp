@@ -1371,7 +1371,7 @@ struct CLIGitStatus: Decodable {
 
     /// Convert to existing GitStatus enum for UI compatibility
     var toGitStatus: GitStatus {
-        guard let branch = branch else {
+        guard branch != nil else {
             return .notGitRepo
         }
 

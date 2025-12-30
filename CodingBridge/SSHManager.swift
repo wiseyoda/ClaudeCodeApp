@@ -667,7 +667,7 @@ class SSHManager: ObservableObject {
                 log.warning("SSH transient error (attempt \(attemptCount)/\(maxRetries)): \(error.localizedDescription)")
 
                 // Disconnect and wait before retry
-                await disconnect()
+                disconnect()
 
                 if attemptCount < maxRetries {
                     try await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
@@ -682,7 +682,7 @@ class SSHManager: ObservableObject {
                 if isTransient && attemptCount < maxRetries {
                     lastError = error
                     log.warning("NIO SSH transient error (attempt \(attemptCount)/\(maxRetries)): \(errorStr.prefix(100))")
-                    await disconnect()
+                    disconnect()
                     try await Task.sleep(nanoseconds: UInt64(retryDelay * 1_000_000_000))
                 } else {
                     throw error

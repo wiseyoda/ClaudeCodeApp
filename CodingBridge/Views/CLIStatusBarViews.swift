@@ -6,19 +6,18 @@ import Combine
 /// A clean, unified status bar combining connection, model, modes, and settings
 struct UnifiedStatusBar: View {
     let isProcessing: Bool
-    let connectionState: ConnectionState
     let tokenUsage: TokenUsage?
     let effectivePermissionMode: PermissionMode
     let projectPath: String?
     @Binding var showQuickSettings: Bool
     @EnvironmentObject var settings: AppSettings
     @ObservedObject private var projectSettingsStore = ProjectSettingsStore.shared
+    @ObservedObject private var healthService = HealthMonitorService.shared
     @Environment(\.colorScheme) var colorScheme
 
-    /// Initializer with full connection state
-    init(isProcessing: Bool, connectionState: ConnectionState, tokenUsage: TokenUsage?, showQuickSettings: Binding<Bool>) {
+    /// Initializer with basic parameters
+    init(isProcessing: Bool, tokenUsage: TokenUsage?, showQuickSettings: Binding<Bool>) {
         self.isProcessing = isProcessing
-        self.connectionState = connectionState
         self.tokenUsage = tokenUsage
         self.effectivePermissionMode = .default
         self.projectPath = nil
@@ -26,9 +25,8 @@ struct UnifiedStatusBar: View {
     }
 
     /// Full initializer with per-project permission support
-    init(isProcessing: Bool, connectionState: ConnectionState, tokenUsage: TokenUsage?, effectivePermissionMode: PermissionMode, projectPath: String, showQuickSettings: Binding<Bool>) {
+    init(isProcessing: Bool, tokenUsage: TokenUsage?, effectivePermissionMode: PermissionMode, projectPath: String, showQuickSettings: Binding<Bool>) {
         self.isProcessing = isProcessing
-        self.connectionState = connectionState
         self.tokenUsage = tokenUsage
         self.effectivePermissionMode = effectivePermissionMode
         self.projectPath = projectPath
@@ -45,8 +43,8 @@ struct UnifiedStatusBar: View {
                         .fill(statusColor)
                         .frame(width: 8, height: 8)
 
-                    // Pulsing overlay when connecting/reconnecting or processing
-                    if connectionState.isConnecting || isProcessing {
+                    // Pulsing overlay when: checking health, reconnecting, or processing
+                    if shouldPulse {
                         Circle()
                             .fill(statusColor)
                             .frame(width: 8, height: 8)
@@ -142,23 +140,40 @@ struct UnifiedStatusBar: View {
         .background(CLITheme.secondaryBackground(for: colorScheme))
     }
 
+    /// Status color based on server health and processing state
+    /// - Red: Server is down or unreachable
+    /// - Yellow: Server is up, agent is working
+    /// - Green: Server is up, idle/ready
     private var statusColor: Color {
-        switch connectionState {
+        switch healthService.serverStatus {
         case .disconnected:
-            // Solid red - server is down
+            // Red - server is down or unreachable
             return CLITheme.red(for: colorScheme)
-        case .connecting, .reconnecting:
-            // Pulsing red - trying to connect (pulsing animation applied separately)
+        case .checking:
+            // Red while checking (will pulse)
             return CLITheme.red(for: colorScheme)
         case .connected:
             if isProcessing {
-                // Yellow - stream in progress
+                // Yellow - agent is working
                 return CLITheme.yellow(for: colorScheme)
             } else {
-                // Green - ready
+                // Green - server up, ready
                 return CLITheme.green(for: colorScheme)
             }
         }
+    }
+
+    /// Whether the status indicator should pulse
+    /// - Pulses red when: checking connection or server is down and retrying
+    /// - Pulses yellow when: agent is processing
+    private var shouldPulse: Bool {
+        if isProcessing {
+            return true  // Pulse yellow while working
+        }
+        if healthService.serverStatus == .checking {
+            return true  // Pulse red while checking
+        }
+        return false
     }
 
     /// Whether this project has a specific override (vs using global setting)

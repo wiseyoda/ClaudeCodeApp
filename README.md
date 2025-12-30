@@ -1,6 +1,6 @@
 # Coding Bridge
 
-A native iOS client for [claudecodeui](https://github.com/wiseyoda/claudecodeui), enabling full Claude Code access from your iPhone or iPad.
+A native iOS client for [cli-bridge](https://github.com/anthropics/claude-code/tree/main/packages/cli-bridge), enabling full Claude Code access from your iPhone or iPad.
 
 ## Features
 
@@ -142,21 +142,21 @@ Control Claude's reasoning depth with 5 levels:
 ## Requirements
 
 - iOS 26.2+
-- Xcode 15.0+
-- A running [claudecodeui](https://github.com/siteboon/claudecodeui) backend
+- Xcode 26.0+
+- A running [cli-bridge](https://github.com/anthropics/claude-code/tree/main/packages/cli-bridge) backend
 - Network access to the backend (via Tailscale or local network)
 
 ## Setup
 
 ### Backend Setup
 
-The app connects to a claudecodeui backend (our fork adds session filtering, permission callbacks, and message batching). See [requirements/BACKEND.md](requirements/BACKEND.md) for setup instructions.
+The app connects to [cli-bridge](https://github.com/anthropics/claude-code/tree/main/packages/cli-bridge), which provides a REST API with SSE streaming for Claude Code. See [requirements/BACKEND.md](requirements/BACKEND.md) for setup instructions.
 
 Quick start:
 
 ```bash
-git clone https://github.com/wiseyoda/claudecodeui.git
-cd claudecodeui && npm install && npm run build && npm start
+cd ~/dev/cli-bridge
+deno task dev  # Runs on http://localhost:3100
 ```
 
 ### Building the App
@@ -195,7 +195,7 @@ curl -s http://localhost:3100/health
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │   iOS App       │────▶│   cli-bridge    │────▶│ Claude Code CLI │
-│   (SwiftUI)     │ SSE │  (Node.js)      │     │                 │
+│   (SwiftUI)     │ SSE │    (Deno)       │     │                 │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
         │                       │
         └───── Tailscale ───────┘
@@ -204,19 +204,20 @@ curl -s http://localhost:3100/health
 
 ### Key Components
 
-| Component           | Purpose                                          |
-| ------------------- | ------------------------------------------------ |
-| `WebSocketManager`  | Real-time streaming, reconnection, message queue |
-| `SessionStore`      | Centralized session state with pagination        |
-| `SessionRepository` | Session data access (API + Mock for testing)     |
-| `APIClient`         | REST API communication, JWT auth                 |
-| `SSHManager`        | Terminal, file browser, git operations           |
-| `SpeechManager`     | Voice input with iOS Speech framework            |
-| `CommandStore`      | Saved prompts with categories                    |
-| `IdeasStore`        | Per-project idea capture and persistence         |
-| `ClaudeHelper`      | AI suggestions via Haiku                         |
-| `MessageStore`      | File-based message persistence                   |
-| `BookmarkStore`     | Cross-session bookmarks                          |
+| Component             | Purpose                                          |
+| --------------------- | ------------------------------------------------ |
+| `CLIBridgeManager`    | Core REST API client with SSE streaming          |
+| `CLIBridgeAdapter`    | Callback-style interface for chat integration    |
+| `CLIBridgeAPIClient`  | HTTP client for health, projects, sessions       |
+| `SessionStore`        | Centralized session state with pagination        |
+| `SessionRepository`   | Session data access (API + Mock for testing)     |
+| `SSHManager`          | Terminal, file browser, git operations           |
+| `SpeechManager`       | Voice input with iOS Speech framework            |
+| `CommandStore`        | Saved prompts with categories                    |
+| `IdeasStore`          | Per-project idea capture and persistence         |
+| `ClaudeHelper`        | AI suggestions via Haiku                         |
+| `MessageStore`        | File-based message persistence                   |
+| `BookmarkStore`       | Cross-session bookmarks                          |
 
 ### View Structure
 
@@ -233,18 +234,25 @@ curl -s http://localhost:3100/health
 | `GlobalSearchView`   | Cross-session search               |
 | `IdeasDrawerSheet`   | Ideas management with FAB          |
 
-## WebSocket Protocol
+## SSE Events
 
-| Message Type          | Direction    | Description                    |
-| --------------------- | ------------ | ------------------------------ |
-| `claude-command`      | App → Server | Send user message              |
-| `claude-response`     | Server → App | Streaming content              |
-| `claude-complete`     | Server → App | Task finished                  |
-| `token-budget`        | Server → App | Usage stats                    |
-| `abort-session`       | App → Server | Cancel request                 |
-| `sessions-updated`    | Server → App | Session list changed           |
-| `permission-request`  | Server → App | Tool approval request          |
-| `permission-response` | App → Server | Approve/deny/always-allow tool |
+| Event Type     | Direction    | Description                    |
+| -------------- | ------------ | ------------------------------ |
+| `assistant`    | Server → App | Streaming text content         |
+| `tool_use`     | Server → App | Tool invocation (name, input)  |
+| `tool_result`  | Server → App | Tool output                    |
+| `thinking`     | Server → App | Reasoning blocks               |
+| `result`       | Server → App | Task complete with session ID  |
+| `error`        | Server → App | Error message                  |
+
+**REST Endpoints:**
+
+| Endpoint                  | Method | Description              |
+| ------------------------- | ------ | ------------------------ |
+| `/health`                 | GET    | Health check             |
+| `/agents`                 | POST   | Create agent session     |
+| `/agents/:id/message`     | POST   | Send message (SSE stream)|
+| `/agents/:id/abort`       | POST   | Abort current request    |
 
 ## Testing
 

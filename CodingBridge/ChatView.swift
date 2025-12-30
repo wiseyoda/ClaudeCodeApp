@@ -68,9 +68,13 @@ struct ChatView: View {
     @State private var showQuickCapture = false
     @State private var showQuickSettings = false
 
+    // MARK: - Todo Progress Drawer State
+    @State private var currentTodos: [TodoListView.TodoItem] = []
+    @State private var isTodoDrawerExpanded = false
+    @State private var showTodoDrawer = false
+    @State private var todoHideTimer: Task<Void, Never>?
+
     // MARK: - Scroll State
-    @State private var visibleMessageIds: Set<String> = []
-    @State private var savedScrollPosition: String?
     @FocusState private var isInputFocused: Bool
 
     // MARK: - Background Tasks
@@ -228,18 +232,20 @@ struct ChatView: View {
             claudeHelper.updateSettings(settings)
             setupWebSocketCallbacks()
 
+            // Start health monitoring for status bar
+            HealthMonitorService.shared.configure(serverURL: settings.serverURL)
+            HealthMonitorService.shared.startPolling()
+
             // Check if we were processing when app closed (for reattachment)
             let wasProcessing = MessageStore.loadProcessingState(for: project.path)
 
-            // Load persisted messages asynchronously
+            // Load persisted messages as temporary content while history loads
+            // Don't trigger scroll here - loadSessionHistory will handle scrolling
             Task {
                 let savedMessages = await MessageStore.loadMessages(for: project.path)
                 if !savedMessages.isEmpty {
                     messages = savedMessages
                     refreshDisplayMessagesCache()
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                        scrollToBottomTrigger = true
-                    }
                 } else {
                     refreshDisplayMessagesCache()
                 }
@@ -831,25 +837,17 @@ struct ChatView: View {
                     }
                 }
                 .onAppear {
-                    // Scroll to bottom on initial appear
+                    // Only scroll on appear if not loading history (history load handles its own scroll)
+                    guard !isLoadingHistory else { return }
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                         scrollManager.forceScrollToBottom()
                     }
                 }
                 .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
-                    // Find the first visible message to restore scroll position after rotation
-                    if let firstVisibleId = visibleMessageIds.first,
-                       let messageUUID = UUID(uuidString: firstVisibleId),
-                       displayMessages.contains(where: { $0.id == messageUUID }) {
-                        savedScrollPosition = firstVisibleId
-                        // Restore scroll position after layout updates
+                    // Keep scroll at bottom after rotation if auto-scroll is enabled
+                    if scrollManager.isAutoScrollEnabled {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                            if let positionId = savedScrollPosition {
-                                withAnimation(.easeInOut(duration: 0.1)) {
-                                    proxy.scrollTo(UUID(uuidString: positionId), anchor: .top)
-                                }
-                                savedScrollPosition = nil
-                            }
+                            scrollManager.forceScrollToBottom()
                         }
                     }
                 }
@@ -873,6 +871,12 @@ struct ChatView: View {
     private var displayMessages: [ChatMessage] {
         // Return cached value - cache is invalidated by onChange handlers
         cachedDisplayMessages
+    }
+
+    /// Grouped display items for compact tool rendering.
+    /// Groups consecutive Read/Glob/Grep into "Explored" rows and merges Bash with its result.
+    private var groupedDisplayItems: [DisplayItem] {
+        groupMessagesForDisplay(displayMessages)
     }
 
     /// Compute the current invalidation key based on filter dependencies.
@@ -967,34 +971,18 @@ struct ChatView: View {
     }
 
     private var messagesListView: some View {
-        LazyVStack(alignment: .leading, spacing: 2) {
-            ForEach(displayMessages) { message in
-                CLIMessageView(
-                    message: message,
+        // Use regular VStack for smooth scrolling - all messages are already loaded
+        // LazyVStack causes jitter due to height estimation on variable-content cells
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(groupedDisplayItems) { item in
+                DisplayItemView(
+                    item: item,
                     projectPath: project.path,
                     projectTitle: project.title,
-                    onAnalyze: { msg in
-                        // Cancel any previous analysis task
-                        analyzeTask?.cancel()
-                        // Use ClaudeHelper to analyze the message
-                        analyzeTask = Task {
-                            guard !Task.isCancelled else { return }
-                            await claudeHelper.analyzeMessage(
-                                msg,
-                                recentMessages: messages,
-                                projectPath: project.path,
-                                sessionId: wsManager.sessionId  // Use current session to avoid creating orphan sessions
-                            )
-                        }
-                    }
+                    onAnalyze: handleAnalyze,
+                    hideTodoInline: showTodoDrawer
                 )
-                .id(message.id)
-                .onAppear {
-                    visibleMessageIds.insert(message.id.uuidString)
-                }
-                .onDisappear {
-                    visibleMessageIds.remove(message.id.uuidString)
-                }
+                .id(item.id)
             }
 
             if wsManager.isProcessing {
@@ -1002,20 +990,26 @@ struct ChatView: View {
             }
 
             // Bottom anchor for scrollTo target
-            // Use Spacer with explicit frame to ensure it's always rendered
-            // (Color.clear can be skipped by LazyVStack, causing scroll failures)
             Spacer()
                 .frame(height: 1)
                 .id("bottomAnchor")
-                .onAppear {
-                    scrollManager.updateBottomAnchorVisible(true)
-                }
-                .onDisappear {
-                    scrollManager.updateBottomAnchorVisible(false)
-                }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    /// Handle analyze action - extracted to avoid closure recreation on every render
+    private func handleAnalyze(_ msg: ChatMessage) {
+        analyzeTask?.cancel()
+        analyzeTask = Task {
+            guard !Task.isCancelled else { return }
+            await claudeHelper.analyzeMessage(
+                msg,
+                recentMessages: messages,
+                projectPath: project.path,
+                sessionId: wsManager.sessionId
+            )
+        }
     }
 
     @ViewBuilder
@@ -1066,6 +1060,18 @@ struct ChatView: View {
         VStack(spacing: 0) {
             // Banners appear ABOVE the status bar for better visibility
 
+            // Todo progress drawer (floating, collapsible, shows during streaming)
+            if showTodoDrawer && !currentTodos.isEmpty {
+                TodoProgressDrawer(
+                    todos: currentTodos,
+                    isExpanded: $isTodoDrawerExpanded
+                )
+                .transition(.asymmetric(
+                    insertion: .move(edge: .top).combined(with: .opacity),
+                    removal: .opacity
+                ))
+            }
+
             // Permission approval banner (shown when bypass permissions is OFF and approval needed)
             if let approval = wsManager.pendingApproval {
                 ApprovalBannerView(
@@ -1105,7 +1111,6 @@ struct ChatView: View {
             // Unified status bar with quick settings access
             UnifiedStatusBar(
                 isProcessing: wsManager.isProcessing,
-                connectionState: wsManager.connectionState,
                 tokenUsage: wsManager.tokenUsage,
                 effectivePermissionMode: effectivePermissionModeValue,
                 projectPath: project.path,
@@ -1170,6 +1175,24 @@ struct ChatView: View {
                 timestamp: Date()
             )
             messages.append(toolMsg)
+
+            // Detect TodoWrite tool calls and update the floating drawer
+            if name == "TodoWrite" {
+                let content = "\(name)(\(input))"
+                if let todos = TodoListView.parseTodoContent(content), !todos.isEmpty {
+                    // Use withTransaction to batch state updates and prevent animation conflicts
+                    // This helps avoid UI freezes when user is typing elsewhere during streaming
+                    var transaction = Transaction()
+                    transaction.disablesAnimations = true
+                    withTransaction(transaction) {
+                        currentTodos = todos
+                        showTodoDrawer = true
+                    }
+                    // Cancel any pending hide timer - we have new todos
+                    todoHideTimer?.cancel()
+                    todoHideTimer = nil
+                }
+            }
         }
 
         wsManager.onToolResult = { result in
@@ -1224,6 +1247,20 @@ struct ChatView: View {
                     )
                 }
             }
+
+            // Start auto-hide timer for todo drawer (15s after streaming completes)
+            if showTodoDrawer && !currentTodos.isEmpty {
+                todoHideTimer?.cancel()
+                todoHideTimer = Task {
+                    try? await Task.sleep(nanoseconds: 15_000_000_000) // 15 seconds
+                    if !Task.isCancelled {
+                        withAnimation(.easeOut(duration: 0.3)) {
+                            showTodoDrawer = false
+                            isTodoDrawerExpanded = false
+                        }
+                    }
+                }
+            }
         }
 
         wsManager.onError = { error in
@@ -1240,7 +1277,18 @@ struct ChatView: View {
         }
 
         wsManager.onSessionCreated = { sessionId in
-            print("[ChatView] NEW SESSION CREATED: \(sessionId.prefix(8))...")
+            // Check if this session already exists in the store (reconnecting to existing session)
+            let existingSession = sessionStore.sessions(for: project.path).first { $0.id == sessionId }
+            if let existing = existingSession {
+                // Don't overwrite selectedSession if we already have good data
+                if selectedSession?.id != sessionId || selectedSession?.summary == nil {
+                    selectedSession = existing
+                }
+                wsManager.sessionId = sessionId
+                MessageStore.saveSessionId(sessionId, for: project.path)
+                sessionStore.setActiveSession(sessionId, for: project.path)
+                return
+            }
             // Set wsManager.sessionId so SessionPicker's activeSessionId includes this session
             wsManager.sessionId = sessionId
             // Save session ID for continuity when returning to this project
@@ -1346,6 +1394,15 @@ struct ChatView: View {
 
         // Haptic feedback for send action
         HapticManager.medium()
+
+        // Hide todo drawer when user sends a new message (new task starting)
+        todoHideTimer?.cancel()
+        todoHideTimer = nil
+        withAnimation(.easeOut(duration: 0.2)) {
+            showTodoDrawer = false
+            isTodoDrawerExpanded = false
+        }
+        currentTodos = []
 
         // Check for slash commands (client-side handling)
         if text.hasPrefix("/") && selectedImages.isEmpty {
@@ -1525,7 +1582,6 @@ struct ChatView: View {
         let storeSessions = sessionStore.displaySessions(for: project.path)
         if !storeSessions.isEmpty {
             if let mostRecent = storeSessions.first, (mostRecent.messageCount ?? 0) > 0 {
-                print("[ChatView] Auto-selecting most recent session from store: \(mostRecent.id.prefix(8))...")
                 selectedSession = mostRecent
                 return
             }
@@ -1537,7 +1593,6 @@ struct ChatView: View {
         guard let mostRecent = filteredSessions.first,
               (mostRecent.messageCount ?? 0) > 0 else { return }
 
-        print("[ChatView] Auto-selecting most recent session: \(mostRecent.id.prefix(8))...")
         selectedSession = mostRecent
     }
 
@@ -1605,7 +1660,6 @@ struct ChatView: View {
                 let historyMessages = parseJSONLToMessages(exportResponse.content)
 
                 await MainActor.run {
-                    isLoadingHistory = false
                     if historyMessages.isEmpty {
                         // Fallback to lastAssistantMessage if parsing failed
                         if let lastMsg = session.lastAssistantMessage {
@@ -1615,32 +1669,25 @@ struct ChatView: View {
                         messages = historyMessages
                         print("[ChatView] Loaded \(historyMessages.count) messages from session export")
                     }
-                    // Trigger scroll to bottom after delays to allow SwiftUI to render
-                    // First scroll attempt after initial render
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                        scrollToBottomTrigger = true
-                    }
-                    // Second scroll attempt after layout settles (handles complex content)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        scrollToBottomTrigger = true
+                    // Mark loading complete and scroll once after layout settles
+                    isLoadingHistory = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        scrollManager.forceScrollToBottom()
                     }
                 }
             } catch {
                 print("[ChatView] Failed to load session history via export: \(error)")
                 await MainActor.run {
-                    isLoadingHistory = false
                     // Fallback to lastAssistantMessage
                     if let lastMsg = session.lastAssistantMessage {
                         messages.append(ChatMessage(role: .assistant, content: lastMsg, timestamp: Date()))
                     }
                     // Show error message
                     messages.append(ChatMessage(role: .system, content: "Could not load history: \(error.localizedDescription)", timestamp: Date()))
-                    // Trigger scroll to bottom after delays to allow SwiftUI to render
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                        scrollToBottomTrigger = true
-                    }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        scrollToBottomTrigger = true
+                    // Mark loading complete and scroll once
+                    isLoadingHistory = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        scrollManager.forceScrollToBottom()
                     }
                 }
             }
@@ -1648,8 +1695,9 @@ struct ChatView: View {
     }
 
     /// Parse session export JSON into ChatMessages
-    /// Format: { "session": {...}, "messages": [{ "type": "user", "content": "..." | [...], "timestamp": "..." }, ...] }
-    /// With includeStructuredContent=true, content is an array of blocks (text, tool_use, tool_result, thinking)
+    /// Format: { "session": {...}, "messages": [...] }
+    /// Messages are flattened StreamMessage objects: tool_use, tool_result, thinking as top-level types
+    /// This matches the WebSocket live stream format for consistent parsing
     private func parseJSONLToMessages(_ jsonContent: String) -> [ChatMessage] {
         guard let data = jsonContent.data(using: .utf8) else {
             print("[ChatView] Failed to convert export content to data")
@@ -1672,8 +1720,8 @@ struct ChatView: View {
     }
 
     /// Parse a message from the export format
-    /// Handles both plain text content (legacy) and structured content arrays (includeStructuredContent=true)
-    /// Returns multiple ChatMessages when content contains multiple blocks (text + tool_use, etc.)
+    /// Handles flattened StreamMessage format (tool_use, tool_result as top-level types)
+    /// and plain text content for user/assistant/system messages
     private func parseExportMessage(_ json: [String: Any]) -> [ChatMessage] {
         guard let type = json["type"] as? String else { return [] }
 
@@ -1690,31 +1738,68 @@ struct ChatView: View {
             }
         }
 
-        // Check if content is structured (array) or plain text (string)
-        if let contentArray = json["content"] as? [[String: Any]] {
-            // Structured content - parse each block
-            return parseStructuredContent(contentArray, messageType: type, timestamp: timestamp)
-        } else if let content = json["content"] as? String, !content.isEmpty {
-            // Plain text content (legacy format)
-            let role: ChatMessage.Role
-            switch type {
-            case "user":
-                role = .user
-            case "assistant":
-                role = .assistant
-            case "system":
-                role = .system
-            default:
-                return []
+        // Handle flattened StreamMessage types (matches WebSocket format)
+        switch type {
+        case "tool_use":
+            // Format: { type: "tool_use", name: "Bash", input: {...}, content: "toolu_id" }
+            // Must use JSON serialization to match live stream format: Bash({"command":"..."})
+            // This ensures extractParam() can parse the JSON to extract parameters
+            if let name = json["name"] as? String {
+                var toolContent = name
+                if let inputDict = json["input"] as? [String: Any] {
+                    if let data = try? JSONSerialization.data(withJSONObject: inputDict),
+                       let inputStr = String(data: data, encoding: .utf8) {
+                        toolContent = "\(name)(\(inputStr))"
+                        print("[ChatView] ✅ Parsed tool_use \(name) with JSON: \(inputStr.prefix(50))...")
+                    } else {
+                        print("[ChatView] ❌ JSONSerialization failed for \(name)")
+                    }
+                } else if json["input"] != nil {
+                    print("[ChatView] ❌ input not [String: Any] for \(name), keys: \(json.keys)")
+                }
+                return [ChatMessage(role: .toolUse, content: toolContent, timestamp: timestamp)]
             }
-            return [ChatMessage(role: role, content: content, timestamp: timestamp)]
-        }
+            return []
 
-        return []
+        case "tool_result":
+            // Format: { type: "tool_result", tool: "Bash", output: "...", success: true, is_error: false }
+            let output = json["output"] as? String ?? json["content"] as? String ?? ""
+            let isError = json["is_error"] as? Bool ?? !(json["success"] as? Bool ?? true)
+            let role: ChatMessage.Role = isError ? .error : .toolResult
+            return [ChatMessage(role: role, content: output, timestamp: timestamp)]
+
+        case "thinking":
+            // Format: { type: "thinking", content: "..." }
+            if let thinking = json["content"] as? String, !thinking.isEmpty {
+                return [ChatMessage(role: .thinking, content: thinking, timestamp: timestamp)]
+            }
+            return []
+
+        case "user", "assistant", "system":
+            // Plain text content
+            if let content = json["content"] as? String, !content.isEmpty {
+                let role: ChatMessage.Role
+                switch type {
+                case "user": role = .user
+                case "assistant": role = .assistant
+                default: role = .system
+                }
+                return [ChatMessage(role: role, content: content, timestamp: timestamp)]
+            }
+            // Legacy: structured content array (for backwards compatibility)
+            if let contentArray = json["content"] as? [[String: Any]] {
+                return parseStructuredContent(contentArray, messageType: type, timestamp: timestamp)
+            }
+            return []
+
+        default:
+            print("[ChatView] Unknown message type: \(type)")
+            return []
+        }
     }
 
     /// Parse structured content array into ChatMessages
-    /// Each block becomes a separate ChatMessage with appropriate role
+    /// Only handles text blocks - tool_use/tool_result/thinking should be flattened by cli-bridge
     private func parseStructuredContent(_ blocks: [[String: Any]], messageType: String, timestamp: Date) -> [ChatMessage] {
         var messages: [ChatMessage] = []
 
@@ -1728,37 +1813,10 @@ struct ChatView: View {
                     messages.append(ChatMessage(role: role, content: text, timestamp: timestamp))
                 }
 
-            case "tool_use":
-                if let name = block["name"] as? String {
-                    // Format tool use for display
-                    var content = "Tool: \(name)"
-                    if let input = block["input"] {
-                        if let inputDict = input as? [String: Any],
-                           let inputData = try? JSONSerialization.data(withJSONObject: inputDict, options: [.prettyPrinted, .sortedKeys]),
-                           let inputStr = String(data: inputData, encoding: .utf8) {
-                            content += "\n\(inputStr)"
-                        } else {
-                            content += "\n\(input)"
-                        }
-                    }
-                    messages.append(ChatMessage(role: .toolUse, content: content, timestamp: timestamp))
-                }
-
-            case "tool_result":
-                if let resultContent = block["content"] as? String {
-                    let isError = block["is_error"] as? Bool ?? false
-                    let role: ChatMessage.Role = isError ? .error : .toolResult
-                    messages.append(ChatMessage(role: role, content: resultContent, timestamp: timestamp))
-                }
-
-            case "thinking":
-                if let thinking = block["thinking"] as? String, !thinking.isEmpty {
-                    messages.append(ChatMessage(role: .thinking, content: thinking, timestamp: timestamp))
-                }
-
             default:
-                // Unknown block type - skip
-                print("[ChatView] Unknown content block type: \(blockType)")
+                // cli-bridge should flatten tool_use/tool_result/thinking to top-level types
+                // If we see them here, cli-bridge needs to be updated
+                print("[ChatView] Unexpected nested block type '\(blockType)' - cli-bridge should flatten this")
             }
         }
 

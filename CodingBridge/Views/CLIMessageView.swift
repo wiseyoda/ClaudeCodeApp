@@ -7,6 +7,7 @@ struct CLIMessageView: View {
     let projectPath: String?
     let projectTitle: String?
     let onAnalyze: ((ChatMessage) -> Void)?  // Callback for analyze action
+    let hideTodoInline: Bool  // Hide inline todo when drawer is showing
     @State private var isExpanded: Bool
     @State private var showCopied = false
     @State private var showActionBar = false  // Track whether to show action bar
@@ -20,11 +21,12 @@ struct CLIMessageView: View {
     private let cachedResultCountBadge: String?
     private let cachedToolErrorInfo: ToolErrorInfo?
 
-    init(message: ChatMessage, projectPath: String? = nil, projectTitle: String? = nil, onAnalyze: ((ChatMessage) -> Void)? = nil) {
+    init(message: ChatMessage, projectPath: String? = nil, projectTitle: String? = nil, onAnalyze: ((ChatMessage) -> Void)? = nil, hideTodoInline: Bool = false) {
         self.message = message
         self.projectPath = projectPath
         self.projectTitle = projectTitle
         self.onAnalyze = onAnalyze
+        self.hideTodoInline = hideTodoInline
 
         // Pre-compute expensive values once during init
         let toolType = CLITheme.ToolType.from(message.content)
@@ -55,23 +57,30 @@ struct CLIMessageView: View {
     }
 
     var body: some View {
+        // Hide TodoWrite messages and their results completely when drawer is showing
+        let isTodoWriteToolUse = message.role == .toolUse && message.content.hasPrefix("TodoWrite")
+        let isTodoWriteResult = message.role == .toolResult && message.content.contains("Todos have been modified")
+        if hideTodoInline && (isTodoWriteToolUse || isTodoWriteResult) {
+            EmptyView()
+        } else {
         VStack(alignment: .leading, spacing: 2) {
-            // Header line with bullet/icon
-            HStack(spacing: 6) {
-                // Use SF Symbol icons for tools, text bullets for others
-                if message.role == .toolUse {
-                    Image(systemName: toolType.icon)
-                        .foregroundColor(bulletColor)
-                        .font(.system(size: 12))
-                } else {
-                    Text(bulletChar)
-                        .foregroundColor(bulletColor)
-                        .font(settings.scaledFont(.body))
-                }
+            // Header line with bullet/icon (skip for assistant - icon is inline with content)
+            if message.role != .assistant {
+                HStack(spacing: 6) {
+                    // Use SF Symbol icons for tools, text bullets for others
+                    if message.role == .toolUse {
+                        Image(systemName: toolType.icon)
+                            .foregroundColor(bulletColor)
+                            .font(.system(size: 12))
+                    } else {
+                        Text(bulletChar)
+                            .foregroundColor(bulletColor)
+                            .font(settings.scaledFont(.body))
+                    }
 
-                Text(headerText)
-                    .foregroundColor(headerColor)
-                    .font(settings.scaledFont(.body))
+                    Text(headerText)
+                        .foregroundColor(headerColor)
+                        .font(settings.scaledFont(.body))
 
                 if isCollapsible {
                     Text(isExpanded ? "[-]" : "[+]")
@@ -95,33 +104,40 @@ struct CLIMessageView: View {
                     }
                 }
 
-                // Relative timestamp
-                Text(relativeTimestamp)
-                    .font(.system(size: 10))
-                    .foregroundColor(CLITheme.mutedText(for: colorScheme).opacity(0.7))
+                // Relative timestamp (skip for toolUse, assistant, error - they show time below content)
+                if message.role != .toolUse && message.role != .assistant && message.role != .error {
+                    Text(relativeTimestamp)
+                        .font(.system(size: 10))
+                        .foregroundColor(CLITheme.mutedText(for: colorScheme).opacity(0.7))
+
+                    // Copy button for result content (small, right after timestamp)
+                    if message.role == .toolResult && !message.content.isEmpty {
+                        Button {
+                            HapticManager.light()
+                            UIPasteboard.general.string = message.content
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showCopied = true
+                            }
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    showCopied = false
+                                }
+                            }
+                        } label: {
+                            Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                                .font(.system(size: 9))
+                                .foregroundColor(
+                                    showCopied
+                                        ? CLITheme.green(for: colorScheme)
+                                        : CLITheme.mutedText(for: colorScheme).opacity(0.6)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(showCopied ? "Copied" : "Copy result")
+                    }
+                }
 
                 Spacer()
-
-                // Quick action buttons for tools
-                if message.role == .toolUse {
-                    quickActionButtons
-                }
-
-                // Show action bar toggle for assistant messages (instead of just copy button)
-                if message.role == .assistant && !message.content.isEmpty {
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            showActionBar.toggle()
-                        }
-                    } label: {
-                        Image(systemName: showActionBar ? "chevron.up" : "ellipsis")
-                            .font(.system(size: 12))
-                            .foregroundColor(CLITheme.mutedText(for: colorScheme))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(showActionBar ? "Hide actions" : "Show actions")
-                    .accessibilityHint("Toggle action bar with copy and analyze options")
-                }
             }
             .contentShape(Rectangle())
             .onTapGesture {
@@ -135,16 +151,130 @@ struct CLIMessageView: View {
             .accessibilityLabel(accessibilityLabel)
             .accessibilityHint(isCollapsible ? (isExpanded ? "Double tap to collapse" : "Double tap to expand") : "")
             .accessibilityAddTraits(isCollapsible ? .isButton : [])
+            } // end if message.role != .assistant
 
-            // Content
+            // Content (assistant messages include inline sparkle icon)
             if isExpanded || !isCollapsible {
-                contentView
-                    .padding(.leading, 16)
+                if message.role == .assistant {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: "sparkles")
+                            .foregroundColor(CLITheme.purple(for: colorScheme))
+                            .font(.system(size: 12))
+                            .padding(.top, 2)
+                        contentView
+                    }
+                } else {
+                    contentView
+                        .padding(.leading, 16)
+                }
             }
 
-            // Action bar for assistant messages
+            // Footer for assistant messages: timestamp + copy button
+            if message.role == .assistant && !message.content.isEmpty {
+                HStack(spacing: 6) {
+                    Text(relativeTimestamp)
+                        .font(.system(size: 10))
+                        .foregroundColor(CLITheme.mutedText(for: colorScheme).opacity(0.7))
+
+                    Button {
+                        HapticManager.light()
+                        UIPasteboard.general.string = message.content
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showCopied = true
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showCopied = false
+                            }
+                        }
+                    } label: {
+                        Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 9))
+                            .foregroundColor(
+                                showCopied
+                                    ? CLITheme.green(for: colorScheme)
+                                    : CLITheme.mutedText(for: colorScheme).opacity(0.6)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(showCopied ? "Copied" : "Copy message")
+
+                    Spacer()
+
+                    // Action bar toggle
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            showActionBar.toggle()
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 12))
+                            .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("More actions")
+                }
+                .padding(.leading, 16)
+                .padding(.top, 4)
+            }
+
+            // Expanded action bar for assistant messages
             if message.role == .assistant && showActionBar && !message.content.isEmpty {
                 messageActionBarView
+            }
+
+            // Footer for error messages: timestamp + copy button + ellipsis
+            if message.role == .error && !message.content.isEmpty {
+                HStack(spacing: 6) {
+                    Text(relativeTimestamp)
+                        .font(.system(size: 10))
+                        .foregroundColor(CLITheme.mutedText(for: colorScheme).opacity(0.7))
+
+                    Button {
+                        HapticManager.light()
+                        UIPasteboard.general.string = message.content
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showCopied = true
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showCopied = false
+                            }
+                        }
+                    } label: {
+                        Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 9))
+                            .foregroundColor(
+                                showCopied
+                                    ? CLITheme.green(for: colorScheme)
+                                    : CLITheme.mutedText(for: colorScheme).opacity(0.6)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(showCopied ? "Copied" : "Copy error")
+
+                    Spacer()
+
+                    // Action bar toggle
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            showActionBar.toggle()
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 12))
+                            .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("More actions")
+                }
+                .padding(.leading, 16)
+                .padding(.top, 4)
+            }
+
+            // Expanded action bar for error messages
+            if message.role == .error && showActionBar && !message.content.isEmpty {
+                errorActionBarView
             }
         }
         .padding(.vertical, 4)
@@ -180,6 +310,7 @@ struct CLIMessageView: View {
                 }
             }
         }
+        } // else (not hideTodoInline)
     }
 
     private func shareContent() {
@@ -571,7 +702,6 @@ struct CLIMessageView: View {
     /// Compute result count badge - called once during init to avoid recomputation
     private static func computeResultCountBadge(for message: ChatMessage, toolType: CLITheme.ToolType) -> String? {
         let content = message.content
-        let lineCount = content.components(separatedBy: "\n").count
 
         switch message.role {
         case .toolUse:
@@ -590,32 +720,55 @@ struct CLIMessageView: View {
         case .toolResult:
             // Parse error info for this computation
             let info = ToolResultParser.parse(content, toolName: nil)
-            switch info.category {
-            case .success:
-                // For success, show additional info about content
-                if let exitCode = extractBashExitCode(from: content), exitCode == 0 {
-                    return "✓"
-                }
-                // Count file paths for grep/glob results
-                let pathLines = content.components(separatedBy: "\n")
-                    .filter { line in
-                        let trimmed = line.trimmingCharacters(in: .whitespaces)
-                        return !trimmed.isEmpty && (trimmed.hasPrefix("/") || trimmed.contains("."))
-                    }
-                if pathLines.count > 3 {
-                    return "\(pathLines.count) files"
-                }
-                if lineCount > 1 {
-                    return "\(lineCount) lines"
-                } else if content.count > 100 {
-                    return "\(content.count) chars"
-                }
-                return "✓"
-            case .gitError, .commandFailed, .sshError, .invalidArgs,
-                 .commandNotFound, .fileConflict, .fileNotFound,
-                 .approvalRequired, .timeout, .permissionDenied, .unknown:
+
+            // Handle errors first - show error category
+            guard info.category == .success else {
                 return info.category.shortLabel
             }
+
+            // 1. Bash exit code - already success, show checkmark
+            if let exitCode = extractBashExitCode(from: content), exitCode == 0 {
+                return "✓"
+            }
+
+            // 2. Simple acknowledgments (short JSON, success messages) - just checkmark
+            let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.count < 50 {
+                return "✓"
+            }
+            if trimmed.hasPrefix("{") && trimmed.hasSuffix("}") && trimmed.count < 200 {
+                // Short JSON response (like TodoWrite result) - just checkmark
+                return "✓"
+            }
+
+            // 3. File path lists (grep/glob results) - show file count
+            let lines = content.components(separatedBy: "\n")
+            let pathLines = lines.filter { line in
+                let t = line.trimmingCharacters(in: .whitespaces)
+                guard !t.isEmpty else { return false }
+                // Absolute paths or relative paths with common extensions
+                return t.hasPrefix("/") || t.hasSuffix(".swift") || t.hasSuffix(".ts") ||
+                       t.hasSuffix(".js") || t.hasSuffix(".json") || t.hasSuffix(".md") ||
+                       t.hasSuffix(".py") || t.hasSuffix(".go") || t.hasSuffix(".rs")
+            }
+            if pathLines.count >= 3 {
+                return "\(pathLines.count) files"
+            }
+
+            // 4. Read-style numbered output (e.g., "   1→ import SwiftUI")
+            let numberedLines = lines.filter { line in
+                // Match patterns like "   1→", "  42→", "123→"
+                let t = line.trimmingCharacters(in: .whitespaces)
+                guard let arrowIndex = t.firstIndex(of: "→") else { return false }
+                let prefix = t[..<arrowIndex]
+                return prefix.allSatisfy { $0.isNumber }
+            }
+            if numberedLines.count >= 5 {
+                return "\(numberedLines.count) lines"
+            }
+
+            // 5. Default - just checkmark for success (no useless "X chars")
+            return "✓"
         case .thinking:
             let wordCount = content.split(separator: " ").count
             if wordCount > 10 {
@@ -639,6 +792,41 @@ struct CLIMessageView: View {
                 onAnalyze?(message)
             }
         )
+        .padding(.leading, 16)
+        .transition(AnyTransition.opacity.combined(with: .move(edge: .top)))
+    }
+
+    /// Error action bar with analyze button for error diagnosis
+    private var errorActionBarView: some View {
+        HStack(spacing: 12) {
+            Spacer()
+
+            // Analyze button - sends error to AI for diagnosis
+            Button {
+                onAnalyze?(message)
+            } label: {
+                Label("Analyze Error", systemImage: "stethoscope")
+                    .font(.caption)
+                    .foregroundColor(CLITheme.red(for: colorScheme))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Analyze error")
+            .accessibilityHint("Ask AI to diagnose this error")
+
+            // Copy button
+            Button {
+                HapticManager.light()
+                UIPasteboard.general.string = message.content
+            } label: {
+                Image(systemName: "doc.on.doc")
+                    .font(.system(size: 14))
+                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Copy error")
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 6)
         .padding(.leading, 16)
         .transition(AnyTransition.opacity.combined(with: .move(edge: .top)))
     }
@@ -881,7 +1069,8 @@ struct CLIMessageView: View {
                let parsed = DiffView.parseEditContent(message.content) {
                 DiffView(oldString: parsed.old, newString: parsed.new)
             } else if message.content.hasPrefix("TodoWrite"),
-                      let todos = TodoListView.parseTodoContent(message.content) {
+                      let todos = TodoListView.parseTodoContent(message.content),
+                      !hideTodoInline {
                 TodoListView(todos: todos)
             } else {
                 // Format and truncate tool use content

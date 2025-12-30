@@ -18,24 +18,32 @@ struct CodeBlockView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            // Header with language badge and copy button
-            HStack {
-                if let displayLang = displayLanguage {
-                    HStack(spacing: 4) {
-                        Image(systemName: Self.languageIcon(for: language ?? ""))
-                            .font(.system(size: 10))
-                        Text(displayLang)
-                    }
+            // Language badge (if present)
+            if let displayLang = displayLanguage {
+                HStack(spacing: 4) {
+                    Image(systemName: Self.languageIcon(for: language ?? ""))
+                        .font(.system(size: 10))
+                    Text(displayLang)
+                }
+                .font(settings.scaledFont(.small))
+                .foregroundColor(CLITheme.cyan(for: colorScheme))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(
+                    Capsule()
+                        .fill(CLITheme.cyan(for: colorScheme).opacity(0.15))
+                )
+            }
+
+            // Code content with copy button in right column
+            HStack(alignment: .top, spacing: 0) {
+                Text(code)
                     .font(settings.scaledFont(.small))
                     .foregroundColor(CLITheme.cyan(for: colorScheme))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(
-                        Capsule()
-                            .fill(CLITheme.cyan(for: colorScheme).opacity(0.15))
-                    )
-                }
-                Spacer()
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+
+                // Copy button column
                 Button {
                     HapticManager.light()
                     UIPasteboard.general.string = code
@@ -44,24 +52,15 @@ struct CodeBlockView: View {
                         showCopied = false
                     }
                 } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
-                        Text(showCopied ? "Copied!" : "Copy")
-                    }
-                    .font(settings.scaledFont(.small))
-                    .foregroundColor(showCopied ? CLITheme.green(for: colorScheme) : CLITheme.mutedText(for: colorScheme))
+                    Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 11))
+                        .foregroundColor(showCopied ? CLITheme.green(for: colorScheme) : CLITheme.mutedText(for: colorScheme))
                 }
                 .buttonStyle(.plain)
+                .padding(6)
             }
-
-            // Code content
-            Text(code)
-                .font(settings.scaledFont(.small))
-                .foregroundColor(CLITheme.cyan(for: colorScheme))
-                .padding(8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(CLITheme.secondaryBackground(for: colorScheme))
-                .cornerRadius(6)
+            .background(CLITheme.secondaryBackground(for: colorScheme))
+            .cornerRadius(6)
         }
     }
 
@@ -149,18 +148,25 @@ struct MathBlockView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            // Header with LaTeX label and copy button
-            HStack {
-                HStack(spacing: 4) {
-                    Image(systemName: "function")
-                        .font(.caption)
-                    Text("LaTeX")
-                }
-                .font(settings.scaledFont(.small))
-                .foregroundColor(CLITheme.purple(for: colorScheme))
+            // LaTeX label
+            HStack(spacing: 4) {
+                Image(systemName: "function")
+                    .font(.caption)
+                Text("LaTeX")
+            }
+            .font(settings.scaledFont(.small))
+            .foregroundColor(CLITheme.purple(for: colorScheme))
 
-                Spacer()
+            // Math content with copy button in right column
+            HStack(alignment: .top, spacing: 0) {
+                Text(content)
+                    .font(.system(size: CGFloat(settings.fontSize), design: .monospaced))
+                    .italic()
+                    .foregroundColor(CLITheme.purple(for: colorScheme))
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(12)
 
+                // Copy button column
                 Button {
                     HapticManager.light()
                     UIPasteboard.general.string = content
@@ -169,31 +175,21 @@ struct MathBlockView: View {
                         showCopied = false
                     }
                 } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
-                        Text(showCopied ? "Copied!" : "Copy")
-                    }
-                    .font(settings.scaledFont(.small))
-                    .foregroundColor(showCopied ? CLITheme.green(for: colorScheme) : CLITheme.mutedText(for: colorScheme))
+                    Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 11))
+                        .foregroundColor(showCopied ? CLITheme.green(for: colorScheme) : CLITheme.mutedText(for: colorScheme))
                 }
                 .buttonStyle(.plain)
+                .padding(6)
             }
-
-            // Math content with distinctive styling
-            Text(content)
-                .font(.system(size: CGFloat(settings.fontSize), design: .monospaced))
-                .italic()
-                .foregroundColor(CLITheme.purple(for: colorScheme))
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .center)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(CLITheme.purple(for: colorScheme).opacity(0.1))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(CLITheme.purple(for: colorScheme).opacity(0.3), lineWidth: 1)
-                        )
-                )
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(CLITheme.purple(for: colorScheme).opacity(0.1))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(CLITheme.purple(for: colorScheme).opacity(0.3), lineWidth: 1)
+                    )
+            )
         }
     }
 }

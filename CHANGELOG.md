@@ -6,6 +6,42 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.6.2] - 2025-12-30
+
+### Added
+
+- **Compact Tool Views**: New grouped display for tool operations
+  - `CompactToolView.swift` - Groups consecutive Read/Glob/Grep into "Explored" rows
+  - Merges Bash commands with their results in collapsible terminal views
+  - Smart result summaries (git status, build results, line counts)
+- **Todo Progress Drawer**: Floating, collapsible todo list during streaming
+  - `TodoProgressDrawer.swift` - Shows current task progress without blocking chat
+  - Smooth animations and compact design
+
+### Fixed
+
+- **UI Freeze During Streaming**: Fixed keyboard input freezing when typing in Ideas sheet while Claude streams
+  - Added 150ms throttling to `MarkdownText` block parsing
+  - Prevents expensive regex operations from blocking main thread
+  - Deferred parsing during rapid streaming updates
+- **ChatView Performance**: Major cleanup and optimization
+  - Improved message grouping logic
+  - Better state management during streaming
+  - Reduced unnecessary view recomputation
+- **cli-bridge Integration**: Various stability improvements
+  - Fixed tool error classification edge cases
+  - Improved session picker reliability
+  - Better background task handling
+
+### Changed
+
+- Unified all target versions to 0.6.2 in project settings
+- Enhanced CLIMessageView with improved tool rendering
+- Improved CodeBlockView and DiffView styling
+- Updated documentation and test coverage notes
+
+---
+
 ## [0.6.1] - 2025-12-29
 
 ### Fixed
@@ -444,3 +480,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | 0.5.0   | Session API migration, permission approval, iOS 26 UI  |
 | 0.5.1   | Message queuing docs, haptics, scroll UX, bug fixes    |
 | 0.6.0   | **cli-bridge migration** - REST API with SSE streaming |
+| 0.6.1   | Session history tool rendering, structured content     |
+| 0.6.2   | Compact tool views, UI freeze fix, ChatView cleanup    |

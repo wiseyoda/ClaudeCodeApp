@@ -281,19 +281,28 @@ struct ToolResultParser {
             category = ToolErrorCategory.from(exitCode: code)
         }
 
-        // Override category based on pattern matching for more specificity
-        if matchesAnyPattern(content, patterns: fileConflictPatterns) {
-            category = .fileConflict
-            errorMessage = "File was modified by another process (likely a linter)"
-        } else if matchesAnyPattern(content, patterns: fileNotFoundPatterns) {
-            category = .fileNotFound
-            errorMessage = extractFileNotFoundPath(from: content)
-        } else if matchesAnyPattern(content, patterns: approvalPatterns) {
-            category = .approvalRequired
-        } else if matchesAnyPattern(content, patterns: permissionPatterns) {
-            category = .permissionDenied
-        } else if matchesAnyPattern(content, patterns: timeoutPatterns) {
-            category = .timeout
+        // Only apply pattern matching if we have evidence of an error:
+        // 1. Exit code indicates failure, OR
+        // 2. Content is short (likely an error message, not file content)
+        // This prevents false positives like "timeout" appearing in code being read
+        let shouldPatternMatch = (exitCode != nil && exitCode != 0) ||
+                                 (exitCode == nil && content.count < 500)
+
+        if shouldPatternMatch {
+            // Override category based on pattern matching for more specificity
+            if matchesAnyPattern(content, patterns: fileConflictPatterns) {
+                category = .fileConflict
+                errorMessage = "File was modified by another process (likely a linter)"
+            } else if matchesAnyPattern(content, patterns: fileNotFoundPatterns) {
+                category = .fileNotFound
+                errorMessage = extractFileNotFoundPath(from: content)
+            } else if matchesAnyPattern(content, patterns: approvalPatterns) {
+                category = .approvalRequired
+            } else if matchesAnyPattern(content, patterns: permissionPatterns) {
+                category = .permissionDenied
+            } else if matchesAnyPattern(content, patterns: timeoutPatterns) {
+                category = .timeout
+            }
         }
 
         // Try to extract stderr if present in structured output

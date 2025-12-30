@@ -865,7 +865,7 @@ class CLIBridgeManager: ObservableObject {
         reconnectTask = Task {
             try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
             guard !Task.isCancelled else { return }
-            await reconnectWithExistingSession()
+            reconnectWithExistingSession()
         }
     }
 
@@ -926,7 +926,7 @@ class CLIBridgeManager: ObservableObject {
             guard !Task.isCancelled else { return }
 
             // Reconnect with existing session
-            await reconnectWithExistingSession()
+            reconnectWithExistingSession()
         }
     }
 

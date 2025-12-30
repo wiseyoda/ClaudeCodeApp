@@ -660,13 +660,9 @@ class CLIBridgeAdapter: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // Observe current text changes
-        manager.$currentText
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] text in
-                self?.currentText = text
-            }
-            .store(in: &cancellables)
+        // NOTE: currentText is updated via onText callback, NOT via Combine subscription
+        // Using both paths creates a race condition where the async Combine dispatch
+        // can overwrite the cleared text after onTextCommit has already processed it
 
         // Observe session ID changes
         manager.$sessionId

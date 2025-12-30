@@ -1,6 +1,7 @@
 import SwiftUI
 import UserNotifications
 import BackgroundTasks
+@preconcurrency import UIKit
 
 // MARK: - App Delegate for Orientation Control, Background Tasks, and Push Notifications
 
@@ -39,13 +40,13 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
     // MARK: - Background Push Handling
 
+    // Note: Swift 6 preview warns about [AnyHashable: Any] not being Sendable.
+    // This is a known UIKit limitation - the protocol requires this type.
     func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any]) async -> UIBackgroundFetchResult {
         log.info("[Push] Received remote notification in background")
 
         // Handle push notification
-        await MainActor.run {
-            PushNotificationManager.shared.handleNotification(userInfo: userInfo)
-        }
+        PushNotificationManager.shared.handleNotification(userInfo: userInfo)
 
         // Check notification type for Live Activity updates
         if let type = userInfo["type"] as? String {

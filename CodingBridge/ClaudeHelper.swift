@@ -79,7 +79,7 @@ class ClaudeHelper: ObservableObject {
 
     /// Helper prompt prefixes used to identify helper-generated sessions.
     /// These are the opening phrases of prompts sent to ClaudeHelper functions.
-    private static let helperPromptPrefixes = [
+    nonisolated private static let helperPromptPrefixes = [
         "Based on this conversation context, suggest",
         "Based on this conversation, which files",
         "You are helping a developer expand a quick idea",

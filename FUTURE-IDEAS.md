@@ -240,8 +240,8 @@ GitHub Mobile has basic Shortcuts. No AI assistant has deep Shortcuts integratio
 
 **Foundation Implemented (December 2025):**
 - `ApprovalBannerView` - Real-time approval UI for tool permission requests
-- `ApprovalRequest/Response` models with WebSocket protocol
-- Backend `canUseTool` callback in wiseyoda/claudecodeui fork
+- `ApprovalRequest/Response` models with SSE protocol
+- Backend permission support in cli-bridge
 - This feature would extend the existing approval system with push notifications
 
 **Problem Statement:**
@@ -1050,21 +1050,17 @@ Share Extension
 
 ## Known Backend Issues
 
-These issues affect future features and require coordination with the backend team:
+These issues affect future features and require coordination with cli-bridge development:
 
-1. **CORS Limitation**: History API endpoints do not accept Authorization headers
-   - Workaround: Load history via SSH from `~/.claude/projects/`
-   - Proper fix requires backend change
-
-2. **Session File Format**: JSONL with specific message types
+1. **Session File Format**: JSONL with specific message types
    - Location: `~/.claude/projects/{encoded-path}/{session-id}.jsonl`
    - Encoded path: `/home/dev/project` -> `-home-dev-project`
 
-3. **Push Notifications**: No APNs infrastructure exists
+2. **Push Notifications**: No APNs infrastructure exists
    - Blocks: Approval Queue feature
    - Requires: Backend push endpoint, token management
 
-4. **Progress Events**: WebSocket does not stream task progress
+3. **Progress Events**: SSE does not stream fine-grained task progress
    - Blocks: Live Activities with accurate progress
    - Requires: Backend progress event emission
 

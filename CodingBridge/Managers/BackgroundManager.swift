@@ -7,8 +7,8 @@ final class BackgroundManager: ObservableObject {
     static let shared = BackgroundManager()
 
     // Task identifiers (must match Info.plist and use bundle ID prefix)
-    static let continuedProcessingTaskId = "com.level.CodingBridge.task.continued-processing"
-    static let appRefreshTaskId = "com.level.CodingBridge.task.refresh"
+    nonisolated static let continuedProcessingTaskId = "com.level.CodingBridge.task.continued-processing"
+    nonisolated static let appRefreshTaskId = "com.level.CodingBridge.task.refresh"
 
     @Published private(set) var isBackgroundTaskActive = false
     @Published var isAppInBackground = false
