@@ -39,7 +39,7 @@ struct QuickSettingsSheet: View {
                                 .tag(mode)
                         }
                     } label: {
-                        Label("Permission Mode", systemImage: "lock.shield")
+                        Label("Claude Mode", systemImage: "wand.and.stars")
                     }
 
                     Picker(selection: $settings.thinkingMode) {
@@ -50,8 +50,23 @@ struct QuickSettingsSheet: View {
                     } label: {
                         Label("Thinking Mode", systemImage: "brain")
                     }
+
+                    Picker(selection: $settings.globalPermissionMode) {
+                        ForEach(PermissionMode.allCases, id: \.self) { mode in
+                            Label(mode.displayName, systemImage: mode.icon)
+                                .tag(mode)
+                        }
+                    } label: {
+                        Label("Tool Permissions", systemImage: "lock.shield")
+                    }
                 } header: {
                     Text("Claude")
+                } footer: {
+                    if settings.globalPermissionMode.isDangerous {
+                        Label("All tool executions will be auto-approved.", systemImage: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.orange)
+                            .font(.caption)
+                    }
                 }
 
                 // Token Usage

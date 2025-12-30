@@ -78,16 +78,24 @@ When reporting a bug, include:
   - iOS 26+ BGContinuedProcessingTask is the primary mechanism anyway
 - **Priority**: Low - doesn't block functionality
 
-### #30: Session Manager Not Showing All Sessions
-- **What happened**: Home screen shows 38 sessions for a project, but Session Manager only shows 1
-- **Expected**: Session Manager should display the same sessions as home screen
+### #32: ClaudeHelper AI Suggestions Not Working
+- **What happened**: Auto-suggestions feature not triggering after Claude responses
+- **Expected**: AI should suggest next actions based on response context
 - **Investigation needed**:
-  - Compare endpoints used: home screen uses `/sessions/recent`, session manager uses `/projects/{path}/sessions`
-  - Verify both endpoints return consistent data
-  - Check if source filter or pagination is causing mismatch
-  - Ensure SessionStore properly loads and displays all sessions
-- **Location**: `SessionPickerViews.swift`, `SessionStore.swift`, `HomeView.swift`
-- **Priority**: High - affects session navigation and resume functionality
+  - Verify ClaudeHelper is receiving response content
+  - Check if suggestion prompts are being sent to API
+  - Confirm UI is displaying suggestions when received
+- **Location**: `ClaudeHelper.swift`, `ChatView.swift`
+- **Priority**: Medium - affects usability enhancement feature
+
+### #35: Git Refresh Error on Pull-to-Refresh
+- **What happened**: Pull-to-refresh on home screen shows git status errors
+- **Expected**: Git status should refresh cleanly or fail gracefully
+- **Investigation needed**:
+  - Check if API endpoint is returning errors
+  - Verify error handling in refresh flow
+- **Location**: `HomeView.swift`, `ContentView.swift`
+- **Priority**: Medium - affects UX
 
 ---
 
@@ -125,6 +133,10 @@ See [CHANGELOG.md](CHANGELOG.md) for details on resolved issues.
 
 | # | Issue | Version |
 |---|-------|---------|
+| 34 | Context menu missing from HomeView ProjectCards | 0.6.1 |
+| 33 | Session Manager not showing all sessions (blocking) | 0.6.1 |
+| 31 | PermissionMode dropdown missing from QuickSettingsSheet | 0.6.1 |
+| 30 | Session Manager showing only 1 session | 0.6.1 |
 | -- | cli-bridge migration (WebSocket -> REST API + SSE) | 0.6.0 |
 | 24 | "Always Allow" permission not working | 0.5.0 |
 | 19 | Bulk session management | 0.5.0 |

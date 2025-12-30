@@ -7,6 +7,10 @@ struct ProjectCard: View {
     let gitStatus: GitStatus
     let branchName: String?
     let onTap: () -> Void
+    var onRename: (() -> Void)? = nil
+    var onArchive: (() -> Void)? = nil
+    var onDelete: (() -> Void)? = nil
+    var isArchived: Bool = false
 
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
@@ -56,6 +60,36 @@ struct ProjectCard: View {
         }
         .buttonStyle(ProjectCardButtonStyle())
         .glassBackground(cornerRadius: 16, isInteractive: true)
+        .contextMenu {
+            if let onRename = onRename {
+                Button {
+                    onRename()
+                } label: {
+                    Label("Rename", systemImage: "pencil")
+                }
+            }
+
+            if let onArchive = onArchive {
+                Button {
+                    onArchive()
+                } label: {
+                    if isArchived {
+                        Label("Unarchive", systemImage: "tray.and.arrow.up")
+                    } else {
+                        Label("Archive", systemImage: "archivebox")
+                    }
+                }
+            }
+
+            if let onDelete = onDelete {
+                Divider()
+                Button(role: .destructive) {
+                    onDelete()
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+        }
     }
 
     // MARK: - Status Icon

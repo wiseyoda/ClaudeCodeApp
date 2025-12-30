@@ -234,13 +234,13 @@ struct SessionPickerSheet: View {
     }
 
     /// Load all sessions via API (SessionStore handles API-based loading)
+    /// Always force refresh to ensure we have the latest sessions from the server
     private func loadAllSessions() {
-        guard !sessionStore.hasLoaded(for: project.path) else {
-            log.debug("[SessionPickerSheet] Already loaded sessions for \(project.path), skipping reload")
-            return
-        }
         Task {
             sessionStore.configure(with: settings)
+            // Always force refresh to get all sessions from API
+            // Don't skip based on hasLoaded - that would miss sessions
+            // when ChatView has only added the current session locally
             await sessionStore.loadSessions(for: project.path, forceRefresh: true)
         }
     }

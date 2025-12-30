@@ -10,6 +10,8 @@ struct HomeView: View {
     let onRefresh: () async -> Void
     let onSelectProject: (Project) -> Void
     let onSelectSession: (CLISessionMetadata) -> Void
+    var onRenameProject: ((Project) -> Void)? = nil
+    var onDeleteProject: ((Project) -> Void)? = nil
 
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
@@ -99,6 +101,16 @@ struct HomeView: View {
                             gitStatus: gitStatuses[project.path] ?? .unknown,
                             branchName: branchNames[project.path],
                             onTap: { onSelectProject(project) },
+                            onRename: onRenameProject != nil ? { onRenameProject?(project) } : nil,
+                            onArchive: {
+                                if archivedStore.isArchived(project.path) {
+                                    archivedStore.unarchive(project.path)
+                                } else {
+                                    archivedStore.archive(project.path)
+                                }
+                            },
+                            onDelete: onDeleteProject != nil ? { onDeleteProject?(project) } : nil,
+                            isArchived: archivedStore.isArchived(project.path),
                             animationDelay: Double(index) * 0.05
                         )
                         .transition(.asymmetric(

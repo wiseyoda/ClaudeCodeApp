@@ -226,6 +226,13 @@ struct ContentView: View {
                         sessionStore.setSelectedSession(session.id, for: project.path)
                         selectedProject = project
                     }
+                },
+                onRenameProject: { project in
+                    projectToRename = project
+                    renameText = ProjectNamesStore.shared.getName(for: project.path) ?? project.title
+                },
+                onDeleteProject: { project in
+                    projectToDelete = project
                 }
             )
             .navigationDestination(for: Project.self) { project in
