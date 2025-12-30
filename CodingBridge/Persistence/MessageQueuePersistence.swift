@@ -16,7 +16,7 @@ final class MessageQueuePersistence {
 
     // MARK: - Public Interface
 
-    /// Save pending messages from WebSocketManager
+    /// Save pending messages from CLIBridgeAdapter
     func save() async {
         // Get pending messages from a source
         // For now, we'll use a stored property that can be set externally

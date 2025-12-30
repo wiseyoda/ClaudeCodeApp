@@ -298,20 +298,6 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(path, "$HOME/.claude/projects/-home-dev-workspace-MyProject/abc123.jsonl")
     }
 
-    // MARK: - WSImage Tests
-
-    func testWSImageCreation() {
-        let image = WSImage(mediaType: "image/png", base64Data: "abc123")
-
-        XCTAssertEqual(image.data, "data:image/png;base64,abc123")
-    }
-
-    func testWSImageWithJPEG() {
-        let image = WSImage(mediaType: "image/jpeg", base64Data: "xyz789")
-
-        XCTAssertEqual(image.data, "data:image/jpeg;base64,xyz789")
-    }
-
     // MARK: - AnyCodable Tests
 
     func testAnyCodableString() throws {

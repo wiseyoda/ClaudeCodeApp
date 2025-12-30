@@ -2,19 +2,18 @@ import XCTest
 @testable import CodingBridge
 
 final class ModelEnumTests: XCTestCase {
-    func testClaudeModelLabelsAndAliases() {
-        let cases: [(ClaudeModel, String, String, String, String?, String)] = [
-            (.opus, "Opus 4.5", "Opus", "Most capable for complex work", "opus", "brain.head.profile"),
-            (.sonnet, "Sonnet 4.5", "Sonnet", "Best for everyday tasks", "sonnet", "sparkles"),
-            (.haiku, "Haiku 4.5", "Haiku", "Fastest for quick answers", "haiku", "bolt.fill"),
-            (.custom, "Custom", "Custom", "Custom model ID", nil, "gearshape")
+    func testClaudeModelLabelsAndIcons() {
+        let cases: [(ClaudeModel, String, String, String, String)] = [
+            (.opus, "Opus 4.5", "Opus", "Most capable for complex work", "brain.head.profile"),
+            (.sonnet, "Sonnet 4.5", "Sonnet", "Best for everyday tasks", "sparkles"),
+            (.haiku, "Haiku 4.5", "Haiku", "Fastest for quick answers", "bolt.fill"),
+            (.custom, "Custom", "Custom", "Custom model ID", "gearshape")
         ]
 
-        for (model, displayName, shortName, description, alias, icon) in cases {
+        for (model, displayName, shortName, description, icon) in cases {
             XCTAssertEqual(model.displayName, displayName)
             XCTAssertEqual(model.shortName, shortName)
             XCTAssertEqual(model.description, description)
-            XCTAssertEqual(model.modelAlias, alias)
             XCTAssertEqual(model.icon, icon)
         }
     }

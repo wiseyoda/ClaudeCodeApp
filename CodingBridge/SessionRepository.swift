@@ -34,103 +34,48 @@ struct SessionsResponse: Codable {
     }
 }
 
-// MARK: - API Session Repository Implementation
+// MARK: - CLI Bridge Session Repository Implementation
 
-/// Production implementation using APIClient for HTTP requests
+/// Implementation using CLIBridgeAPIClient for the cli-bridge backend
 @MainActor
-final class APISessionRepository: SessionRepository {
-    private let apiClient: APIClient
+final class CLIBridgeSessionRepository: SessionRepository {
+    private let apiClient: CLIBridgeAPIClient
     private let settings: AppSettings
 
-    init(apiClient: APIClient, settings: AppSettings) {
+    init(apiClient: CLIBridgeAPIClient, settings: AppSettings) {
         self.apiClient = apiClient
         self.settings = settings
     }
 
     func fetchSessions(projectName: String, limit: Int = 100, offset: Int = 0) async throws -> SessionsResponse {
-        guard let baseURL = settings.baseURL else {
-            throw APIError.invalidURL
-        }
+        // Convert project name back to path for cli-bridge API
+        // Note: cli-bridge uses the path encoding directly in URL
+        let projectPath = projectName.replacingOccurrences(of: "-", with: "/")
 
-        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
-            throw APIError.invalidURL
-        }
+        let response = try await apiClient.fetchSessions(
+            projectPath: projectPath,
+            limit: limit,
+            cursor: offset > 0 ? String(offset) : nil
+        )
 
-        // API endpoint: /api/projects/:projectName/sessions
-        components.path = "/api/projects/\(projectName)/sessions"
-        components.queryItems = [
-            URLQueryItem(name: "limit", value: String(limit)),
-            URLQueryItem(name: "offset", value: String(offset))
-        ]
+        // Convert CLISessionMetadata to ProjectSession
+        let projectSessions = response.sessions.toProjectSessions()
 
-        guard let url = components.url else {
-            throw APIError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        if !settings.authToken.isEmpty {
-            request.setValue("Bearer \(settings.authToken)", forHTTPHeaderField: "Authorization")
-        }
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw APIError.serverError
-        }
-
-        if httpResponse.statusCode == 401 {
-            throw APIError.authenticationFailed
-        }
-
-        guard httpResponse.statusCode == 200 else {
-            log.error("Sessions fetch failed with status: \(httpResponse.statusCode)")
-            throw APIError.serverError
-        }
-
-        do {
-            return try JSONDecoder().decode(SessionsResponse.self, from: data)
-        } catch {
-            log.error("[SessionRepository] Failed to decode sessions response: \(error)")
-            throw error
-        }
+        return SessionsResponse(
+            sessions: projectSessions,
+            hasMore: response.hasMore,
+            total: projectSessions.count + (response.hasMore ? 1 : 0)  // Approximate total
+        )
     }
 
     func deleteSession(projectName: String, sessionId: String) async throws {
-        guard let baseURL = settings.baseURL else {
-            throw APIError.invalidURL
-        }
+        // Convert project name back to path
+        let projectPath = projectName.replacingOccurrences(of: "-", with: "/")
 
-        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
-            throw APIError.invalidURL
-        }
-
-        // API endpoint: DELETE /api/projects/:projectName/sessions/:sessionId
-        components.path = "/api/projects/\(projectName)/sessions/\(sessionId)"
-
-        guard let url = components.url else {
-            throw APIError.invalidURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "DELETE"
-        if !settings.authToken.isEmpty {
-            request.setValue("Bearer \(settings.authToken)", forHTTPHeaderField: "Authorization")
-        }
-
-        let (_, response) = try await URLSession.shared.data(for: request)
-
-        guard let httpResponse = response as? HTTPURLResponse else {
-            throw APIError.serverError
-        }
-
-        if httpResponse.statusCode == 401 {
-            throw APIError.authenticationFailed
-        }
-
-        guard httpResponse.statusCode == 200 || httpResponse.statusCode == 204 else {
-            log.error("Session delete failed with status: \(httpResponse.statusCode)")
-            throw APIError.serverError
-        }
+        try await apiClient.deleteSession(
+            projectPath: projectPath,
+            sessionId: sessionId
+        )
     }
 }
 
@@ -149,7 +94,7 @@ final class MockSessionRepository: SessionRepository {
     func fetchSessions(projectName: String, limit: Int, offset: Int) async throws -> SessionsResponse {
         fetchSessionsCalled = true
         if shouldThrowError {
-            throw APIError.serverError
+            throw CLIBridgeAPIError.serverError(500)
         }
 
         // Simulate pagination
@@ -167,7 +112,7 @@ final class MockSessionRepository: SessionRepository {
     func deleteSession(projectName: String, sessionId: String) async throws {
         deleteSessionCalled = true
         if shouldThrowError {
-            throw APIError.serverError
+            throw CLIBridgeAPIError.serverError(500)
         }
         mockSessions.removeAll { $0.id == sessionId }
     }

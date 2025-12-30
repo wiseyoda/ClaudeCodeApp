@@ -1,53 +1,210 @@
 import SwiftUI
+import Combine
 
-// MARK: - Global Search Result
+// MARK: - Date Filter Enum
 
-struct GlobalSearchResult: Identifiable {
-    let id = UUID()
-    let projectPath: String
-    let projectTitle: String
-    let sessionId: String
-    let message: ChatMessage
-    let matchPreview: String
+/// Date range filter options for search results
+enum SearchDateFilter: String, CaseIterable, Identifiable {
+    case anyTime = "Any time"
+    case today = "Today"
+    case pastWeek = "Past week"
+    case pastMonth = "Past month"
+    case pastYear = "Past year"
+
+    var id: String { rawValue }
+
+    /// Check if a date matches this filter
+    func matches(_ date: Date) -> Bool {
+        let now = Date()
+        let calendar = Calendar.current
+
+        switch self {
+        case .anyTime:
+            return true
+        case .today:
+            return calendar.isDateInToday(date)
+        case .pastWeek:
+            guard let weekAgo = calendar.date(byAdding: .day, value: -7, to: now) else { return true }
+            return date >= weekAgo
+        case .pastMonth:
+            guard let monthAgo = calendar.date(byAdding: .month, value: -1, to: now) else { return true }
+            return date >= monthAgo
+        case .pastYear:
+            guard let yearAgo = calendar.date(byAdding: .year, value: -1, to: now) else { return true }
+            return date >= yearAgo
+        }
+    }
 }
 
-// MARK: - Global Search View (iOS 26+ compatible with .searchable)
+// MARK: - Search Service
+
+/// Manages search state with debouncing and pagination
+@MainActor
+class SearchService: ObservableObject {
+    private let serverURL: String
+
+    @Published var query: String = ""
+    @Published private(set) var results: [CLISearchResult] = []
+    @Published private(set) var isSearching = false
+    @Published private(set) var error: String?
+    @Published private(set) var hasMore = false
+    @Published private(set) var totalResults = 0
+
+    private var searchTask: Task<Void, Never>?
+    private var currentOffset = 0
+    private let pageSize = 20
+    private var currentProjectPath: String?
+
+    // Debounce search
+    private var searchDebouncer: AnyCancellable?
+
+    init(serverURL: String) {
+        self.serverURL = serverURL
+        setupDebouncer()
+    }
+
+    private func setupDebouncer() {
+        searchDebouncer = $query
+            .debounce(for: .milliseconds(300), scheduler: DispatchQueue.main)
+            .removeDuplicates()
+            .sink { [weak self] query in
+                guard let self = self else { return }
+                if query.isEmpty {
+                    self.clearResults()
+                } else {
+                    Task { await self.performSearch(query: query, projectPath: self.currentProjectPath, reset: true) }
+                }
+            }
+    }
+
+    // MARK: - Search Operations
+
+    func search(query: String, projectPath: String? = nil, limit: Int = 20, offset: Int = 0) async throws -> CLISearchResponse {
+        let apiClient = CLIBridgeAPIClient(serverURL: serverURL)
+        return try await apiClient.search(query: query, projectPath: projectPath, limit: limit, offset: offset)
+    }
+
+    /// Update the project filter and re-search if needed
+    func setProjectFilter(_ projectPath: String?) {
+        currentProjectPath = projectPath
+        if !query.isEmpty {
+            Task { await performSearch(query: query, projectPath: projectPath, reset: true) }
+        }
+    }
+
+    // MARK: - UI Operations
+
+    func performSearch(query: String, projectPath: String? = nil, reset: Bool) async {
+        searchTask?.cancel()
+
+        searchTask = Task {
+            if reset {
+                currentOffset = 0
+                results = []
+            }
+
+            isSearching = true
+            error = nil
+
+            do {
+                let response = try await search(
+                    query: query,
+                    projectPath: projectPath,
+                    limit: pageSize,
+                    offset: currentOffset
+                )
+
+                guard !Task.isCancelled else { return }
+
+                if reset {
+                    results = response.results
+                } else {
+                    results.append(contentsOf: response.results)
+                }
+
+                totalResults = response.total
+                hasMore = response.hasMore
+                currentOffset += response.results.count
+
+                // Save to search history
+                if reset && !response.results.isEmpty {
+                    SearchHistoryStore.shared.addSearch(query)
+                }
+
+            } catch is CancellationError {
+                // Ignore cancellation
+            } catch {
+                self.error = error.localizedDescription
+            }
+
+            isSearching = false
+        }
+    }
+
+    func loadMore() async {
+        guard hasMore, !isSearching else { return }
+        await performSearch(query: query, projectPath: currentProjectPath, reset: false)
+    }
+
+    func clearResults() {
+        searchTask?.cancel()
+        results = []
+        totalResults = 0
+        hasMore = false
+        currentOffset = 0
+        error = nil
+    }
+
+    func refresh() async {
+        guard !query.isEmpty else { return }
+        await performSearch(query: query, projectPath: currentProjectPath, reset: true)
+    }
+}
+
+// MARK: - Global Search View
 
 struct GlobalSearchView: View {
     let projects: [Project]
+    let onSelect: ((CLISearchResult) -> Void)?
     @EnvironmentObject var settings: AppSettings
-    @ObservedObject private var sshManager = SSHManager.shared
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.dismiss) var dismiss
 
-    @State private var searchText = ""
-    @State private var isSearching = false
-    @State private var results: [GlobalSearchResult] = []
-    @State private var searchError: String?
+    @StateObject private var searchService: SearchService
+    @ObservedObject private var historyStore = SearchHistoryStore.shared
     @State private var hasSearched = false
-    @State private var searchTask: Task<Void, Never>?
-    @State private var connectTask: Task<Void, Never>?
+    @State private var selectedProject: Project?
+    @State private var dateFilter: SearchDateFilter = .anyTime
+    @FocusState private var isSearchFocused: Bool
+
+    init(projects: [Project], serverURL: String = "", onSelect: ((CLISearchResult) -> Void)? = nil) {
+        self.projects = projects
+        self.onSelect = onSelect
+        _searchService = StateObject(wrappedValue: SearchService(serverURL: serverURL))
+    }
+
+    /// Filtered results based on date filter
+    private var filteredResults: [CLISearchResult] {
+        guard dateFilter != .anyTime else { return searchService.results }
+        return searchService.results.filter { result in
+            guard let date = result.date else { return true }
+            return dateFilter.matches(date)
+        }
+    }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                // Results or placeholder
-                if isSearching {
-                    loadingView
-                } else if let error = searchError {
-                    errorView(error)
-                } else if results.isEmpty && hasSearched {
-                    emptyResultsView
-                } else if results.isEmpty {
-                    placeholderView
-                } else {
-                    resultsList
+                // Filter bar
+                if !searchService.results.isEmpty || hasSearched {
+                    filterBar
                 }
+
+                searchContent
             }
             .background(CLITheme.background(for: colorScheme))
             .navigationTitle("Search All Sessions")
             .navigationBarTitleDisplayMode(.inline)
-            // iOS 26+: Use Material for glass-compatible toolbar
             .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbar {
@@ -58,78 +215,248 @@ struct GlobalSearchView: View {
                     .foregroundColor(CLITheme.blue(for: colorScheme))
                 }
             }
-            // iOS 26+: Native .searchable() with glass-compatible styling
-            // Replaces custom searchInputView for better UX and Liquid Glass support
-            .searchable(text: $searchText, prompt: "Search across all sessions...")
-            .onSubmit(of: .search) {
-                performSearch()
-            }
-            // iOS 26+: searchToolbarBehavior(.minimize) available for collapsible search
+            .searchable(
+                text: $searchService.query,
+                prompt: "Search across all sessions..."
+            )
         }
-        .onAppear {
-            connectSSH()
-        }
-        .onDisappear {
-            // Cancel any pending tasks to prevent hangs
-            searchTask?.cancel()
-            connectTask?.cancel()
-        }
-        .onChange(of: searchText) { oldValue, newValue in
-            // Clear results when search text is cleared
+        .onChange(of: searchService.query) { oldValue, newValue in
             if newValue.isEmpty {
-                results = []
                 hasSearched = false
             }
         }
+        .onChange(of: selectedProject) { _, newValue in
+            searchService.setProjectFilter(newValue?.path)
+        }
     }
 
-    // MARK: - Legacy searchInputView (replaced by .searchable() in iOS 26+)
-    // Keeping for reference during transition
+    // MARK: - Filter Bar
 
-    private var searchInputView: some View {
-        HStack(spacing: 8) {
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass")
-                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
-                    .font(.system(size: 14))
-
-                TextField("Search across all sessions...", text: $searchText)
-                    .font(settings.scaledFont(.body))
-                    .foregroundColor(CLITheme.primaryText(for: colorScheme))
-                    .autocorrectionDisabled()
-                    .submitLabel(.search)
-                    .onSubmit {
-                        performSearch()
-                    }
-
-                if !searchText.isEmpty {
+    private var filterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 12) {
+                // Project filter
+                Menu {
                     Button {
-                        searchText = ""
-                        results = []
-                        hasSearched = false
+                        selectedProject = nil
                     } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundColor(CLITheme.mutedText(for: colorScheme))
-                            .font(.system(size: 14))
+                        HStack {
+                            Text("All Projects")
+                            if selectedProject == nil {
+                                Image(systemName: "checkmark")
+                            }
+                        }
                     }
-                }
-            }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .background(CLITheme.background(for: colorScheme))
-            .cornerRadius(8)
 
-            Button("Search") {
-                performSearch()
+                    Divider()
+
+                    ForEach(projects) { project in
+                        Button {
+                            selectedProject = project
+                        } label: {
+                            HStack {
+                                Text(project.title)
+                                if selectedProject?.id == project.id {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    SearchFilterChip(
+                        icon: "folder",
+                        text: selectedProject?.title ?? "All Projects",
+                        isActive: selectedProject != nil
+                    )
+                }
+
+                // Date filter
+                Menu {
+                    ForEach(SearchDateFilter.allCases) { filter in
+                        Button {
+                            dateFilter = filter
+                        } label: {
+                            HStack {
+                                Text(filter.rawValue)
+                                if dateFilter == filter {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    SearchFilterChip(
+                        icon: "calendar",
+                        text: dateFilter.rawValue,
+                        isActive: dateFilter != .anyTime
+                    )
+                }
+
+                Spacer()
             }
-            .font(settings.scaledFont(.body))
-            .foregroundColor(searchText.isEmpty ? CLITheme.mutedText(for: colorScheme) : CLITheme.blue(for: colorScheme))
-            .disabled(searchText.isEmpty)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
         .background(CLITheme.secondaryBackground(for: colorScheme))
     }
+
+    // MARK: - Search Content
+
+    @ViewBuilder
+    private var searchContent: some View {
+        if searchService.isSearching && searchService.results.isEmpty {
+            loadingView
+        } else if let error = searchService.error {
+            errorView(error)
+        } else if searchService.results.isEmpty && hasSearched {
+            emptyResultsView
+        } else if searchService.results.isEmpty && searchService.query.isEmpty {
+            suggestionsView
+        } else {
+            resultsList
+        }
+    }
+
+    // MARK: - Suggestions View (Recent Searches + Tips)
+
+    private var suggestionsView: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                // Recent searches
+                if !historyStore.recentSearches.isEmpty {
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("Recent Searches")
+                                .font(settings.scaledFont(.body))
+                                .fontWeight(.medium)
+                                .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+
+                            Spacer()
+
+                            Button("Clear") {
+                                historyStore.clearHistory()
+                            }
+                            .font(settings.scaledFont(.small))
+                            .foregroundColor(CLITheme.blue(for: colorScheme))
+                        }
+
+                        ForEach(historyStore.recentSearches, id: \.self) { query in
+                            Button {
+                                searchService.query = query
+                                hasSearched = true
+                            } label: {
+                                HStack {
+                                    Image(systemName: "clock.arrow.circlepath")
+                                        .font(.system(size: 14))
+                                        .foregroundColor(CLITheme.mutedText(for: colorScheme))
+
+                                    Text(query)
+                                        .font(settings.scaledFont(.body))
+                                        .foregroundColor(CLITheme.primaryText(for: colorScheme))
+
+                                    Spacer()
+
+                                    Image(systemName: "arrow.up.left")
+                                        .font(.system(size: 12))
+                                        .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                                }
+                                .padding(.vertical, 8)
+                            }
+                        }
+                    }
+                    .padding()
+                    .background(CLITheme.secondaryBackground(for: colorScheme))
+                    .cornerRadius(12)
+                }
+
+                // Search tips
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Search Tips")
+                        .font(settings.scaledFont(.body))
+                        .fontWeight(.medium)
+                        .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+
+                    SearchTipRow(
+                        icon: "text.bubble",
+                        text: "Search messages, code, and tool outputs"
+                    )
+
+                    SearchTipRow(
+                        icon: "folder",
+                        text: "Filter by project for faster results"
+                    )
+
+                    SearchTipRow(
+                        icon: "hand.tap",
+                        text: "Tap a result to jump to that session"
+                    )
+                }
+                .padding()
+                .background(CLITheme.secondaryBackground(for: colorScheme))
+                .cornerRadius(12)
+            }
+            .padding()
+        }
+    }
+
+    private var resultsList: some View {
+        VStack(spacing: 0) {
+            // Result count with filter info
+            HStack {
+                if dateFilter != .anyTime && filteredResults.count != searchService.totalResults {
+                    Text("\(filteredResults.count) of \(searchService.totalResults) result\(searchService.totalResults == 1 ? "" : "s")")
+                } else {
+                    Text("\(searchService.totalResults) result\(searchService.totalResults == 1 ? "" : "s")")
+                }
+                Spacer()
+            }
+            .font(settings.scaledFont(.small))
+            .foregroundColor(CLITheme.mutedText(for: colorScheme))
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(CLITheme.secondaryBackground(for: colorScheme))
+
+            List {
+                ForEach(filteredResults) { result in
+                    Button {
+                        onSelect?(result)
+                    } label: {
+                        SearchResultRow(result: result, projects: projects)
+                    }
+                    .buttonStyle(.plain)
+                    .listRowBackground(CLITheme.background(for: colorScheme))
+                    .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+                    .onAppear {
+                        // Load more when approaching end
+                        if result.id == searchService.results.last?.id && searchService.hasMore {
+                            Task { await searchService.loadMore() }
+                        }
+                    }
+                }
+
+                // Loading indicator for infinite scroll
+                if searchService.isSearching && searchService.hasMore {
+                    HStack {
+                        Spacer()
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: CLITheme.blue(for: colorScheme)))
+                        Spacer()
+                    }
+                    .listRowBackground(Color.clear)
+                }
+            }
+            .listStyle(.plain)
+            .background(CLITheme.background(for: colorScheme))
+        }
+        .onAppear {
+            hasSearched = !searchService.query.isEmpty
+        }
+        .onChange(of: searchService.results) { _, _ in
+            hasSearched = true
+        }
+    }
+
+    // MARK: - Shared Views
 
     private var loadingView: some View {
         VStack(spacing: 16) {
@@ -159,7 +486,7 @@ struct GlobalSearchView: View {
                 .multilineTextAlignment(.center)
 
             Button("Retry") {
-                connectSSH()
+                Task { await searchService.refresh() }
             }
             .foregroundColor(CLITheme.blue(for: colorScheme))
         }
@@ -177,242 +504,184 @@ struct GlobalSearchView: View {
                 .font(settings.scaledFont(.large))
                 .foregroundColor(CLITheme.primaryText(for: colorScheme))
 
-            Text("No messages found matching \"\(searchText)\"")
+            Text("No messages found matching \"\(searchService.query)\"")
                 .font(settings.scaledFont(.body))
                 .foregroundColor(CLITheme.secondaryText(for: colorScheme))
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var placeholderView: some View {
-        VStack(spacing: 16) {
-            Image(systemName: "text.magnifyingglass")
-                .font(.system(size: 48))
-                .foregroundColor(CLITheme.mutedText(for: colorScheme))
-
-            Text("Search All Sessions")
-                .font(settings.scaledFont(.large))
-                .foregroundColor(CLITheme.primaryText(for: colorScheme))
-
-            Text("Find messages across all your projects and sessions")
-                .font(settings.scaledFont(.body))
-                .foregroundColor(CLITheme.secondaryText(for: colorScheme))
-                .multilineTextAlignment(.center)
-        }
-        .padding()
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-
-    private var resultsList: some View {
-        VStack(spacing: 0) {
-            // Result count
-            HStack {
-                Text("\(results.count) result\(results.count == 1 ? "" : "s")")
-                    .font(settings.scaledFont(.small))
-                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
-                Spacer()
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(CLITheme.secondaryBackground(for: colorScheme))
-
-            List {
-                ForEach(results) { result in
-                    GlobalSearchResultRow(result: result, searchText: searchText)
-                        .listRowBackground(CLITheme.background(for: colorScheme))
-                        .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
-                }
-            }
-            .listStyle(.plain)
-            .background(CLITheme.background(for: colorScheme))
-        }
-    }
-
-    // MARK: - SSH Connection
-
-    private func connectSSH() {
-        searchError = nil
-        connectTask?.cancel()
-        connectTask = Task {
-            do {
-                try await sshManager.autoConnect(settings: settings)
-            } catch {
-                guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    searchError = "Failed to connect: \(error.localizedDescription)"
-                }
-            }
-        }
-    }
-
-    // MARK: - Search
-
-    private func performSearch() {
-        guard !searchText.isEmpty else { return }
-        guard sshManager.isConnected else {
-            searchError = "SSH not connected. Please check settings."
-            return
-        }
-
-        // Cancel any previous search
-        searchTask?.cancel()
-
-        isSearching = true
-        searchError = nil
-        results = []
-
-        searchTask = Task {
-            var allResults: [GlobalSearchResult] = []
-
-            for project in projects {
-                // Check for cancellation between projects
-                guard !Task.isCancelled else { return }
-
-                // Encode project path for Claude session directory
-                let encodedPath = project.path
-                    .replacingOccurrences(of: "/", with: "-")
-
-                // List session files (use $HOME for consistent shell expansion)
-                let sessionsPath = "$HOME/.claude/projects/\(encodedPath)"
-                do {
-                    let output = try await sshManager.executeCommand("ls \(sessionsPath)/*.jsonl 2>/dev/null")
-                    let files = output.components(separatedBy: .newlines).filter { !$0.isEmpty }
-
-                    for file in files.prefix(20) { // Limit to 20 sessions per project
-                        // Check for cancellation between files
-                        guard !Task.isCancelled else { return }
-
-                        // Extract session ID from filename
-                        let sessionId = URL(fileURLWithPath: file).deletingPathExtension().lastPathComponent
-
-                        // Read and search the file
-                        do {
-                            let content = try await sshManager.executeCommand("cat '\(file)'")
-                            let messages = SessionHistoryLoader.parseSessionHistory(content)
-                            let matches = messages.filter {
-                                $0.content.localizedCaseInsensitiveContains(searchText)
-                            }
-
-                            for message in matches.prefix(5) { // Limit matches per session
-                                let preview = createPreview(content: message.content, searchText: searchText)
-                                allResults.append(GlobalSearchResult(
-                                    projectPath: project.path,
-                                    projectTitle: project.title,
-                                    sessionId: sessionId,
-                                    message: message,
-                                    matchPreview: preview
-                                ))
-                            }
-                        } catch {
-                            log.warning("Failed to read session file \(file): \(error.localizedDescription)")
-                        }
-                    }
-                } catch {
-                    // No sessions for this project or SSH error - log for debugging
-                    log.debug("No sessions found for \(project.title): \(error.localizedDescription)")
-                }
-            }
-
-            // Only update UI if not cancelled
-            guard !Task.isCancelled else { return }
-
-            await MainActor.run {
-                // Sort by timestamp, newest first
-                results = allResults.sorted { $0.message.timestamp > $1.message.timestamp }
-                isSearching = false
-                hasSearched = true
-            }
-        }
-    }
-
-    private func createPreview(content: String, searchText: String) -> String {
-        guard let range = content.range(of: searchText, options: .caseInsensitive) else {
-            return String(content.prefix(100))
-        }
-
-        // Get context around the match
-        let startDistance = content.distance(from: content.startIndex, to: range.lowerBound)
-        let contextStart = max(0, startDistance - 30)
-        let contextEnd = min(content.count, startDistance + searchText.count + 70)
-
-        let startIndex = content.index(content.startIndex, offsetBy: contextStart)
-        let endIndex = content.index(content.startIndex, offsetBy: contextEnd)
-
-        var preview = String(content[startIndex..<endIndex])
-        if contextStart > 0 { preview = "..." + preview }
-        if contextEnd < content.count { preview = preview + "..." }
-
-        return preview
     }
 }
 
-// MARK: - Global Search Result Row
+// MARK: - Search Filter Chip
 
-struct GlobalSearchResultRow: View {
-    let result: GlobalSearchResult
-    let searchText: String
+private struct SearchFilterChip: View {
+    let icon: String
+    let text: String
+    let isActive: Bool
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
 
-    private var roleIcon: String {
-        switch result.message.role {
-        case .user: return "person.fill"
-        case .assistant: return "sparkle"
-        case .toolUse, .toolResult, .resultSuccess: return "wrench.fill"
-        case .thinking: return "brain"
-        case .system, .error: return "exclamationmark.circle"
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 12))
+
+            Text(text)
+                .font(settings.scaledFont(.small))
+                .lineLimit(1)
+
+            Image(systemName: "chevron.down")
+                .font(.system(size: 10))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .foregroundColor(isActive ? .white : CLITheme.primaryText(for: colorScheme))
+        .background(isActive ? CLITheme.blue(for: colorScheme) : CLITheme.background(for: colorScheme))
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(CLITheme.mutedText(for: colorScheme).opacity(0.3), lineWidth: isActive ? 0 : 1)
+        )
+    }
+}
+
+// MARK: - Search Tip Row
+
+private struct SearchTipRow: View {
+    let icon: String
+    let text: String
+    @EnvironmentObject var settings: AppSettings
+    @Environment(\.colorScheme) var colorScheme
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 16))
+                .foregroundColor(CLITheme.blue(for: colorScheme))
+                .frame(width: 24)
+
+            Text(text)
+                .font(settings.scaledFont(.body))
+                .foregroundColor(CLITheme.primaryText(for: colorScheme))
         }
     }
+}
 
-    private var roleColor: Color {
-        switch result.message.role {
-        case .user: return CLITheme.green(for: colorScheme)
-        case .assistant: return CLITheme.blue(for: colorScheme)
-        case .toolUse, .toolResult, .resultSuccess: return CLITheme.cyan(for: colorScheme)
-        case .thinking: return CLITheme.purple(for: colorScheme)
-        case .system, .error: return CLITheme.yellow(for: colorScheme)
-        }
+// MARK: - Search Result Row
+
+struct SearchResultRow: View {
+    let result: CLISearchResult
+    let projects: [Project]
+    @EnvironmentObject var settings: AppSettings
+    @Environment(\.colorScheme) var colorScheme
+
+    private var projectTitle: String {
+        projects.first { $0.path == result.projectPath }?.title ?? result.projectName
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            // Project and role header
+        VStack(alignment: .leading, spacing: 8) {
+            // Header
             HStack {
-                Image(systemName: roleIcon)
-                    .font(.system(size: 10))
-                    .foregroundColor(roleColor)
-
-                Text(result.projectTitle)
-                    .font(settings.scaledFont(.small))
+                Image(systemName: "folder.fill")
                     .foregroundColor(CLITheme.blue(for: colorScheme))
+                    .font(.system(size: 12))
+
+                Text(projectTitle)
+                    .font(settings.scaledFont(.body).bold())
+                    .foregroundColor(CLITheme.primaryText(for: colorScheme))
                     .lineLimit(1)
 
                 Spacer()
 
-                Text(result.message.timestamp, style: .relative)
+                Text(result.formattedDate)
                     .font(settings.scaledFont(.small))
                     .foregroundColor(CLITheme.mutedText(for: colorScheme))
             }
 
-            // Match preview
-            Text(result.matchPreview)
-                .font(settings.scaledFont(.body))
-                .foregroundColor(CLITheme.primaryText(for: colorScheme))
-                .lineLimit(3)
+            // Snippets with highlighting
+            ForEach(result.snippets) { snippet in
+                SnippetView(snippet: snippet)
+            }
 
-            // Session info
-            Text("Session: \(result.sessionId.prefix(8))...")
-                .font(settings.scaledFont(.small))
-                .foregroundColor(CLITheme.mutedText(for: colorScheme))
+            // Score badge
+            HStack(spacing: 4) {
+                Image(systemName: "star.fill")
+                    .font(.system(size: 10))
+                    .foregroundColor(CLITheme.yellow(for: colorScheme))
+
+                Text("Relevance: \(Int(result.score))")
+                    .font(settings.scaledFont(.small))
+                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
+
+                Spacer()
+
+                Text("Session: \(result.sessionId.prefix(8))...")
+                    .font(settings.scaledFont(.small))
+                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
+            }
         }
         .padding(.vertical, 4)
         .contextMenu {
             Button {
-                UIPasteboard.general.string = result.message.content
+                UIPasteboard.general.string = result.snippet
             } label: {
-                Label("Copy Message", systemImage: "doc.on.doc")
+                Label("Copy Preview", systemImage: "doc.on.doc")
             }
         }
+    }
+}
+
+// MARK: - Snippet View with Highlighting
+
+struct SnippetView: View {
+    let snippet: CLISearchSnippet
+    @EnvironmentObject var settings: AppSettings
+    @Environment(\.colorScheme) var colorScheme
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: snippet.messageTypeIcon)
+                .font(.system(size: 10))
+                .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+                .frame(width: 16)
+
+            // Highlighted text
+            Text(highlightedText)
+                .font(settings.scaledFont(.body))
+                .lineLimit(2)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var highlightedText: AttributedString {
+        var text = AttributedString(snippet.text)
+
+        // Set default foreground color for the entire text
+        text.foregroundColor = CLITheme.primaryText(for: colorScheme)
+
+        // Find the range to highlight using string indices
+        let sourceString = snippet.text
+        let startOffset = min(snippet.matchStart, sourceString.count)
+        let endOffset = min(snippet.matchStart + snippet.matchLength, sourceString.count)
+
+        guard startOffset < endOffset,
+              startOffset >= 0 else {
+            return text
+        }
+
+        // Convert String indices to AttributedString indices
+        let sourceStartIndex = sourceString.index(sourceString.startIndex, offsetBy: startOffset)
+        let sourceEndIndex = sourceString.index(sourceString.startIndex, offsetBy: endOffset)
+        let sourceRange = sourceStartIndex..<sourceEndIndex
+
+        // Find the equivalent range in the AttributedString
+        if let attributedRange = Range(sourceRange, in: text) {
+            text[attributedRange].backgroundColor = CLITheme.yellow(for: colorScheme).opacity(0.3)
+            text[attributedRange].font = settings.scaledFont(.body).bold()
+        }
+
+        return text
     }
 }

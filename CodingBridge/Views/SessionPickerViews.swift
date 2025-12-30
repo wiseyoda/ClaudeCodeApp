@@ -154,165 +154,6 @@ struct SessionBar: View {
     }
 }
 
-// MARK: - Session Picker (Legacy horizontal scrolling - kept for reference)
-
-struct SessionPicker: View {
-    @Binding var sessions: [ProjectSession]
-    let project: Project
-    @Binding var selected: ProjectSession?
-    var isLoading: Bool = false
-    var isProcessing: Bool = false
-    var activeSessionId: String?  // Currently active session (may be processing)
-    let onSelect: (ProjectSession) -> Void
-    let onNew: () -> Void
-    let onDelete: ((ProjectSession) -> Void)?
-    @EnvironmentObject var settings: AppSettings
-    @Environment(\.colorScheme) var colorScheme
-    @State private var showAllSessions = false
-
-    /// Determines if a session should be shown as selected
-    private func isSessionSelected(_ session: ProjectSession) -> Bool {
-        if let selected = selected {
-            return selected.id == session.id
-        }
-        return activeSessionId == session.id
-    }
-
-    /// "New" is selected only when there's no active session at all
-    private var isNewSelected: Bool {
-        selected == nil && activeSessionId == nil
-    }
-
-    /// Sessions sorted by last activity (most recent first), excluding empty and helper sessions
-    /// Uses shared filtering logic from Models.swift
-    /// Always includes the active session (even if newly created with few messages)
-    private var sortedSessions: [ProjectSession] {
-        sessions.filterAndSortForDisplay(projectPath: project.path, activeSessionId: activeSessionId ?? selected?.id)
-    }
-
-    /// Number of sessions not shown in the bar (based on filtered sessions)
-    private var hiddenSessionCount: Int {
-        max(0, sortedSessions.count - 5)
-    }
-
-    var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                // New button
-                Button {
-                    onNew()
-                } label: {
-                    Text("New")
-                        .font(settings.scaledFont(.small))
-                        .foregroundColor(isNewSelected ? CLITheme.background(for: colorScheme) : CLITheme.cyan(for: colorScheme))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 6)
-                        .background(isNewSelected ? CLITheme.cyan(for: colorScheme) : CLITheme.secondaryBackground(for: colorScheme))
-                        .cornerRadius(4)
-                }
-
-                // Recent sessions (up to 5)
-                ForEach(sortedSessions.prefix(5)) { session in
-                    sessionButton(for: session)
-                }
-
-                // Always show "all sessions" button (with count if > 5)
-                Button {
-                    showAllSessions = true
-                } label: {
-                    HStack(spacing: 3) {
-                        Image(systemName: "list.bullet")
-                            .font(.system(size: 11))
-                        if hiddenSessionCount > 0 {
-                            Text("+\(hiddenSessionCount)")
-                                .font(settings.scaledFont(.small))
-                        }
-                    }
-                    .foregroundColor(CLITheme.secondaryText(for: colorScheme))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .background(CLITheme.secondaryBackground(for: colorScheme))
-                    .cornerRadius(4)
-                }
-                .accessibilityLabel("All sessions")
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-        }
-        .background(CLITheme.background(for: colorScheme))
-        .sheet(isPresented: $showAllSessions) {
-            SessionPickerSheet(
-                project: project,
-                sessions: $sessions,
-                activeSessionId: activeSessionId ?? selected?.id,
-                onSelect: { session in
-                    showAllSessions = false
-                    selected = session
-                    onSelect(session)
-                },
-                onCancel: {
-                    showAllSessions = false
-                },
-                onDelete: onDelete
-            )
-        }
-    }
-
-    @ViewBuilder
-    private func sessionButton(for session: ProjectSession) -> some View {
-        Button {
-            selected = session
-            onSelect(session)
-        } label: {
-            HStack(spacing: 4) {
-                // Show processing indicator for active session
-                if isProcessing && activeSessionId == session.id {
-                    Circle()
-                        .fill(CLITheme.yellow(for: colorScheme))
-                        .frame(width: 6, height: 6)
-                }
-                // Show loading indicator when fetching history
-                if isLoading && selected?.id == session.id {
-                    ProgressView()
-                        .scaleEffect(0.6)
-                        .frame(width: 12, height: 12)
-                }
-                Text(displayName(for: session))
-                    .font(settings.scaledFont(.small))
-                    .lineLimit(1)
-            }
-            .foregroundColor(isSessionSelected(session) ? CLITheme.background(for: colorScheme) : CLITheme.primaryText(for: colorScheme))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(isSessionSelected(session) ? CLITheme.cyan(for: colorScheme) : CLITheme.secondaryBackground(for: colorScheme))
-            .cornerRadius(4)
-        }
-        .disabled(isLoading)
-        .contextMenu {
-            Button {
-                showAllSessions = true
-            } label: {
-                Label("All Sessions", systemImage: "list.bullet")
-            }
-
-            Divider()
-
-            Button(role: .destructive) {
-                onDelete?(session)
-            } label: {
-                Label("Delete Session", systemImage: "trash")
-            }
-        }
-    }
-
-    private func displayName(for session: ProjectSession) -> String {
-        if let customName = SessionNamesStore.shared.getName(for: session.id) {
-            return customName
-        }
-        return session.summary ?? "Session"
-    }
-}
-
 // MARK: - Session Picker Sheet
 
 struct SessionPickerSheet: View {
@@ -826,6 +667,29 @@ struct SessionRow: View {
         SessionNamesStore.shared.getName(for: session.id) != nil
     }
 
+    /// Preview text to show below the session name
+    /// Shows assistant's last response (more informative), or user's message if different from title
+    private var previewText: String? {
+        // Prefer showing what Claude was working on (more informative)
+        if let assistantMsg = session.lastAssistantMessage, !assistantMsg.isEmpty {
+            // Truncate long responses to first meaningful line
+            let firstLine = assistantMsg.components(separatedBy: .newlines).first ?? assistantMsg
+            return String(firstLine.prefix(100))
+        }
+
+        // Fall back to user message only if different from display name
+        if let userMsg = session.lastUserMessage, !userMsg.isEmpty {
+            // Don't show if it's the same as the title (avoids "Test" / "Test" duplication)
+            let normalizedUser = userMsg.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            let normalizedDisplay = displayName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            if normalizedUser != normalizedDisplay {
+                return userMsg
+            }
+        }
+
+        return nil
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -843,9 +707,9 @@ struct SessionRow: View {
                 }
             }
 
-            // Show last user message as preview
-            if let lastMsg = session.lastUserMessage, !lastMsg.isEmpty {
-                Text(lastMsg)
+            // Show preview text (assistant response or different user message)
+            if let preview = previewText {
+                Text(preview)
                     .font(.subheadline)
                     .foregroundColor(CLITheme.secondaryText(for: colorScheme))
                     .lineLimit(2)

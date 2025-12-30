@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 
-// Thinking mode - appends trigger words to prompts for extended thinking
+// Thinking mode - sent to server via thinkingMode field in input messages
 enum ThinkingMode: String, CaseIterable {
     case normal = "normal"
     case think = "think"
@@ -27,17 +27,6 @@ enum ThinkingMode: String, CaseIterable {
         case .thinkHard: return "Hard"
         case .thinkHarder: return "Harder"
         case .ultrathink: return "Ultra"
-        }
-    }
-
-    /// The suffix to append to messages (nil for normal mode)
-    var promptSuffix: String? {
-        switch self {
-        case .normal: return nil
-        case .think: return "think"
-        case .thinkHard: return "think hard"
-        case .thinkHarder: return "think harder"
-        case .ultrathink: return "ultrathink"
         }
     }
 
@@ -70,7 +59,6 @@ enum ThinkingMode: String, CaseIterable {
 }
 
 // Claude Code modes - values must match server expectations
-// Note: bypassPermissions is now a separate toggle (skipPermissions) in AppSettings
 enum ClaudeMode: String, CaseIterable {
     case normal = "default"
     case plan = "plan"
@@ -152,6 +140,8 @@ enum ProjectSortOrder: String, CaseIterable {
     }
 }
 
+// Note: PermissionMode enum is defined in PermissionTypes.swift
+
 // Font size preset
 enum FontSizePreset: Int, CaseIterable {
     case extraSmall = 10
@@ -191,7 +181,7 @@ enum HistoryLimit: Int, CaseIterable {
 @MainActor
 class AppSettings: ObservableObject {
     // Server Configuration
-    @AppStorage("serverURL") var serverURL: String = "http://10.0.3.2:8080"
+    @AppStorage("serverURL") var serverURL: String = "http://localhost:3100"
 
     // Appearance Settings
     @AppStorage("appTheme") private var appThemeRaw: String = AppTheme.system.rawValue
@@ -200,8 +190,10 @@ class AppSettings: ObservableObject {
     // Claude Settings
     @AppStorage("claudeMode") private var claudeModeRaw: String = ClaudeMode.normal.rawValue
     @AppStorage("thinkingMode") private var thinkingModeRaw: String = ThinkingMode.normal.rawValue
-    @AppStorage("skipPermissions") var skipPermissions: Bool = false
     @AppStorage("defaultModel") private var defaultModelRaw: String = ClaudeModel.sonnet.rawValue
+
+    // Permission Settings
+    @AppStorage("globalPermissionMode") private var globalPermissionModeRaw: String = PermissionMode.default.rawValue
     @AppStorage("customModelId") var customModelId: String = ""
 
     // Chat Display Settings
@@ -219,6 +211,10 @@ class AppSettings: ObservableObject {
     @AppStorage("processingTimeout") var processingTimeout: Int = 300
 
     // MARK: - Background & Notifications
+
+    /// Master toggle for push notifications feature (default: false - experimental)
+    /// When disabled, all push notification functionality is inactive
+    @AppStorage("enablePushNotifications") var enablePushNotifications: Bool = false
 
     /// Enable background notifications when app not in foreground (default: true)
     @AppStorage("enableBackgroundNotifications") var enableBackgroundNotifications: Bool = true
@@ -239,7 +235,7 @@ class AppSettings: ObservableObject {
     // Project List Settings
     @AppStorage("projectSortOrder") private var projectSortOrderRaw: String = ProjectSortOrder.name.rawValue
 
-    // Auth Settings (for claudecodeui backend)
+    // Auth Settings (for cli-bridge server)
     @AppStorage("authUsername") var authUsername: String = ""
     // Auth credentials are stored in Keychain for security - see computed properties below
     @Published private var _authPasswordCache: String?
@@ -247,7 +243,8 @@ class AppSettings: ObservableObject {
     @Published private var _apiKeyCache: String?
 
     // SSH Settings
-    @AppStorage("sshHost") var sshHost: String = "10.0.3.2"
+    // Default to empty - SSH is optional when using cli-bridge locally
+    @AppStorage("sshHost") var sshHost: String = ""
     @AppStorage("sshPort") var sshPort: Int = 22
     @AppStorage("sshUsername") var sshUsername: String = "dev"
     @AppStorage("sshAuthMethod") private var sshAuthMethodRaw: String = SSHAuthType.password.rawValue
@@ -279,12 +276,6 @@ class AppSettings: ObservableObject {
         set { thinkingModeRaw = newValue.rawValue }
     }
 
-    /// Applies thinking mode suffix to a message if needed
-    func applyThinkingMode(to message: String) -> String {
-        guard let suffix = thinkingMode.promptSuffix else { return message }
-        return "\(message) \(suffix)"
-    }
-
     var defaultModel: ClaudeModel {
         get { ClaudeModel(rawValue: defaultModelRaw) ?? .sonnet }
         set { defaultModelRaw = newValue.rawValue }
@@ -298,6 +289,12 @@ class AppSettings: ObservableObject {
     var historyLimit: HistoryLimit {
         get { HistoryLimit(rawValue: historyLimitRaw) ?? .medium }
         set { historyLimitRaw = newValue.rawValue }
+    }
+
+    /// Global permission mode
+    var globalPermissionMode: PermissionMode {
+        get { PermissionMode(rawValue: globalPermissionModeRaw) ?? .default }
+        set { globalPermissionModeRaw = newValue.rawValue }
     }
 
     var sshAuthType: SSHAuthType {
@@ -418,37 +415,29 @@ class AppSettings: ObservableObject {
     }
 
     /// The effective permission mode to send to server
-    /// If skipPermissions is enabled, always use bypassPermissions
-    var effectivePermissionMode: String? {
-        skipPermissions ? "bypassPermissions" : claudeMode.serverValue
+    /// Returns the global permission mode as a string for server communication
+    var effectivePermissionMode: String {
+        globalPermissionMode.rawValue
     }
 
     var baseURL: URL? {
         URL(string: serverURL)
     }
 
-    var webSocketURL: URL? {
-        guard let base = baseURL else { return nil }
-        let wsScheme = base.scheme == "https" ? "wss" : "ws"
-        var components = URLComponents(url: base, resolvingAgainstBaseURL: false)
-        components?.scheme = wsScheme
-        components?.path = "/ws"
-        if !authToken.isEmpty {
-            components?.queryItems = [URLQueryItem(name: "token", value: authToken)]
-        }
-        return components?.url
-    }
-
     // Derive SSH host from server URL if not set
+    // Returns empty string if SSH is not configured (disables SSH features)
     var effectiveSSHHost: String {
         if !sshHost.isEmpty {
             return sshHost
         }
-        // Try to extract host from server URL
-        if let url = URL(string: serverURL), let host = url.host {
-            return host
-        }
-        return "10.0.3.2"
+        // When SSH host is empty, SSH features are disabled
+        // cli-bridge provides git status and file browsing via REST API
+        return ""
+    }
+
+    /// True if SSH is configured and can be used
+    var isSSHConfigured: Bool {
+        !effectiveSSHHost.isEmpty && effectiveSSHHost != "localhost" && effectiveSSHHost != "127.0.0.1"
     }
 
     // Font size scaling

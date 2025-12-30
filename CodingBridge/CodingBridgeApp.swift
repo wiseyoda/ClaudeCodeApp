@@ -2,7 +2,7 @@ import SwiftUI
 import UserNotifications
 import BackgroundTasks
 
-// MARK: - App Delegate for Orientation Control and Background Tasks
+// MARK: - App Delegate for Orientation Control, Background Tasks, and Push Notifications
 
 class AppDelegate: NSObject, UIApplicationDelegate {
     /// Controls which orientations are allowed. Updated by AppSettings.lockToPortrait
@@ -16,7 +16,62 @@ class AppDelegate: NSObject, UIApplicationDelegate {
         // Register background tasks synchronously - must happen before launch completes
         // Per Apple docs: "All launch handlers must be registered before application finishes launching"
         BackgroundManager.shared.registerBackgroundTasksSync()
+
+        // Configure Firebase if available (for push notifications)
+        // Note: Firebase initialization happens here when GoogleService-Info.plist is present
+        // and enablePushNotifications is true. For now, we check in PushNotificationManager.configure()
         return true
+    }
+
+    // MARK: - Push Notification Registration
+
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        Task { @MainActor in
+            PushNotificationManager.shared.didRegisterForRemoteNotifications(deviceToken: deviceToken)
+        }
+    }
+
+    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        Task { @MainActor in
+            PushNotificationManager.shared.didFailToRegisterForRemoteNotifications(error: error)
+        }
+    }
+
+    // MARK: - Background Push Handling
+
+    func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any]) async -> UIBackgroundFetchResult {
+        log.info("[Push] Received remote notification in background")
+
+        // Handle push notification
+        await MainActor.run {
+            PushNotificationManager.shared.handleNotification(userInfo: userInfo)
+        }
+
+        // Check notification type for Live Activity updates
+        if let type = userInfo["type"] as? String {
+            switch type {
+            case "task_complete", "task_error":
+                await LiveActivityManager.shared.handlePushUpdate(userInfo)
+            case "approval_request":
+                // Parse approval request from push payload
+                if let data = userInfo["data"] as? [String: Any],
+                   let requestId = data["requestId"] as? String,
+                   let toolName = data["toolName"] as? String {
+                    let summary = data["summary"] as? String ?? "Approve tool execution?"
+                    await NotificationManager.shared.sendApprovalNotification(
+                        requestId: requestId,
+                        toolName: toolName,
+                        summary: summary
+                    )
+                }
+            case "live_activity_update":
+                await LiveActivityManager.shared.handlePushUpdate(userInfo)
+            default:
+                break
+            }
+        }
+
+        return .newData
     }
 }
 
@@ -45,6 +100,22 @@ struct CodingBridgeApp: App {
             Task { @MainActor in
                 NotificationManager.shared.configure()
                 _ = await NotificationManager.shared.requestPermissions()
+            }
+        }
+
+        // Configure push notification manager if enabled
+        let pushEnabled = UserDefaults.standard.bool(forKey: "enablePushNotifications")
+        if pushEnabled && !isUITestMode {
+            Task { @MainActor in
+                let serverURL = UserDefaults.standard.string(forKey: "serverURL") ?? "http://localhost:3100"
+                PushNotificationManager.shared.configure(serverURL: serverURL)
+                LiveActivityManager.shared.configure(serverURL: serverURL)
+
+                // Request push permission if not already granted
+                _ = await PushNotificationManager.shared.requestPermission()
+
+                // Clean up stale Live Activities from previous sessions
+                await LiveActivityManager.shared.cleanupStaleActivities()
             }
         }
 

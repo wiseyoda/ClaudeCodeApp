@@ -7,40 +7,30 @@ import Combine
 struct UnifiedStatusBar: View {
     let isProcessing: Bool
     let connectionState: ConnectionState
-    let tokenUsage: WebSocketManager.TokenUsage?
-    let effectiveSkipPermissions: Bool
+    let tokenUsage: TokenUsage?
+    let effectivePermissionMode: PermissionMode
     let projectPath: String?
     @Binding var showQuickSettings: Bool
     @EnvironmentObject var settings: AppSettings
     @ObservedObject private var projectSettingsStore = ProjectSettingsStore.shared
     @Environment(\.colorScheme) var colorScheme
 
-    /// Legacy initializer for backward compatibility
-    init(isProcessing: Bool, isConnected: Bool, tokenUsage: WebSocketManager.TokenUsage?, showQuickSettings: Binding<Bool>) {
-        self.isProcessing = isProcessing
-        self.connectionState = isConnected ? .connected : .disconnected
-        self.tokenUsage = tokenUsage
-        self.effectiveSkipPermissions = false
-        self.projectPath = nil
-        self._showQuickSettings = showQuickSettings
-    }
-
-    /// New initializer with full connection state
-    init(isProcessing: Bool, connectionState: ConnectionState, tokenUsage: WebSocketManager.TokenUsage?, showQuickSettings: Binding<Bool>) {
+    /// Initializer with full connection state
+    init(isProcessing: Bool, connectionState: ConnectionState, tokenUsage: TokenUsage?, showQuickSettings: Binding<Bool>) {
         self.isProcessing = isProcessing
         self.connectionState = connectionState
         self.tokenUsage = tokenUsage
-        self.effectiveSkipPermissions = false
+        self.effectivePermissionMode = .default
         self.projectPath = nil
         self._showQuickSettings = showQuickSettings
     }
 
     /// Full initializer with per-project permission support
-    init(isProcessing: Bool, connectionState: ConnectionState, tokenUsage: WebSocketManager.TokenUsage?, effectiveSkipPermissions: Bool, projectPath: String, showQuickSettings: Binding<Bool>) {
+    init(isProcessing: Bool, connectionState: ConnectionState, tokenUsage: TokenUsage?, effectivePermissionMode: PermissionMode, projectPath: String, showQuickSettings: Binding<Bool>) {
         self.isProcessing = isProcessing
         self.connectionState = connectionState
         self.tokenUsage = tokenUsage
-        self.effectiveSkipPermissions = effectiveSkipPermissions
+        self.effectivePermissionMode = effectivePermissionMode
         self.projectPath = projectPath
         self._showQuickSettings = showQuickSettings
     }
@@ -55,7 +45,7 @@ struct UnifiedStatusBar: View {
                         .fill(statusColor)
                         .frame(width: 8, height: 8)
 
-                    // Pulsing overlay when processing/connecting
+                    // Pulsing overlay when connecting/reconnecting or processing
                     if connectionState.isConnecting || isProcessing {
                         Circle()
                             .fill(statusColor)
@@ -109,36 +99,21 @@ struct UnifiedStatusBar: View {
             .accessibilityLabel("Thinking: \(settings.thinkingMode.displayName)")
             .accessibilityHint("Tap to switch to \(settings.thinkingMode.next().displayName)")
 
-            // Skip permissions indicator (icon-only, tappable to toggle per-project)
-            if effectiveSkipPermissions {
+            // Permission mode indicator (icon-only, tappable to cycle modes)
+            if effectivePermissionMode != .default || hasProjectOverride {
                 Button {
-                    toggleProjectBypass()
+                    togglePermissionMode()
                 } label: {
                     ModePill(
-                        icon: hasProjectOverride ? "exclamationmark.shield.fill" : "exclamationmark.shield",
-                        text: hasProjectOverride ? "Bypass*" : "Bypass",
-                        color: CLITheme.red(for: colorScheme),
-                        isActive: true,
+                        icon: hasProjectOverride ? effectivePermissionMode.icon + ".fill" : effectivePermissionMode.icon,
+                        text: hasProjectOverride ? effectivePermissionMode.shortDisplayName + "*" : effectivePermissionMode.shortDisplayName,
+                        color: effectivePermissionMode.color,
+                        isActive: effectivePermissionMode != .default,
                         iconOnly: true
                     )
                 }
-                .accessibilityLabel("Permissions bypass enabled" + (hasProjectOverride ? " for this project" : " globally"))
-                .accessibilityHint("Tap to toggle for this project")
-            } else if let path = projectPath, projectSettingsStore.skipPermissionsOverride(for: path) == false {
-                // Show when project explicitly disables bypass (overriding global)
-                Button {
-                    toggleProjectBypass()
-                } label: {
-                    ModePill(
-                        icon: "shield.checkered",
-                        text: "Safe*",
-                        color: CLITheme.green(for: colorScheme),
-                        isActive: true,
-                        iconOnly: true
-                    )
-                }
-                .accessibilityLabel("Permissions required for this project")
-                .accessibilityHint("Tap to toggle for this project")
+                .accessibilityLabel("Permission mode: \(effectivePermissionMode.displayName)" + (hasProjectOverride ? " for this project" : " globally"))
+                .accessibilityHint("Tap to change permission mode")
             }
 
             Spacer()
@@ -170,14 +145,17 @@ struct UnifiedStatusBar: View {
     private var statusColor: Color {
         switch connectionState {
         case .disconnected:
+            // Solid red - server is down
             return CLITheme.red(for: colorScheme)
         case .connecting, .reconnecting:
-            // Yellow for connecting/reconnecting - pulsing animation shows activity
-            return CLITheme.yellow(for: colorScheme)
+            // Pulsing red - trying to connect (pulsing animation applied separately)
+            return CLITheme.red(for: colorScheme)
         case .connected:
             if isProcessing {
+                // Yellow - stream in progress
                 return CLITheme.yellow(for: colorScheme)
             } else {
+                // Green - ready
                 return CLITheme.green(for: colorScheme)
             }
         }
@@ -186,26 +164,29 @@ struct UnifiedStatusBar: View {
     /// Whether this project has a specific override (vs using global setting)
     private var hasProjectOverride: Bool {
         guard let path = projectPath else { return false }
-        return projectSettingsStore.skipPermissionsOverride(for: path) != nil
+        return projectSettingsStore.permissionModeOverride(for: path) != nil
     }
 
-    /// Toggle the per-project bypass setting
-    /// Cycles through: use global -> force on -> force off -> use global
-    private func toggleProjectBypass() {
+    /// Toggle the per-project permission mode
+    /// Cycles through: use global -> default -> acceptEdits -> bypassPermissions -> use global
+    private func togglePermissionMode() {
         guard let path = projectPath else { return }
 
-        let currentOverride = projectSettingsStore.skipPermissionsOverride(for: path)
+        let currentOverride = projectSettingsStore.permissionModeOverride(for: path)
 
         switch currentOverride {
         case nil:
-            // Using global, switch to opposite of global
-            projectSettingsStore.setSkipPermissionsOverride(for: path, override: !settings.skipPermissions)
-        case true:
-            // Was forced on, switch to forced off
-            projectSettingsStore.setSkipPermissionsOverride(for: path, override: false)
-        case false:
-            // Was forced off, clear override to use global
-            projectSettingsStore.setSkipPermissionsOverride(for: path, override: nil)
+            // Using global, start cycling through modes (start with default)
+            projectSettingsStore.setPermissionModeOverride(for: path, mode: .default)
+        case .default:
+            // Switch to acceptEdits
+            projectSettingsStore.setPermissionModeOverride(for: path, mode: .acceptEdits)
+        case .acceptEdits:
+            // Switch to bypassPermissions
+            projectSettingsStore.setPermissionModeOverride(for: path, mode: .bypassPermissions)
+        case .bypassPermissions:
+            // Clear override to use global
+            projectSettingsStore.setPermissionModeOverride(for: path, mode: nil)
         }
     }
 }
@@ -314,168 +295,6 @@ private struct CompactTokenView: View {
             .font(settings.scaledFont(.small))
             .fontDesign(.monospaced)
             .foregroundColor(color)
-    }
-
-    private func formatTokens(_ count: Int) -> String {
-        if count >= 1000 {
-            return String(format: "%.1fk", Double(count) / 1000.0)
-        }
-        return "\(count)"
-    }
-}
-
-// MARK: - CLI Status Bar (Legacy - kept for compatibility)
-
-struct CLIStatusBar: View {
-    let isProcessing: Bool
-    let isUploadingImage: Bool
-    let startTime: Date?
-    let tokenUsage: WebSocketManager.TokenUsage?
-    @EnvironmentObject var settings: AppSettings
-    @Environment(\.colorScheme) var colorScheme
-
-    @State private var elapsedTime: String = "0s"
-    @State private var statusWordIndex: Int = 0
-    let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-
-    // Cycling status words for processing state
-    private let statusWords = ["thinking", "processing", "analyzing", "working", "reasoning"]
-
-    private var statusAccessibilityLabel: String {
-        var label: String
-        if isUploadingImage {
-            label = "Uploading image"
-        } else if isProcessing {
-            label = "Claude is \(statusWords[statusWordIndex]), elapsed time \(elapsedTime)"
-        } else {
-            label = "Claude is ready"
-        }
-        if let usage = tokenUsage {
-            let percentage = Int((Double(usage.used) / Double(usage.total)) * 100)
-            label += ", \(percentage)% of context used"
-        }
-        return label
-    }
-
-    var body: some View {
-        HStack(spacing: 12) {
-            if isUploadingImage {
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(CLITheme.cyan(for: colorScheme))
-                        .frame(width: 6, height: 6)
-                    Text("uploading image")
-                        .foregroundColor(CLITheme.cyan(for: colorScheme))
-                }
-            } else if isProcessing {
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(CLITheme.yellow(for: colorScheme))
-                        .frame(width: 6, height: 6)
-                    Text(statusWords[statusWordIndex])
-                        .foregroundColor(CLITheme.yellow(for: colorScheme))
-                        .animation(.easeInOut(duration: 0.3), value: statusWordIndex)
-                }
-            } else {
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(CLITheme.green(for: colorScheme))
-                        .frame(width: 6, height: 6)
-                    Text("ready")
-                        .foregroundColor(CLITheme.green(for: colorScheme))
-                }
-            }
-
-            Spacer()
-
-            // Context usage from WebSocket (only show if actually received from server)
-            if let usage = tokenUsage {
-                TokenUsageView(used: usage.used, total: usage.total)
-            }
-
-            if isProcessing {
-                Text(elapsedTime)
-                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
-            }
-        }
-        .font(settings.scaledFont(.small))
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(CLITheme.secondaryBackground(for: colorScheme))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(statusAccessibilityLabel)
-        .accessibilityAddTraits(isProcessing ? .updatesFrequently : [])
-        .onReceive(timer) { _ in
-            if let start = startTime {
-                let elapsed = Int(Date().timeIntervalSince(start))
-                if elapsed < 60 {
-                    elapsedTime = "\(elapsed)s"
-                } else {
-                    elapsedTime = "\(elapsed / 60)m \(elapsed % 60)s"
-                }
-                // Cycle status word every 3 seconds
-                if isProcessing && elapsed > 0 && elapsed % 3 == 0 {
-                    statusWordIndex = (statusWordIndex + 1) % statusWords.count
-                }
-            }
-        }
-        .onChange(of: isProcessing) { _, processing in
-            // Reset to first word when processing starts
-            if processing {
-                statusWordIndex = 0
-            }
-        }
-    }
-
-}
-
-// MARK: - Token Usage View
-
-struct TokenUsageView: View {
-    let used: Int
-    let total: Int
-    @EnvironmentObject var settings: AppSettings
-    @Environment(\.colorScheme) var colorScheme
-
-    private var percentage: Double {
-        Double(used) / Double(total)
-    }
-
-    private var displayPercentage: Double {
-        min(percentage, 1.0)
-    }
-
-    private var color: Color {
-        if percentage > 0.8 {
-            return CLITheme.red(for: colorScheme)
-        } else if percentage > 0.6 {
-            return CLITheme.yellow(for: colorScheme)
-        } else {
-            return CLITheme.green(for: colorScheme)
-        }
-    }
-
-    var body: some View {
-        HStack(spacing: 6) {
-            // Circular progress indicator
-            ZStack {
-                // Background circle
-                Circle()
-                    .stroke(CLITheme.mutedText(for: colorScheme).opacity(0.3), lineWidth: 2)
-
-                // Progress arc
-                Circle()
-                    .trim(from: 0, to: displayPercentage)
-                    .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-            }
-            .frame(width: 14, height: 14)
-
-            // Text display
-            Text("\(formatTokens(used))/\(formatTokens(total))")
-                .font(settings.scaledFont(.small))
-                .foregroundColor(color)
-        }
     }
 
     private func formatTokens(_ count: Int) -> String {

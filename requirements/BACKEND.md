@@ -2,52 +2,48 @@
 
 ## Overview
 
-The iOS app requires a running [claudecodeui](https://github.com/wiseyoda/claudecodeui) backend server (our fork with additional features) that the app connects to via HTTP/WebSocket, plus SSH access for file operations.
-
-> **Note**: We use a fork of the original siteboon/claudecodeui that adds session filtering, permission callbacks, message batching, and other improvements. See [QNAP-CONTAINER.md](QNAP-CONTAINER.md) for fork setup details.
+The iOS app connects to [cli-bridge](https://github.com/anthropics/claude-code) backend via REST API with SSE streaming. Optional SSH access for file operations.
 
 ## Prerequisites
 
-- Node.js 20+
-- Claude CLI installed and authenticated
-- SSH server (sshd) running
+- Deno runtime
+- Claude Code CLI installed and authenticated (`claude --version`)
 - Network connectivity from iOS device to backend
+
+## Quick Start (Local Development)
+
+```bash
+# Start cli-bridge
+cd ~/dev/cli-bridge
+deno task dev  # Runs on http://localhost:3100
+
+# Verify it's running
+curl -s http://localhost:3100/health
+# Returns: {"status":"ok","agents":0,...}
+```
+
+**iOS App Default:** `http://localhost:3100`
 
 ## Installation Options
 
-### Option 1: Local Machine
+### Option 1: Local Development (Recommended)
 
 ```bash
-git clone https://github.com/wiseyoda/claudecodeui.git
-cd claudecodeui && npm install && npm run build && npm start
+cd ~/dev/cli-bridge
+deno task dev
 ```
 
-### Option 2: Docker Container (Recommended for NAS)
+### Option 2: Docker Container (Production/NAS)
 
-```dockerfile
-FROM node:20-slim
-
-RUN apt-get update && apt-get install -y openssh-server git curl sudo tmux \
-    && rm -rf /var/lib/apt/lists/*
-
-RUN npm install -g @anthropic-ai/claude-code
-
-# ... (see full Dockerfile in deployment docs)
-```
-
-### Option 3: QNAP NAS Container
-
-See the QNAP deployment guide for a complete Docker Compose setup with:
-- Auto-starting WebUI
-- Persistent Claude credentials
-- Tailscale integration for secure remote access
+Coming soon - cli-bridge Docker deployment for QNAP.
 
 ## Network Configuration
 
 ### Local Network
 
-If iOS device and backend are on the same network:
-- Use the backend's local IP (e.g., `http://192.168.1.100:8080`)
+For iOS Simulator or device on same network:
+- Use `http://localhost:3100` (Simulator)
+- Use the backend's local IP (e.g., `http://192.168.1.100:3100`)
 
 ### Remote Access via Tailscale
 
@@ -55,45 +51,19 @@ For secure remote access:
 1. Install Tailscale on the backend host
 2. Advertise the backend's subnet or use the Tailscale IP
 3. Install Tailscale on iOS device
-4. Connect to backend via Tailscale IP (e.g., `http://10.0.3.2:8080`)
+4. Connect to backend via Tailscale IP
 
 ## Authentication
 
-The backend supports two authentication methods:
-
-### JWT (Username/Password) - Used by iOS App
-
-```
-POST /api/auth/login
-Content-Type: application/json
-
-{"username": "admin", "password": "yourpassword"}
-
-Response: {"success": true, "token": "eyJ..."}
-```
-
-- Use `Authorization: Bearer <jwt_token>` header for API calls
-- Required for `/api/projects`, `/api/settings`, etc.
-- **This is what the iOS app uses**
-
-### API Keys (`ck_...`) - Agent API Only
-
-- Created in Web UI: Settings > API Keys
-- Use `X-API-Key: ck_...` header
-- **Only works for `/api/agent/*` endpoints**
-- Used for external integrations (n8n, etc.)
-- **NOT for iOS app - leave API Key field empty!**
+cli-bridge currently runs without authentication for local development.
 
 ### iOS App Configuration
 
 | Setting | Value |
 |---------|-------|
-| Server URL | `http://10.0.3.2:8080` (your server) |
-| API Key | **Leave empty** |
-| Username | Your web UI username |
-| Password | Your web UI password |
+| Server URL | `http://localhost:3100` (local dev) |
 
-The app authenticates via JWT automatically when you provide username/password.
+Production authentication will be documented once cli-bridge is deployed to QNAP.
 
 ## API Reference
 

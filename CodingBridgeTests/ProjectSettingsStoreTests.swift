@@ -35,78 +35,78 @@ final class ProjectSettingsStoreTests: XCTestCase {
 
         let settings = store.settings(for: "/path/to/project")
 
-        XCTAssertNil(settings.skipPermissionsOverride)
+        XCTAssertNil(settings.permissionModeOverride)
     }
 
-    func test_skipPermissionsOverride_returnsNilByDefault() {
+    func test_permissionModeOverride_returnsNilByDefault() {
         let store = makeStore()
 
-        XCTAssertNil(store.skipPermissionsOverride(for: "/path/to/project"))
+        XCTAssertNil(store.settings(for: "/path/to/project").permissionModeOverride)
     }
 
     func test_updateSettings_persistsAndLoads() throws {
         let store = makeStore()
         let projectPath = "/path/to/project"
 
-        store.updateSettings(for: projectPath, settings: ProjectSettings(skipPermissionsOverride: true))
+        store.updateSettings(for: projectPath, settings: ProjectSettings(permissionModeOverride: .bypassPermissions))
 
         let reloaded = ProjectSettingsStore(baseDirectory: tempDirectory)
-        XCTAssertEqual(reloaded.settings(for: projectPath).skipPermissionsOverride, true)
+        XCTAssertEqual(reloaded.settings(for: projectPath).permissionModeOverride, .bypassPermissions)
     }
 
-    func test_setSkipPermissionsOverride_updatesInMemory() {
+    func test_updateSettings_setsPermissionMode() {
         let store = makeStore()
         let projectPath = "/path/to/project"
 
-        store.setSkipPermissionsOverride(for: projectPath, override: false)
+        store.updateSettings(for: projectPath, settings: ProjectSettings(permissionModeOverride: .acceptEdits))
 
-        XCTAssertEqual(store.skipPermissionsOverride(for: projectPath), false)
+        XCTAssertEqual(store.settings(for: projectPath).permissionModeOverride, .acceptEdits)
     }
 
-    func test_effectiveSkipPermissions_prefersOverrideTrue() {
+    func test_updateSettings_canSetBypassPermissions() {
         let store = makeStore()
         let projectPath = "/path/to/project"
 
-        store.setSkipPermissionsOverride(for: projectPath, override: true)
+        store.updateSettings(for: projectPath, settings: ProjectSettings(permissionModeOverride: .bypassPermissions))
 
-        XCTAssertTrue(store.effectiveSkipPermissions(for: projectPath, globalSetting: false))
+        XCTAssertEqual(store.settings(for: projectPath).permissionModeOverride, .bypassPermissions)
     }
 
-    func test_effectiveSkipPermissions_prefersOverrideFalse() {
+    func test_updateSettings_canSetDefault() {
         let store = makeStore()
         let projectPath = "/path/to/project"
 
-        store.setSkipPermissionsOverride(for: projectPath, override: false)
+        store.updateSettings(for: projectPath, settings: ProjectSettings(permissionModeOverride: .default))
 
-        XCTAssertFalse(store.effectiveSkipPermissions(for: projectPath, globalSetting: true))
+        XCTAssertEqual(store.settings(for: projectPath).permissionModeOverride, .default)
     }
 
-    func test_effectiveSkipPermissions_fallsBackToGlobalSetting() {
+    func test_updateSettings_canClearOverride() {
         let store = makeStore()
         let projectPath = "/path/to/project"
 
-        store.setSkipPermissionsOverride(for: projectPath, override: nil)
+        store.updateSettings(for: projectPath, settings: ProjectSettings(permissionModeOverride: .bypassPermissions))
+        store.updateSettings(for: projectPath, settings: ProjectSettings(permissionModeOverride: nil))
 
-        XCTAssertTrue(store.effectiveSkipPermissions(for: projectPath, globalSetting: true))
-        XCTAssertFalse(store.effectiveSkipPermissions(for: projectPath, globalSetting: false))
+        XCTAssertNil(store.settings(for: projectPath).permissionModeOverride)
     }
 
     func test_clearSettings_removesPersistedOverride() {
         let store = makeStore()
         let projectPath = "/path/to/project"
 
-        store.setSkipPermissionsOverride(for: projectPath, override: true)
+        store.updateSettings(for: projectPath, settings: ProjectSettings(permissionModeOverride: .bypassPermissions))
         store.clearSettings(for: projectPath)
 
         let reloaded = ProjectSettingsStore(baseDirectory: tempDirectory)
-        XCTAssertNil(reloaded.skipPermissionsOverride(for: projectPath))
+        XCTAssertNil(reloaded.settings(for: projectPath).permissionModeOverride)
     }
 
     func test_encodedPath_usesHyphensInStorageKey() throws {
         let store = makeStore()
         let projectPath = "/home/user/my-project"
 
-        store.setSkipPermissionsOverride(for: projectPath, override: true)
+        store.updateSettings(for: projectPath, settings: ProjectSettings(permissionModeOverride: .bypassPermissions))
 
         let data = try Data(contentsOf: settingsFileURL())
         let decoded = try JSONDecoder().decode([String: ProjectSettings].self, from: data)

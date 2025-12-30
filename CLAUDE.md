@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-iOS client for [claudecodeui](https://github.com/wiseyoda/claudecodeui) (fork). SwiftUI app targeting iOS 26+ with Citadel SSH library.
+iOS client for [cli-bridge](https://github.com/anthropics/claude-code/tree/main/packages/cli-bridge) backend. SwiftUI app targeting iOS 26+ with Citadel SSH library.
 
 ## Commands
 
@@ -21,7 +21,9 @@ open CodingBridge.xcodeproj
 
 | File | Purpose |
 |------|---------|
-| `WebSocketManager.swift` | All backend communication, streaming, reconnection |
+| `CLIBridgeManager.swift` | Core cli-bridge API client, SSE streaming |
+| `CLIBridgeAdapter.swift` | Adapts CLIBridgeManager to WebSocket-style interface |
+| `CLIBridgeTypes.swift` | All cli-bridge message types and models |
 | `SessionStore.swift` | Session state, pagination, real-time updates |
 | `SSHManager.swift` | SSH terminal, file ops, git commands via Citadel |
 | `ChatView.swift` | Main chat UI, message handling, slash commands |
@@ -51,7 +53,7 @@ open CodingBridge.xcodeproj
 - See `.claude/rules/ssh-security.md` for examples
 
 **Code Patterns:**
-- Use `@StateObject` for manager ownership in views (WebSocketManager, SSHManager, IdeasStore)
+- Use `@StateObject` for manager ownership in views (CLIBridgeAdapter, SSHManager, IdeasStore)
 - Use `@EnvironmentObject` for AppSettings (injected at app root)
 - Use singletons for shared stores: `SessionStore.shared`, `CommandStore.shared`, `BookmarkStore.shared`
 - Persist to Documents directory using `FileManager.default.urls(for: .documentDirectory)`
@@ -61,7 +63,7 @@ open CodingBridge.xcodeproj
 ```swift
 // Correct: View owns the manager
 struct ChatView: View {
-    @StateObject private var wsManager = WebSocketManager()
+    @StateObject private var wsManager = CLIBridgeAdapter()
 }
 
 // Correct: Shared settings from environment
@@ -83,7 +85,7 @@ let command = "cat '\(escaped)'"
 ## Architecture
 
 ```
-App → WebSocketManager → claudecodeui backend → Claude CLI
+App → CLIBridgeAdapter → cli-bridge backend → Claude Code CLI
 App → SSHManager → sshd (file ops, git, session history)
 ```
 
@@ -105,12 +107,27 @@ See `requirements/ARCHITECTURE.md` for full structure and data flows.
 
 ## Backend
 
-Connects to claudecodeui via WebSocket (`ws://host:port/ws?token=JWT`). Auth via POST `/api/auth/login`.
+Connects to [cli-bridge](~/dev/cli-bridge) via REST API with SSE streaming.
+
+**Local Development:**
+```bash
+# Start cli-bridge (in ~/dev/cli-bridge)
+deno task dev  # Runs on http://localhost:3100
+
+# Verify it's running
+curl -s http://localhost:3100/health
+```
+
+**Default Server URL:** `http://localhost:3100` (configurable in app settings)
+
+**Key Endpoints:**
+- `GET /health` - Health check
+- `POST /agents` - Start new agent session
+- `POST /agents/:id/message` - Send message (SSE response)
+- `POST /agents/:id/abort` - Abort current operation
 
 Session files: `$HOME/.claude/projects/{encoded-path}/{session}.jsonl`
 Path encoding: `/home/dev/project` → `-home-dev-project` (starts with dash)
-
-Fork adds: session API with pagination, `sessions-updated` WebSocket events, permission callbacks.
 
 See `requirements/BACKEND.md` for full API reference.
 
@@ -118,7 +135,6 @@ See `requirements/BACKEND.md` for full API reference.
 
 | Issue | Location | Priority |
 |-------|----------|----------|
-| WebSocket state serialization | `WebSocketManager.swift` | High |
 | @MainActor on BookmarkStore | `Models.swift` | High |
 
 Many critical issues fixed in v0.4.0. See `ROADMAP.md` for remaining work.

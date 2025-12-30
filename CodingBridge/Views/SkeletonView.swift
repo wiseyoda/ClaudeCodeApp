@@ -116,44 +116,6 @@ struct SkeletonProjectList: View {
     }
 }
 
-// MARK: - Loading State Overlay
-
-/// An overlay that shows loading progress with optional status text
-struct LoadingOverlay: View {
-    @Environment(\.colorScheme) var colorScheme
-
-    let statusText: String?
-    let showSpinner: Bool
-
-    init(statusText: String? = nil, showSpinner: Bool = true) {
-        self.statusText = statusText
-        self.showSpinner = showSpinner
-    }
-
-    var body: some View {
-        VStack(spacing: 8) {
-            if showSpinner {
-                ProgressView()
-                    .scaleEffect(0.8)
-                    .tint(CLITheme.cyan(for: colorScheme))
-            }
-
-            if let text = statusText {
-                Text(text)
-                    .font(CLITheme.monoSmall)
-                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(
-            CLITheme.secondaryBackground(for: colorScheme)
-                .opacity(0.95)
-        )
-        .cornerRadius(8)
-    }
-}
-
 // MARK: - Progressive Loading Banner
 
 /// A small banner that shows when background loading is in progress
@@ -198,12 +160,4 @@ struct ProgressiveBanner: View {
 #Preview("Skeleton List") {
     SkeletonProjectList()
         .preferredColorScheme(.dark)
-}
-
-#Preview("Loading Overlay") {
-    ZStack {
-        Color.black
-        LoadingOverlay(statusText: "Checking git status...")
-    }
-    .preferredColorScheme(.dark)
 }

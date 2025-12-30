@@ -10,7 +10,7 @@ import PhotosUI
 
 struct CLIInputView: View {
     @Binding var text: String
-    @Binding var selectedImage: Data?
+    @Binding var selectedImages: [ImageAttachment]
     let isProcessing: Bool
     let isAborting: Bool
     let projectPath: String?
@@ -36,11 +36,11 @@ struct CLIInputView: View {
     @State private var showFilePicker = false
     @State private var showCommandPicker = false
     @State private var showPhotoPicker = false
-    @State private var selectedItem: PhotosPickerItem?
+    @State private var selectedItems: [PhotosPickerItem] = []
 
     init(
         text: Binding<String>,
-        selectedImage: Binding<Data?>,
+        selectedImages: Binding<[ImageAttachment]>,
         isProcessing: Bool,
         isAborting: Bool = false,
         projectPath: String?,
@@ -55,7 +55,7 @@ struct CLIInputView: View {
         sessionId: String? = nil
     ) {
         self._text = text
-        self._selectedImage = selectedImage
+        self._selectedImages = selectedImages
         self.isProcessing = isProcessing
         self.isAborting = isAborting
         self.projectPath = projectPath
@@ -77,9 +77,9 @@ struct CLIInputView: View {
                 recordingIndicator
             }
 
-            // Image preview
-            if let imageData = selectedImage, let uiImage = UIImage(data: imageData) {
-                imagePreview(uiImage)
+            // Image previews (multiple)
+            if !selectedImages.isEmpty {
+                imagePreviewStrip
             }
 
             // Main input row
@@ -99,7 +99,7 @@ struct CLIInputView: View {
                     .textFieldStyle(.plain)
                     .submitLabel(.send)
                     .onSubmit {
-                        if !isProcessing && (!text.isEmpty || selectedImage != nil) {
+                        if !isProcessing && (!text.isEmpty || !selectedImages.isEmpty) {
                             onSend()
                         }
                     }
@@ -167,28 +167,71 @@ struct CLIInputView: View {
         .glassBackground(tint: .error, cornerRadius: 0)
     }
 
-    private func imagePreview(_ uiImage: UIImage) -> some View {
-        HStack {
-            Image(uiImage: uiImage)
-                .resizable()
-                .scaledToFit()
-                .frame(maxHeight: 80)
-                .cornerRadius(8)
+    private var imagePreviewStrip: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(selectedImages) { attachment in
+                    ZStack(alignment: .topTrailing) {
+                        if let uiImage = attachment.displayImage {
+                            Image(uiImage: uiImage)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 60, height: 60)
+                                .clipShape(RoundedRectangle(cornerRadius: 8))
+                        }
 
-            Button {
-                selectedImage = nil
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 20))
-                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                        // Upload progress overlay
+                        if case .uploading(let progress) = attachment.uploadState {
+                            ZStack {
+                                Color.black.opacity(0.5)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                ProgressView(value: progress)
+                                    .progressViewStyle(.circular)
+                                    .tint(.white)
+                            }
+                            .frame(width: 60, height: 60)
+                        }
+
+                        // Remove button
+                        Button {
+                            removeImage(attachment.id)
+                        } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 18))
+                                .foregroundColor(.white)
+                                .background(Circle().fill(Color.black.opacity(0.6)))
+                        }
+                        .offset(x: 4, y: -4)
+                        .accessibilityLabel("Remove image")
+                    }
+                }
+
+                // Add more button (if under limit)
+                if selectedImages.count < ImageAttachment.maxImagesPerMessage && !isProcessing {
+                    Button {
+                        showPhotoPicker = true
+                    } label: {
+                        VStack {
+                            Image(systemName: "plus")
+                                .font(.system(size: 20))
+                                .foregroundColor(CLITheme.blue(for: colorScheme))
+                        }
+                        .frame(width: 60, height: 60)
+                        .background(CLITheme.secondaryBackground(for: colorScheme))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                    }
+                    .accessibilityLabel("Add another image")
+                }
             }
-            .accessibilityLabel("Remove image")
-
-            Spacer()
+            .padding(.horizontal, 12)
         }
-        .padding(.horizontal, 12)
+        .frame(height: 70)
         .padding(.vertical, 6)
         .background(CLITheme.secondaryBackground(for: colorScheme))
+    }
+
+    private func removeImage(_ id: UUID) {
+        selectedImages.removeAll { $0.id == id }
     }
 
     private var attachmentMenuButton: some View {
@@ -239,13 +282,28 @@ struct CLIInputView: View {
         }
         .accessibilityLabel("Add attachment")
         // PhotosPicker must be outside Menu to work on iPhone
-        .photosPicker(isPresented: $showPhotoPicker, selection: $selectedItem, matching: .images)
-        .onChange(of: selectedItem) { _, newItem in
+        .photosPicker(
+            isPresented: $showPhotoPicker,
+            selection: $selectedItems,
+            maxSelectionCount: ImageAttachment.maxImagesPerMessage - selectedImages.count,
+            matching: .images
+        )
+        .onChange(of: selectedItems) { _, newItems in
             Task {
-                if let data = try? await newItem?.loadTransferable(type: Data.self) {
-                    await MainActor.run {
-                        selectedImage = data
+                for item in newItems {
+                    if let data = try? await item.loadTransferable(type: Data.self) {
+                        await MainActor.run {
+                            // Avoid duplicates and respect limit
+                            if selectedImages.count < ImageAttachment.maxImagesPerMessage {
+                                let attachment = ImageAttachment(data: data)
+                                selectedImages.append(attachment)
+                            }
+                        }
                     }
+                }
+                // Clear selection for next time
+                await MainActor.run {
+                    selectedItems = []
                 }
             }
         }
@@ -267,7 +325,7 @@ struct CLIInputView: View {
                 }
                 .accessibilityLabel("Stop")
                 .accessibilityHint("Double tap to stop the current task")
-            } else if !text.isEmpty || selectedImage != nil {
+            } else if !text.isEmpty || !selectedImages.isEmpty {
                 // Send button when there's content
                 Button(action: onSend) {
                     Image(systemName: "arrow.up.circle.fill")
@@ -293,7 +351,7 @@ struct CLIInputView: View {
         Group {
             // Cmd+Return to send
             Button("") {
-                if !isProcessing && (!text.isEmpty || selectedImage != nil) {
+                if !isProcessing && (!text.isEmpty || !selectedImages.isEmpty) {
                     onSend()
                 }
             }

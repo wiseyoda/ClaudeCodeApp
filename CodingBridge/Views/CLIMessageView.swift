@@ -35,11 +35,11 @@ struct CLIMessageView: View {
             ? ToolResultParser.parse(message.content, toolName: nil)
             : nil
 
-        // Collapse result messages, Grep/Glob tool uses, and thinking blocks by default
+        // Collapse result messages, common tool uses (Bash/Read/Grep/Glob), and thinking blocks by default
         let shouldStartCollapsed = message.role == .resultSuccess ||
             message.role == .toolResult ||
             message.role == .thinking ||
-            (message.role == .toolUse && (message.content.hasPrefix("Grep") || message.content.hasPrefix("Glob")))
+            (message.role == .toolUse && (message.content.hasPrefix("Bash") || message.content.hasPrefix("Read") || message.content.hasPrefix("Grep") || message.content.hasPrefix("Glob")))
         self._isExpanded = State(initialValue: !shouldStartCollapsed)
     }
 
@@ -247,55 +247,123 @@ struct CLIMessageView: View {
     }
 
     /// Extract tool name + key param for richer headers
-    /// Note: This is kept for backward compatibility but the cached version is preferred
     private var toolHeaderText: String {
-        // Use cached value from init
         cachedToolHeaderText
     }
 
-    /// Extract a parameter value from tool content like "Tool(key: value, ...)"
+    /// Extract a parameter value from tool content JSON
+    /// Expects format: `Tool({"key":"value",...})`
     private static func extractParam(from content: String, key: String) -> String? {
-        // Look for "key: value" pattern
-        let searchKey = "\(key): "
-        guard let keyRange = content.range(of: searchKey) else { return nil }
-
-        let afterKey = content[keyRange.upperBound...]
-
-        // Find the end of the value (next ", " or ")" or end)
-        var value = ""
-        var depth = 0
-        var inQuote = false
-
-        for char in afterKey {
-            if char == "\"" {
-                inQuote.toggle()
-            } else if !inQuote {
-                if char == "(" || char == "[" || char == "{" {
-                    depth += 1
-                } else if char == ")" || char == "]" || char == "}" {
-                    if depth == 0 {
-                        break
-                    }
-                    depth -= 1
-                } else if char == "," && depth == 0 {
-                    break
-                }
-            }
-            value.append(char)
+        guard let jsonStart = content.firstIndex(of: "{"),
+              let jsonEnd = content.lastIndex(of: "}") else {
+            return nil
         }
 
-        var result = value.trimmingCharacters(in: .whitespaces)
+        let jsonString = String(content[jsonStart...jsonEnd])
+        guard let data = jsonString.data(using: .utf8),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let value = dict[key] else {
+            return nil
+        }
 
-        // Clean AnyCodableValue wrapper if present (migration fix for corrupted content)
-        if result.hasPrefix("AnyCodableValue(value: ") && result.hasSuffix(")") {
-            result = String(result.dropFirst("AnyCodableValue(value: ".count).dropLast())
-            // Remove surrounding quotes if present
-            if result.hasPrefix("\"") && result.hasSuffix("\"") && result.count >= 2 {
-                result = String(result.dropFirst().dropLast())
+        // Handle different value types
+        if let strValue = value as? String {
+            return strValue
+        } else if let intValue = value as? Int {
+            return String(intValue)
+        } else if let boolValue = value as? Bool {
+            return String(boolValue)
+        } else {
+            return String(describing: value)
+        }
+    }
+
+    /// Format tool use content for display (converts JSON to readable format)
+    private static func formatToolContent(_ content: String) -> String {
+        // Extract tool name and JSON
+        guard let parenStart = content.firstIndex(of: "("),
+              let jsonStart = content.firstIndex(of: "{"),
+              let jsonEnd = content.lastIndex(of: "}") else {
+            return content
+        }
+
+        let toolName = String(content[..<parenStart])
+        let jsonString = String(content[jsonStart...jsonEnd])
+
+        guard let data = jsonString.data(using: .utf8),
+              let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return content
+        }
+
+        // Format based on tool type
+        var lines: [String] = []
+
+        switch toolName {
+        case "Bash":
+            if let command = dict["command"] as? String {
+                lines.append("$ \(command)")
+            }
+            if let description = dict["description"] as? String {
+                lines.append("# \(description)")
+            }
+        case "Read":
+            if let path = dict["file_path"] as? String {
+                lines.append("Path: \(path)")
+            }
+            if let offset = dict["offset"] as? Int {
+                lines.append("From line: \(offset)")
+            }
+            if let limit = dict["limit"] as? Int {
+                lines.append("Lines: \(limit)")
+            }
+        case "Write":
+            if let path = dict["file_path"] as? String {
+                lines.append("Path: \(path)")
+            }
+            if let fileContent = dict["content"] as? String {
+                let preview = fileContent.count > 200 ? String(fileContent.prefix(200)) + "..." : fileContent
+                lines.append("Content:\n\(preview)")
+            }
+        case "Edit":
+            if let path = dict["file_path"] as? String {
+                lines.append("Path: \(path)")
+            }
+            // old_string and new_string handled by DiffView
+        case "Grep":
+            if let pattern = dict["pattern"] as? String {
+                lines.append("Pattern: \(pattern)")
+            }
+            if let path = dict["path"] as? String {
+                lines.append("In: \(path)")
+            }
+        case "Glob":
+            if let pattern = dict["pattern"] as? String {
+                lines.append("Pattern: \(pattern)")
+            }
+            if let path = dict["path"] as? String {
+                lines.append("In: \(path)")
+            }
+        case "Task":
+            if let subagentType = dict["subagent_type"] as? String {
+                lines.append("Agent: \(subagentType)")
+            }
+            if let description = dict["description"] as? String {
+                lines.append("Task: \(description)")
+            }
+            if let prompt = dict["prompt"] as? String {
+                let preview = prompt.count > 300 ? String(prompt.prefix(300)) + "..." : prompt
+                lines.append("Prompt:\n\(preview)")
+            }
+        default:
+            // Generic formatting for other tools
+            for (key, value) in dict.sorted(by: { $0.key < $1.key }) {
+                let strValue = String(describing: value)
+                let preview = strValue.count > 100 ? String(strValue.prefix(100)) + "..." : strValue
+                lines.append("\(key): \(preview)")
             }
         }
 
-        return result
+        return lines.isEmpty ? content : lines.joined(separator: "\n")
     }
 
     /// Shorten a file path to just filename or last 2 components
@@ -773,9 +841,9 @@ struct CLIMessageView: View {
                       let todos = TodoListView.parseTodoContent(message.content) {
                 TodoListView(todos: todos)
             } else {
-                // Truncate long tool use content
+                // Format and truncate tool use content
                 TruncatableText(
-                    content: message.content,
+                    content: Self.formatToolContent(message.content),
                     defaultLineLimit: 10,
                     isExpanded: $isExpanded
                 )

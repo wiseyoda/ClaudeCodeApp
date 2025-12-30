@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 @testable import CodingBridge
 
 final class ImageUtilitiesTests: XCTestCase {
@@ -44,5 +45,168 @@ final class ImageUtilitiesTests: XCTestCase {
         // Less than 4 bytes
         let shortData = Data([0x89, 0x50])
         XCTAssertEqual(ImageUtilities.detectMediaType(from: shortData), "image/jpeg")
+    }
+
+    // MARK: - HEIC Detection Tests
+
+    func testDetectHEIC() {
+        // HEIC ftyp box: ....ftypheic
+        var heicData = Data([0x00, 0x00, 0x00, 0x18]) // box size
+        heicData.append(contentsOf: [0x66, 0x74, 0x79, 0x70]) // "ftyp"
+        heicData.append(contentsOf: [0x68, 0x65, 0x69, 0x63]) // "heic"
+        XCTAssertTrue(ImageUtilities.isHEIC(heicData))
+        XCTAssertEqual(ImageUtilities.detectMediaType(from: heicData), "image/heic")
+    }
+
+    func testDetectHEIX() {
+        // HEIC variant: heix
+        var heixData = Data([0x00, 0x00, 0x00, 0x18])
+        heixData.append(contentsOf: [0x66, 0x74, 0x79, 0x70]) // "ftyp"
+        heixData.append(contentsOf: [0x68, 0x65, 0x69, 0x78]) // "heix"
+        XCTAssertTrue(ImageUtilities.isHEIC(heixData))
+    }
+
+    func testDetectMIF1() {
+        // HEIF variant: mif1
+        var mif1Data = Data([0x00, 0x00, 0x00, 0x18])
+        mif1Data.append(contentsOf: [0x66, 0x74, 0x79, 0x70]) // "ftyp"
+        mif1Data.append(contentsOf: [0x6D, 0x69, 0x66, 0x31]) // "mif1"
+        XCTAssertTrue(ImageUtilities.isHEIC(mif1Data))
+    }
+
+    func testNotHEICForPNG() {
+        let pngData = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x00])
+        XCTAssertFalse(ImageUtilities.isHEIC(pngData))
+    }
+
+    func testNotHEICForShortData() {
+        let shortData = Data([0x00, 0x00, 0x00, 0x18, 0x66, 0x74])
+        XCTAssertFalse(ImageUtilities.isHEIC(shortData))
+    }
+
+    // MARK: - Format Support Tests
+
+    func testSupportedFormats() {
+        XCTAssertTrue(ImageUtilities.isSupportedForUpload("image/jpeg"))
+        XCTAssertTrue(ImageUtilities.isSupportedForUpload("image/png"))
+        XCTAssertTrue(ImageUtilities.isSupportedForUpload("image/gif"))
+        XCTAssertTrue(ImageUtilities.isSupportedForUpload("image/webp"))
+    }
+
+    func testUnsupportedFormats() {
+        XCTAssertFalse(ImageUtilities.isSupportedForUpload("image/heic"))
+        XCTAssertFalse(ImageUtilities.isSupportedForUpload("image/bmp"))
+        XCTAssertFalse(ImageUtilities.isSupportedForUpload("image/svg+xml"))
+        XCTAssertFalse(ImageUtilities.isSupportedForUpload("application/pdf"))
+    }
+
+    // MARK: - JPEG Conversion Tests
+
+    func testConvertToJPEGFromValidImage() {
+        // Create a simple 1x1 red pixel PNG
+        let pngData = createTestPNGData()
+        let jpegData = ImageUtilities.convertToJPEG(pngData)
+        XCTAssertNotNil(jpegData)
+        // Verify it's now JPEG
+        if let jpeg = jpegData {
+            XCTAssertEqual(ImageUtilities.detectMediaType(from: jpeg), "image/jpeg")
+        }
+    }
+
+    func testConvertToJPEGFromInvalidData() {
+        let invalidData = Data([0x00, 0x01, 0x02, 0x03])
+        let jpegData = ImageUtilities.convertToJPEG(invalidData)
+        XCTAssertNil(jpegData)
+    }
+
+    // MARK: - Compression Tests
+
+    func testCompressSmallImage() {
+        let pngData = createTestPNGData()
+        let compressed = ImageUtilities.compress(pngData, maxSizeBytes: 1_000_000)
+        XCTAssertNotNil(compressed)
+    }
+
+    func testCompressRespectsMaxSize() {
+        // Create a larger test image
+        let largeImage = createLargerTestImage()
+        let maxSize = 50_000 // 50KB limit
+        let compressed = ImageUtilities.compress(largeImage, maxSizeBytes: maxSize)
+        XCTAssertNotNil(compressed)
+        if let data = compressed {
+            // Should be under or reasonably close to max size
+            // (may exceed slightly if minimum quality still produces larger output)
+            XCTAssertLessThan(data.count, maxSize * 2, "Compressed size should be reasonable")
+        }
+    }
+
+    // MARK: - Validation Error Tests
+
+    func testValidationErrorDescriptions() {
+        let tooLarge = ImageUtilities.ValidationError.tooLarge(sizeBytes: 25_000_000, maxBytes: 20_000_000)
+        XCTAssertNotNil(tooLarge.errorDescription)
+        XCTAssertTrue(tooLarge.errorDescription?.contains("too large") ?? false)
+
+        let unsupported = ImageUtilities.ValidationError.unsupportedFormat(mimeType: "image/bmp")
+        XCTAssertNotNil(unsupported.errorDescription)
+        XCTAssertTrue(unsupported.errorDescription?.contains("Unsupported") ?? false)
+
+        let corrupted = ImageUtilities.ValidationError.corruptedData
+        XCTAssertNotNil(corrupted.errorDescription)
+        XCTAssertTrue(corrupted.errorDescription?.contains("corrupted") ?? false)
+    }
+
+    // MARK: - Prepare For Upload Tests
+
+    func testPrepareSmallSupportedImage() throws {
+        let pngData = createTestPNGData()
+        let result = try ImageUtilities.prepareForUpload(pngData)
+
+        XCTAssertEqual(result.mimeType, "image/png")
+        XCTAssertFalse(result.wasConverted)
+        XCTAssertFalse(result.wasCompressed)
+        XCTAssertEqual(result.originalSize, pngData.count)
+    }
+
+    func testPrepareCorruptedDataThrows() {
+        let invalidData = Data([0x00, 0x01, 0x02, 0x03])
+
+        XCTAssertThrowsError(try ImageUtilities.prepareForUpload(invalidData)) { error in
+            if case ImageUtilities.ValidationError.corruptedData = error {
+                // Expected
+            } else {
+                XCTFail("Expected corruptedData error")
+            }
+        }
+    }
+
+    // MARK: - Helper Methods
+
+    private func createTestPNGData() -> Data {
+        // Create a simple 10x10 red image
+        let size = CGSize(width: 10, height: 10)
+        let renderer = UIGraphicsImageRenderer(size: size)
+        let image = renderer.image { context in
+            UIColor.red.setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+        }
+        return image.pngData() ?? Data()
+    }
+
+    private func createLargerTestImage() -> Data {
+        // Create a 200x200 gradient image for compression testing
+        let size = CGSize(width: 200, height: 200)
+        let renderer = UIGraphicsImageRenderer(size: size)
+        let image = renderer.image { context in
+            for y in 0..<200 {
+                for x in 0..<200 {
+                    let hue = CGFloat(x) / 200.0
+                    let saturation = CGFloat(y) / 200.0
+                    UIColor(hue: hue, saturation: saturation, brightness: 1.0, alpha: 1.0).setFill()
+                    context.fill(CGRect(x: x, y: y, width: 1, height: 1))
+                }
+            }
+        }
+        return image.pngData() ?? Data()
     }
 }

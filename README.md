@@ -169,23 +169,33 @@ cd claudecodeui && npm install && npm run build && npm start
 
 On first launch, configure in Settings (gear icon):
 
-| Setting               | Description                                       |
-| --------------------- | ------------------------------------------------- |
-| **Server URL**        | Backend address (default: `http://10.0.3.2:8080`) |
-| **Username/Password** | JWT authentication credentials                    |
-| **SSH Host/Port**     | SSH server for file operations                    |
-| **SSH Auth**          | Password or SSH key (Keychain)                    |
-| **Font Size**         | XS / S / M / L / XL                               |
-| **Theme**             | System / Dark / Light                             |
-| **Model**             | Default Claude model                              |
-| **Permission Mode**   | Normal (execute) / Plan (ask first)               |
+| Setting               | Description                                        |
+| --------------------- | -------------------------------------------------- |
+| **Server URL**        | Backend address (default: `http://localhost:3100`) |
+| **SSH Host/Port**     | SSH server for file operations (optional)          |
+| **SSH Auth**          | Password or SSH key (Keychain)                     |
+| **Font Size**         | XS / S / M / L / XL                                |
+| **Theme**             | System / Dark / Light                              |
+| **Model**             | Default Claude model                               |
+| **Permission Mode**   | Normal (execute) / Plan (ask first)                |
+
+### Local Development
+
+Start cli-bridge backend:
+```bash
+cd ~/dev/cli-bridge
+deno task dev  # Runs on http://localhost:3100
+
+# Verify
+curl -s http://localhost:3100/health
+```
 
 ## Architecture
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   iOS App       │────▶│  WebUI Backend  │────▶│   Claude CLI    │
-│   (SwiftUI)     │ WS  │  (Node.js)      │     │                 │
+│   iOS App       │────▶│   cli-bridge    │────▶│ Claude Code CLI │
+│   (SwiftUI)     │ SSE │  (Node.js)      │     │                 │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
         │                       │
         └───── Tailscale ───────┘

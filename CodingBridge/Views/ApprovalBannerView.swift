@@ -11,6 +11,24 @@ struct ApprovalBannerView: View {
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
 
+    // Timeout configuration
+    private let warningThreshold: TimeInterval = 120  // 2 minutes
+    private let expirationThreshold: TimeInterval = 300  // 5 minutes
+
+    @State private var elapsedTime: TimeInterval = 0
+    @State private var showAlwaysConfirmation = false
+
+    // Timer for tracking elapsed time
+    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    private var remainingTime: Int {
+        max(0, Int(expirationThreshold - elapsedTime))
+    }
+
+    private var isWarningShown: Bool {
+        elapsedTime >= warningThreshold
+    }
+
     var body: some View {
         VStack(spacing: 8) {
             // Tool info row
@@ -37,6 +55,23 @@ struct ApprovalBannerView: View {
                 Spacer()
             }
 
+            // Timeout warning row (shown after 2 minutes)
+            if isWarningShown {
+                HStack(spacing: 6) {
+                    Image(systemName: "clock.badge.exclamationmark")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.orange)
+
+                    Text("Auto-deny in \(remainingTime)s")
+                        .font(settings.scaledFont(.small))
+                        .fontWeight(.medium)
+                        .foregroundColor(.orange)
+
+                    Spacer()
+                }
+                .transition(.opacity)
+            }
+
             // Action buttons row
             HStack(spacing: 12) {
                 // Approve button
@@ -58,7 +93,9 @@ struct ApprovalBannerView: View {
                 .buttonStyle(.plain)
 
                 // Always Allow button
-                Button(action: onAlwaysAllow) {
+                Button {
+                    showAlwaysConfirmation = true
+                } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "checkmark.shield")
                             .font(.system(size: 11, weight: .semibold))
@@ -107,15 +144,38 @@ struct ApprovalBannerView: View {
                 .fill(CLITheme.secondaryBackground(for: colorScheme))
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(CLITheme.cyan(for: colorScheme).opacity(0.4), lineWidth: 1)
+                        .stroke(isWarningShown ? Color.orange.opacity(0.6) : CLITheme.cyan(for: colorScheme).opacity(0.4), lineWidth: 1)
                 )
         )
         .padding(.horizontal, 12)
         .padding(.bottom, 4)
         .transition(.move(edge: .bottom).combined(with: .opacity))
         .animation(.easeInOut(duration: 0.2), value: request.id)
+        .animation(.easeInOut(duration: 0.3), value: isWarningShown)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("ApprovalBanner")
+        .onAppear {
+            // Calculate initial elapsed time based on when request was received
+            elapsedTime = Date().timeIntervalSince(request.receivedAt)
+        }
+        .onReceive(timer) { _ in
+            elapsedTime = Date().timeIntervalSince(request.receivedAt)
+        }
+        .confirmationDialog(
+            "Always Allow \(request.toolName)?",
+            isPresented: $showAlwaysConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Always Allow") {
+                onAlwaysAllow()
+            }
+            Button("Just This Once") {
+                onApprove()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This will auto-approve \(request.toolName) for this project in the future.")
+        }
     }
 }
 

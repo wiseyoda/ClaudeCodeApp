@@ -5,10 +5,6 @@ import Foundation
 @MainActor
 class ClaudeHelper: ObservableObject {
     private var settings: AppSettings
-    private var webSocket: URLSessionWebSocketTask?
-    private var responseBuffer = ""
-    private var completion: ((Result<String, Error>) -> Void)?
-    private var timeoutTask: Task<Void, Never>?
 
     /// Debug logging
     private var debugLog: DebugLogStore { DebugLogStore.shared }
@@ -502,186 +498,77 @@ class ClaudeHelper: ObservableObject {
     ///   - model: The model to use (default: .haiku). Uses full model ID for backend compatibility.
     ///   - sessionId: Optional session ID to use. If nil, uses a helper session ID.
     private func sendQuickQuery(prompt: String, projectPath: String, model: ClaudeModel = .haiku, sessionId: String? = nil) async throws -> String {
-        try await withCheckedThrowingContinuation { continuation in
-            sendQueryViaWebSocket(prompt: prompt, projectPath: projectPath, model: model, sessionId: sessionId) { result in
-                continuation.resume(with: result)
-            }
-        }
+        // Use CLI Bridge for all queries
+        return try await sendQueryViaCLIBridge(prompt: prompt, projectPath: projectPath, model: model, sessionId: sessionId)
     }
 
-    private func sendQueryViaWebSocket(prompt: String, projectPath: String, model: ClaudeModel = .haiku, sessionId: String? = nil, completion: @escaping (Result<String, Error>) -> Void) {
-        guard let url = settings.webSocketURL else {
-            completion(.failure(ClaudeHelperError.invalidURL))
-            return
+    // MARK: - CLI Bridge Helper Query
+
+    /// Helper query manager for cli-bridge backend
+    private var helperManager: CLIBridgeManager?
+
+    /// Send a quick query via CLI Bridge with helper: true flag.
+    /// Helper sessions are hidden from the session list and use a fast model.
+    private func sendQueryViaCLIBridge(prompt: String, projectPath: String, model: ClaudeModel = .haiku, sessionId: String? = nil) async throws -> String {
+        // Create or reuse helper manager
+        if helperManager == nil {
+            helperManager = CLIBridgeManager(serverURL: settings.serverURL)
         }
 
-        // Clean up any existing connection
-        if webSocket != nil {
-            debugLog.log("ClaudeHelper: Cancelling existing WebSocket", type: .info)
+        guard let manager = helperManager else {
+            throw ClaudeHelperError.invalidURL
         }
-        webSocket?.cancel()
-        responseBuffer = ""
-        self.completion = completion
 
-        // Use provided session ID if available.
-        // If nil, let the backend create a new session (don't use helperSessionId
-        // as it may reference a non-existent session causing CLI errors).
-        let effectiveSessionId = sessionId
+        // Accumulate response text
+        var responseText = ""
 
-        let session = URLSession(configuration: .default)
-        webSocket = session.webSocketTask(with: url)
-        webSocket?.resume()
+        // Setup callback to collect text
+        manager.onText = { text, isFinal in
+            responseText += text
+        }
 
-        debugLog.logConnection("ClaudeHelper connecting to \(url.host ?? "unknown")")
-
-        // Start receiving messages
-        receiveMessage()
-
-        // Send the query with specified model and session ID
-        let command = WSClaudeCommand(
-            command: prompt,
-            options: WSCommandOptions(
-                cwd: projectPath,
-                sessionId: effectiveSessionId,
-                model: model.modelId,  // Full model ID (e.g., "claude-sonnet-4-5-20250929")
-                permissionMode: nil,
-                images: nil
-            )
+        // Connect with helper: true flag
+        await manager.connect(
+            projectPath: projectPath,
+            sessionId: sessionId,
+            model: model.modelId,
+            helper: true  // <-- This marks the session as a helper session
         )
 
-        debugLog.log("ClaudeHelper sending query (model: \(model.modelId ?? "default"))", type: .info)
-
-        do {
-            let data = try JSONEncoder().encode(command)
-            if let jsonString = String(data: data, encoding: .utf8) {
-                debugLog.logSent("ClaudeHelper sending: \(jsonString)")
-                webSocket?.send(.string(jsonString)) { [weak self] error in
-                    if let error = error {
-                        Task { @MainActor [weak self] in
-                            self?.completion?(.failure(error))
-                            self?.cleanup()
-                        }
-                    }
-                }
-            }
-        } catch {
-            completion(.failure(error))
-            cleanup()
+        // Wait for connection
+        var connectAttempts = 0
+        while !manager.connectionState.isConnected && connectAttempts < 20 {
+            try await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            connectAttempts += 1
         }
 
-        // Set timeout - store task so it can be cancelled on success
-        // 30 second timeout to allow for model switching which can take time
-        timeoutTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 30_000_000_000)  // 30 second timeout
-            guard !Task.isCancelled else { return }
-            await MainActor.run { [weak self] in
-                guard let self = self, self.completion != nil else { return }
-                self.debugLog.logError("ClaudeHelper timeout after 30s - buffer so far: \(self.responseBuffer.prefix(200))")
-                self.completion?(.failure(ClaudeHelperError.timeout))
-                self.cleanup()
-            }
-        }
-    }
-
-    private func receiveMessage() {
-        webSocket?.receive { [weak self] result in
-            Task { @MainActor in
-                switch result {
-                case .success(let message):
-                    self?.handleMessage(message)
-                    self?.receiveMessage()  // Continue listening
-
-                case .failure(let error):
-                    self?.debugLog.logError("ClaudeHelper receive error: \(error.localizedDescription)")
-                    self?.completion?(.failure(error))
-                    self?.cleanup()
-                }
-            }
-        }
-    }
-
-    private func handleMessage(_ message: URLSessionWebSocketTask.Message) {
-        switch message {
-        case .string(let text):
-            parseMessage(text)
-        case .data(let data):
-            if let text = String(data: data, encoding: .utf8) {
-                parseMessage(text)
-            }
-        @unknown default:
-            break
-        }
-    }
-
-    private func parseMessage(_ text: String) {
-        debugLog.log("ClaudeHelper received message: \(text.prefix(200))...", type: .received)
-
-        guard let data = text.data(using: .utf8),
-              let msg = try? JSONDecoder().decode(WSMessage.self, from: data) else {
-            debugLog.logError("ClaudeHelper: Failed to decode message")
-            return
+        guard manager.connectionState.isConnected else {
+            throw ClaudeHelperError.serverError("Failed to connect to cli-bridge")
         }
 
-        debugLog.log("ClaudeHelper message type: \(msg.type)", type: .received)
+        // Send the query
+        try await manager.sendInput(prompt)
 
-        switch msg.type {
-        case "claude-response":
-            // Extract text from response - SDK sends different formats:
-            // 1. {type: "assistant", message: {role: "assistant", content: [...]}}
-            // 2. {content: [...]} - direct content
-            // 3. {message: {content: [...]}} - nested message
-            guard let responseData = msg.data?.dictValue else { break }
-
-            let outerType = responseData["type"] as? String
-            debugLog.log("ClaudeHelper response outer type: \(outerType ?? "nil")", type: .received)
-
-            // Case 1: Outer type is "assistant" with nested message.content
-            if outerType == "assistant",
-               let messageData = responseData["message"] as? [String: Any],
-               let content = messageData["content"] as? [[String: Any]] {
-                extractTextFromContent(content)
-            }
-            // Case 2: Direct content array at top level
-            else if let content = responseData["content"] as? [[String: Any]] {
-                extractTextFromContent(content)
-            }
-            // Case 3: Content nested in message (without outer type)
-            else if let messageData = responseData["message"] as? [String: Any],
-                    let content = messageData["content"] as? [[String: Any]] {
-                extractTextFromContent(content)
-            }
-
-        case "claude-complete":
-            debugLog.log("ClaudeHelper complete, buffer length: \(responseBuffer.count)", type: .received)
-            completion?(.success(responseBuffer))
-            cleanup()
-
-        case "claude-error":
-            let errorMsg = msg.error ?? "Unknown error"
-            debugLog.logError("ClaudeHelper server error: \(errorMsg)")
-            completion?(.failure(ClaudeHelperError.serverError(errorMsg)))
-            cleanup()
-
-        default:
-            break
+        // Wait for response (with timeout)
+        var waitAttempts = 0
+        let maxWaitAttempts = 300 // 30 seconds at 100ms intervals
+        while manager.agentState.isProcessing && waitAttempts < maxWaitAttempts {
+            try await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            waitAttempts += 1
         }
-    }
 
-    private func extractTextFromContent(_ content: [[String: Any]]) {
-        for part in content {
-            if let partText = part["text"] as? String {
-                responseBuffer += partText
-            }
+        // Check for timeout
+        if waitAttempts >= maxWaitAttempts {
+            throw ClaudeHelperError.timeout
         }
-    }
 
-    private func cleanup() {
-        timeoutTask?.cancel()
-        timeoutTask = nil
-        webSocket?.cancel()
-        webSocket = nil
-        completion = nil
-        responseBuffer = ""
+        // Check for error
+        if let error = manager.lastError {
+            throw ClaudeHelperError.serverError(error)
+        }
+
+        // Return accumulated text
+        return responseText.isEmpty ? manager.currentText : responseText
     }
 }
 

@@ -52,19 +52,19 @@ final class FileEntryTests: XCTestCase {
 
     func testIconForCommonExtensions() {
         let swiftEntry = FileEntry(name: "main.swift", path: "/main.swift", isDirectory: false, isSymlink: false, size: 1, permissions: "-rw-r--r--")
-        XCTAssertEqual(swiftEntry.icon, "doc.text.fill")
+        XCTAssertEqual(swiftEntry.icon, "swift")
 
         let jsonEntry = FileEntry(name: "config.json", path: "/config.json", isDirectory: false, isSymlink: false, size: 1, permissions: "-rw-r--r--")
-        XCTAssertEqual(jsonEntry.icon, "doc.badge.gearshape.fill")
+        XCTAssertEqual(jsonEntry.icon, "curlybraces")
 
         let markdownEntry = FileEntry(name: "README.md", path: "/README.md", isDirectory: false, isSymlink: false, size: 1, permissions: "-rw-r--r--")
-        XCTAssertEqual(markdownEntry.icon, "doc.richtext.fill")
+        XCTAssertEqual(markdownEntry.icon, "doc.text")
 
         let imageEntry = FileEntry(name: "photo.png", path: "/photo.png", isDirectory: false, isSymlink: false, size: 1, permissions: "-rw-r--r--")
-        XCTAssertEqual(imageEntry.icon, "photo.fill")
+        XCTAssertEqual(imageEntry.icon, "photo")
 
         let defaultEntry = FileEntry(name: "archive.zip", path: "/archive.zip", isDirectory: false, isSymlink: false, size: 1, permissions: "-rw-r--r--")
-        XCTAssertEqual(defaultEntry.icon, "doc.fill")
+        XCTAssertEqual(defaultEntry.icon, "doc")
     }
 
     func testFormattedSizeUsesByteUnits() {

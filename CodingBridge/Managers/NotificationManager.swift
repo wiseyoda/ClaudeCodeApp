@@ -305,12 +305,9 @@ final class NotificationManager: NSObject, ObservableObject, @preconcurrency UNU
             return
         }
 
-        // Send approval response via WebSocket
-        // Note: WebSocketManager needs to be connected for this to work
-        // If not connected, the approval will need to be retried
+        // Send approval response via notification pattern
+        // CLIBridgeAdapter (owned by ChatView) observes this notification and handles the response
         Task {
-            // The WebSocketManager.shared access would need to be updated
-            // For now, we'll use a notification pattern
             NotificationCenter.default.post(
                 name: .approvalResponseReady,
                 object: nil,

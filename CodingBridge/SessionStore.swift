@@ -42,12 +42,14 @@ final class SessionStore: ObservableObject {
     }
 
     /// Convenience method to configure with AppSettings
-    /// Creates an APISessionRepository internally
+    /// Creates CLIBridgeSessionRepository for the cli-bridge backend
     func configure(with settings: AppSettings) {
-        let repository = APISessionRepository(
-            apiClient: APIClient(settings: settings),
+        let cliClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
+        let repository = CLIBridgeSessionRepository(
+            apiClient: cliClient,
             settings: settings
         )
+        log.info("[SessionStore] Configured with CLIBridgeSessionRepository")
         configure(with: repository)
     }
 
@@ -210,6 +212,13 @@ final class SessionStore: ObservableObject {
         activeSessionIds[projectPath] = sessionId
     }
 
+    /// Set a specific session as selected for navigation (from search results)
+    /// This saves the session ID so ChatView will load it when opening the project
+    func setSelectedSession(_ sessionId: String, for projectPath: String) {
+        activeSessionIds[projectPath] = sessionId
+        MessageStore.saveSessionId(sessionId, for: projectPath)
+    }
+
     /// Save active session ID to UserDefaults
     func saveActiveSessionId(for projectPath: String) {
         if let sessionId = activeSessionIds[projectPath] {
@@ -307,6 +316,46 @@ final class SessionStore: ObservableObject {
 
         default:
             break
+        }
+    }
+
+    /// Handle session event from CLI Bridge WebSocket
+    /// - Parameter event: The session event from cli-bridge
+    func handleCLISessionEvent(_ event: CLISessionEvent) async {
+        let projectPath = event.projectPath
+
+        switch event.action {
+        case .deleted:
+            if var sessions = sessionsByProject[projectPath] {
+                sessions.removeAll { $0.id == event.sessionId }
+                sessionsByProject[projectPath] = sessions
+            }
+            if activeSessionIds[projectPath] == event.sessionId {
+                activeSessionIds[projectPath] = nil
+            }
+
+        case .created:
+            // Add the new session from metadata if available
+            if let metadata = event.metadata {
+                let session = metadata.toProjectSession()
+                addSession(session, for: projectPath)
+            } else {
+                // Fallback: reload sessions
+                await loadSessions(for: projectPath, forceRefresh: true)
+            }
+
+        case .updated:
+            // Update the session in place if metadata available
+            if let metadata = event.metadata {
+                if var sessions = sessionsByProject[projectPath] {
+                    if let index = sessions.firstIndex(where: { $0.id == event.sessionId }) {
+                        sessions[index] = metadata.toProjectSession()
+                        sessionsByProject[projectPath] = sessions
+                    }
+                }
+            } else {
+                await loadSessions(for: projectPath, forceRefresh: true)
+            }
         }
     }
 

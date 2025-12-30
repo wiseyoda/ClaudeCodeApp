@@ -2,11 +2,11 @@ import Foundation
 
 /// Per-project settings that override global AppSettings
 struct ProjectSettings: Codable, Equatable {
-    /// Override for skipPermissions: nil = use global, true = always skip, false = never skip
-    var skipPermissionsOverride: Bool?
+    /// Override for permission mode: nil = use global, otherwise use this mode
+    var permissionModeOverride: PermissionMode?
 
-    init(skipPermissionsOverride: Bool? = nil) {
-        self.skipPermissionsOverride = skipPermissionsOverride
+    init(permissionModeOverride: PermissionMode? = nil) {
+        self.permissionModeOverride = permissionModeOverride
     }
 }
 
@@ -68,25 +68,25 @@ class ProjectSettingsStore: ObservableObject {
         save()
     }
 
-    /// Get the skip permissions override for a project (nil = use global)
-    func skipPermissionsOverride(for projectPath: String) -> Bool? {
-        return settings(for: projectPath).skipPermissionsOverride
+    /// Get the permission mode override for a project (nil = use global)
+    func permissionModeOverride(for projectPath: String) -> PermissionMode? {
+        return settings(for: projectPath).permissionModeOverride
     }
 
-    /// Set the skip permissions override for a project
-    func setSkipPermissionsOverride(for projectPath: String, override: Bool?) {
+    /// Set the permission mode override for a project
+    func setPermissionModeOverride(for projectPath: String, mode: PermissionMode?) {
         var currentSettings = settings(for: projectPath)
-        currentSettings.skipPermissionsOverride = override
+        currentSettings.permissionModeOverride = mode
         updateSettings(for: projectPath, settings: currentSettings)
     }
 
-    /// Get the effective skip permissions value for a project
+    /// Get the effective permission mode for a project
     /// Takes into account both the project override and global setting
-    func effectiveSkipPermissions(for projectPath: String, globalSetting: Bool) -> Bool {
-        if let override = skipPermissionsOverride(for: projectPath) {
+    func effectivePermissionMode(for projectPath: String, globalMode: PermissionMode) -> PermissionMode {
+        if let override = permissionModeOverride(for: projectPath) {
             return override
         }
-        return globalSetting
+        return globalMode
     }
 
     /// Clear settings for a project (revert to global defaults)

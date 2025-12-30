@@ -65,7 +65,7 @@ final class OfflineActionQueue: ObservableObject {
                 continue
             }
 
-            // Post notification for WebSocketManager to handle
+            // Post notification for CLIBridgeAdapter to handle
             NotificationCenter.default.post(
                 name: .approvalResponseReady,
                 object: nil,

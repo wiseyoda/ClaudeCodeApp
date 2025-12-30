@@ -23,17 +23,6 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(ThinkingMode.ultrathink.shortDisplayName, "Ultra")
     }
 
-    func test_thinkingMode_promptSuffix_returnsNilForNormal() {
-        XCTAssertNil(ThinkingMode.normal.promptSuffix)
-    }
-
-    func test_thinkingMode_promptSuffix_returnsCorrectSuffixes() {
-        XCTAssertEqual(ThinkingMode.think.promptSuffix, "think")
-        XCTAssertEqual(ThinkingMode.thinkHard.promptSuffix, "think hard")
-        XCTAssertEqual(ThinkingMode.thinkHarder.promptSuffix, "think harder")
-        XCTAssertEqual(ThinkingMode.ultrathink.promptSuffix, "ultrathink")
-    }
-
     func test_thinkingMode_icon_returnsValidSFSymbols() {
         XCTAssertEqual(ThinkingMode.normal.icon, "bolt")
         XCTAssertEqual(ThinkingMode.think.icon, "brain")
@@ -160,53 +149,6 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(settings.baseURL?.host, "example.com")
     }
 
-    func test_webSocketURL_convertsHTTPtoWS() {
-        let settings = AppSettings()
-        settings.serverURL = "http://localhost:8080"
-        settings.authToken = ""
-
-        let wsURL = settings.webSocketURL
-
-        XCTAssertNotNil(wsURL)
-        XCTAssertEqual(wsURL?.scheme, "ws")
-        XCTAssertEqual(wsURL?.host, "localhost")
-        XCTAssertEqual(wsURL?.port, 8080)
-        XCTAssertEqual(wsURL?.path, "/ws")
-    }
-
-    func test_webSocketURL_convertsHTTPStoWSS() {
-        let settings = AppSettings()
-        settings.serverURL = "https://example.com"
-        settings.authToken = ""
-
-        let wsURL = settings.webSocketURL
-
-        XCTAssertNotNil(wsURL)
-        XCTAssertEqual(wsURL?.scheme, "wss")
-    }
-
-    func test_webSocketURL_includesTokenWhenSet() {
-        let settings = AppSettings()
-        settings.serverURL = "http://localhost:8080"
-        settings.authToken = "test-token-123"
-
-        let wsURL = settings.webSocketURL
-
-        XCTAssertNotNil(wsURL)
-        XCTAssertTrue(wsURL?.absoluteString.contains("token=test-token-123") ?? false)
-    }
-
-    func test_webSocketURL_omitsTokenWhenEmpty() {
-        let settings = AppSettings()
-        settings.serverURL = "http://localhost:8080"
-        settings.authToken = ""
-
-        let wsURL = settings.webSocketURL
-
-        XCTAssertNotNil(wsURL)
-        XCTAssertFalse(wsURL?.absoluteString.contains("token=") ?? true)
-    }
-
     // MARK: - Effective SSH Host Tests
 
     func test_effectiveSSHHost_returnsConfiguredHostWhenSet() {
@@ -216,91 +158,44 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(settings.effectiveSSHHost, "192.168.1.100")
     }
 
-    func test_effectiveSSHHost_extractsHostFromServerURLWhenSSHHostEmpty() {
+    func test_effectiveSSHHost_returnsEmptyWhenSSHHostEmpty() {
         let settings = AppSettings()
         settings.sshHost = ""
-        settings.serverURL = "http://10.0.3.2:8080"
+        settings.serverURL = "http://example.com:8080"
 
-        XCTAssertEqual(settings.effectiveSSHHost, "10.0.3.2")
+        // SSH features disabled when sshHost is empty (cli-bridge provides git/file ops via REST)
+        XCTAssertEqual(settings.effectiveSSHHost, "")
     }
 
-    func test_effectiveSSHHost_returnsDefaultWhenBothEmpty() {
+    func test_effectiveSSHHost_returnsEmptyWhenBothEmpty() {
         let settings = AppSettings()
         settings.sshHost = ""
         settings.serverURL = ""
 
-        XCTAssertEqual(settings.effectiveSSHHost, "10.0.3.2")
+        // SSH features disabled when not configured
+        XCTAssertEqual(settings.effectiveSSHHost, "")
     }
 
     // MARK: - Effective Permission Mode Tests
 
-    func test_effectivePermissionMode_returnsBypassWhenSkipPermissionsEnabled() {
+    func test_effectivePermissionMode_returnsBypassWhenBypassEnabled() {
         let settings = AppSettings()
-        settings.skipPermissions = true
-        settings.claudeMode = .normal
+        settings.globalPermissionMode = .bypassPermissions
 
         XCTAssertEqual(settings.effectivePermissionMode, "bypassPermissions")
     }
 
-    func test_effectivePermissionMode_returnsNilForNormalModeWithoutSkip() {
+    func test_effectivePermissionMode_returnsDefaultForDefaultMode() {
         let settings = AppSettings()
-        settings.skipPermissions = false
-        settings.claudeMode = .normal
+        settings.globalPermissionMode = .default
 
-        XCTAssertNil(settings.effectivePermissionMode)
+        XCTAssertEqual(settings.effectivePermissionMode, "default")
     }
 
-    func test_effectivePermissionMode_returnsPlanForPlanModeWithoutSkip() {
+    func test_effectivePermissionMode_returnsAcceptEditsForAcceptEditsMode() {
         let settings = AppSettings()
-        settings.skipPermissions = false
-        settings.claudeMode = .plan
+        settings.globalPermissionMode = .acceptEdits
 
-        XCTAssertEqual(settings.effectivePermissionMode, "plan")
-    }
-
-    func test_effectivePermissionMode_returnsBypassEvenInPlanModeWhenSkipEnabled() {
-        let settings = AppSettings()
-        settings.skipPermissions = true
-        settings.claudeMode = .plan
-
-        XCTAssertEqual(settings.effectivePermissionMode, "bypassPermissions")
-    }
-
-    // MARK: - Apply Thinking Mode Tests
-
-    func test_applyThinkingMode_returnsUnmodifiedMessageForNormal() {
-        let settings = AppSettings()
-        settings.thinkingMode = .normal
-
-        let result = settings.applyThinkingMode(to: "Hello world")
-
-        XCTAssertEqual(result, "Hello world")
-    }
-
-    func test_applyThinkingMode_appendsSuffixForThink() {
-        let settings = AppSettings()
-        settings.thinkingMode = .think
-
-        let result = settings.applyThinkingMode(to: "Analyze this")
-
-        XCTAssertEqual(result, "Analyze this think")
-    }
-
-    func test_applyThinkingMode_appendsSuffixForThinkHard() {
-        let settings = AppSettings()
-        settings.thinkingMode = .thinkHard
-
-        let result = settings.applyThinkingMode(to: "Complex problem")
-
-        XCTAssertEqual(result, "Complex problem think hard")
-    }
-
-    func test_applyThinkingMode_appendsSuffixForUltrathink() {
-        let settings = AppSettings()
-        settings.thinkingMode = .ultrathink
-
-        let result = settings.applyThinkingMode(to: "Very hard problem")
-
-        XCTAssertEqual(result, "Very hard problem ultrathink")
+        XCTAssertEqual(settings.effectivePermissionMode, "acceptEdits")
     }
 }

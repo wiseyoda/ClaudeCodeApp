@@ -5,7 +5,7 @@ struct ContentView: View {
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.horizontalSizeClass) var horizontalSizeClass
-    @StateObject private var apiClient = APIClient()
+    /// API client for CLI Bridge - lazily initialized with settings
     @State private var projects: [Project] = []
     @State private var isLoading = true
     @State private var isFetchingFresh = false  // True when fetching fresh data (but have cache)
@@ -26,6 +26,9 @@ struct ContentView: View {
     // Project rename state
     @State private var projectToRename: Project?
     @State private var renameText = ""
+
+    // Project detail sheet
+    @State private var projectToShowDetail: Project?
 
     // Git status tracking per project path
     // Local dict used during refresh to show .checking state
@@ -150,7 +153,6 @@ struct ContentView: View {
             } else if let project = selectedProject {
                 ChatView(
                     project: project,
-                    apiClient: apiClient,
                     initialGitStatus: effectiveGitStatus(for: project.path),
                     onSessionsChanged: {
                         Task { await loadProjects() }
@@ -175,12 +177,34 @@ struct ContentView: View {
             }
         }
         .sheet(isPresented: $showGlobalSearch) {
-            GlobalSearchView(projects: projects)
-                .environmentObject(settings)
+            GlobalSearchView(
+                projects: projects,
+                serverURL: settings.serverURL,
+                onSelect: { result in
+                    // Navigate to the session from search result
+                    if let project = projects.first(where: { $0.path == result.projectPath }) {
+                        selectedProject = project
+                        // Set the session ID so ChatView loads this session
+                        sessionStore.setSelectedSession(result.sessionId, for: project.path)
+                        showGlobalSearch = false
+                    }
+                }
+            )
+            .environmentObject(settings)
         }
         .sheet(isPresented: $showCommands) {
             CommandsView(commandStore: commandStore)
                 .environmentObject(settings)
+        }
+        .sheet(item: $projectToShowDetail) { project in
+            ProjectDetailView(
+                project: project,
+                onSelectSession: { sessionId in
+                    // Could navigate to session
+                    projectToShowDetail = nil
+                }
+            )
+            .environmentObject(settings)
         }
         .alert("Delete Project?", isPresented: .init(
             get: { projectToDelete != nil },
@@ -246,9 +270,6 @@ struct ContentView: View {
                         }
                     }
             }
-        }
-        .onAppear {
-            apiClient.configure(with: settings)
         }
         .task {
             await loadProjectsWithCache()
@@ -410,16 +431,10 @@ struct ContentView: View {
         .background(CLITheme.background(for: colorScheme))
     }
 
-    /// Workspace prefix to filter and simplify project paths
-    private let workspacePrefix = "/home/dev/workspace/"
-
-    /// Projects filtered to only those in the workspace directory
+    /// All projects from cli-bridge (no filtering needed - server returns the appropriate list)
     private var workspaceProjects: [Project] {
-        projects.filter { project in
-            // Only include projects that are inside /home/dev/workspace/
-            // This excludes /home/dev and /home/dev/workspace itself
-            project.path.hasPrefix(workspacePrefix) && project.path.count > workspacePrefix.count
-        }
+        // cli-bridge returns all projects with Claude sessions, no client-side filtering needed
+        projects
     }
 
     /// Active (non-archived) projects sorted according to user preference
@@ -612,6 +627,14 @@ struct ContentView: View {
                 Label("Refresh Git Status", systemImage: "arrow.triangle.2.circlepath")
             }
 
+            Divider()
+
+            Button {
+                projectToShowDetail = project
+            } label: {
+                Label("View Details", systemImage: "info.circle")
+            }
+
             Button(role: .destructive) {
                 projectToDelete = project
             } label: {
@@ -628,10 +651,29 @@ struct ContentView: View {
         errorMessage = nil
 
         do {
-            let freshProjects = try await apiClient.fetchProjects()
-            projects = freshProjects
+            let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
+            let cliProjects = try await apiClient.fetchProjects()
+            // Convert CLIProject to Project for existing views
+            projects = cliProjects.map { cliProject in
+                Project(
+                    name: cliProject.name,
+                    path: cliProject.path,
+                    displayName: nil,
+                    fullPath: cliProject.path,
+                    sessions: nil,
+                    sessionMeta: nil
+                )
+            }
+
+            // Extract git statuses from cli-bridge response
+            for cliProject in cliProjects {
+                if let git = cliProject.git {
+                    gitStatuses[cliProject.path] = git.toGitStatus
+                }
+            }
+
             isLoading = false
-        } catch APIError.authenticationFailed {
+        } catch CLIBridgeAPIError.unauthorized {
             if !settings.apiKey.isEmpty {
                 errorMessage = "API Key authentication failed.\n\nCheck your API key in Settings."
             } else {
@@ -681,6 +723,14 @@ struct ContentView: View {
     /// Check git status for all projects in background
     private func checkAllGitStatuses() async {
         guard !isCheckingGitStatus else { return }
+
+        // Skip SSH git checks if SSH is not configured
+        // Git status is provided by cli-bridge in the project list response
+        guard settings.isSSHConfigured else {
+            log.info("[Git] SSH not configured, skipping git status checks (using cli-bridge data)")
+            return
+        }
+
         isCheckingGitStatus = true
 
         // Mark all as checking
@@ -742,6 +792,14 @@ struct ContentView: View {
     /// Unlike checkAllGitStatuses, this updates the UI as each status comes in
     private func checkAllGitStatusesProgressive() async {
         guard !isCheckingGitStatus else { return }
+
+        // Skip SSH git checks if SSH is not configured
+        // Git status is provided by cli-bridge in the project list response
+        guard settings.isSSHConfigured else {
+            log.info("[Git] SSH not configured, skipping progressive git status checks (using cli-bridge data)")
+            return
+        }
+
         isCheckingGitStatus = true
 
         // Don't mark all as checking - let cached statuses show while we update
@@ -798,6 +856,8 @@ struct ContentView: View {
 
     /// Discover sub-repos for all projects in background
     private func discoverAllSubRepos() async {
+        // Skip if SSH not configured (cli-bridge doesn't provide sub-repo discovery yet)
+        guard settings.isSSHConfigured else { return }
         guard sshManager.isConnected else { return }
 
         await withTaskGroup(of: (String, [String]).self) { group in
@@ -968,730 +1028,6 @@ struct ContentView: View {
         // Session counts come from API Project response, no separate loading needed
     }
 }
-
-// MARK: - Project Row
-
-struct ProjectRow: View {
-    let project: Project
-    let gitStatus: GitStatus
-    var sessionCount: Int? = nil  // SSH-loaded count (overrides API count if set)
-    var isSelected: Bool = false
-    var isArchived: Bool = false
-    var multiRepoStatus: MultiRepoStatus? = nil
-    var isExpanded: Bool = false
-    var onToggleExpand: (() -> Void)? = nil
-    @Environment(\.colorScheme) var colorScheme
-
-    /// Display name: custom name if set, otherwise project.title
-    private var displayName: String {
-        if let customName = ProjectNamesStore.shared.getName(for: project.path) {
-            return customName
-        }
-        return project.title
-    }
-
-    /// Whether this project has a custom name
-    private var hasCustomName: Bool {
-        ProjectNamesStore.shared.hasCustomName(for: project.path)
-    }
-
-    /// Whether this project has sub-repos
-    private var hasSubRepos: Bool {
-        multiRepoStatus?.hasSubRepos ?? false
-    }
-
-    var body: some View {
-        HStack(spacing: 8) {
-            // Leading indicator: disclosure triangle for monorepos, or selection dot
-            if hasSubRepos {
-                Button {
-                    onToggleExpand?()
-                } label: {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(CLITheme.green(for: colorScheme))
-                        .frame(width: 14)
-                }
-                .buttonStyle(.plain)
-            } else {
-                Text(isSelected ? "●" : ">")
-                    .font(CLITheme.monoFont)
-                    .foregroundColor(isSelected ? CLITheme.blue(for: colorScheme) : CLITheme.green(for: colorScheme))
-                    .opacity(isArchived ? 0.5 : 1)
-            }
-
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(displayName)
-                        .font(CLITheme.monoFont)
-                        .foregroundColor(CLITheme.primaryText(for: colorScheme))
-                        .opacity(isArchived ? 0.6 : 1)
-
-                    // Custom name indicator
-                    if hasCustomName {
-                        Image(systemName: "pencil.circle.fill")
-                            .font(.system(size: 10))
-                            .foregroundColor(CLITheme.mutedText(for: colorScheme))
-                    }
-
-                    // Git status indicator
-                    if !isArchived {
-                        GitStatusIndicator(status: gitStatus)
-                    }
-
-                    // Multi-repo summary badge (when collapsed)
-                    if hasSubRepos && !isExpanded, let status = multiRepoStatus {
-                        MultiRepoSummaryBadge(status: status)
-                    }
-                }
-
-                // Session count + sub-repo count
-                HStack(spacing: 8) {
-                    let count = sessionCount ?? project.displaySessions.count
-                    if count > 0 {
-                        Text("[\(count) sessions]")
-                            .font(CLITheme.monoSmall)
-                            .foregroundColor(CLITheme.cyan(for: colorScheme))
-                            .opacity(isArchived ? 0.6 : 1)
-                    }
-
-                    if hasSubRepos, let status = multiRepoStatus {
-                        Text("[\(status.subRepos.count) repos]")
-                            .font(CLITheme.monoSmall)
-                            .foregroundColor(CLITheme.mutedText(for: colorScheme))
-                            .opacity(isArchived ? 0.6 : 1)
-                    }
-                }
-            }
-
-            Spacer()
-
-            Image(systemName: "chevron.right")
-                .font(CLITheme.monoSmall)
-                .foregroundColor(CLITheme.mutedText(for: colorScheme))
-        }
-        .padding(.vertical, 12)
-        .contentShape(Rectangle())
-    }
-}
-
-// MARK: - Multi-Repo Summary Badge
-
-struct MultiRepoSummaryBadge: View {
-    let status: MultiRepoStatus
-    @Environment(\.colorScheme) var colorScheme
-
-    var body: some View {
-        if status.isScanning {
-            ProgressView()
-                .scaleEffect(0.5)
-                .frame(width: 12, height: 12)
-        } else if !status.summary.isEmpty {
-            HStack(spacing: 4) {
-                Image(systemName: status.worstStatus.icon)
-                    .font(.system(size: 10))
-                Text(status.summary)
-                    .font(CLITheme.monoSmall)
-            }
-            .foregroundColor(badgeColor)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(badgeColor.opacity(0.15))
-            .cornerRadius(4)
-        }
-    }
-
-    private var badgeColor: Color {
-        switch status.worstStatus.colorName {
-        case "green":
-            return CLITheme.green(for: colorScheme)
-        case "orange":
-            return CLITheme.yellow(for: colorScheme)
-        case "blue":
-            return CLITheme.blue(for: colorScheme)
-        case "cyan":
-            return CLITheme.cyan(for: colorScheme)
-        case "red":
-            return CLITheme.red(for: colorScheme)
-        default:
-            return CLITheme.mutedText(for: colorScheme)
-        }
-    }
-}
-
-// MARK: - Sub-Repo Row
-
-struct SubRepoRow: View {
-    let subRepo: SubRepo
-    let projectPath: String
-    var onRefresh: (() -> Void)? = nil
-    var onPull: (() -> Void)? = nil
-    @Environment(\.colorScheme) var colorScheme
-
-    var body: some View {
-        HStack(spacing: 8) {
-            // Indentation spacer
-            Spacer()
-                .frame(width: 24)
-
-            // Tree connector
-            Text("├─")
-                .font(CLITheme.monoSmall)
-                .foregroundColor(CLITheme.mutedText(for: colorScheme))
-
-            // Sub-repo path
-            Text(subRepo.relativePath)
-                .font(CLITheme.monoSmall)
-                .foregroundColor(CLITheme.primaryText(for: colorScheme))
-                .lineLimit(1)
-
-            // Status indicator
-            GitStatusIndicator(status: subRepo.status)
-
-            Spacer()
-
-            // Action buttons
-            if subRepo.status.canAutoPull {
-                Button {
-                    onPull?()
-                } label: {
-                    Text("Pull")
-                        .font(CLITheme.monoSmall)
-                        .foregroundColor(CLITheme.cyan(for: colorScheme))
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(CLITheme.cyan(for: colorScheme).opacity(0.15))
-                        .cornerRadius(4)
-                }
-                .buttonStyle(.plain)
-            }
-
-            Button {
-                onRefresh?()
-            } label: {
-                Image(systemName: "arrow.triangle.2.circlepath")
-                    .font(.system(size: 12))
-                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.vertical, 6)
-        .padding(.leading, 8)
-        .background(CLITheme.secondaryBackground(for: colorScheme).opacity(0.5))
-    }
-}
-
-// MARK: - Sub-Repo Action Bar
-
-struct SubRepoActionBar: View {
-    let multiRepoStatus: MultiRepoStatus
-    var onPullAll: (() -> Void)? = nil
-    var onRefreshAll: (() -> Void)? = nil
-    @Environment(\.colorScheme) var colorScheme
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Spacer()
-                .frame(width: 32)
-
-            if multiRepoStatus.pullableCount > 0 {
-                Button {
-                    onPullAll?()
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "arrow.down.circle")
-                        Text("Pull All Behind (\(multiRepoStatus.pullableCount))")
-                    }
-                    .font(CLITheme.monoSmall)
-                    .foregroundColor(CLITheme.cyan(for: colorScheme))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(CLITheme.cyan(for: colorScheme).opacity(0.15))
-                    .cornerRadius(6)
-                }
-                .buttonStyle(.plain)
-            }
-
-            Button {
-                onRefreshAll?()
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                    Text("Refresh All")
-                }
-                .font(CLITheme.monoSmall)
-                .foregroundColor(CLITheme.mutedText(for: colorScheme))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(CLITheme.secondaryBackground(for: colorScheme))
-                .cornerRadius(6)
-            }
-            .buttonStyle(.plain)
-
-            Spacer()
-        }
-        .padding(.vertical, 8)
-        .padding(.leading, 8)
-        .background(CLITheme.secondaryBackground(for: colorScheme).opacity(0.3))
-    }
-}
-
-// MARK: - Git Status Indicator
-
-struct GitStatusIndicator: View {
-    let status: GitStatus
-    @Environment(\.colorScheme) var colorScheme
-
-    var body: some View {
-        Group {
-            switch status {
-            case .unknown:
-                EmptyView()
-            case .checking:
-                ProgressView()
-                    .scaleEffect(0.6)
-                    .frame(width: 14, height: 14)
-            case .notGitRepo:
-                // Don't show anything for non-git repos
-                EmptyView()
-            default:
-                Image(systemName: status.icon)
-                    .font(.system(size: 12))
-                    .foregroundColor(statusColor)
-            }
-        }
-        .accessibilityLabel(status.accessibilityLabel)
-    }
-
-    private var statusColor: Color {
-        switch status.colorName {
-        case "green":
-            return CLITheme.green(for: colorScheme)
-        case "orange":
-            return CLITheme.yellow(for: colorScheme)
-        case "blue":
-            return CLITheme.blue(for: colorScheme)
-        case "cyan":
-            return CLITheme.cyan(for: colorScheme)
-        case "red":
-            return CLITheme.red(for: colorScheme)
-        default:
-            return CLITheme.mutedText(for: colorScheme)
-        }
-    }
-}
-
-// MARK: - Settings View
-
-struct SettingsView: View {
-    @EnvironmentObject var settings: AppSettings
-    @Environment(\.dismiss) var dismiss
-    @State private var showSSHKeyImport = false
-    @State private var hasSSHKey = KeychainHelper.shared.hasSSHKey
-
-    // Binding for font size picker
-    private var fontSizeBinding: Binding<FontSizePreset> {
-        Binding(
-            get: { FontSizePreset(rawValue: settings.fontSize) ?? .medium },
-            set: { settings.fontSize = $0.rawValue }
-        )
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                // Section 1: Appearance
-                Section("Appearance") {
-                    Picker("Theme", selection: Binding(
-                        get: { settings.appTheme },
-                        set: { settings.appTheme = $0 }
-                    )) {
-                        ForEach(AppTheme.allCases, id: \.self) { theme in
-                            Text(theme.displayName).tag(theme)
-                        }
-                    }
-
-                    Picker("Font Size", selection: fontSizeBinding) {
-                        ForEach(FontSizePreset.allCases, id: \.rawValue) { preset in
-                            Text(preset.displayName).tag(preset)
-                        }
-                    }
-
-                    // Font preview
-                    HStack {
-                        Text("Preview:")
-                            .foregroundStyle(.secondary)
-                        Spacer()
-                        Text("The quick brown fox")
-                            .font(settings.scaledFont(.body))
-                    }
-                }
-
-                // Section 2: Claude Behavior
-                Section {
-                    Picker("Default Model", selection: Binding(
-                        get: { settings.defaultModel },
-                        set: { settings.defaultModel = $0 }
-                    )) {
-                        ForEach(ClaudeModel.allCases.filter { $0 != .custom }, id: \.self) { model in
-                            HStack {
-                                Image(systemName: model.icon)
-                                Text(model.displayName)
-                            }
-                            .tag(model)
-                        }
-                    }
-
-                    Picker("Default Mode", selection: Binding(
-                        get: { settings.claudeMode },
-                        set: { settings.claudeMode = $0 }
-                    )) {
-                        ForEach(ClaudeMode.allCases, id: \.self) { mode in
-                            Text(mode.displayName).tag(mode)
-                        }
-                    }
-
-                    Toggle("Skip Permission Prompts", isOn: $settings.skipPermissions)
-                } header: {
-                    Text("Claude")
-                } footer: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        if settings.skipPermissions {
-                            Label("All tool executions will be auto-approved without confirmation.", systemImage: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.orange)
-                        }
-                        Text("Model: \(settings.defaultModel.description)")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                // Section 3: Chat Display
-                Section("Chat Display") {
-                    Toggle("Show Thinking Blocks", isOn: $settings.showThinkingBlocks)
-                    Toggle("Auto-scroll to Bottom", isOn: $settings.autoScrollEnabled)
-                }
-
-                // Section 4: Project List
-                Section("Projects") {
-                    Picker("Sort Order", selection: Binding(
-                        get: { settings.projectSortOrder },
-                        set: { settings.projectSortOrder = $0 }
-                    )) {
-                        ForEach(ProjectSortOrder.allCases, id: \.self) { order in
-                            Text(order.displayName).tag(order)
-                        }
-                    }
-                }
-
-                // Section 5: Server Configuration
-                Section {
-                    TextField("URL", text: $settings.serverURL)
-                        .keyboardType(.URL)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-
-                    TextField("Username", text: $settings.authUsername)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-
-                    SecureField("Password", text: $settings.authPassword)
-                } header: {
-                    Text("Server")
-                } footer: {
-                    Text("Login credentials for claudecodeui web UI")
-                }
-
-                // Section 6: SSH Key (for iPhone - no access to ~/.ssh)
-                Section {
-                    HStack {
-                        Text("SSH Key")
-                        Spacer()
-                        if hasSSHKey {
-                            Label("Configured", systemImage: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
-                                .font(.subheadline)
-                        } else {
-                            Text("Not configured")
-                                .foregroundStyle(.secondary)
-                                .font(.subheadline)
-                        }
-                    }
-
-                    Button {
-                        showSSHKeyImport = true
-                    } label: {
-                        Label(hasSSHKey ? "Replace SSH Key..." : "Import SSH Key...", systemImage: "key")
-                    }
-
-                    if hasSSHKey {
-                        Button(role: .destructive) {
-                            KeychainHelper.shared.clearAll()
-                            hasSSHKey = false
-                        } label: {
-                            Label("Remove SSH Key", systemImage: "trash")
-                        }
-                    }
-                } header: {
-                    Text("SSH Key")
-                } footer: {
-                    Text("Import your private key for SSH authentication. Required for Git operations on iPhone.")
-                }
-
-                // Section 7: SSH Configuration (fallback/additional)
-                Section {
-                    TextField("Host", text: $settings.sshHost)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-
-                    HStack {
-                        Text("Port")
-                        Spacer()
-                        TextField("22", value: $settings.sshPort, format: .number)
-                            .keyboardType(.numberPad)
-                            .multilineTextAlignment(.trailing)
-                            .frame(width: 80)
-                    }
-
-                    TextField("Username", text: $settings.sshUsername)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-
-                    SecureField("Password (fallback)", text: $settings.sshPassword)
-                } header: {
-                    Text("SSH Connection")
-                } footer: {
-                    Text("SSH key is preferred. Password is used as fallback if no key is configured.")
-                }
-            }
-            .navigationTitle("Settings")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                }
-            }
-            .sheet(isPresented: $showSSHKeyImport) {
-                SSHKeyImportSheet(onKeyImported: {
-                    hasSSHKey = KeychainHelper.shared.hasSSHKey
-                })
-            }
-        }
-    }
-}
-
-// MARK: - SSH Key Import Sheet
-
-struct SSHKeyImportSheet: View {
-    @Environment(\.dismiss) var dismiss
-    @Environment(\.colorScheme) var colorScheme
-    @State private var keyContent = ""
-    @State private var passphrase = ""
-    @State private var showFileImporter = false
-    @State private var error: String?
-    @State private var isValidating = false
-    @State private var detectedKeyType: SSHKeyType?
-
-    let onKeyImported: () -> Void
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 20) {
-                // Icon
-                Image(systemName: "key.fill")
-                    .font(.system(size: 48))
-                    .foregroundColor(CLITheme.cyan(for: colorScheme))
-                    .padding(.top, 24)
-
-                Text("Import SSH Private Key")
-                    .font(.headline)
-
-                // Key content text editor
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Paste your private key:")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-
-                    TextEditor(text: $keyContent)
-                        .font(.system(.caption, design: .monospaced))
-                        .frame(minHeight: 120, maxHeight: 200)
-                        .padding(8)
-                        .background(CLITheme.secondaryBackground(for: colorScheme))
-                        .cornerRadius(8)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 8)
-                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-                        )
-                        .onChange(of: keyContent) { _, newValue in
-                            validateKey(newValue)
-                        }
-
-                    if let keyType = detectedKeyType {
-                        HStack {
-                            Image(systemName: keyType.isSupported ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                .foregroundColor(keyType.isSupported ? .green : .red)
-                            Text("Detected: \(keyType.description)")
-                                .font(.caption)
-                                .foregroundColor(keyType.isSupported ? .gray : .red)
-                            if !keyType.isSupported {
-                                Text("(not supported)")
-                                    .font(.caption)
-                                    .foregroundColor(.red)
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal)
-
-                // Import from file button
-                Button {
-                    showFileImporter = true
-                } label: {
-                    Label("Import from Files", systemImage: "folder")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
-                        .background(CLITheme.secondaryBackground(for: colorScheme))
-                        .cornerRadius(8)
-                }
-                .padding(.horizontal)
-
-                // Passphrase (optional)
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Passphrase (if encrypted):")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-
-                    SecureField("Optional", text: $passphrase)
-                        .padding(12)
-                        .background(CLITheme.secondaryBackground(for: colorScheme))
-                        .cornerRadius(8)
-                }
-                .padding(.horizontal)
-
-                // Error message
-                if let error = error {
-                    HStack {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                        Text(error)
-                    }
-                    .foregroundStyle(.red)
-                    .font(.caption)
-                    .padding(.horizontal)
-                }
-
-                Spacer()
-
-                // Save button
-                Button {
-                    saveKey()
-                } label: {
-                    Text("Save Key")
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(canSave ? CLITheme.cyan(for: colorScheme) : Color.gray)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
-                }
-                .disabled(!canSave)
-                .padding(.horizontal)
-                .padding(.bottom, 24)
-            }
-            .background(CLITheme.background(for: colorScheme))
-            .navigationTitle("Import SSH Key")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                }
-            }
-            .fileImporter(
-                isPresented: $showFileImporter,
-                allowedContentTypes: [.data, .text],
-                allowsMultipleSelection: false
-            ) { result in
-                handleFileImport(result)
-            }
-        }
-    }
-
-    private var canSave: Bool {
-        guard !keyContent.isEmpty else { return false }
-        guard let keyType = detectedKeyType else { return false }
-        return keyType.isSupported
-    }
-
-    private func validateKey(_ content: String) {
-        guard !content.isEmpty else {
-            detectedKeyType = nil
-            error = nil
-            return
-        }
-
-        if SSHKeyDetection.isValidKeyFormat(content) {
-            do {
-                detectedKeyType = try SSHKeyDetection.detectPrivateKeyType(from: content)
-                error = nil
-            } catch {
-                detectedKeyType = .unknown
-                self.error = "Could not detect key type"
-            }
-        } else {
-            detectedKeyType = nil
-            error = "Invalid key format. Key should start with '-----BEGIN'"
-        }
-    }
-
-    private func handleFileImport(_ result: Result<[URL], Error>) {
-        switch result {
-        case .success(let urls):
-            guard let url = urls.first else { return }
-
-            // Request access to the file
-            guard url.startAccessingSecurityScopedResource() else {
-                error = "Could not access the selected file"
-                return
-            }
-            defer { url.stopAccessingSecurityScopedResource() }
-
-            do {
-                let content = try String(contentsOf: url, encoding: .utf8)
-                keyContent = content
-                validateKey(content)
-            } catch {
-                self.error = "Could not read file: \(error.localizedDescription)"
-            }
-
-        case .failure(let error):
-            self.error = "File selection failed: \(error.localizedDescription)"
-        }
-    }
-
-    private func saveKey() {
-        guard canSave else { return }
-
-        // Normalize the key content (fixes truncation issues from paste)
-        let normalizedKey = SSHKeyDetection.normalizeSSHKey(keyContent)
-
-        // Store key in Keychain
-        if KeychainHelper.shared.storeSSHKey(normalizedKey) {
-            // Store passphrase if provided
-            if !passphrase.isEmpty {
-                KeychainHelper.shared.storePassphrase(passphrase)
-            } else {
-                KeychainHelper.shared.deletePassphrase()
-            }
-
-            onKeyImported()
-            dismiss()
-        } else {
-            error = "Failed to save key to Keychain"
-        }
-    }
-}
-
 #Preview {
     ContentView()
         .environmentObject(AppSettings())

@@ -230,7 +230,6 @@ Stores all user configuration using @AppStorage:
 | SSH | host, port, username, authMethod, password |
 
 Key computed properties:
-- `applyThinkingMode()` - Appends thinking trigger words
 - `effectivePermissionMode` - Resolves bypass vs mode setting
 - `webSocketURL` - Derives ws:// from serverURL with token
 - `effectiveSSHHost` - Falls back to server URL host

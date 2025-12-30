@@ -14,8 +14,8 @@ func stringifyAnyValue(_ value: Any) -> String {
     if let num = value as? NSNumber {
         return num.stringValue
     }
-    // Handle AnyCodable wrapper (defined later in this file)
-    if let codable = value as? AnyCodable {
+    // Handle AnyCodableValue wrapper (from CLIBridgeTypes.swift)
+    if let codable = value as? AnyCodableValue {
         return codable.stringValue
     }
     // Handle dictionaries - convert to JSON or extract common fields
@@ -124,284 +124,20 @@ enum ClaudeModel: String, CaseIterable, Identifiable, Codable {
         }
     }
 
-    /// The alias to send to /model command (nil for custom, which requires full model ID)
-    var modelAlias: String? {
+    /// The model identifier to send to cli-bridge
+    /// Standard models use aliases ("opus", "sonnet", "haiku") - server resolves to full SDK model IDs
+    /// Custom model requires user to enter full model ID
+    var modelId: String? {
         switch self {
         case .opus: return "opus"
         case .sonnet: return "sonnet"
         case .haiku: return "haiku"
-        case .custom: return nil
-        }
-    }
-
-    /// The full model ID to pass in WebSocket message options (nil for custom)
-    var modelId: String? {
-        switch self {
-        case .opus: return "claude-opus-4-5-20251101"
-        case .sonnet: return "claude-sonnet-4-5-20250929"
-        case .haiku: return "claude-3-5-haiku-20241022"
-        case .custom: return nil
+        case .custom: return nil  // User provides full model ID via settings
         }
     }
 }
 
-// MARK: - Git Status
-
-/// Represents the git sync status of a project
-enum GitStatus: Equatable {
-    case unknown        // Status not yet checked
-    case checking       // Currently checking status
-    case notGitRepo     // Not a git repository
-    case clean          // Clean, up to date with remote
-    case dirty          // Has uncommitted local changes
-    case ahead(Int)     // Has unpushed commits
-    case behind(Int)    // Behind remote (can auto-pull)
-    case diverged       // Both ahead and behind (needs manual resolution)
-    case dirtyAndAhead  // Uncommitted changes + unpushed commits
-    case error(String)  // Failed to check status
-
-    /// Icon to display for this status
-    var icon: String {
-        switch self {
-        case .unknown, .checking:
-            return "circle.dotted"
-        case .notGitRepo:
-            return "minus.circle"
-        case .clean:
-            return "checkmark.circle.fill"
-        case .dirty:
-            return "exclamationmark.triangle.fill"
-        case .ahead:
-            return "arrow.up.circle.fill"
-        case .behind:
-            return "arrow.down.circle.fill"
-        case .diverged:
-            return "arrow.up.arrow.down.circle.fill"
-        case .dirtyAndAhead:
-            return "exclamationmark.arrow.triangle.2.circlepath"
-        case .error:
-            return "xmark.circle"
-        }
-    }
-
-    /// Color name for the status icon
-    var colorName: String {
-        switch self {
-        case .unknown, .checking, .notGitRepo:
-            return "gray"
-        case .clean:
-            return "green"
-        case .dirty, .dirtyAndAhead, .diverged:
-            return "orange"
-        case .ahead:
-            return "blue"
-        case .behind:
-            return "cyan"
-        case .error:
-            return "red"
-        }
-    }
-
-    /// Short description for accessibility
-    var accessibilityLabel: String {
-        switch self {
-        case .unknown:
-            return "Status unknown"
-        case .checking:
-            return "Checking status"
-        case .notGitRepo:
-            return "Not a git repository"
-        case .clean:
-            return "Clean, up to date"
-        case .dirty:
-            return "Has uncommitted changes"
-        case .ahead(let count):
-            return "\(count) unpushed commit\(count == 1 ? "" : "s")"
-        case .behind(let count):
-            return "\(count) commit\(count == 1 ? "" : "s") behind remote"
-        case .diverged:
-            return "Diverged from remote"
-        case .dirtyAndAhead:
-            return "Uncommitted changes and unpushed commits"
-        case .error(let msg):
-            return "Error: \(msg)"
-        }
-    }
-
-    /// Whether auto-pull is safe for this status
-    var canAutoPull: Bool {
-        switch self {
-        case .behind:
-            return true
-        default:
-            return false
-        }
-    }
-
-    /// Whether this status indicates local changes that need attention
-    var hasLocalChanges: Bool {
-        switch self {
-        case .dirty, .ahead, .dirtyAndAhead, .diverged:
-            return true
-        default:
-            return false
-        }
-    }
-}
-
-// MARK: - Multi-Repo Git Status
-
-/// Represents a nested git repository within a project
-struct SubRepo: Identifiable, Hashable {
-    let id: UUID
-    let relativePath: String  // e.g., "packages/api" or "services/auth"
-    let fullPath: String      // Full path for git commands
-    var status: GitStatus
-
-    init(relativePath: String, fullPath: String, status: GitStatus = .unknown) {
-        self.id = UUID()
-        self.relativePath = relativePath
-        self.fullPath = fullPath
-        self.status = status
-    }
-
-    // Hashable conformance (exclude status for stable identity)
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(relativePath)
-        hasher.combine(fullPath)
-    }
-
-    static func == (lhs: SubRepo, rhs: SubRepo) -> Bool {
-        lhs.relativePath == rhs.relativePath && lhs.fullPath == rhs.fullPath
-    }
-}
-
-/// Aggregated status for a project with multiple nested git repositories
-struct MultiRepoStatus {
-    var subRepos: [SubRepo]
-    var isScanning: Bool = false
-
-    init(subRepos: [SubRepo] = [], isScanning: Bool = false) {
-        self.subRepos = subRepos
-        self.isScanning = isScanning
-    }
-
-    /// Human-readable summary of sub-repo statuses (e.g., "2 dirty, 1 behind")
-    var summary: String {
-        guard !subRepos.isEmpty else { return "" }
-
-        var counts: [String: Int] = [:]
-
-        for subRepo in subRepos {
-            switch subRepo.status {
-            case .dirty, .dirtyAndAhead:
-                counts["dirty", default: 0] += 1
-            case .behind:
-                counts["behind", default: 0] += 1
-            case .ahead:
-                counts["ahead", default: 0] += 1
-            case .diverged:
-                counts["diverged", default: 0] += 1
-            case .error:
-                counts["error", default: 0] += 1
-            case .clean:
-                counts["clean", default: 0] += 1
-            case .unknown, .checking, .notGitRepo:
-                break
-            }
-        }
-
-        // Build summary string, prioritizing actionable items
-        var parts: [String] = []
-        if let count = counts["dirty"], count > 0 {
-            parts.append("\(count) dirty")
-        }
-        if let count = counts["behind"], count > 0 {
-            parts.append("\(count) behind")
-        }
-        if let count = counts["ahead"], count > 0 {
-            parts.append("\(count) ahead")
-        }
-        if let count = counts["diverged"], count > 0 {
-            parts.append("\(count) diverged")
-        }
-        if let count = counts["error"], count > 0 {
-            parts.append("\(count) error")
-        }
-
-        if parts.isEmpty {
-            let cleanCount = counts["clean"] ?? 0
-            if cleanCount == subRepos.count {
-                return "all clean"
-            }
-            return "\(subRepos.count) repos"
-        }
-
-        return parts.joined(separator: ", ")
-    }
-
-    /// Returns the most actionable/urgent status for badge coloring
-    var worstStatus: GitStatus {
-        // Priority order: error > diverged > dirty > behind > ahead > clean > unknown
-        var hasError = false
-        var hasDiverged = false
-        var hasDirty = false
-        var hasBehind = false
-        var hasAhead = false
-        var hasClean = false
-
-        for subRepo in subRepos {
-            switch subRepo.status {
-            case .error:
-                hasError = true
-            case .diverged:
-                hasDiverged = true
-            case .dirty, .dirtyAndAhead:
-                hasDirty = true
-            case .behind:
-                hasBehind = true
-            case .ahead:
-                hasAhead = true
-            case .clean:
-                hasClean = true
-            default:
-                break
-            }
-        }
-
-        if hasError { return .error("sub-repo error") }
-        if hasDiverged { return .diverged }
-        if hasDirty { return .dirty }
-        if hasBehind { return .behind(1) }
-        if hasAhead { return .ahead(1) }
-        if hasClean { return .clean }
-        return .unknown
-    }
-
-    /// Whether any sub-repo needs user attention
-    var hasActionableItems: Bool {
-        subRepos.contains { subRepo in
-            switch subRepo.status {
-            case .dirty, .dirtyAndAhead, .behind, .ahead, .diverged, .error:
-                return true
-            default:
-                return false
-            }
-        }
-    }
-
-    /// Count of sub-repos that can be auto-pulled
-    var pullableCount: Int {
-        subRepos.filter { $0.status.canAutoPull }.count
-    }
-
-    /// Whether there are any sub-repos
-    var hasSubRepos: Bool {
-        !subRepos.isEmpty
-    }
-}
-
-// MARK: - Project Models (new claudecodeui API)
+// MARK: - Project Models
 
 struct Project: Codable, Identifiable, Hashable {
     let name: String
@@ -695,15 +431,6 @@ class MessageStore {
                 let messages = loadMessagesUnsafe(for: projectPath)
                 continuation.resume(returning: messages)
             }
-        }
-    }
-
-    /// Synchronous load for backward compatibility - DEPRECATED, use async version
-    /// This blocks the calling thread and should only be used where async is not possible
-    @available(*, deprecated, message: "Use async loadMessages(for:) instead to avoid blocking main thread")
-    static func loadMessagesSync(for projectPath: String) -> [ChatMessage] {
-        fileQueue.sync {
-            loadMessagesUnsafe(for: projectPath)
         }
     }
 
@@ -1149,8 +876,8 @@ class SessionHistoryLoader {
 
     /// Convert Any value to string - delegates to global stringifyAnyValue
     private static func stringifyValue(_ value: Any) -> String {
-        // Handle AnyCodable wrapper (specific to this context)
-        if let codable = value as? AnyCodable {
+        // Handle AnyCodableValue wrapper (specific to this context)
+        if let codable = value as? AnyCodableValue {
             return codable.stringValue
         }
         // Use global helper for everything else
@@ -1247,97 +974,6 @@ class SessionHistoryLoader {
 
         // Use $HOME for consistent shell expansion (~ doesn't expand in all contexts)
         return "$HOME/.claude/projects/\(trimmedPath)/\(sessionId).jsonl"
-    }
-}
-
-// MARK: - WebSocket Message Types (claudecodeui)
-
-// Messages sent TO server
-struct WSClaudeCommand: Encodable {
-    let type: String = "claude-command"
-    let command: String
-    let options: WSCommandOptions
-}
-
-struct WSImage: Encodable {
-    let data: String  // Full data URL: "data:image/png;base64,<base64data>"
-
-    /// Create WSImage from raw image data
-    init(mediaType: String, base64Data: String) {
-        // Server expects: "data:image/png;base64,<base64data>"
-        self.data = "data:\(mediaType);base64,\(base64Data)"
-    }
-}
-
-struct WSCommandOptions: Encodable {
-    let cwd: String  // Working directory - server expects 'cwd', not 'projectPath'
-    let sessionId: String?
-    let model: String?
-    let permissionMode: String?  // "default", "plan", or "bypassPermissions"
-    let images: [WSImage]?  // Images must be inside options, not at top level
-}
-
-struct WSAbortSession: Encodable {
-    let type: String = "abort-session"
-    let sessionId: String
-    let provider: String = "claude"
-}
-
-// Messages received FROM server
-struct WSMessage: Decodable {
-    let type: String
-    let sessionId: String?
-    let data: AnyCodable?
-    let error: String?
-    let exitCode: Int?
-    let isNewSession: Bool?
-}
-
-// Helper for dynamic JSON
-struct AnyCodable: Decodable, CustomStringConvertible {
-    let value: Any
-
-    init(_ value: Any) {
-        self.value = value
-    }
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-        if let string = try? container.decode(String.self) {
-            value = string
-        } else if let int = try? container.decode(Int.self) {
-            value = int
-        } else if let double = try? container.decode(Double.self) {
-            value = double
-        } else if let bool = try? container.decode(Bool.self) {
-            value = bool
-        } else if let dict = try? container.decode([String: AnyCodable].self) {
-            value = dict.mapValues { $0.value }
-        } else if let array = try? container.decode([AnyCodable].self) {
-            value = array.map { $0.value }
-        } else {
-            value = ""
-        }
-    }
-
-    /// CustomStringConvertible - returns just the value for string interpolation
-    var description: String {
-        stringValue
-    }
-
-    var stringValue: String {
-        if let s = value as? String { return s }
-        if let dict = value as? [String: Any] {
-            if let data = try? JSONSerialization.data(withJSONObject: dict),
-               let str = String(data: data, encoding: .utf8) {
-                return str
-            }
-        }
-        return String(describing: value)
-    }
-
-    var dictValue: [String: Any]? {
-        return value as? [String: Any]
     }
 }
 

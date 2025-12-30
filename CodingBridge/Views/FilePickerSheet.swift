@@ -285,12 +285,22 @@ struct FilePickerSheet: View {
     }
 
     /// Load files and return them directly (avoids state timing issues)
+    /// Uses REST API when cli-bridge is enabled, otherwise uses SSH
     private func loadFilesAndReturn() async -> [FileEntry] {
         isLoading = true
         error = nil
 
         do {
-            let loadedFiles = try await sshManager.listFilesWithAutoConnect(currentPath, settings: settings)
+            // Use CLI Bridge REST API
+            let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
+            // Calculate relative directory path from project root
+            let relativeDir = currentPath.hasPrefix(projectPath)
+                ? String(currentPath.dropFirst(projectPath.count))
+                : "/"
+            let directory = relativeDir.isEmpty ? "/" : relativeDir
+            let response = try await apiClient.listFiles(projectPath: projectPath, directory: directory)
+            let loadedFiles = response.entries.toFileEntries()
+
             files = loadedFiles
             isLoading = false
             return loadedFiles

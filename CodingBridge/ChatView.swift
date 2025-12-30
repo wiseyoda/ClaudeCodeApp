@@ -7,7 +7,6 @@ import PhotosUI
 struct ChatView: View {
     // MARK: - Properties
     let project: Project
-    let apiClient: APIClient
     let initialGitStatus: GitStatus
     var onSessionsChanged: (() -> Void)?
 
@@ -18,7 +17,8 @@ struct ChatView: View {
     @Environment(\.colorScheme) private var colorScheme
 
     // MARK: - Managers (StateObject/ObservedObject)
-    @StateObject private var wsManager: WebSocketManager
+    // wsManager is CLIBridgeAdapter - provides WebSocket-style interface to cli-bridge backend
+    @StateObject private var wsManager: CLIBridgeAdapter
     @StateObject private var claudeHelper: ClaudeHelper
     @StateObject private var ideasStore: IdeasStore
     @StateObject private var scrollManager = ScrollStateManager()
@@ -31,7 +31,7 @@ struct ChatView: View {
     /// Add `.incrementalID()` modifier to CLIMessageView using `message.id`
     @State private var messages: [ChatMessage] = []
     @State private var inputText = ""
-    @State private var selectedImage: Data?
+    @State private var selectedImages: [ImageAttachment] = []
     @State private var processingStartTime: Date?
     @State private var selectedSession: ProjectSession?
     @State private var isUploadingImage = false
@@ -82,13 +82,12 @@ struct ChatView: View {
     @State private var cachedDisplayMessages: [ChatMessage] = []
     @State private var displayMessagesInvalidationKey: Int = 0
 
-    init(project: Project, apiClient: APIClient, initialGitStatus: GitStatus = .unknown, onSessionsChanged: (() -> Void)? = nil) {
+    init(project: Project, initialGitStatus: GitStatus = .unknown, onSessionsChanged: (() -> Void)? = nil) {
         self.project = project
-        self.apiClient = apiClient
         self.initialGitStatus = initialGitStatus
         self.onSessionsChanged = onSessionsChanged
-        // Initialize WebSocketManager without settings - will be configured in onAppear
-        _wsManager = StateObject(wrappedValue: WebSocketManager())
+        // Initialize CLIBridgeAdapter (cli-bridge backend) - will be configured in onAppear
+        _wsManager = StateObject(wrappedValue: CLIBridgeAdapter())
         _claudeHelper = StateObject(wrappedValue: ClaudeHelper(settings: AppSettings()))
         _ideasStore = StateObject(wrappedValue: IdeasStore(projectPath: project.path))
     }
@@ -228,68 +227,55 @@ struct ChatView: View {
             wsManager.updateSettings(settings)
             claudeHelper.updateSettings(settings)
             setupWebSocketCallbacks()
-            wsManager.connect()
 
-            // Load persisted messages asynchronously to avoid blocking main thread
+            // Check if we were processing when app closed (for reattachment)
+            let wasProcessing = MessageStore.loadProcessingState(for: project.path)
+
+            // Load persisted messages asynchronously
             Task {
                 let savedMessages = await MessageStore.loadMessages(for: project.path)
                 if !savedMessages.isEmpty {
                     messages = savedMessages
-                    // Initialize display messages cache
                     refreshDisplayMessagesCache()
-                    // Trigger scroll to bottom after a short delay to allow SwiftUI to render
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                         scrollToBottomTrigger = true
                     }
                 } else {
-                    // Initialize empty cache
                     refreshDisplayMessagesCache()
                 }
             }
 
-            // Load sessions and restore/auto-select session with full history
-            let wasProcessing = MessageStore.loadProcessingState(for: project.path)
-            let savedSessionId = MessageStore.loadSessionId(for: project.path)
-
-            // Start loading sessions from API in background
+            // Load sessions from API, then select most recent and connect
             Task {
+                // Load sessions first
                 await sessionStore.loadSessions(for: project.path, forceRefresh: true)
 
-                // After sessions load, ensure we have the right session selected
                 await MainActor.run {
-                    autoSelectAndLoadSession(savedSessionId: savedSessionId, wasProcessing: wasProcessing)
-                }
-            }
+                    // Now select the most recent session
+                    autoSelectMostRecentSession()
 
-            // Initial session selection (before API load completes)
-            if let savedSessionId = savedSessionId {
-                print("[ChatView] Loaded saved session ID: \(savedSessionId.prefix(8))...")
-                wsManager.sessionId = savedSessionId
-                // Find matching session in project sessions for UI
-                if let sessions = project.sessions {
-                    selectedSession = sessions.first { $0.id == savedSessionId }
-                    if selectedSession != nil {
-                        print("[ChatView] Found matching session in project.sessions")
-                        // Load history for the saved session
-                        loadSessionHistory(selectedSession!)
+                    // Connect based on selected session
+                    if let session = selectedSession {
+                        print("[ChatView] Opening project with most recent session: \(session.id.prefix(8))...")
+                        wsManager.sessionId = session.id
+                        wsManager.connect(projectPath: project.path, sessionId: session.id)
+                        MessageStore.saveSessionId(session.id, for: project.path)
+                        loadSessionHistory(session)
+
+                        // Check if we need to reattach to an active session
+                        if wasProcessing {
+                            print("[ChatView] Session was processing when app closed - attempting reattachment...")
+                            attemptSessionReattachment(sessionId: session.id)
+                        }
                     } else {
-                        print("[ChatView] WARNING: Saved session not found in project.sessions (count: \(sessions.count))")
+                        // No sessions exist - connect without sessionId
+                        // cli-bridge will create a new session on first message
+                        print("[ChatView] No sessions found for project - connecting without session")
+                        wsManager.connect(projectPath: project.path)
+                        if wasProcessing {
+                            MessageStore.clearProcessingState(for: project.path)
+                        }
                     }
-                }
-
-                // Check if we need to reattach to an active session
-                if wasProcessing {
-                    print("[ChatView] Session was processing when app closed - attempting reattachment...")
-                    attemptSessionReattachment(sessionId: savedSessionId)
-                }
-            } else {
-                print("[ChatView] No saved session ID found for project")
-                // Auto-select the most recent session if available
-                autoSelectMostRecentSession()
-
-                // Clear any stale processing state if no session ID
-                if wasProcessing {
-                    MessageStore.clearProcessingState(for: project.path)
                 }
             }
 
@@ -367,6 +353,13 @@ struct ChatView: View {
         .onChange(of: messageFilter) { _, _ in
             // Refresh display messages cache when filter changes
             refreshDisplayMessagesCache()
+        }
+        .onChange(of: settings.defaultModel) { oldModel, newModel in
+            // When user changes model in UI, send setModel command to cli-bridge
+            guard oldModel != newModel else { return }
+            guard wsManager.connectionState.isConnected else { return }
+            print("[ChatView] Model changed from \(oldModel.shortName) to \(newModel.shortName) - calling switchModel")
+            wsManager.switchModel(to: newModel)
         }
         .onChange(of: inputText) { _, newText in
             // Auto-save draft input
@@ -571,12 +564,11 @@ struct ChatView: View {
         )
         messages.append(answerMessage)
 
-        // Use stored session ID for resume
-        let sessionToResume = wsManager.sessionId ?? selectedSession?.id
+        // Use effectiveSessionToResume which filters out ephemeral sessions
         wsManager.sendMessage(
             answer,
             projectPath: project.path,
-            resumeSessionId: sessionToResume,
+            resumeSessionId: effectiveSessionToResume,
             permissionMode: effectivePermissionMode,
             model: effectiveModelId
         )
@@ -588,6 +580,26 @@ struct ChatView: View {
     private func handleQuestionCancel() {
         wsManager.abortSession()
         pendingQuestions = nil
+    }
+
+    /// Compute session ID to resume, filtering out ephemeral sessions
+    /// Returns wsManager.sessionId if set, otherwise selectedSession.id if it's a real session
+    private var effectiveSessionToResume: String? {
+        // If wsManager has a session ID, use it (it's always a real session)
+        if let sessionId = wsManager.sessionId {
+            return sessionId
+        }
+
+        // Fall back to selected session, but filter out ephemeral sessions
+        if let session = selectedSession {
+            // Ephemeral sessions have IDs starting with "new-session-"
+            if session.id.hasPrefix("new-session-") {
+                return nil  // Don't pass ephemeral ID to cli-bridge
+            }
+            return session.id
+        }
+
+        return nil
     }
 
     // MARK: - View Components (extracted to help Swift compiler)
@@ -644,14 +656,25 @@ struct ChatView: View {
         )
     }
 
-    /// Start a completely new session - clears messages and resets session ID
+    /// Start a completely new session - creates ephemeral "New Session" placeholder
+    /// The actual session is created in cli-bridge when the user sends their first message
     private func startNewSession() {
         messages = []
-        wsManager.sessionId = nil
-        selectedSession = nil
+        wsManager.sessionId = nil  // Clear so cli-bridge creates new session on first input
         scrollManager.reset()  // Reset scroll state for fresh session
         MessageStore.clearMessages(for: project.path)
         MessageStore.clearSessionId(for: project.path)
+
+        // Create ephemeral "New Session" placeholder (not persisted until first message)
+        let ephemeralSession = ProjectSession(
+            id: "new-session-\(UUID().uuidString)",  // Temporary ID, will be replaced
+            summary: "New Session",
+            messageCount: 0,
+            lastActivity: ISO8601DateFormatter().string(from: Date()),
+            lastUserMessage: nil,
+            lastAssistantMessage: nil
+        )
+        selectedSession = ephemeralSession
 
         // Add welcome message for new session
         let welcomeMessage = ChatMessage(
@@ -660,6 +683,7 @@ struct ChatView: View {
             timestamp: Date()
         )
         messages.append(welcomeMessage)
+        refreshDisplayMessagesCache()
     }
 
     @ViewBuilder
@@ -1045,7 +1069,7 @@ struct ChatView: View {
                 isProcessing: wsManager.isProcessing,
                 connectionState: wsManager.connectionState,
                 tokenUsage: wsManager.tokenUsage,
-                effectiveSkipPermissions: effectiveSkipPermissions,
+                effectivePermissionMode: effectivePermissionModeValue,
                 projectPath: project.path,
                 showQuickSettings: $showQuickSettings
             )
@@ -1066,6 +1090,26 @@ struct ChatView: View {
                 )
             }
 
+            // Input queued banner (shown when input is queued while agent is busy)
+            if wsManager.isInputQueued {
+                InputQueuedBanner(
+                    position: wsManager.queuePosition,
+                    onCancel: {
+                        wsManager.cancelQueuedInput()
+                    }
+                )
+            }
+
+            // Subagent banner (shown when a Task tool subagent is running)
+            if let subagent = wsManager.activeSubagent {
+                SubagentBanner(subagent: subagent)
+            }
+
+            // Tool progress banner (shown when tool reports progress)
+            if let progress = wsManager.toolProgress {
+                ToolProgressBanner(progress: progress)
+            }
+
             // AI-powered suggestion chips (shown when enabled, not processing, and not typing)
             if settings.autoSuggestionsEnabled && !wsManager.isProcessing && inputText.isEmpty && !claudeHelper.suggestedActions.isEmpty {
                 SuggestionChipsView(
@@ -1082,7 +1126,7 @@ struct ChatView: View {
 
             CLIInputView(
                 text: $inputText,
-                selectedImage: $selectedImage,
+                selectedImages: $selectedImages,
                 isProcessing: wsManager.isProcessing,
                 isAborting: wsManager.isAborting,
                 projectPath: project.path,
@@ -1269,17 +1313,40 @@ struct ChatView: View {
             messages.append(attachMsg)
             print("[ChatView] Successfully reattached to active session")
         }
+
+        // Handle session events from WebSocket (for real-time session list updates)
+        wsManager.onSessionEvent = { [weak sessionStore] event in
+            guard let sessionStore = sessionStore else { return }
+            Task { @MainActor in
+                await sessionStore.handleCLISessionEvent(event)
+            }
+        }
+
+        // Handle history replay when resuming a session
+        wsManager.onHistory = { payload in
+            // Convert history messages to ChatMessages and display
+            let historyMessages = payload.messages.map { $0.toChatMessage() }
+            if !historyMessages.isEmpty {
+                messages.insert(contentsOf: historyMessages, at: 0)
+                refreshDisplayMessagesCache()
+                // Scroll to bottom after history loads
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    scrollToBottomTrigger = true
+                }
+            }
+            print("[ChatView] Loaded \(historyMessages.count) history messages, hasMore: \(payload.hasMore)")
+        }
     }
 
     private func sendMessage() {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty || selectedImage != nil else { return }
+        guard !text.isEmpty || !selectedImages.isEmpty else { return }
 
         // Haptic feedback for send action
         HapticManager.medium()
 
         // Check for slash commands (client-side handling)
-        if text.hasPrefix("/") && selectedImage == nil {
+        if text.hasPrefix("/") && selectedImages.isEmpty {
             if handleSlashCommand(text) {
                 inputText = ""
                 return
@@ -1287,57 +1354,47 @@ struct ChatView: View {
             // If command not handled, fall through to send to server
         }
 
-        // Capture image before clearing
-        let imageToSend = selectedImage
+        // Capture images before clearing
+        let imagesToSend = selectedImages
 
-        // Add user message with optional image
+        // Add user message with first image for display (if any)
+        let displayImage = imagesToSend.first?.originalData
+        let imageCountSuffix = imagesToSend.count > 1 ? " (\(imagesToSend.count) images)" : ""
         let userMessage = ChatMessage(
             role: .user,
-            content: text.isEmpty ? "[Image attached]" : text,
+            content: text.isEmpty ? "[Image attached]\(imageCountSuffix)" : text,
             timestamp: Date(),
-            imageData: imageToSend
+            imageData: displayImage
         )
         messages.append(userMessage)
 
         inputText = ""
-        selectedImage = nil
+        selectedImages = []
         processingStartTime = Date()
 
-        // Apply thinking mode suffix (silently - not shown in UI)
-        let messageToSend = text.isEmpty ? text : settings.applyThinkingMode(to: text)
+        // Server handles thinking mode - just send the text as-is
+        let messageToSend = text
 
-        // Use stored session ID (from wsManager) if available, falling back to selected session
-        // This ensures we resume the correct session even if selectedSession is nil
-        let sessionToResume = wsManager.sessionId ?? selectedSession?.id
+        // Use effectiveSessionToResume which filters out ephemeral sessions
+        let sessionToResume = effectiveSessionToResume
 
         // Debug: Log session ID being used
         if let sid = sessionToResume {
             print("[ChatView] Sending message with sessionToResume: \(sid.prefix(8))...")
         } else {
-            print("[ChatView] WARNING: Sending message with NO session ID - new session will be created!")
+            print("[ChatView] Sending message with NO session ID - new session will be created")
         }
 
-        // If we have an image, send it with the message
-        if let imageData = imageToSend {
-            // Send message with image data directly via WebSocket
-            wsManager.sendMessage(
-                text.isEmpty ? "What is this image?" : messageToSend,
-                projectPath: project.path,
-                resumeSessionId: sessionToResume,
-                permissionMode: effectivePermissionMode,
-                imageData: imageData,
-                model: effectiveModelId
-            )
-        } else {
-            // No image - just send text
-            wsManager.sendMessage(
-                messageToSend,
-                projectPath: project.path,
-                resumeSessionId: sessionToResume,
-                permissionMode: effectivePermissionMode,
-                model: effectiveModelId
-            )
-        }
+        // Send message with optional images
+        let defaultPrompt = imagesToSend.count == 1 ? "What is this image?" : "What are these images?"
+        wsManager.sendMessage(
+            text.isEmpty ? defaultPrompt : messageToSend,
+            projectPath: project.path,
+            resumeSessionId: sessionToResume,
+            permissionMode: effectivePermissionMode,
+            images: imagesToSend.isEmpty ? nil : imagesToSend,
+            model: effectiveModelId
+        )
 
         // Persist messages
         MessageStore.saveMessages(messages, for: project.path, maxMessages: settings.historyLimit.rawValue)
@@ -1459,46 +1516,27 @@ struct ChatView: View {
 
     // MARK: - Session Auto-Selection
 
-    /// Auto-select and load session after API sessions are loaded
-    private func autoSelectAndLoadSession(savedSessionId: String?, wasProcessing: Bool) {
-        let loadedSessions = sessionStore.displaySessions(for: project.path)
-
-        if let savedSessionId = savedSessionId {
-            // Try to find the saved session in loaded sessions
-            if let session = loadedSessions.first(where: { $0.id == savedSessionId }) {
-                if selectedSession?.id != session.id {
-                    selectedSession = session
-                    // Only load history if not already loaded
-                    if messages.isEmpty {
-                        loadSessionHistory(session)
-                    }
-                }
-            } else if !loadedSessions.isEmpty {
-                // Saved session not found, fall back to most recent
-                print("[ChatView] Saved session not in loaded sessions, selecting most recent")
-                selectMostRecentSession(from: loadedSessions)
-            }
-        } else if !loadedSessions.isEmpty {
-            // No saved session, auto-select most recent
-            selectMostRecentSession(from: loadedSessions)
-        }
-    }
-
-    /// Auto-select the most recent session from project.sessions (before API load)
+    /// Auto-select the most recent session from project.sessions by lastActivityAt
+    /// Does NOT load history or connect - caller is responsible for that
     private func autoSelectMostRecentSession() {
-        guard let sessions = project.sessions else { return }
+        // First try SessionStore (more up-to-date)
+        let storeSessions = sessionStore.displaySessions(for: project.path)
+        if !storeSessions.isEmpty {
+            if let mostRecent = storeSessions.first, (mostRecent.messageCount ?? 0) > 0 {
+                print("[ChatView] Auto-selecting most recent session from store: \(mostRecent.id.prefix(8))...")
+                selectedSession = mostRecent
+                return
+            }
+        }
 
+        // Fall back to project.sessions
+        guard let sessions = project.sessions else { return }
         let filteredSessions = sessions.filterAndSortForDisplay(projectPath: project.path, activeSessionId: nil)
         guard let mostRecent = filteredSessions.first,
               (mostRecent.messageCount ?? 0) > 0 else { return }
 
         print("[ChatView] Auto-selecting most recent session: \(mostRecent.id.prefix(8))...")
-        wsManager.sessionId = mostRecent.id
         selectedSession = mostRecent
-        MessageStore.saveSessionId(mostRecent.id, for: project.path)
-
-        // Load the session history
-        loadSessionHistory(mostRecent)
     }
 
     /// Select the most recent session from a list of sessions
@@ -1539,7 +1577,7 @@ struct ChatView: View {
         }
     }
 
-    /// Load full session history via API
+    /// Load full session history via API using export endpoint
     private func loadSessionHistory(_ session: ProjectSession) {
         messages = []  // Clear current messages
         isLoadingHistory = true
@@ -1547,19 +1585,21 @@ struct ChatView: View {
 
         Task {
             do {
-                print("[ChatView] Loading session history via API for: \(session.id)")
+                print("[ChatView] Loading session history via export API for: \(session.id)")
 
-                // Fetch session messages via API (much simpler than SSH!)
-                let sessionMessages = try await apiClient.fetchSessionMessages(
-                    projectName: project.name,
-                    sessionId: session.id
+                // Export session as JSON (returns JSONL content)
+                let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
+                let exportResponse = try await apiClient.exportSession(
+                    projectPath: project.path,
+                    sessionId: session.id,
+                    format: .json
                 )
 
                 // Fetch token usage for this session
                 await wsManager.refreshTokenUsage(projectPath: project.path, sessionId: session.id)
 
-                // Convert API messages to ChatMessages
-                let historyMessages = sessionMessages.compactMap { $0.toChatMessage() }
+                // Parse JSONL content to ChatMessages
+                let historyMessages = parseJSONLToMessages(exportResponse.content)
 
                 await MainActor.run {
                     isLoadingHistory = false
@@ -1570,7 +1610,7 @@ struct ChatView: View {
                         }
                     } else {
                         messages = historyMessages
-                        print("[ChatView] Loaded \(historyMessages.count) messages from session history via API")
+                        print("[ChatView] Loaded \(historyMessages.count) messages from session export")
                     }
                     // Trigger scroll to bottom after delays to allow SwiftUI to render
                     // First scroll attempt after initial render
@@ -1583,7 +1623,7 @@ struct ChatView: View {
                     }
                 }
             } catch {
-                print("[ChatView] Failed to load session history via API: \(error)")
+                print("[ChatView] Failed to load session history via export: \(error)")
                 await MainActor.run {
                     isLoadingHistory = false
                     // Fallback to lastAssistantMessage
@@ -1601,6 +1641,63 @@ struct ChatView: View {
                     }
                 }
             }
+        }
+    }
+
+    /// Parse session export JSON into ChatMessages
+    /// Format: { "session": {...}, "messages": [{ "type": "user", "content": "...", "timestamp": "..." }, ...] }
+    private func parseJSONLToMessages(_ jsonContent: String) -> [ChatMessage] {
+        guard let data = jsonContent.data(using: .utf8) else {
+            print("[ChatView] Failed to convert export content to data")
+            return []
+        }
+
+        do {
+            // Parse as JSON object with messages array
+            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let messagesArray = json["messages"] as? [[String: Any]] {
+                print("[ChatView] Found \(messagesArray.count) messages in export")
+                return messagesArray.compactMap { parseExportMessage($0) }
+            }
+        } catch {
+            print("[ChatView] Failed to parse export JSON: \(error)")
+        }
+
+        return []
+    }
+
+    /// Parse a message from the export format
+    /// Format: { "id": "...", "type": "user|assistant", "content": "plain text", "timestamp": "..." }
+    private func parseExportMessage(_ json: [String: Any]) -> ChatMessage? {
+        guard let type = json["type"] as? String else { return nil }
+
+        // Extract timestamp
+        var timestamp = Date()
+        if let ts = json["timestamp"] as? String {
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            if let date = formatter.date(from: ts) {
+                timestamp = date
+            } else {
+                formatter.formatOptions = [.withInternetDateTime]
+                timestamp = formatter.date(from: ts) ?? Date()
+            }
+        }
+
+        // Content is plain text in export format
+        guard let content = json["content"] as? String, !content.isEmpty else {
+            return nil
+        }
+
+        switch type {
+        case "user":
+            return ChatMessage(role: .user, content: content, timestamp: timestamp)
+        case "assistant":
+            return ChatMessage(role: .assistant, content: content, timestamp: timestamp)
+        case "system":
+            return ChatMessage(role: .system, content: content, timestamp: timestamp)
+        default:
+            return nil
         }
     }
 
@@ -1666,12 +1763,14 @@ struct ChatView: View {
         // Reload session history if we have an active session
         if let sessionId = wsManager.sessionId {
             do {
-                let sessionMessages = try await apiClient.fetchSessionMessages(
-                    projectName: project.name,
-                    sessionId: sessionId
+                let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
+                let exportResponse = try await apiClient.exportSession(
+                    projectPath: project.path,
+                    sessionId: sessionId,
+                    format: .json
                 )
-                // Convert to ChatMessages and update on main actor
-                let historyMessages = sessionMessages.compactMap { $0.toChatMessage() }
+                // Parse JSONL content to ChatMessages
+                let historyMessages = parseJSONLToMessages(exportResponse.content)
                 await MainActor.run {
                     // Only update if we got messages
                     if !historyMessages.isEmpty {
@@ -1685,6 +1784,12 @@ struct ChatView: View {
     }
 
     private func refreshGitStatus() {
+        // Skip SSH git checks if SSH is not configured
+        // Git status is provided by cli-bridge in the project list response
+        guard settings.isSSHConfigured else {
+            return
+        }
+
         Task {
             gitStatus = .checking
             let newStatus = await sshManager.checkGitStatusWithAutoConnect(
@@ -1785,12 +1890,11 @@ struct ChatView: View {
         // Hide banner after adding message to avoid layout shift during scroll
         showGitBanner = false
 
-        // Send to Claude (use stored session ID for resume)
-        let sessionToResume = wsManager.sessionId ?? selectedSession?.id
+        // Send to Claude (use effectiveSessionToResume which filters out ephemeral sessions)
         wsManager.sendMessage(
             cleanupPrompt,
             projectPath: project.path,
-            resumeSessionId: sessionToResume,
+            resumeSessionId: effectiveSessionToResume,
             permissionMode: effectivePermissionMode,
             model: effectiveModelId
         )
@@ -1815,12 +1919,11 @@ struct ChatView: View {
         // Hide banner after adding message to avoid layout shift during scroll
         showGitBanner = false
 
-        // Send to Claude (use stored session ID for resume)
-        let sessionToResume = wsManager.sessionId ?? selectedSession?.id
+        // Send to Claude (use effectiveSessionToResume which filters out ephemeral sessions)
         wsManager.sendMessage(
             commitPrompt,
             projectPath: project.path,
-            resumeSessionId: sessionToResume,
+            resumeSessionId: effectiveSessionToResume,
             permissionMode: effectivePermissionMode,
             model: effectiveModelId
         )
@@ -1845,12 +1948,11 @@ struct ChatView: View {
         // Hide banner after adding message to avoid layout shift during scroll
         showGitBanner = false
 
-        // Send to Claude (use stored session ID for resume)
-        let sessionToResume = wsManager.sessionId ?? selectedSession?.id
+        // Send to Claude (use effectiveSessionToResume which filters out ephemeral sessions)
         wsManager.sendMessage(
             pushPrompt,
             projectPath: project.path,
-            resumeSessionId: sessionToResume,
+            resumeSessionId: effectiveSessionToResume,
             permissionMode: effectivePermissionMode,
             model: effectiveModelId
         )
@@ -1882,420 +1984,19 @@ struct ChatView: View {
         return model.modelId
     }
 
-    /// Whether to skip permissions for this project (considers per-project override)
-    private var effectiveSkipPermissions: Bool {
-        projectSettingsStore.effectiveSkipPermissions(
+    /// The effective permission mode value for this project (considers per-project override)
+    /// Returns the resolved PermissionMode enum value for UI display
+    private var effectivePermissionModeValue: PermissionMode {
+        projectSettingsStore.effectivePermissionMode(
             for: project.path,
-            globalSetting: settings.skipPermissions
+            globalMode: settings.globalPermissionMode
         )
     }
 
     /// The effective permission mode to send to server for this project
-    private var effectivePermissionMode: String? {
-        effectiveSkipPermissions ? "bypassPermissions" : settings.claudeMode.serverValue
-    }
-}
-
-// MARK: - Custom Model Picker Sheet
-
-struct CustomModelPickerSheet: View {
-    @Binding var customModelId: String
-    let onConfirm: (String) -> Void
-    let onCancel: () -> Void
-    @Environment(\.colorScheme) var colorScheme
-
-    var body: some View {
-        NavigationView {
-            VStack(spacing: 20) {
-                Text("Enter a custom model ID")
-                    .font(CLITheme.monoFont)
-                    .foregroundColor(CLITheme.primaryText(for: colorScheme))
-
-                TextField("e.g., claude-opus-4-5-20251101", text: $customModelId)
-                    .font(CLITheme.monoFont)
-                    .textFieldStyle(.roundedBorder)
-                    .autocapitalization(.none)
-                    .disableAutocorrection(true)
-
-                Text("Examples:\n• claude-opus-4-5-20251101\n• claude-sonnet-4-5-20250929\n• claude-sonnet-4-5-20250929[1m]")
-                    .font(CLITheme.monoSmall)
-                    .foregroundColor(CLITheme.secondaryText(for: colorScheme))
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                Spacer()
-            }
-            .padding()
-            .background(CLITheme.background(for: colorScheme))
-            .navigationTitle("Custom Model")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { onCancel() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Switch") { onConfirm(customModelId) }
-                        .disabled(customModelId.isEmpty)
-                }
-            }
-        }
-    }
-}
-
-// MARK: - Git Sync Banner (Compact, Dark Mode Optimized)
-
-struct GitSyncBanner: View {
-    let status: GitStatus
-    let isAutoPulling: Bool
-    let isRefreshing: Bool
-    let onDismiss: () -> Void
-    let onRefresh: () -> Void
-    let onPull: (() -> Void)?
-    let onCommit: (() -> Void)?
-    let onAskClaude: (() -> Void)?
-    @Environment(\.colorScheme) var colorScheme
-
-    var body: some View {
-        HStack(spacing: 8) {
-            // Status icon (compact)
-            if isAutoPulling || isRefreshing {
-                ProgressView()
-                    .scaleEffect(0.6)
-                    .frame(width: 14, height: 14)
-            } else {
-                Image(systemName: status.icon)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundColor(iconColor)
-            }
-
-            // Status text (single line, compact)
-            Text(isRefreshing ? "Checking..." : statusTitle)
-                .font(.system(size: 12, weight: .medium, design: .monospaced))
-                .foregroundColor(CLITheme.primaryText(for: colorScheme))
-                .lineLimit(1)
-
-            Spacer()
-
-            // Action buttons (compact pills)
-            if !isAutoPulling && !isRefreshing {
-                HStack(spacing: 6) {
-                    // Pull button (for behind status)
-                    if let onPull = onPull {
-                        compactButton(
-                            title: "Pull",
-                            icon: "arrow.down",
-                            color: CLITheme.cyan(for: colorScheme),
-                            action: onPull
-                        )
-                    }
-
-                    // Commit/Push button
-                    if let onCommit = onCommit {
-                        compactButton(
-                            title: commitButtonLabel,
-                            icon: commitButtonIcon,
-                            color: commitButtonColor,
-                            action: onCommit
-                        )
-                    }
-
-                    // Ask Claude button
-                    if let onAskClaude = onAskClaude {
-                        compactButton(
-                            title: "Ask",
-                            icon: "bubble.left",
-                            color: CLITheme.purple(for: colorScheme),
-                            action: onAskClaude
-                        )
-                    }
-
-                    // Refresh button (icon only)
-                    Button(action: onRefresh) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundColor(CLITheme.mutedText(for: colorScheme))
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            // Dismiss button (compact)
-            Button(action: onDismiss) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
-                    .frame(width: 16, height: 16)
-                    .background(
-                        Circle()
-                            .fill(CLITheme.mutedText(for: colorScheme).opacity(0.15))
-                    )
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(bannerBackground)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(status.accessibilityLabel)
-    }
-
-    // MARK: - Compact Button Helper
-
-    @ViewBuilder
-    private func compactButton(
-        title: String,
-        icon: String,
-        color: Color,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 3) {
-                Image(systemName: icon)
-                    .font(.system(size: 9, weight: .bold))
-                Text(title)
-                    .font(.system(size: 10, weight: .bold))
-            }
-            // Dark mode: white text on colored background for high contrast
-            // Light mode: colored text on light colored background
-            .foregroundColor(colorScheme == .dark ? .white : color)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(
-                Capsule()
-                    .fill(color.opacity(colorScheme == .dark ? 0.7 : 0.15))
-            )
-            .overlay(
-                Capsule()
-                    .strokeBorder(color.opacity(colorScheme == .dark ? 0.9 : 0.3), lineWidth: 0.5)
-            )
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - Computed Properties
-
-    private var iconColor: Color {
-        switch status.colorName {
-        case "green": return CLITheme.green(for: colorScheme)
-        case "orange": return CLITheme.yellow(for: colorScheme)
-        case "blue": return CLITheme.blue(for: colorScheme)
-        case "cyan": return CLITheme.cyan(for: colorScheme)
-        case "red": return CLITheme.red(for: colorScheme)
-        default: return CLITheme.mutedText(for: colorScheme)
-        }
-    }
-
-    private var bannerBackground: Color {
-        let baseColor: Color = {
-            switch status {
-            case .dirty, .dirtyAndAhead, .diverged:
-                return CLITheme.yellow(for: colorScheme)
-            case .behind:
-                return CLITheme.cyan(for: colorScheme)
-            case .ahead:
-                return CLITheme.blue(for: colorScheme)
-            case .error:
-                return CLITheme.red(for: colorScheme)
-            default:
-                return CLITheme.mutedText(for: colorScheme)
-            }
-        }()
-        return baseColor.opacity(colorScheme == .dark ? 0.15 : 0.08)
-    }
-
-    private var statusTitle: String {
-        if isAutoPulling { return "Pulling..." }
-        switch status {
-        case .dirty: return "Uncommitted changes"
-        case .ahead(let count): return "\(count) unpushed"
-        case .behind(let count): return "\(count) behind"
-        case .dirtyAndAhead: return "Changes + unpushed"
-        case .diverged: return "Diverged"
-        case .error(let msg): return "Error: \(msg.prefix(20))"
-        default: return ""
-        }
-    }
-
-    private var commitButtonLabel: String {
-        switch status {
-        case .ahead: return "Push"
-        default: return "Commit"
-        }
-    }
-
-    private var commitButtonIcon: String {
-        switch status {
-        case .ahead: return "arrow.up"
-        default: return "checkmark"
-        }
-    }
-
-    private var commitButtonColor: Color {
-        switch status {
-        case .ahead: return CLITheme.blue(for: colorScheme)
-        default: return CLITheme.green(for: colorScheme)
-        }
-    }
-
-    private var commitButtonAccessibilityLabel: String {
-        switch status {
-        case .dirty, .dirtyAndAhead, .diverged:
-            return "Commit changes"
-        case .ahead:
-            return "Push commits"
-        default:
-            return "Commit changes"
-        }
-    }
-}
-
-// MARK: - Slash Command Help Sheet
-
-struct SlashCommandHelpSheet: View {
-    @Environment(\.dismiss) var dismiss
-    @Environment(\.colorScheme) var colorScheme
-
-    var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    // Keyboard Shortcuts section
-                    Text("Keyboard Shortcuts")
-                        .font(.headline)
-                        .foregroundColor(CLITheme.primaryText(for: colorScheme))
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        KeyboardShortcutRow(shortcut: "⌘ Return", description: "Send message")
-                        KeyboardShortcutRow(shortcut: "⌘ K", description: "Clear conversation")
-                        KeyboardShortcutRow(shortcut: "⌘ N", description: "New session")
-                        KeyboardShortcutRow(shortcut: "⌘ .", description: "Abort current request")
-                        KeyboardShortcutRow(shortcut: "⌘ /", description: "Show this help")
-                        KeyboardShortcutRow(shortcut: "⌘ R", description: "Resume session picker")
-                    }
-
-                    Divider()
-                        .padding(.vertical, 8)
-
-                    // Slash Commands section
-                    Text("Slash Commands")
-                        .font(.headline)
-                        .foregroundColor(CLITheme.primaryText(for: colorScheme))
-
-                    VStack(alignment: .leading, spacing: 12) {
-                        SlashCommandRow(command: "/clear", description: "Clear conversation and start fresh")
-                        SlashCommandRow(command: "/new", description: "Start a new session")
-                        SlashCommandRow(command: "/init", description: "Create/modify CLAUDE.md (via Claude)")
-                        SlashCommandRow(command: "/resume", description: "Resume a previous session")
-                        SlashCommandRow(command: "/compact", description: "Compact conversation to save context")
-                        SlashCommandRow(command: "/status", description: "Show connection and session info")
-                        SlashCommandRow(command: "/exit", description: "Close chat and return to projects")
-                        SlashCommandRow(command: "/help", description: "Show this help")
-                    }
-
-                    Divider()
-                        .padding(.vertical, 8)
-
-                    Text("Claude Commands")
-                        .font(.headline)
-                        .foregroundColor(CLITheme.primaryText(for: colorScheme))
-
-                    Text("Other slash commands (like /review, /commit) are passed directly to Claude for handling.")
-                        .font(.subheadline)
-                        .foregroundColor(CLITheme.secondaryText(for: colorScheme))
-                }
-                .padding()
-            }
-            .background(CLITheme.background(for: colorScheme))
-            .navigationTitle("Help")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                    .keyboardShortcut(.escape)
-                }
-            }
-        }
-    }
-}
-
-struct KeyboardShortcutRow: View {
-    let shortcut: String
-    let description: String
-    @Environment(\.colorScheme) var colorScheme
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Text(shortcut)
-                .font(.system(.body, design: .monospaced))
-                .foregroundColor(CLITheme.yellow(for: colorScheme))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(CLITheme.secondaryBackground(for: colorScheme))
-                .cornerRadius(6)
-
-            Text(description)
-                .font(.subheadline)
-                .foregroundColor(CLITheme.secondaryText(for: colorScheme))
-
-            Spacer()
-        }
-        .padding(.vertical, 2)
-    }
-}
-
-private struct SlashCommandRow: View {
-    let command: String
-    let description: String
-    @Environment(\.colorScheme) var colorScheme
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Text(command)
-                .font(.system(.body, design: .monospaced))
-                .foregroundColor(CLITheme.cyan(for: colorScheme))
-                .frame(width: 100, alignment: .leading)
-
-            Text(description)
-                .font(.subheadline)
-                .foregroundColor(CLITheme.secondaryText(for: colorScheme))
-
-            Spacer()
-        }
-        .padding(.vertical, 4)
-    }
-}
-
-// MARK: - Placeholder Extension
-
-extension View {
-    func placeholder<Content: View>(
-        when shouldShow: Bool,
-        alignment: Alignment = .leading,
-        @ViewBuilder placeholder: () -> Content
-    ) -> some View {
-        ZStack(alignment: alignment) {
-            placeholder().opacity(shouldShow ? 1 : 0)
-            self
-        }
-    }
-}
-
-// MARK: - Preference Keys
-
-/// Preference key for tracking content size
-struct ContentSizePreferenceKey: PreferenceKey {
-    static var defaultValue: CGSize = .zero
-    static func reduce(value: inout CGSize, nextValue: () -> CGSize) {
-        value = nextValue()
-    }
-}
-
-/// Preference key for tracking scroll offset within coordinate space
-struct ScrollOffsetPreferenceKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
+    /// Always returns a value (never nil) to ensure permissions are set correctly
+    private var effectivePermissionMode: String {
+        effectivePermissionModeValue.rawValue
     }
 }
 
@@ -2310,8 +2011,7 @@ struct ScrollOffsetPreferenceKey: PreferenceKey {
                 fullPath: "/test/project",
                 sessions: nil,
                 sessionMeta: nil
-            ),
-            apiClient: APIClient(settings: settings)
+            )
         )
     }
     .environmentObject(settings)
