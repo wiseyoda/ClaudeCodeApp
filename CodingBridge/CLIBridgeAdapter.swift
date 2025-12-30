@@ -89,9 +89,9 @@ class CLIBridgeAdapter: ObservableObject {
 
     // MARK: - Initialization
 
-    init(settings: AppSettings? = nil) {
+    init(settings: AppSettings? = nil, manager: CLIBridgeManager? = nil) {
         self.settings = settings ?? AppSettings()
-        self.manager = CLIBridgeManager()
+        self.manager = manager ?? CLIBridgeManager()
         setupCallbacks()
         setupStateObservation()
     }
@@ -284,7 +284,7 @@ class CLIBridgeAdapter: ObservableObject {
 
     /// Upload image to server via REST API
     private func uploadImage(_ data: Data, mimeType: String, agentId: String) async throws -> String {
-        let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
+        let apiClient = await MainActor.run { CLIBridgeAPIClient(serverURL: self.settings.serverURL) }
         let response = try await apiClient.uploadImage(agentId: agentId, imageData: data, mimeType: mimeType)
         return response.id
     }
@@ -420,6 +420,12 @@ class CLIBridgeAdapter: ObservableObject {
         sessionPermissionMode = nil
     }
 
+    /// Clear current streaming text (both adapter and manager state)
+    func clearCurrentText() {
+        currentText = ""
+        manager.clearCurrentText()
+    }
+
     // MARK: - Image Upload via REST API
 
     /// Upload an image via REST API for use in messages.
@@ -431,7 +437,7 @@ class CLIBridgeAdapter: ObservableObject {
         }
 
         let mimeType = ImageUtilities.detectMediaType(from: imageData)
-        let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
+        let apiClient = await MainActor.run { CLIBridgeAPIClient(serverURL: self.settings.serverURL) }
         let response = try await apiClient.uploadImage(agentId: agentId, imageData: imageData, mimeType: mimeType)
         return response.id
     }
@@ -903,4 +909,3 @@ class CLIBridgeAdapter: ObservableObject {
         }
     }
 }
-

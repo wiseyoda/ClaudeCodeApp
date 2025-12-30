@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.6.4] - 2025-12-30
+
+### Added
+
+- **Cache-First Startup Optimization**: Near-instant app startup on repeat launches
+  - Extended `ProjectCache` with session counts and recent sessions caching
+  - UI renders from cache in <1ms, background tasks refresh data without blocking
+  - Recent sessions now cached for instant "Recent Activity" display
+  - Session counts cached per-project for immediate display
+
+### Fixed
+
+- **Project Card Title Priority**: Custom names from `ProjectNamesStore` now take priority
+  - Previously showed cli-bridge title only, now checks local override first
+  - Matches behavior of `ProjectRow` in list view
+- **Context Menu Animation Jitter**: Fixed laggy/freezing long-press on project cards
+  - Replaced `scaleEffect` with `opacity` in `ProjectCardButtonStyle`
+  - Scale animation was conflicting with iOS contextMenu's native lift animation
+- **ProjectSettingsStore Backwards Compatibility**: Fixed crash on upgrade
+  - Added custom decoder for missing `enableSubrepoDiscovery` field
+  - Old cached settings now load correctly with default values
+
+### Changed
+
+- `CLISessionMetadata` changed from `Decodable` to `Codable` (enables caching)
+- Background refresh runs sub-repo discovery and session counts in parallel
+
+---
+
 ## [0.6.2] - 2025-12-30
 
 ### Added

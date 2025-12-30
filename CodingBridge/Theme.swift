@@ -426,13 +426,17 @@ struct ConnectionStatusIndicator: View {
     }
 
     private var dotColor: Color {
+        Self.dotColor(for: state, scheme: colorScheme)
+    }
+
+    static func dotColor(for state: ConnectionState, scheme: ColorScheme) -> Color {
         switch state {
         case .connected:
-            return CLITheme.green(for: colorScheme)
+            return CLITheme.green(for: scheme)
         case .connecting, .reconnecting:
-            return CLITheme.yellow(for: colorScheme)
+            return CLITheme.yellow(for: scheme)
         case .disconnected:
-            return CLITheme.red(for: colorScheme)
+            return CLITheme.red(for: scheme)
         }
     }
 }

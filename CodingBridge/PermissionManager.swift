@@ -21,7 +21,15 @@ class PermissionManager: ObservableObject {
     /// API client for server communication
     private var apiClient: CLIBridgeAPIClient?
 
-    private init() {}
+    private init(apiClient: CLIBridgeAPIClient? = nil) {
+        self.apiClient = apiClient
+    }
+
+#if DEBUG
+    static func makeForTesting(apiClient: CLIBridgeAPIClient? = nil) -> PermissionManager {
+        PermissionManager(apiClient: apiClient)
+    }
+#endif
 
     // MARK: - Configuration
 

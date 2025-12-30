@@ -375,3 +375,32 @@ extension LiveActivityManager {
         }
     }
 }
+
+#if DEBUG
+extension LiveActivityManager {
+    static func makeForTesting() -> LiveActivityManager {
+        LiveActivityManager()
+    }
+
+    func setSupportForTesting(isSupported: Bool, isEnabled: Bool) {
+        self.isSupported = isSupported
+        self.isEnabled = isEnabled
+    }
+
+    func setElapsedSecondsForTesting(_ seconds: Int) {
+        elapsedSeconds = seconds
+    }
+
+    func setCurrentSessionIdForTesting(_ sessionId: String?) {
+        currentSessionId = sessionId
+    }
+
+    func resetForTesting() {
+        currentActivity = nil
+        currentSessionId = nil
+        elapsedSeconds = 0
+        elapsedTimer?.invalidate()
+        elapsedTimer = nil
+    }
+}
+#endif

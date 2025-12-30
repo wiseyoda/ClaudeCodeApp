@@ -479,10 +479,11 @@ final class ModelsTests: XCTestCase {
             ]
         ]
 
-        let data = AskUserQuestionData.from(input)
+        let data = AskUserQuestionData.from(input, requestId: "test-req-1")
 
         XCTAssertNotNil(data)
         XCTAssertEqual(data?.questions.count, 1)
+        XCTAssertEqual(data?.requestId, "test-req-1")
     }
 
     func testAskUserQuestionDataFromInputEmpty() {
@@ -490,7 +491,7 @@ final class ModelsTests: XCTestCase {
             "questions": []
         ]
 
-        let data = AskUserQuestionData.from(input)
+        let data = AskUserQuestionData.from(input, requestId: "test-req-2")
 
         // Empty questions array should return nil
         XCTAssertNil(data)
@@ -501,7 +502,7 @@ final class ModelsTests: XCTestCase {
             "other": "data"
         ]
 
-        let data = AskUserQuestionData.from(input)
+        let data = AskUserQuestionData.from(input, requestId: "test-req-3")
 
         XCTAssertNil(data)
     }
@@ -518,7 +519,7 @@ final class ModelsTests: XCTestCase {
         )
         question.selectedOptions = ["SwiftUI"]
 
-        let data = AskUserQuestionData(questions: [question])
+        let data = AskUserQuestionData(requestId: "test-request-1", questions: [question])
         let formatted = data.formatAnswers()
 
         XCTAssertTrue(formatted.contains("**Framework**"))
@@ -534,7 +535,7 @@ final class ModelsTests: XCTestCase {
         )
         question.customAnswer = "Custom response here"
 
-        let data = AskUserQuestionData(questions: [question])
+        let data = AskUserQuestionData(requestId: "test-request-2", questions: [question])
         let formatted = data.formatAnswers()
 
         XCTAssertTrue(formatted.contains("Custom response here"))
@@ -553,7 +554,7 @@ final class ModelsTests: XCTestCase {
         )
         question.selectedOptions = ["Dark Mode", "Sync"]
 
-        let data = AskUserQuestionData(questions: [question])
+        let data = AskUserQuestionData(requestId: "test-request-3", questions: [question])
         let formatted = data.formatAnswers()
 
         XCTAssertTrue(formatted.contains("Dark Mode"))

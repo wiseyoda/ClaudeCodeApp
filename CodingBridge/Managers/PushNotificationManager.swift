@@ -301,3 +301,23 @@ extension Notification.Name {
     static let pushQuestion = Notification.Name("pushQuestion")
     static let pushSessionWarning = Notification.Name("pushSessionWarning")
 }
+
+#if DEBUG
+extension PushNotificationManager {
+    static func makeForTesting() -> PushNotificationManager {
+        PushNotificationManager()
+    }
+
+    func resetForTesting() {
+        fcmToken = nil
+        isRegistered = false
+        registrationError = nil
+        isEnabled = false
+        authorizationStatus = .notDetermined
+        apiClient = nil
+        pendingTokenRegistration = nil
+        isFirebaseConfigured = false
+        KeychainHelper.shared.deleteFCMToken()
+    }
+}
+#endif

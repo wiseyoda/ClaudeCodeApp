@@ -268,3 +268,37 @@ final class HealthMonitorService: ObservableObject {
         return Self.relativeFormatter.localizedString(for: lastCheck, relativeTo: Date())
     }
 }
+
+#if DEBUG
+extension HealthMonitorService {
+    func resetForTesting() {
+        stopPolling()
+        serverStatus = .disconnected
+        lastCheck = nil
+        serverVersion = ""
+        uptime = 0
+        activeAgents = 0
+        latency = 0
+        lastError = nil
+        serverURL = ""
+        currentBackoffInterval = 5
+        consecutiveFailures = 0
+    }
+
+    var currentBackoffIntervalForTesting: TimeInterval {
+        currentBackoffInterval
+    }
+
+    var consecutiveFailuresForTesting: Int {
+        consecutiveFailures
+    }
+
+    var isPollingForTesting: Bool {
+        isPolling
+    }
+
+    var hasPollTimerForTesting: Bool {
+        pollTimer != nil
+    }
+}
+#endif

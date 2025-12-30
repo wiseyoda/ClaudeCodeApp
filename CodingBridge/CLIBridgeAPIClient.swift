@@ -38,11 +38,22 @@ class CLIBridgeAPIClient: ObservableObject {
     // MARK: - Sessions
 
     /// Fetch sessions for a project
+    /// - Parameters:
+    ///   - projectPath: Project directory path
+    ///   - limit: Maximum sessions to return (default 100)
+    ///   - cursor: Pagination cursor/offset
+    ///   - source: Filter by session source (user/agent/helper)
+    ///   - includeArchived: Include archived sessions in results (default false)
+    ///   - archivedOnly: Only return archived sessions (default false)
+    ///   - parentSessionId: Filter by parent session for lineage queries
     func fetchSessions(
         projectPath: String,
         limit: Int = 100,
         cursor: String? = nil,
-        source: CLISessionMetadata.SessionSource? = nil
+        source: CLISessionMetadata.SessionSource? = nil,
+        includeArchived: Bool = false,
+        archivedOnly: Bool = false,
+        parentSessionId: String? = nil
     ) async throws -> CLISessionsResponse {
         let encodedPath = encodeProjectPath(projectPath)
         var queryItems: [URLQueryItem] = [
@@ -54,6 +65,15 @@ class CLIBridgeAPIClient: ObservableObject {
         }
         if let source = source {
             queryItems.append(URLQueryItem(name: "source", value: source.rawValue))
+        }
+        if includeArchived {
+            queryItems.append(URLQueryItem(name: "includeArchived", value: "true"))
+        }
+        if archivedOnly {
+            queryItems.append(URLQueryItem(name: "archivedOnly", value: "true"))
+        }
+        if let parentSessionId = parentSessionId {
+            queryItems.append(URLQueryItem(name: "parentSessionId", value: parentSessionId))
         }
 
         return try await get("/projects/\(encodedPath)/sessions", queryItems: queryItems)
@@ -97,12 +117,218 @@ class CLIBridgeAPIClient: ObservableObject {
         return response.sessions
     }
 
-    /// Fetch session messages (history)
-    /// Note: This endpoint doesn't exist in cli-bridge. Use exportSession() instead.
-    func fetchSessionMessages(projectPath: String, sessionId: String) async throws -> [CLISessionMessage] {
-        // The /messages endpoint doesn't exist in cli-bridge
-        // Callers should use exportSession(format: .json) and parse the content
-        throw CLIBridgeAPIError.endpointNotAvailable("Session messages endpoint not available - use exportSession() instead")
+    // MARK: - Session Count
+
+    /// Get session count with breakdown by source
+    /// - Parameters:
+    ///   - projectPath: Project directory path
+    ///   - source: Optional source filter (returns single count if specified)
+    func getSessionCount(
+        projectPath: String,
+        source: CLISessionMetadata.SessionSource? = nil
+    ) async throws -> CLISessionCountResponse {
+        let encodedPath = encodeProjectPath(projectPath)
+        var queryItems: [URLQueryItem] = []
+
+        if let source = source {
+            queryItems.append(URLQueryItem(name: "source", value: source.rawValue))
+        }
+
+        return try await get(
+            "/projects/\(encodedPath)/sessions/count",
+            queryItems: queryItems.isEmpty ? nil : queryItems
+        )
+    }
+
+    // MARK: - Session Search
+
+    /// Search sessions by keyword
+    /// - Parameters:
+    ///   - projectPath: Project directory path
+    ///   - query: Search query string
+    ///   - limit: Maximum results to return (default 20)
+    ///   - offset: Pagination offset (default 0)
+    func searchSessions(
+        projectPath: String,
+        query: String,
+        limit: Int = 20,
+        offset: Int = 0
+    ) async throws -> CLISessionSearchResponse {
+        let encodedPath = encodeProjectPath(projectPath)
+        var queryItems: [URLQueryItem] = [
+            URLQueryItem(name: "q", value: query)
+        ]
+
+        if limit != 20 {
+            queryItems.append(URLQueryItem(name: "limit", value: String(limit)))
+        }
+        if offset > 0 {
+            queryItems.append(URLQueryItem(name: "offset", value: String(offset)))
+        }
+
+        return try await get("/projects/\(encodedPath)/sessions/search", queryItems: queryItems)
+    }
+
+    // MARK: - Session Archive
+
+    /// Archive a session (soft delete)
+    /// - Parameters:
+    ///   - projectPath: Project directory path
+    ///   - sessionId: Session ID to archive
+    /// - Returns: Updated session metadata with archivedAt timestamp
+    func archiveSession(projectPath: String, sessionId: String) async throws -> CLISessionMetadata {
+        let encodedPath = encodeProjectPath(projectPath)
+        return try await post("/projects/\(encodedPath)/sessions/\(sessionId)/archive")
+    }
+
+    /// Unarchive a session (restore from archive)
+    /// - Parameters:
+    ///   - projectPath: Project directory path
+    ///   - sessionId: Session ID to unarchive
+    /// - Returns: Updated session metadata with archivedAt cleared
+    func unarchiveSession(projectPath: String, sessionId: String) async throws -> CLISessionMetadata {
+        let encodedPath = encodeProjectPath(projectPath)
+        return try await post("/projects/\(encodedPath)/sessions/\(sessionId)/unarchive")
+    }
+
+    // MARK: - Session Children (Lineage)
+
+    /// Get child sessions (sessions spawned by Task tool from this session)
+    /// - Parameters:
+    ///   - projectPath: Project directory path
+    ///   - sessionId: Parent session ID
+    ///   - limit: Maximum sessions to return (default 50)
+    ///   - offset: Pagination offset (default 0)
+    func getSessionChildren(
+        projectPath: String,
+        sessionId: String,
+        limit: Int = 50,
+        offset: Int = 0
+    ) async throws -> CLISessionsResponse {
+        let encodedPath = encodeProjectPath(projectPath)
+        var queryItems: [URLQueryItem] = []
+
+        if limit != 50 {
+            queryItems.append(URLQueryItem(name: "limit", value: String(limit)))
+        }
+        if offset > 0 {
+            queryItems.append(URLQueryItem(name: "offset", value: String(offset)))
+        }
+
+        return try await get(
+            "/projects/\(encodedPath)/sessions/\(sessionId)/children",
+            queryItems: queryItems.isEmpty ? nil : queryItems
+        )
+    }
+
+    // MARK: - Bulk Operations
+
+    /// Execute bulk operation on multiple sessions
+    /// - Parameters:
+    ///   - projectPath: Project directory path
+    ///   - sessionIds: Session IDs to operate on (max 100)
+    ///   - action: Operation: "archive", "unarchive", "delete", "update"
+    ///   - customTitle: For update action, the new custom title
+    func bulkSessionOperation(
+        projectPath: String,
+        sessionIds: [String],
+        action: String,
+        customTitle: String? = nil
+    ) async throws -> CLIBulkOperationResponse {
+        let encodedPath = encodeProjectPath(projectPath)
+        let request = CLIBulkOperationRequest(
+            sessionIds: sessionIds,
+            action: action,
+            customTitle: customTitle
+        )
+        return try await postWithBody("/projects/\(encodedPath)/sessions/bulk", body: request)
+    }
+
+    /// Fetch session messages with pagination
+    /// GET /projects/:path/sessions/:id/messages
+    /// - Parameters:
+    ///   - projectPath: Project directory path
+    ///   - sessionId: Session ID
+    ///   - limit: Max messages to return (1-100, default 25)
+    ///   - offset: Skip N messages (for offset-based pagination)
+    ///   - before: Cursor for older messages (message ID)
+    ///   - after: Cursor for newer messages (message ID)
+    ///   - types: Filter by message types (e.g., "user,assistant")
+    ///   - order: Sort order ("asc" or "desc", default "desc")
+    ///   - includeRawContent: Include tool_use, tool_result, thinking blocks
+    func fetchMessages(
+        projectPath: String,
+        sessionId: String,
+        limit: Int? = nil,
+        offset: Int? = nil,
+        before: String? = nil,
+        after: String? = nil,
+        types: String? = nil,
+        order: String? = nil,
+        includeRawContent: Bool? = nil
+    ) async throws -> CLIPaginatedMessagesResponse {
+        let encodedPath = encodeProjectPath(projectPath)
+        let request = CLIPaginatedMessagesRequest(
+            limit: limit,
+            offset: offset,
+            before: before,
+            after: after,
+            types: types,
+            order: order,
+            includeRawContent: includeRawContent
+        )
+        let queryItems = request.queryItems
+        return try await get(
+            "/projects/\(encodedPath)/sessions/\(sessionId)/messages",
+            queryItems: queryItems.isEmpty ? nil : queryItems
+        )
+    }
+
+    /// Convenience: Fetch initial messages for mobile (last N messages, newest first)
+    func fetchInitialMessages(
+        projectPath: String,
+        sessionId: String,
+        limit: Int = 25
+    ) async throws -> CLIPaginatedMessagesResponse {
+        try await fetchMessages(
+            projectPath: projectPath,
+            sessionId: sessionId,
+            limit: limit,
+            order: "desc",
+            includeRawContent: true
+        )
+    }
+
+    /// Convenience: Load more (older) messages for "scroll up" pagination
+    func fetchOlderMessages(
+        projectPath: String,
+        sessionId: String,
+        before: String,
+        limit: Int = 25
+    ) async throws -> CLIPaginatedMessagesResponse {
+        try await fetchMessages(
+            projectPath: projectPath,
+            sessionId: sessionId,
+            limit: limit,
+            before: before,
+            order: "desc",
+            includeRawContent: true
+        )
+    }
+
+    /// Convenience: Sync newer messages (real-time updates)
+    func fetchNewerMessages(
+        projectPath: String,
+        sessionId: String,
+        after: String
+    ) async throws -> CLIPaginatedMessagesResponse {
+        try await fetchMessages(
+            projectPath: projectPath,
+            sessionId: sessionId,
+            after: after,
+            order: "asc",
+            includeRawContent: true
+        )
     }
 
     /// Export a session as Markdown or JSON
@@ -546,18 +772,20 @@ struct CLISessionsResponse: Decodable {
     let sessions: [CLISessionMetadata]
     let cursor: String?
     let hasMore: Bool
+    let total: Int?  // NEW: Total session count (cli-bridge now returns this)
 
     // Custom decoder to handle missing pagination fields
-    // cli-bridge may only send { sessions: [...] } without cursor/hasMore
+    // cli-bridge may only send { sessions: [...] } without cursor/hasMore/total
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         sessions = try container.decode([CLISessionMetadata].self, forKey: .sessions)
         cursor = try container.decodeIfPresent(String.self, forKey: .cursor)
         hasMore = try container.decodeIfPresent(Bool.self, forKey: .hasMore) ?? false
+        total = try container.decodeIfPresent(Int.self, forKey: .total)
     }
 
     private enum CodingKeys: String, CodingKey {
-        case sessions, cursor, hasMore
+        case sessions, cursor, hasMore, total
     }
 }
 

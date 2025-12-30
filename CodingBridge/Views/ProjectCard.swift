@@ -7,6 +7,7 @@ struct ProjectCard: View {
     let gitStatus: GitStatus
     let branchName: String?
     let onTap: () -> Void
+    var sessionCount: Int? = nil  // Override count (filtered from SessionStore)
     var onRename: (() -> Void)? = nil
     var onArchive: (() -> Void)? = nil
     var onDelete: (() -> Void)? = nil
@@ -18,12 +19,20 @@ struct ProjectCard: View {
     // Animation state for staggered entrance
     var animationDelay: Double = 0
 
+    /// Display name: custom name from ProjectNamesStore if set, otherwise cli-bridge title
+    private var displayName: String {
+        if let customName = ProjectNamesStore.shared.getName(for: project.path) {
+            return customName
+        }
+        return project.title
+    }
+
     var body: some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: 8) {
                 // Header: Name + Status Icon
                 HStack(alignment: .top, spacing: 6) {
-                    Text(project.title)
+                    Text(displayName)
                         .font(.system(.subheadline, design: .default, weight: .semibold))
                         .foregroundColor(CLITheme.primaryText(for: colorScheme))
                         .lineLimit(1)
@@ -148,7 +157,8 @@ struct ProjectCard: View {
 
     @ViewBuilder
     private var sessionCountView: some View {
-        let count = project.totalSessionCount
+        // Use filtered count if provided, otherwise fall back to project's raw count
+        let count = sessionCount ?? project.totalSessionCount
         let hasActiveSessions = count > 0
 
         Text("[\(count) session\(count == 1 ? "" : "s")]")
@@ -228,11 +238,11 @@ struct ProjectCard: View {
 // MARK: - Button Style
 
 /// Custom button style for project cards with press feedback
+/// Uses opacity instead of scale to avoid conflicts with contextMenu's lift animation
 struct ProjectCardButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-            .animation(.easeInOut(duration: 0.15), value: configuration.isPressed)
+            .opacity(configuration.isPressed ? 0.7 : 1.0)
     }
 }
 

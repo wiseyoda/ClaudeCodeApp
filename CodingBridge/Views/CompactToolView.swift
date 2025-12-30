@@ -532,7 +532,6 @@ struct DisplayItemView: View {
     let item: DisplayItem
     let projectPath: String?
     let projectTitle: String?
-    let onAnalyze: ((ChatMessage) -> Void)?
     var hideTodoInline: Bool = false
 
     var body: some View {
@@ -542,7 +541,6 @@ struct DisplayItemView: View {
                 message: message,
                 projectPath: projectPath,
                 projectTitle: projectTitle,
-                onAnalyze: onAnalyze,
                 hideTodoInline: hideTodoInline
             )
         case .exploredFiles(let group):

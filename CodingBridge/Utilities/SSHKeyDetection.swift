@@ -55,6 +55,7 @@ enum SSHKeyDetection {
             "\u{200D}", // ZERO WIDTH JOINER
             "\u{FEFF}", // BOM / ZERO WIDTH NO-BREAK SPACE
             "\u{2060}", // WORD JOINER
+            "\u{00AD}", // SOFT HYPHEN
             "\u{00A0}", // NON-BREAKING SPACE (replace with regular space)
         ]
         for char in invisibleChars {

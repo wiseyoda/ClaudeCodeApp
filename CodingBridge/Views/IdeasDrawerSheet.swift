@@ -4,16 +4,13 @@ import SwiftUI
 struct IdeasDrawerSheet: View {
     @Binding var isPresented: Bool
     @ObservedObject var ideasStore: IdeasStore
-    @ObservedObject var claudeHelper: ClaudeHelper
     let projectPath: String
-    let currentSessionId: String?
     let onSendIdea: (Idea) -> Void
 
     @State private var searchText = ""
     @State private var selectedTag: String?
     @State private var showNewIdeaEditor = false
     @State private var editingIdea: Idea?
-    @State private var enhancingIdeaId: UUID?
     @State private var newIdea = Idea(text: "")
     @State private var showArchived = false
 
@@ -119,15 +116,11 @@ struct IdeasDrawerSheet: View {
             ForEach(filteredIdeas) { idea in
                 IdeaRowView(
                     idea: idea,
-                    isEnhancing: enhancingIdeaId == idea.id,
                     onSend: {
                         sendIdea(idea)
                     },
                     onEdit: {
                         editingIdea = idea
-                    },
-                    onEnhance: {
-                        enhanceIdea(idea)
                     },
                     onArchiveToggle: {
                         toggleArchive(idea)
@@ -297,27 +290,6 @@ struct IdeasDrawerSheet: View {
         }
     }
 
-    private func enhanceIdea(_ idea: Idea) {
-        guard enhancingIdeaId == nil else { return }
-
-        enhancingIdeaId = idea.id
-
-        Task {
-            await claudeHelper.enhanceIdea(idea.text, projectPath: projectPath, sessionId: currentSessionId)
-
-            await MainActor.run {
-                if let enhanced = claudeHelper.enhancedIdea {
-                    ideasStore.updateWithEnhancement(
-                        ideaId: idea.id,
-                        expandedPrompt: enhanced.expandedPrompt,
-                        suggestedFollowups: enhanced.suggestedFollowups
-                    )
-                }
-                enhancingIdeaId = nil
-            }
-        }
-    }
-
     private func toggleArchive(_ idea: Idea) {
         withAnimation {
             if idea.isArchived {
@@ -339,7 +311,6 @@ struct IdeasDrawerSheet: View {
     struct PreviewWrapper: View {
         @State private var isPresented = true
         @StateObject private var ideasStore = IdeasStore(projectPath: "/preview/project")
-        @StateObject private var claudeHelper = ClaudeHelper(settings: AppSettings())
 
         var body: some View {
             Color.gray
@@ -347,15 +318,12 @@ struct IdeasDrawerSheet: View {
                     IdeasDrawerSheet(
                         isPresented: $isPresented,
                         ideasStore: ideasStore,
-                        claudeHelper: claudeHelper,
-                        projectPath: "/preview/project",
-                        currentSessionId: nil
+                        projectPath: "/preview/project"
                     ) { idea in
                         print("Send: \(idea.text)")
                     }
                 }
                 .onAppear {
-                    // Add sample ideas
                     ideasStore.add(Idea(
                         text: "Add dark mode support",
                         title: "Dark Mode",
@@ -381,7 +349,6 @@ struct IdeasDrawerSheet: View {
     struct PreviewWrapper: View {
         @State private var isPresented = true
         @StateObject private var ideasStore = IdeasStore(projectPath: "/empty/project")
-        @StateObject private var claudeHelper = ClaudeHelper(settings: AppSettings())
 
         var body: some View {
             Color.gray
@@ -389,9 +356,7 @@ struct IdeasDrawerSheet: View {
                     IdeasDrawerSheet(
                         isPresented: $isPresented,
                         ideasStore: ideasStore,
-                        claudeHelper: claudeHelper,
-                        projectPath: "/empty/project",
-                        currentSessionId: nil
+                        projectPath: "/empty/project"
                     ) { _ in }
                 }
         }

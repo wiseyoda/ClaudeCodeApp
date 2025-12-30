@@ -233,3 +233,32 @@ final class BackgroundManager: ObservableObject {
         UIApplication.shared.backgroundTimeRemaining
     }
 }
+
+#if DEBUG
+extension BackgroundManager {
+    func setProcessingStartTimeForTesting(_ date: Date?) {
+        processingStartTime = date
+    }
+
+    func setBackgroundTaskIdentifierForTesting(_ identifier: UIBackgroundTaskIdentifier) {
+        backgroundTask = identifier
+    }
+
+    var backgroundTaskIdentifierForTesting: UIBackgroundTaskIdentifier {
+        backgroundTask
+    }
+
+    func setBackgroundTaskActiveForTesting(_ isActive: Bool) {
+        isBackgroundTaskActive = isActive
+    }
+
+    func resetForTesting() {
+        backgroundTask = .invalid
+        processingStartTime = nil
+        isBackgroundTaskActive = false
+        isAppInBackground = false
+        currentTaskState = nil
+        clearProcessingState()
+    }
+}
+#endif

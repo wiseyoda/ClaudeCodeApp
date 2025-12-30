@@ -30,6 +30,20 @@ final class SessionStore: ObservableObject {
     /// Currently active session ID per project
     @Published private(set) var activeSessionIds: [String: String] = [:]
 
+    // MARK: - New Session Management State
+
+    /// Session count breakdown by source per project
+    @Published private(set) var countsByProject: [String: CLISessionCountResponse] = [:]
+
+    /// Search results per project
+    @Published private(set) var searchResults: [String: CLISessionSearchResponse] = [:]
+
+    /// Search loading state per project
+    @Published private(set) var isSearching: [String: Bool] = [:]
+
+    /// Toggle to show archived sessions
+    @Published var showArchivedSessions: Bool = false
+
     // MARK: - Dependencies
 
     private var repository: SessionRepository?
@@ -37,20 +51,29 @@ final class SessionStore: ObservableObject {
     private init() {}
 
     /// Configure the store with a repository (call during app setup)
+    /// Idempotent - subsequent calls are no-ops
     func configure(with repository: SessionRepository) {
+        guard self.repository == nil else { return }
         self.repository = repository
     }
 
     /// Convenience method to configure with AppSettings
     /// Creates CLIBridgeSessionRepository for the cli-bridge backend
+    /// Idempotent - subsequent calls are no-ops (check isConfigured first)
     func configure(with settings: AppSettings) {
+        guard !isConfigured else { return }
         let cliClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
         let repository = CLIBridgeSessionRepository(
             apiClient: cliClient,
             settings: settings
         )
         log.info("[SessionStore] Configured with CLIBridgeSessionRepository")
-        configure(with: repository)
+        self.repository = repository
+    }
+
+    /// Check if the store is already configured
+    var isConfigured: Bool {
+        repository != nil
     }
 
     // MARK: - Session Loading
@@ -477,5 +500,245 @@ extension SessionStore {
             }
         }
         return deleted
+    }
+
+    // MARK: - Session Count
+
+    /// Load session counts from the API
+    /// This provides accurate counts broken down by source
+    func loadSessionCounts(for projectPath: String) async {
+        guard let repository = repository else {
+            log.error("[SessionStore] Repository not configured")
+            return
+        }
+
+        let projectName = encodeProjectPath(projectPath)
+
+        do {
+            let counts = try await repository.getSessionCount(projectName: projectName, source: nil)
+            countsByProject[projectPath] = counts
+            log.debug("[SessionStore] Loaded counts for \(projectPath): total=\(counts.total), user=\(counts.user ?? 0), agent=\(counts.agent ?? 0)")
+        } catch {
+            log.error("[SessionStore] Failed to load session counts: \(error)")
+        }
+    }
+
+    /// Check if counts have been loaded from the count API
+    func hasCountsLoaded(for projectPath: String) -> Bool {
+        countsByProject[projectPath] != nil
+    }
+
+    /// Get user session count for a project (excludes agent/helper)
+    func userSessionCount(for projectPath: String) -> Int {
+        countsByProject[projectPath]?.user ?? 0
+    }
+
+    /// Get total session count from count endpoint
+    func totalSessionCount(for projectPath: String) -> Int {
+        countsByProject[projectPath]?.total ?? sessionCount(for: projectPath)
+    }
+
+    // MARK: - Session Search
+
+    /// Search sessions for a project
+    /// - Parameters:
+    ///   - projectPath: Project path
+    ///   - query: Search query string
+    func searchSessions(for projectPath: String, query: String) async {
+        guard let repository = repository else {
+            log.error("[SessionStore] Repository not configured")
+            return
+        }
+
+        guard !query.trimmingCharacters(in: .whitespaces).isEmpty else {
+            searchResults[projectPath] = nil
+            return
+        }
+
+        let projectName = encodeProjectPath(projectPath)
+        isSearching[projectPath] = true
+
+        do {
+            let results = try await repository.searchSessions(
+                projectName: projectName,
+                query: query,
+                limit: 20,
+                offset: 0
+            )
+            searchResults[projectPath] = results
+            log.debug("[SessionStore] Search '\(query)' found \(results.total) results")
+        } catch {
+            log.error("[SessionStore] Search failed: \(error)")
+            searchResults[projectPath] = nil
+        }
+
+        isSearching[projectPath] = false
+    }
+
+    /// Clear search results for a project
+    func clearSearch(for projectPath: String) {
+        searchResults[projectPath] = nil
+    }
+
+    /// Check if currently searching for a project
+    func isSearchingSessions(for projectPath: String) -> Bool {
+        isSearching[projectPath] ?? false
+    }
+
+    // MARK: - Session Archive
+
+    /// Archive a session (soft delete)
+    /// - Parameters:
+    ///   - session: Session to archive
+    ///   - projectPath: Project path
+    /// - Returns: True if successful
+    @discardableResult
+    func archiveSession(_ session: ProjectSession, for projectPath: String) async -> Bool {
+        guard let repository = repository else {
+            log.error("[SessionStore] Repository not configured")
+            return false
+        }
+
+        let projectName = encodeProjectPath(projectPath)
+
+        // Optimistic update - remove from list immediately
+        var backup: [ProjectSession]?
+        if var sessions = sessionsByProject[projectPath] {
+            backup = sessions
+            sessions.removeAll { $0.id == session.id }
+            sessionsByProject[projectPath] = sessions
+        }
+
+        do {
+            _ = try await repository.archiveSession(projectName: projectName, sessionId: session.id)
+            log.info("[SessionStore] Archived session \(session.id)")
+
+            // Reload counts
+            await loadSessionCounts(for: projectPath)
+            return true
+        } catch {
+            log.error("[SessionStore] Failed to archive session: \(error)")
+            // Rollback on failure
+            if let backup = backup {
+                sessionsByProject[projectPath] = backup
+            }
+            return false
+        }
+    }
+
+    /// Unarchive a session (restore from archive)
+    /// - Parameters:
+    ///   - session: Session to unarchive
+    ///   - projectPath: Project path
+    /// - Returns: True if successful
+    @discardableResult
+    func unarchiveSession(_ session: ProjectSession, for projectPath: String) async -> Bool {
+        guard let repository = repository else {
+            log.error("[SessionStore] Repository not configured")
+            return false
+        }
+
+        let projectName = encodeProjectPath(projectPath)
+
+        do {
+            let metadata = try await repository.unarchiveSession(projectName: projectName, sessionId: session.id)
+            log.info("[SessionStore] Unarchived session \(session.id)")
+
+            // Add back to list using the returned metadata
+            addSession(metadata.toProjectSession(), for: projectPath)
+
+            // Reload counts
+            await loadSessionCounts(for: projectPath)
+            return true
+        } catch {
+            log.error("[SessionStore] Failed to unarchive session: \(error)")
+            return false
+        }
+    }
+
+    // MARK: - Bulk Operations
+
+    /// Bulk archive sessions
+    /// - Parameters:
+    ///   - sessionIds: Session IDs to archive
+    ///   - projectPath: Project path
+    /// - Returns: Tuple of (successful count, failed count)
+    func bulkArchive(sessionIds: [String], for projectPath: String) async -> (success: Int, failed: Int) {
+        guard let repository = repository else {
+            log.error("[SessionStore] Repository not configured")
+            return (0, sessionIds.count)
+        }
+
+        let projectName = encodeProjectPath(projectPath)
+
+        do {
+            let result = try await repository.bulkOperation(
+                projectName: projectName,
+                sessionIds: sessionIds,
+                action: "archive",
+                customTitle: nil
+            )
+
+            // Update local state - remove archived sessions
+            if var sessions = sessionsByProject[projectPath] {
+                sessions.removeAll { result.success.contains($0.id) }
+                sessionsByProject[projectPath] = sessions
+            }
+
+            log.info("[SessionStore] Bulk archived \(result.successCount) sessions, \(result.failedCount) failed")
+
+            // Reload counts
+            await loadSessionCounts(for: projectPath)
+
+            return (result.successCount, result.failedCount)
+        } catch {
+            log.error("[SessionStore] Bulk archive failed: \(error)")
+            return (0, sessionIds.count)
+        }
+    }
+
+    /// Bulk delete sessions (permanent)
+    /// - Parameters:
+    ///   - sessionIds: Session IDs to delete
+    ///   - projectPath: Project path
+    /// - Returns: Tuple of (successful count, failed count)
+    func bulkDelete(sessionIds: [String], for projectPath: String) async -> (success: Int, failed: Int) {
+        guard let repository = repository else {
+            log.error("[SessionStore] Repository not configured")
+            return (0, sessionIds.count)
+        }
+
+        let projectName = encodeProjectPath(projectPath)
+
+        do {
+            let result = try await repository.bulkOperation(
+                projectName: projectName,
+                sessionIds: sessionIds,
+                action: "delete",
+                customTitle: nil
+            )
+
+            // Update local state - remove deleted sessions
+            if var sessions = sessionsByProject[projectPath] {
+                sessions.removeAll { result.success.contains($0.id) }
+                sessionsByProject[projectPath] = sessions
+            }
+
+            // Clear active session if it was deleted
+            if let activeId = activeSessionIds[projectPath], result.success.contains(activeId) {
+                activeSessionIds[projectPath] = nil
+                MessageStore.clearSessionId(for: projectPath)
+            }
+
+            log.info("[SessionStore] Bulk deleted \(result.successCount) sessions, \(result.failedCount) failed")
+
+            // Reload counts
+            await loadSessionCounts(for: projectPath)
+
+            return (result.successCount, result.failedCount)
+        } catch {
+            log.error("[SessionStore] Bulk delete failed: \(error)")
+            return (0, sessionIds.count)
+        }
     }
 }

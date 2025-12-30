@@ -6,7 +6,6 @@ struct CLIMessageView: View {
     let message: ChatMessage
     let projectPath: String?
     let projectTitle: String?
-    let onAnalyze: ((ChatMessage) -> Void)?  // Callback for analyze action
     let hideTodoInline: Bool  // Hide inline todo when drawer is showing
     @State private var isExpanded: Bool
     @State private var showCopied = false
@@ -39,11 +38,10 @@ struct CLIMessageView: View {
     /// Threshold for switching from relative to static time (1 hour)
     private static let relativeTimeThreshold: TimeInterval = 3600
 
-    init(message: ChatMessage, projectPath: String? = nil, projectTitle: String? = nil, onAnalyze: ((ChatMessage) -> Void)? = nil, hideTodoInline: Bool = false) {
+    init(message: ChatMessage, projectPath: String? = nil, projectTitle: String? = nil, hideTodoInline: Bool = false) {
         self.message = message
         self.projectPath = projectPath
         self.projectTitle = projectTitle
-        self.onAnalyze = onAnalyze
         self.hideTodoInline = hideTodoInline
 
         // Pre-compute expensive values once during init
@@ -56,12 +54,15 @@ struct CLIMessageView: View {
             : nil
 
         // Cache timestamp string - use static format for old messages, relative for recent
+        // NOTE: Cached timestamps won't update dynamically (e.g., "2m ago" won't become "3m ago").
+        // This is an intentional trade-off for performance - eliminates formatter allocation during scrolling.
+        // Timestamps become accurate again when the view is recreated (e.g., navigation, search filter change).
         let age = Date().timeIntervalSince(message.timestamp)
         if age > Self.relativeTimeThreshold {
             // Old message: use static format (doesn't need updating)
             self.cachedTimestamp = Self.staticFormatter.string(from: message.timestamp)
         } else {
-            // Recent message: use relative format
+            // Recent message: use relative format (won't update, but acceptable UX trade-off)
             self.cachedTimestamp = Self.relativeFormatter.localizedString(for: message.timestamp, relativeTo: Date())
         }
 
@@ -808,31 +809,16 @@ struct CLIMessageView: View {
             projectPath: projectPath ?? "",
             onCopy: {
                 UIPasteboard.general.string = message.content
-            },
-            onAnalyze: {
-                onAnalyze?(message)
             }
         )
         .padding(.leading, 16)
         .transition(AnyTransition.opacity.combined(with: .move(edge: .top)))
     }
 
-    /// Error action bar with analyze button for error diagnosis
+    /// Error action bar with copy button
     private var errorActionBarView: some View {
         HStack(spacing: 12) {
             Spacer()
-
-            // Analyze button - sends error to AI for diagnosis
-            Button {
-                onAnalyze?(message)
-            } label: {
-                Label("Analyze Error", systemImage: "stethoscope")
-                    .font(.caption)
-                    .foregroundColor(CLITheme.red(for: colorScheme))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Analyze error")
-            .accessibilityHint("Ask AI to diagnose this error")
 
             // Copy button
             Button {

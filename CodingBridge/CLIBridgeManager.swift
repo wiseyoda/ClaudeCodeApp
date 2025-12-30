@@ -2,6 +2,25 @@ import Foundation
 import Network
 import UIKit
 
+protocol WebSocketTasking: AnyObject {
+    func resume()
+    func cancel(with closeCode: URLSessionWebSocketTask.CloseCode, reason: Data?)
+    func send(_ message: URLSessionWebSocketTask.Message) async throws
+    func receive() async throws -> URLSessionWebSocketTask.Message
+}
+
+protocol WebSocketSessioning {
+    func makeWebSocketTask(with url: URL) -> WebSocketTasking
+}
+
+extension URLSessionWebSocketTask: WebSocketTasking {}
+
+extension URLSession: WebSocketSessioning {
+    func makeWebSocketTask(with url: URL) -> WebSocketTasking {
+        webSocketTask(with: url)
+    }
+}
+
 // MARK: - CLI Bridge WebSocket Manager
 // Manages WebSocket connection to cli-bridge server with robust lifecycle handling
 // See: requirements/projects/cli-bridge-migration/PROTOCOL-MAPPING.md
@@ -125,8 +144,9 @@ class CLIBridgeManager: ObservableObject {
 
     // MARK: - Private State
 
-    private var webSocket: URLSessionWebSocketTask?
+    private var webSocket: WebSocketTasking?
     private var serverURL: String
+    private let webSocketSession: WebSocketSessioning
     private var reconnectAttempt = 0
     private var reconnectTask: Task<Void, Never>?
     private let maxReconnectAttempts = 5
@@ -181,8 +201,9 @@ class CLIBridgeManager: ObservableObject {
 
     // MARK: - Initialization
 
-    init(serverURL: String = "") {
+    init(serverURL: String = "", webSocketSession: WebSocketSessioning = URLSession(configuration: .default)) {
         self.serverURL = serverURL
+        self.webSocketSession = webSocketSession
         setupLifecycleObservers()
         setupNetworkMonitoring()
     }
@@ -390,8 +411,7 @@ class CLIBridgeManager: ObservableObject {
         }
 
         // Create WebSocket connection
-        let session = URLSession(configuration: .default)
-        webSocket = session.webSocketTask(with: wsURL)
+        webSocket = webSocketSession.makeWebSocketTask(with: wsURL)
         webSocket?.resume()
 
         // Start receive loop
@@ -433,8 +453,7 @@ class CLIBridgeManager: ObservableObject {
             return
         }
 
-        let session = URLSession(configuration: .default)
-        webSocket = session.webSocketTask(with: wsURL)
+        webSocket = webSocketSession.makeWebSocketTask(with: wsURL)
         webSocket?.resume()
 
         let currentConnectionId = UUID()
@@ -530,6 +549,9 @@ class CLIBridgeManager: ObservableObject {
     func sendInput(_ text: String, images: [CLIImageAttachment]? = nil, thinkingMode: String? = nil) async throws {
         let payload = CLIInputPayload(text: text, images: images, thinkingMode: thinkingMode)
         try await send(.input(payload))
+        if agentState == .idle {
+            agentState = .thinking
+        }
     }
 
     /// Interrupt the current operation (pause without ending)
@@ -653,8 +675,12 @@ class CLIBridgeManager: ObservableObject {
                     // Check if this is our current connection
                     guard self.connectionId == connectionId else { break }
 
-                    log.error("WebSocket receive error: \(error)")
-                    await self.handleDisconnect(error: error)
+                    // Only log errors for unexpected disconnects
+                    // Manual disconnects will naturally throw "Socket is not connected"
+                    if !self.isManualDisconnect {
+                        log.error("WebSocket receive error: \(error)")
+                        await self.handleDisconnect(error: error)
+                    }
                     break
                 }
             }
@@ -1005,6 +1031,63 @@ class CLIBridgeManager: ObservableObject {
         textFlushTask = nil
     }
 }
+
+#if DEBUG
+extension CLIBridgeManager {
+    func test_setWebSocket(_ socket: WebSocketTasking?) {
+        webSocket = socket
+    }
+
+    func test_handleMessage(_ message: URLSessionWebSocketTask.Message) async {
+        await handleMessage(message)
+    }
+
+    func test_processServerMessage(_ message: CLIServerMessage) async {
+        await processServerMessage(message)
+    }
+
+    func test_handleStreamMessage(_ content: CLIStreamContent) {
+        handleStreamMessage(content)
+    }
+
+    func test_handleDisconnect(error: Error) async {
+        await handleDisconnect(error: error)
+    }
+
+    func test_attemptReconnect() async {
+        await attemptReconnect()
+    }
+
+    func test_reconnectWithExistingSession() {
+        reconnectWithExistingSession()
+    }
+
+    func test_setNetworkAvailable(_ available: Bool) {
+        isNetworkAvailable = available
+    }
+
+    func test_setPendingConnection(projectPath: String?, sessionId: String?, model: String?, helper: Bool) {
+        pendingProjectPath = projectPath
+        pendingSessionId = sessionId
+        pendingModel = model
+        pendingHelper = helper
+    }
+
+    var test_reconnectAttempt: Int {
+        get { reconnectAttempt }
+        set { reconnectAttempt = newValue }
+    }
+
+    var test_isManualDisconnect: Bool {
+        get { isManualDisconnect }
+        set { isManualDisconnect = newValue }
+    }
+
+    var test_textBuffer: String {
+        textBuffer
+    }
+}
+#endif
 
 // MARK: - Errors
 

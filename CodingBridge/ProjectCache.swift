@@ -9,8 +9,15 @@ class ProjectCache: ObservableObject {
     @Published private(set) var cachedProjects: [Project] = []
     @Published private(set) var cachedGitStatuses: [String: GitStatus] = [:]
     @Published private(set) var cachedBranchNames: [String: String] = [:]
+    @Published private(set) var cachedSessionCounts: [String: Int] = [:]
+    @Published private(set) var cachedRecentSessions: [CLISessionMetadata] = []
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var isStale: Bool = true
+
+    /// Whether we have cached recent sessions
+    var hasRecentSessions: Bool {
+        !cachedRecentSessions.isEmpty
+    }
 
     private static let cacheFile: URL = {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -44,6 +51,8 @@ class ProjectCache: ObservableObject {
                     self?.cachedProjects = cache.projects
                     self?.cachedGitStatuses = cache.gitStatuses
                     self?.cachedBranchNames = cache.branchNames
+                    self?.cachedSessionCounts = cache.sessionCounts
+                    self?.cachedRecentSessions = cache.recentSessions
                     self?.lastUpdated = cache.timestamp
                     self?.isStale = cache.isStale(threshold: Self.staleThreshold)
                 }
@@ -54,17 +63,36 @@ class ProjectCache: ObservableObject {
     }
 
     /// Save projects to cache
-    func saveProjects(_ projects: [Project], gitStatuses: [String: GitStatus] = [:], branchNames: [String: String] = [:]) {
+    func saveProjects(
+        _ projects: [Project],
+        gitStatuses: [String: GitStatus] = [:],
+        branchNames: [String: String] = [:],
+        sessionCounts: [String: Int]? = nil,
+        recentSessions: [CLISessionMetadata]? = nil
+    ) {
         cachedProjects = projects
         cachedGitStatuses = gitStatuses
         cachedBranchNames = branchNames
+        if let counts = sessionCounts {
+            cachedSessionCounts = counts
+        }
+        if let sessions = recentSessions {
+            cachedRecentSessions = sessions
+        }
         lastUpdated = Date()
         isStale = false
 
+        persistCache()
+    }
+
+    /// Persist current cache state to disk
+    private func persistCache() {
         let cache = CachedProjectData(
-            projects: projects,
-            gitStatuses: gitStatuses,
-            branchNames: branchNames,
+            projects: cachedProjects,
+            gitStatuses: cachedGitStatuses,
+            branchNames: cachedBranchNames,
+            sessionCounts: cachedSessionCounts,
+            recentSessions: cachedRecentSessions,
             timestamp: Date()
         )
 
@@ -101,8 +129,31 @@ class ProjectCache: ObservableObject {
         for (path, branch) in branchNames {
             cachedBranchNames[path] = branch
         }
-        // Save updated statuses to cache
-        saveProjects(cachedProjects, gitStatuses: cachedGitStatuses, branchNames: cachedBranchNames)
+        persistCache()
+    }
+
+    /// Update session count for a single project
+    func updateSessionCount(for projectPath: String, count: Int) {
+        cachedSessionCounts[projectPath] = count
+    }
+
+    /// Batch update session counts and persist
+    func updateSessionCounts(_ counts: [String: Int]) {
+        for (path, count) in counts {
+            cachedSessionCounts[path] = count
+        }
+        persistCache()
+    }
+
+    /// Get cached session count for a project
+    func sessionCount(for projectPath: String) -> Int? {
+        cachedSessionCounts[projectPath]
+    }
+
+    /// Update recent sessions cache
+    func updateRecentSessions(_ sessions: [CLISessionMetadata]) {
+        cachedRecentSessions = sessions
+        persistCache()
     }
 
     /// Clear the cache
@@ -110,6 +161,8 @@ class ProjectCache: ObservableObject {
         cachedProjects = []
         cachedGitStatuses = [:]
         cachedBranchNames = [:]
+        cachedSessionCounts = [:]
+        cachedRecentSessions = []
         lastUpdated = nil
         isStale = true
 
@@ -126,19 +179,32 @@ private struct CachedProjectData: Codable {
     let projects: [Project]
     let storedGitStatuses: [String: CodableGitStatus]
     let storedBranchNames: [String: String]?
+    let storedSessionCounts: [String: Int]?
+    let storedRecentSessions: [CLISessionMetadata]?
     let timestamp: Date
 
     enum CodingKeys: String, CodingKey {
         case projects
         case storedGitStatuses = "gitStatuses"
         case storedBranchNames = "branchNames"
+        case storedSessionCounts = "sessionCounts"
+        case storedRecentSessions = "recentSessions"
         case timestamp
     }
 
-    init(projects: [Project], gitStatuses: [String: GitStatus], branchNames: [String: String], timestamp: Date) {
+    init(
+        projects: [Project],
+        gitStatuses: [String: GitStatus],
+        branchNames: [String: String],
+        sessionCounts: [String: Int],
+        recentSessions: [CLISessionMetadata],
+        timestamp: Date
+    ) {
         self.projects = projects
         self.storedGitStatuses = gitStatuses.mapValues { CodableGitStatus(from: $0) }
         self.storedBranchNames = branchNames
+        self.storedSessionCounts = sessionCounts
+        self.storedRecentSessions = recentSessions
         self.timestamp = timestamp
     }
 
@@ -155,6 +221,16 @@ private struct CachedProjectData: Codable {
     /// Get branch names (optional for backwards compatibility)
     var branchNames: [String: String] {
         storedBranchNames ?? [:]
+    }
+
+    /// Get session counts (optional for backwards compatibility)
+    var sessionCounts: [String: Int] {
+        storedSessionCounts ?? [:]
+    }
+
+    /// Get recent sessions (optional for backwards compatibility)
+    var recentSessions: [CLISessionMetadata] {
+        storedRecentSessions ?? []
     }
 }
 

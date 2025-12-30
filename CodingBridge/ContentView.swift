@@ -21,6 +21,7 @@ struct ContentView: View {
     @StateObject private var commandStore = CommandStore.shared
     @ObservedObject private var archivedStore = ArchivedProjectsStore.shared
     @ObservedObject private var projectCache = ProjectCache.shared
+    @ObservedObject private var projectSettingsStore = ProjectSettingsStore.shared
 
     // Project rename state
     @State private var projectToRename: Project?
@@ -379,48 +380,83 @@ struct ContentView: View {
     // MARK: - Cached Loading Flow
 
     /// Load projects with cache-first strategy for instant startup
+    /// Uses fire-and-forget background tasks for API calls to avoid blocking
     private func loadProjectsWithCache() async {
         let startupStart = CFAbsoluteTimeGetCurrent()
         log.info("[Startup] Beginning loadProjectsWithCache, hasCache=\(projectCache.hasCachedData)")
 
-        // Step 1: Immediately show cached data if available
+        // Step 1: INSTANT - Load from cache (projects, git, branches, session counts)
         if projectCache.hasCachedData {
             projects = projectCache.cachedProjects
             gitStatuses = projectCache.cachedGitStatuses
             branchNames = projectCache.cachedBranchNames
+            // Session counts are now in ProjectCache too - HomeView will read from there
             isLoading = false
             isFetchingFresh = true
-            loadingStatus = "Updating..."
-            log.info("[Startup] Loaded \(projects.count) projects from cache")
+            log.info("[Startup] Loaded \(projects.count) projects from cache in \(String(format: "%.1f", (CFAbsoluteTimeGetCurrent() - startupStart) * 1000))ms")
         }
 
-        // Step 2: Fetch fresh project list from server
-        let apiStart = CFAbsoluteTimeGetCurrent()
+        // Step 2: BACKGROUND - Fire all API calls without blocking
+        // These run in parallel and update state when complete
+        Task { @MainActor in
+            await refreshProjectsInBackground()
+        }
+
+        // UI is now fully responsive - background tasks will update as they complete
+        log.info("[Startup] UI ready in \(String(format: "%.1f", (CFAbsoluteTimeGetCurrent() - startupStart) * 1000))ms")
+    }
+
+    /// Background refresh of all project data - runs without blocking UI
+    private func refreshProjectsInBackground() async {
+        let refreshStart = CFAbsoluteTimeGetCurrent()
+
+        // Fetch fresh project list
         await loadProjects()
-        log.info("[Startup] loadProjects() took \(String(format: "%.2f", (CFAbsoluteTimeGetCurrent() - apiStart) * 1000))ms")
+        log.info("[Background] loadProjects() took \(String(format: "%.1f", (CFAbsoluteTimeGetCurrent() - refreshStart) * 1000))ms")
 
-        // Step 3: Defer heavy operations to after UI is shown
-        // Note: loadProjects() already extracts git statuses from API
-        if !projects.isEmpty {
-            // Discover sub-repos (stubbed pending cli-bridge API support)
-            loadingStatus = "Scanning repos..."
-            let repoStart = CFAbsoluteTimeGetCurrent()
-            await discoverAllSubRepos()
-            log.info("[Startup] Sub-repo discovery took \(String(format: "%.2f", (CFAbsoluteTimeGetCurrent() - repoStart) * 1000))ms")
-
-            // Load session counts last
-            loadingStatus = nil
-            let sessionStart = CFAbsoluteTimeGetCurrent()
-            await loadAllSessionCounts()
-            log.info("[Startup] Session counts took \(String(format: "%.2f", (CFAbsoluteTimeGetCurrent() - sessionStart) * 1000))ms")
-
-            // Save to cache for next startup
-            projectCache.saveProjects(projects, gitStatuses: gitStatuses, branchNames: branchNames)
+        guard !projects.isEmpty else {
+            isFetchingFresh = false
+            return
         }
+
+        // Run remaining tasks in parallel
+        await withTaskGroup(of: Void.self) { group in
+            // Sub-repo discovery
+            group.addTask { @MainActor in
+                let start = CFAbsoluteTimeGetCurrent()
+                await self.discoverAllSubRepos()
+                log.info("[Background] Sub-repo discovery took \(String(format: "%.1f", (CFAbsoluteTimeGetCurrent() - start) * 1000))ms")
+            }
+
+            // Session counts
+            group.addTask { @MainActor in
+                let start = CFAbsoluteTimeGetCurrent()
+                await self.loadAllSessionCounts()
+                log.info("[Background] Session counts took \(String(format: "%.1f", (CFAbsoluteTimeGetCurrent() - start) * 1000))ms")
+
+                // Save session counts to cache for next startup
+                self.saveSessionCountsToCache()
+            }
+        }
+
+        // Save updated data to cache
+        projectCache.saveProjects(projects, gitStatuses: gitStatuses, branchNames: branchNames)
 
         isFetchingFresh = false
-        loadingStatus = nil
-        log.info("[Startup] Total startup time: \(String(format: "%.2f", (CFAbsoluteTimeGetCurrent() - startupStart) * 1000))ms")
+        log.info("[Background] Total refresh took \(String(format: "%.1f", (CFAbsoluteTimeGetCurrent() - refreshStart) * 1000))ms")
+    }
+
+    /// Save current session counts from SessionStore to ProjectCache
+    private func saveSessionCountsToCache() {
+        var counts: [String: Int] = [:]
+        for project in projects {
+            if sessionStore.hasCountsLoaded(for: project.path) {
+                counts[project.path] = sessionStore.userSessionCount(for: project.path)
+            }
+        }
+        if !counts.isEmpty {
+            projectCache.updateSessionCounts(counts)
+        }
     }
 
     // MARK: - Sidebar Content
@@ -880,18 +916,27 @@ struct ContentView: View {
 
     /// Discover sub-repos for all projects in parallel
     private func discoverAllSubRepos() async {
+        // Filter to only projects with subrepo discovery enabled (opt-in, default off)
+        let enabledProjects = projects.filter { projectSettingsStore.isSubrepoDiscoveryEnabled(for: $0.path) }
+
+        guard !enabledProjects.isEmpty else {
+            log.debug("[MultiRepo] No projects have subrepo discovery enabled, skipping")
+            return
+        }
+
+        log.debug("[MultiRepo] Discovering sub-repos for \(enabledProjects.count) projects")
         let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
 
-        // Mark all as scanning
+        // Mark enabled projects as scanning
         await MainActor.run {
-            for project in projects {
+            for project in enabledProjects {
                 multiRepoStatuses[project.path] = MultiRepoStatus(isScanning: true)
             }
         }
 
         // Discover in parallel using TaskGroup
         await withTaskGroup(of: (String, [SubRepo]?).self) { group in
-            for project in projects {
+            for project in enabledProjects {
                 group.addTask {
                     do {
                         let subRepoInfos = try await apiClient.discoverSubRepos(projectPath: project.path)
@@ -1018,10 +1063,21 @@ struct ContentView: View {
     // MARK: - Session Count Loading
 
     /// Load accurate session counts for all projects via SessionStore
-    /// Note: Session counts now come from the API Project response, so this is a no-op.
+    /// Calls the /sessions/count API for each project to get user/agent/helper breakdown.
     /// Individual sessions are loaded when entering ChatView.
     private func loadAllSessionCounts() async {
-        // Session counts come from API Project response, no separate loading needed
+        // Ensure SessionStore is configured with repository before loading counts
+        sessionStore.configure(with: settings)
+
+        // Load session counts from the dedicated count API endpoint for each project
+        // This provides accurate user/agent/helper breakdown for display
+        await withTaskGroup(of: Void.self) { group in
+            for project in projects {
+                group.addTask {
+                    await sessionStore.loadSessionCounts(for: project.path)
+                }
+            }
+        }
     }
 }
 #Preview {

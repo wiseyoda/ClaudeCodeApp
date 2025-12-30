@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		CVMB0001 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CVMF0001 /* ChatViewModel.swift */; };
 		1205495BA2434BF79B906228 /* ErrorAnalyticsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 603895DCE0554062BCEC87F7 /* ErrorAnalyticsStore.swift */; };
 		1597F6A073B1490D948C46FE /* QuickCaptureSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F4D52190DB54B75A6081DAA /* QuickCaptureSheet.swift */; };
 		1D727765964448C0BF0B34A9 /* IdeasStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4676361593D14ED18823954D /* IdeasStore.swift */; };
@@ -47,8 +46,6 @@
 		A1000031 /* SearchFilterViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000030 /* SearchFilterViews.swift */; };
 		A1000032 /* BookmarksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000031 /* BookmarksView.swift */; };
 		A1000033 /* GlobalSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000032 /* GlobalSearchView.swift */; };
-		A1000034 /* ClaudeHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000033 /* ClaudeHelper.swift */; };
-		A1000035 /* SuggestionChipsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000034 /* SuggestionChipsView.swift */; };
 		A1000036 /* QuickSettingsSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000035 /* QuickSettingsSheet.swift */; };
 		A1000037 /* CommandStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000036 /* CommandStore.swift */; };
 		A1000038 /* CommandsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000037 /* CommandsView.swift */; };
@@ -56,8 +53,6 @@
 		A1000040 /* ApprovalBannerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000040 /* ApprovalBannerView.swift */; };
 		A1000041 /* CLIBridgeBanners.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000041 /* CLIBridgeBanners.swift */; };
 		AA000040 /* MessageActionBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA000041 /* MessageActionBar.swift */; };
-		CT000001 /* CompactToolView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CT000002 /* CompactToolView.swift */; };
-		TD000001 /* TodoProgressDrawer.swift in Sources */ = {isa = PBXBuildFile; fileRef = TD000002 /* TodoProgressDrawer.swift */; };
 		B9000002 /* PermissionApprovalTestHarnessView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9000001 /* PermissionApprovalTestHarnessView.swift */; };
 		BG000001 /* BackgroundManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BG000002 /* BackgroundManager.swift */; };
 		CB000001 /* CLIBridgeTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB000002 /* CLIBridgeTypes.swift */; };
@@ -67,6 +62,8 @@
 		CCA13BBABC8E4725947D1011 /* ErrorInsightsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2CB9D357C2E4C4791DA828F /* ErrorInsightsView.swift */; };
 		CE000001 /* ChatViewExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE000002 /* ChatViewExtensions.swift */; };
 		CM000001 /* CustomModelPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CM000002 /* CustomModelPickerSheet.swift */; };
+		CT000001 /* CompactToolView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CT000002 /* CompactToolView.swift */; };
+		CVMB0001 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CVMF0001 /* ChatViewModel.swift */; };
 		DB000042 /* DebugLogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB000043 /* DebugLogStore.swift */; };
 		DB000044 /* DebugLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB000045 /* DebugLogView.swift */; };
 		DI000001 /* DraftInputPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = DI000002 /* DraftInputPersistence.swift */; };
@@ -85,16 +82,19 @@
 		HM000069 /* ServerHealthView.swift in Sources */ = {isa = PBXBuildFile; fileRef = HM000068 /* ServerHealthView.swift */; };
 		HM00006B /* MetricsDashboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = HM00006A /* MetricsDashboardView.swift */; };
 		HM00006D /* DiagnosticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = HM00006C /* DiagnosticsView.swift */; };
+		HV000001 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = HV000002 /* HomeView.swift */; };
 		IA000001 /* ImageAttachment.swift in Sources */ = {isa = PBXBuildFile; fileRef = IA000002 /* ImageAttachment.swift */; };
 		KH000001 /* KeychainHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = KH000002 /* KeychainHelper.swift */; };
 		LA000001 /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = LA000002 /* LiveActivityManager.swift */; };
 		LAT00001 /* LiveActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = LAT00002 /* LiveActivityAttributes.swift */; };
 		MQ000001 /* MessageQueuePersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = MQ000002 /* MessageQueuePersistence.swift */; };
+		MTV0001 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MTV0002 /* MainTabView.swift */; };
 		NM000001 /* NotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = NM000002 /* NotificationManager.swift */; };
 		NW000001 /* NetworkMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = NW000002 /* NetworkMonitor.swift */; };
 		ODL75VT1JDWVUKM5HVUEOJP8 /* ProjectNamesStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39UUJ7I96JL1A5K32KNO0PXO /* ProjectNamesStore.swift */; };
 		OQ000001 /* OfflineActionQueue.swift in Sources */ = {isa = PBXBuildFile; fileRef = OQ000002 /* OfflineActionQueue.swift */; };
 		PC000001 /* ProjectCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = PC000002 /* ProjectCache.swift */; };
+		PCD0001 /* ProjectCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = PCD0002 /* ProjectCard.swift */; };
 		PD000001 /* ProjectDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = PD000002 /* ProjectDetailView.swift */; };
 		PL000001 /* ProjectListViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = PL000002 /* ProjectListViews.swift */; };
 		PM000001 /* PermissionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = PM000002 /* PermissionManager.swift */; };
@@ -109,10 +109,8 @@
 		SS000048 /* ScrollStateManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = SS000049 /* ScrollStateManager.swift */; };
 		SST00052 /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = SST00053 /* SessionStore.swift */; };
 		SV000001 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SV000002 /* SettingsView.swift */; };
+		TD000001 /* TodoProgressDrawer.swift in Sources */ = {isa = PBXBuildFile; fileRef = TD000002 /* TodoProgressDrawer.swift */; };
 		TS000001 /* TaskState.swift in Sources */ = {isa = PBXBuildFile; fileRef = TS000002 /* TaskState.swift */; };
-		HV000001 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = HV000002 /* HomeView.swift */; };
-		PCD0001 /* ProjectCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = PCD0002 /* ProjectCard.swift */; };
-		MTV0001 /* MainTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MTV0002 /* MainTabView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -133,7 +131,6 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		CVMF0001 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
 		1F4D52190DB54B75A6081DAA /* QuickCaptureSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickCaptureSheet.swift; sourceTree = "<group>"; };
 		2509F4FB2EFF976200EAFBFE /* CodingBridgeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CodingBridgeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2CE0280C4CD14A61A45D94D0 /* TagsFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagsFlowView.swift; sourceTree = "<group>"; };
@@ -173,8 +170,6 @@
 		A2000030 /* SearchFilterViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchFilterViews.swift; sourceTree = "<group>"; };
 		A2000031 /* BookmarksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarksView.swift; sourceTree = "<group>"; };
 		A2000032 /* GlobalSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlobalSearchView.swift; sourceTree = "<group>"; };
-		A2000033 /* ClaudeHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeHelper.swift; sourceTree = "<group>"; };
-		A2000034 /* SuggestionChipsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SuggestionChipsView.swift; sourceTree = "<group>"; };
 		A2000035 /* QuickSettingsSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuickSettingsSheet.swift; sourceTree = "<group>"; };
 		A2000036 /* CommandStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandStore.swift; sourceTree = "<group>"; };
 		A2000037 /* CommandsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandsView.swift; sourceTree = "<group>"; };
@@ -183,8 +178,6 @@
 		A2000041 /* CLIBridgeBanners.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIBridgeBanners.swift; sourceTree = "<group>"; };
 		A3000001 /* CodingBridge.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CodingBridge.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		AA000041 /* MessageActionBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageActionBar.swift; sourceTree = "<group>"; };
-		CT000002 /* CompactToolView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompactToolView.swift; sourceTree = "<group>"; };
-		TD000002 /* TodoProgressDrawer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoProgressDrawer.swift; sourceTree = "<group>"; };
 		B423E7C7AA924BD1BA2E2418 /* IdeaEditorSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeaEditorSheet.swift; sourceTree = "<group>"; };
 		B9000001 /* PermissionApprovalTestHarnessView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionApprovalTestHarnessView.swift; sourceTree = "<group>"; };
 		B9000003 /* CodingBridgeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CodingBridgeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -195,6 +188,8 @@
 		CB000008 /* CLIBridgeAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIBridgeAdapter.swift; sourceTree = "<group>"; };
 		CE000002 /* ChatViewExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewExtensions.swift; sourceTree = "<group>"; };
 		CM000002 /* CustomModelPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomModelPickerSheet.swift; sourceTree = "<group>"; };
+		CT000002 /* CompactToolView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompactToolView.swift; sourceTree = "<group>"; };
+		CVMF0001 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
 		D406B32A88A3423899A037FB /* IdeasFAB.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IdeasFAB.swift; sourceTree = "<group>"; };
 		DB000043 /* DebugLogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogStore.swift; sourceTree = "<group>"; };
 		DB000045 /* DebugLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogView.swift; sourceTree = "<group>"; };
@@ -213,15 +208,18 @@
 		HM000068 /* ServerHealthView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerHealthView.swift; sourceTree = "<group>"; };
 		HM00006A /* MetricsDashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetricsDashboardView.swift; sourceTree = "<group>"; };
 		HM00006C /* DiagnosticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DiagnosticsView.swift; sourceTree = "<group>"; };
+		HV000002 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
 		IA000002 /* ImageAttachment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageAttachment.swift; sourceTree = "<group>"; };
 		KH000002 /* KeychainHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainHelper.swift; sourceTree = "<group>"; };
 		LA000002 /* LiveActivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityManager.swift; sourceTree = "<group>"; };
 		LAT00002 /* LiveActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveActivityAttributes.swift; sourceTree = "<group>"; };
 		MQ000002 /* MessageQueuePersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageQueuePersistence.swift; sourceTree = "<group>"; };
+		MTV0002 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 		NM000002 /* NotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationManager.swift; sourceTree = "<group>"; };
 		NW000002 /* NetworkMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkMonitor.swift; sourceTree = "<group>"; };
 		OQ000002 /* OfflineActionQueue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineActionQueue.swift; sourceTree = "<group>"; };
 		PC000002 /* ProjectCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCache.swift; sourceTree = "<group>"; };
+		PCD0002 /* ProjectCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCard.swift; sourceTree = "<group>"; };
 		PD000002 /* ProjectDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectDetailView.swift; sourceTree = "<group>"; };
 		PL000002 /* ProjectListViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectListViews.swift; sourceTree = "<group>"; };
 		PM000002 /* PermissionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PermissionManager.swift; sourceTree = "<group>"; };
@@ -236,10 +234,8 @@
 		SS000049 /* ScrollStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollStateManager.swift; sourceTree = "<group>"; };
 		SST00053 /* SessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<group>"; };
 		SV000002 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
+		TD000002 /* TodoProgressDrawer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoProgressDrawer.swift; sourceTree = "<group>"; };
 		TS000002 /* TaskState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskState.swift; sourceTree = "<group>"; };
-		HV000002 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeView.swift; sourceTree = "<group>"; };
-		PCD0002 /* ProjectCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCard.swift; sourceTree = "<group>"; };
-		MTV0002 /* MainTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MainTabView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -292,7 +288,6 @@
 				A2000003 /* ChatView.swift */,
 				A2000004 /* Models.swift */,
 				A2000006 /* AppSettings.swift */,
-				A2000033 /* ClaudeHelper.swift */,
 				A2000036 /* CommandStore.swift */,
 				DB000043 /* DebugLogStore.swift */,
 				ER000051 /* ErrorStore.swift */,
@@ -395,7 +390,6 @@
 				A2000030 /* SearchFilterViews.swift */,
 				A2000031 /* BookmarksView.swift */,
 				A2000032 /* GlobalSearchView.swift */,
-				A2000034 /* SuggestionChipsView.swift */,
 				A2000035 /* QuickSettingsSheet.swift */,
 				A2000037 /* CommandsView.swift */,
 				A2000038 /* CommandPickerSheet.swift */,
@@ -669,8 +663,6 @@
 				A1000031 /* SearchFilterViews.swift in Sources */,
 				A1000032 /* BookmarksView.swift in Sources */,
 				A1000033 /* GlobalSearchView.swift in Sources */,
-				A1000034 /* ClaudeHelper.swift in Sources */,
-				A1000035 /* SuggestionChipsView.swift in Sources */,
 				A1000036 /* QuickSettingsSheet.swift in Sources */,
 				A1000037 /* CommandStore.swift in Sources */,
 				F651E84643F2460D8BA6DFB9 /* IdeasFAB.swift in Sources */,
@@ -752,7 +744,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 0.6.3;
+				MARKETING_VERSION = 0.6.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.level.CodingBridgeTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -773,7 +765,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 0.6.3;
+				MARKETING_VERSION = 0.6.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.level.CodingBridgeTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -919,6 +911,7 @@
 				DEVELOPMENT_TEAM = VPLAUT6646;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CodingBridge/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Coding Bridge";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSAppTransportSecurity_AllowsArbitraryLoads = YES;
@@ -935,7 +928,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.6.3;
+				MARKETING_VERSION = 0.6.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.level.CodingBridge;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -954,6 +947,7 @@
 				DEVELOPMENT_TEAM = VPLAUT6646;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = CodingBridge/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Coding Bridge";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSAppTransportSecurity_AllowsArbitraryLoads = YES;
@@ -970,7 +964,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.6.3;
+				MARKETING_VERSION = 0.6.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.level.CodingBridge;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -986,7 +980,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 0.6.3;
+				MARKETING_VERSION = 0.6.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.level.CodingBridgeUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -1006,7 +1000,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 0.6.3;
+				MARKETING_VERSION = 0.6.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.level.CodingBridgeUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;

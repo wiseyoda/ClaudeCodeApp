@@ -189,11 +189,39 @@ struct ProjectSessionMeta: Codable, Hashable {
 
 struct ProjectSession: Codable, Identifiable {
     let id: String
+    let projectPath: String?
     let summary: String?
     let messageCount: Int?
     let lastActivity: String?
     let lastUserMessage: String?
     let lastAssistantMessage: String?
+    let archivedAt: String?
+
+    /// Initialize with all fields
+    init(
+        id: String,
+        projectPath: String? = nil,
+        summary: String?,
+        lastActivity: String?,
+        messageCount: Int?,
+        lastUserMessage: String?,
+        lastAssistantMessage: String?,
+        archivedAt: String? = nil
+    ) {
+        self.id = id
+        self.projectPath = projectPath
+        self.summary = summary
+        self.lastActivity = lastActivity
+        self.messageCount = messageCount
+        self.lastUserMessage = lastUserMessage
+        self.lastAssistantMessage = lastAssistantMessage
+        self.archivedAt = archivedAt
+    }
+
+    /// Whether this session is archived
+    var isArchived: Bool {
+        archivedAt != nil
+    }
 }
 
 // MARK: - Session Filtering
@@ -201,10 +229,8 @@ struct ProjectSession: Codable, Identifiable {
 extension Array where Element == ProjectSession {
     /// Filter sessions to show only user conversation sessions.
     /// Excludes:
-    /// - ClaudeHelper sessions (used for suggestions, not user conversations)
-    ///   - By ID: sessions matching the deterministic helper session ID
-    ///   - By content: sessions whose lastUserMessage starts with helper prompts
     /// - Empty sessions (messageCount == 0, never had any messages)
+    /// - Agent sub-sessions (Task tool spawns these with specific ID patterns)
     /// - Always includes the activeSessionId if provided (current session)
     func filterForDisplay(projectPath: String, activeSessionId: String? = nil) -> [ProjectSession] {
         return self.filter { session in
@@ -212,12 +238,8 @@ extension Array where Element == ProjectSession {
             if let activeId = activeSessionId, session.id == activeId {
                 return true
             }
-            // Filter out ClaudeHelper sessions (by ID or by content)
-            if ClaudeHelper.isHelperSession(
-                sessionId: session.id,
-                lastUserMessage: session.lastUserMessage,
-                projectPath: projectPath
-            ) {
+            // Filter out agent sub-sessions (Task tool spawns these with UUIDs containing "agent")
+            if session.id.contains("agent") {
                 return false
             }
             // Filter out truly empty sessions (messageCount == 0)
@@ -240,7 +262,7 @@ extension Array where Element == ProjectSession {
 }
 
 extension Project {
-    /// Get filtered sessions for display (excludes helper and empty sessions)
+    /// Get filtered sessions for display (excludes empty sessions)
     var displaySessions: [ProjectSession] {
         (sessions ?? []).filterForDisplay(projectPath: path)
     }

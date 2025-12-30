@@ -26,8 +26,8 @@ final class SessionStoreTests: XCTestCase {
         ProjectSession(
             id: id,
             summary: summary,
-            messageCount: messageCount,
             lastActivity: lastActivity,
+            messageCount: messageCount,
             lastUserMessage: nil,
             lastAssistantMessage: nil
         )
@@ -150,13 +150,12 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertNil(store.activeSessionId(for: path))
     }
 
-    func testDisplaySessionCountExcludesHelper() {
+    func testDisplaySessionCountExcludesAgentSessions() {
         let path = makeProjectPath()
-        let helperId = ClaudeHelper.createHelperSessionId(for: path)
-        let helper = makeSession(id: helperId, messageCount: 5)
+        let agent = makeSession(id: "agent-test-123", messageCount: 5)
         let regular = makeSession(id: "regular", messageCount: 1)
 
-        store.addSession(helper, for: path)
+        store.addSession(agent, for: path)
         store.addSession(regular, for: path)
 
         XCTAssertEqual(store.displaySessionCount(for: path), 1)

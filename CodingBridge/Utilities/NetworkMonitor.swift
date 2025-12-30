@@ -68,17 +68,31 @@ final class NetworkMonitor: ObservableObject {
     // MARK: - Path Handling
 
     private func handlePathUpdate(_ path: NWPath) {
-        let wasConnected = isConnected
-        isConnected = path.status == .satisfied
-        connectionType = getConnectionType(path)
-        isExpensive = path.isExpensive
-        isConstrained = path.isConstrained
+        applyState(
+            isConnected: path.status == .satisfied,
+            connectionType: getConnectionType(path),
+            isExpensive: path.isExpensive,
+            isConstrained: path.isConstrained
+        )
+    }
+
+    private func applyState(
+        isConnected: Bool,
+        connectionType: ConnectionType,
+        isExpensive: Bool,
+        isConstrained: Bool
+    ) {
+        let wasConnected = self.isConnected
+        self.isConnected = isConnected
+        self.connectionType = connectionType
+        self.isExpensive = isExpensive
+        self.isConstrained = isConstrained
 
         // Log significant changes
-        if wasConnected != isConnected {
-            log.info("[Network] Connection \(isConnected ? "restored" : "lost")")
+        if wasConnected != self.isConnected {
+            log.info("[Network] Connection \(self.isConnected ? "restored" : "lost")")
 
-            if isConnected {
+            if self.isConnected {
                 // Process any queued offline actions
                 Task {
                     await OfflineActionQueue.shared.processQueue()
@@ -118,3 +132,21 @@ extension Notification.Name {
     static let networkDidBecomeAvailable = Notification.Name("networkDidBecomeAvailable")
     static let networkDidBecomeUnavailable = Notification.Name("networkDidBecomeUnavailable")
 }
+
+#if DEBUG
+extension NetworkMonitor {
+    func updateStateForTesting(
+        isConnected: Bool,
+        connectionType: ConnectionType,
+        isExpensive: Bool,
+        isConstrained: Bool
+    ) {
+        applyState(
+            isConnected: isConnected,
+            connectionType: connectionType,
+            isExpensive: isExpensive,
+            isConstrained: isConstrained
+        )
+    }
+}
+#endif

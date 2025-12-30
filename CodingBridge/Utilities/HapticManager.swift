@@ -16,9 +16,21 @@ enum HapticManager {
         generator.impactOccurred()
     }
 
+    /// Heavy impact - for strong confirmations (commit, publish)
+    static func heavy() {
+        let generator = UIImpactFeedbackGenerator(style: .heavy)
+        generator.impactOccurred()
+    }
+
     /// Rigid impact - for definitive actions (abort, delete)
     static func rigid() {
         let generator = UIImpactFeedbackGenerator(style: .rigid)
+        generator.impactOccurred()
+    }
+
+    /// Soft impact - for gentle confirmations (hover, subtle toggle)
+    static func soft() {
+        let generator = UIImpactFeedbackGenerator(style: .soft)
         generator.impactOccurred()
     }
 

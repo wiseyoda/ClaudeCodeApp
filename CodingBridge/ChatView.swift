@@ -250,9 +250,7 @@ struct ChatView: View {
             IdeasDrawerSheet(
                 isPresented: $viewModel.showIdeasDrawer,
                 ideasStore: viewModel.ideasStore,
-                claudeHelper: viewModel.claudeHelper,
                 projectPath: project.path,
-                currentSessionId: viewModel.activeSessionId,
                 onSendIdea: { idea in
                     viewModel.appendToInput(idea.formattedPrompt)
                 }
@@ -514,12 +512,16 @@ struct ChatView: View {
 
     private var messagesListView: some View {
         VStack(alignment: .leading, spacing: 2) {
+            // Show loading indicator when loading history with no messages yet
+            if viewModel.isLoadingHistory && viewModel.messages.isEmpty {
+                loadingHistoryView
+            }
+
             ForEach(viewModel.groupedDisplayItems) { item in
                 DisplayItemView(
                     item: item,
                     projectPath: project.path,
                     projectTitle: project.title,
-                    onAnalyze: viewModel.handleAnalyze,
                     hideTodoInline: viewModel.showTodoDrawer
                 )
                 .id(item.id)
@@ -536,6 +538,22 @@ struct ChatView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+    }
+
+    @ViewBuilder
+    private var loadingHistoryView: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            ProgressView()
+                .scaleEffect(1.2)
+                .tint(CLITheme.cyan(for: colorScheme))
+            Text("Loading session history...")
+                .font(CLITheme.monoSmall)
+                .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 100)
     }
 
     @ViewBuilder
@@ -641,19 +659,6 @@ struct ChatView: View {
                 showQuickSettings: $viewModel.showQuickSettings
             )
 
-            // AI-powered suggestion chips
-            if settings.autoSuggestionsEnabled && !viewModel.isProcessing && viewModel.inputText.isEmpty && !viewModel.claudeHelper.suggestedActions.isEmpty {
-                SuggestionChipsView(
-                    suggestions: viewModel.claudeHelper.suggestedActions,
-                    isLoading: viewModel.claudeHelper.isLoading,
-                    onSelect: { suggestion in
-                        viewModel.inputText = suggestion.prompt
-                        viewModel.sendMessage()
-                    }
-                )
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-
             CLIInputView(
                 text: $viewModel.inputText,
                 selectedImages: $viewModel.selectedImages,
@@ -663,9 +668,7 @@ struct ChatView: View {
                 isFocused: _isInputFocused,
                 onSend: viewModel.sendMessage,
                 onAbort: { viewModel.abortSession() },
-                recentMessages: viewModel.messages,
-                claudeHelper: viewModel.claudeHelper,
-                sessionId: viewModel.activeSessionId
+                recentMessages: viewModel.messages
             )
             .id("input-view")
         }

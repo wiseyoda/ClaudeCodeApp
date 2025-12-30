@@ -156,9 +156,15 @@ struct AnyCodableValue: Codable, Equatable {
     }
 
     /// Get value as String (for display) - converts any type to string
+    /// For dictionaries with "stdout" key (common in tool results), returns the stdout value
     var stringValue: String {
         if let s = value as? String { return s }
         if let dict = value as? [String: Any] {
+            // If dict has a "stdout" key, return that value (common in Bash tool results)
+            if let stdout = dict["stdout"] as? String {
+                return stdout
+            }
+            // Otherwise serialize the entire dictionary
             if let data = try? JSONSerialization.data(withJSONObject: dict),
                let str = String(data: data, encoding: .utf8) {
                 return str
@@ -1068,7 +1074,7 @@ struct CLISessionEvent: Decodable {
 
 // MARK: - Session Metadata
 
-struct CLISessionMetadata: Decodable {
+struct CLISessionMetadata: Codable {
     let id: String
     let projectPath: String      // Fixed: was 'project', cli-bridge sends 'projectPath'
     let messageCount: Int
@@ -1081,23 +1087,51 @@ struct CLISessionMetadata: Decodable {
     let model: String?
     let source: SessionSource?
 
-    enum SessionSource: String, Decodable {
+    // NEW: Archive support (soft delete)
+    let archivedAt: String?      // ISO timestamp when archived, nil = not archived
+
+    // NEW: Session lineage (parent/child relationships)
+    let parentSessionId: String? // Parent session UUID for subagent sessions
+
+    enum SessionSource: String, Codable {
         case user
         case agent
         case helper
     }
 
-    // Shared formatter to avoid allocation on each property access
-    private static let isoFormatter = ISO8601DateFormatter()
-
-    /// Parse createdAt as Date
-    var createdDate: Date? {
-        Self.isoFormatter.date(from: createdAt)
+    /// Whether this session is archived (soft deleted)
+    var isArchived: Bool {
+        archivedAt != nil
     }
 
-    /// Parse lastActivityAt as Date
+    // Shared formatters to avoid allocation on each property access
+    // Two formatters needed: backend may return timestamps with or without fractional seconds
+    private static let isoFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static let isoFormatterNoFrac: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    /// Parse createdAt as Date (tries both ISO formats)
+    var createdDate: Date? {
+        Self.isoFormatter.date(from: createdAt) ?? Self.isoFormatterNoFrac.date(from: createdAt)
+    }
+
+    /// Parse lastActivityAt as Date (tries both ISO formats)
     var lastActivityDate: Date? {
-        Self.isoFormatter.date(from: lastActivityAt)
+        Self.isoFormatter.date(from: lastActivityAt) ?? Self.isoFormatterNoFrac.date(from: lastActivityAt)
+    }
+
+    /// Parse archivedAt as Date (tries both ISO formats)
+    var archivedDate: Date? {
+        guard let archivedAt = archivedAt else { return nil }
+        return Self.isoFormatter.date(from: archivedAt) ?? Self.isoFormatterNoFrac.date(from: archivedAt)
     }
 
     /// Display title - prefers customTitle over auto-generated title
@@ -1187,7 +1221,8 @@ struct CLISessionMetadata: Decodable {
                 }
             }
         } catch {
-            log.debug("[parseContentBlockText] JSON parsing error: \(error.localizedDescription)")
+            // JSON parsing often fails for truncated titles - this is expected
+            // Don't log here, let regex fallback handle it silently
         }
 
         // Try parsing as [Any] and handle mixed content
@@ -1209,8 +1244,8 @@ struct CLISessionMetadata: Decodable {
             }
         }
 
-        // JSON parsing failed or no content found - try regex-based extraction as last resort
-        log.debug("[parseContentBlockText] No content extracted, trying regex fallback: \(text.prefix(100))")
+        // JSON parsing failed or no content found - use regex-based extraction
+        // This commonly happens for truncated session titles - no need to log
         return extractTextFallback(text)
     }
 
@@ -1465,12 +1500,23 @@ struct CLIFileEntry: Decodable, Identifiable {
         type == "directory"
     }
 
-    // Shared formatter to avoid allocation on each property access
-    private static let isoFormatter = ISO8601DateFormatter()
+    // Shared formatters to avoid allocation on each property access
+    // Two formatters needed: backend may return timestamps with or without fractional seconds
+    private static let isoFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static let isoFormatterNoFrac: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
 
     var modifiedDate: Date? {
         guard let modified = modified else { return nil }
-        return Self.isoFormatter.date(from: modified)
+        return Self.isoFormatter.date(from: modified) ?? Self.isoFormatterNoFrac.date(from: modified)
     }
 
     /// SF Symbol icon for this file type
@@ -1547,7 +1593,19 @@ struct CLIFileContentResponse: Decodable {
     let lineCount: Int?
 
     // Shared formatters to avoid allocation on each property access
-    private static let isoFormatter = ISO8601DateFormatter()
+    // Two ISO formatters needed: backend may return timestamps with or without fractional seconds
+    private static let isoFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static let isoFormatterNoFrac: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
     private static let byteFormatter: ByteCountFormatter = {
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file
@@ -1565,10 +1623,10 @@ struct CLIFileContentResponse: Decodable {
         return Self.byteFormatter.string(fromByteCount: Int64(size))
     }
 
-    /// Modified date
+    /// Modified date (tries both ISO formats)
     var modifiedDate: Date? {
         guard let modified = modified else { return nil }
-        return Self.isoFormatter.date(from: modified)
+        return Self.isoFormatter.date(from: modified) ?? Self.isoFormatterNoFrac.date(from: modified)
     }
 }
 
@@ -1699,11 +1757,13 @@ extension CLISessionMetadata {
     func toProjectSession() -> ProjectSession {
         return ProjectSession(
             id: id,
+            projectPath: projectPath,
             summary: displayTitle,  // Uses parsed title (handles JSON content block format)
-            messageCount: messageCount,
             lastActivity: lastActivityAt,
+            messageCount: messageCount,
             lastUserMessage: parsedLastUserMessage,  // Parsed from JSON content block format
-            lastAssistantMessage: lastAssistantMessage  // Already plain text from Claude
+            lastAssistantMessage: lastAssistantMessage,  // Already plain text from Claude
+            archivedAt: archivedAt
         )
     }
 }
@@ -1834,4 +1894,294 @@ struct LiveActivityTokenInfo: Decodable {
 /// Generic success response for push operations
 struct CLIPushSuccessResponse: Decodable {
     let success: Bool
+}
+
+// MARK: - Session Count Response
+
+/// Response from session count endpoint
+/// GET /projects/:path/sessions/count
+struct CLISessionCountResponse: Decodable {
+    /// Total session count (all sources)
+    let total: Int
+
+    /// User-created sessions count (when not filtered by source)
+    let user: Int?
+
+    /// Agent-created sessions count (when not filtered by source)
+    let agent: Int?
+
+    /// Helper sessions count (when not filtered by source)
+    let helper: Int?
+
+    /// Single count (when filtered by source)
+    let count: Int?
+
+    /// Source filter used (when filtered by source)
+    let source: String?
+}
+
+// MARK: - Session Search Types
+
+/// A single match within a session search result
+struct CLISessionSearchMatch: Codable, Equatable {
+    /// Message ID where match was found
+    let messageId: String
+
+    /// Role of the message (user, assistant)
+    let role: String
+
+    /// Snippet of text with match highlighted
+    let snippet: String
+
+    /// Timestamp of the message
+    let timestamp: String
+}
+
+/// A session that matched a search query
+struct CLISessionSearchResult: Codable, Identifiable, Equatable {
+    /// Session ID
+    let sessionId: String
+
+    /// Project path
+    let projectPath: String
+
+    /// Relevance score (0-1)
+    let score: Double
+
+    /// Matches within this session
+    let matches: [CLISessionSearchMatch]
+
+    var id: String { sessionId }
+}
+
+/// Response from session search endpoint
+/// GET /projects/:path/sessions/search?q=...
+struct CLISessionSearchResponse: Codable {
+    /// Original search query
+    let query: String
+
+    /// Total number of matching sessions
+    let total: Int
+
+    /// Search results for current page
+    let results: [CLISessionSearchResult]
+
+    /// Whether more results exist
+    let hasMore: Bool
+}
+
+// MARK: - Paginated Messages Types
+
+/// Query parameters for paginated message fetching
+/// GET /projects/:path/sessions/:id/messages
+struct CLIPaginatedMessagesRequest {
+    /// Max messages to return (1-100, default 25)
+    let limit: Int?
+    /// Skip N messages (for offset-based pagination)
+    let offset: Int?
+    /// Cursor: fetch messages before this message ID (for older messages)
+    let before: String?
+    /// Cursor: fetch messages after this message ID (for newer/real-time sync)
+    let after: String?
+    /// Filter by message types (comma-separated: user,assistant,system,tool_use,tool_result)
+    let types: String?
+    /// Sort order: "asc" (oldest first) or "desc" (newest first, default)
+    let order: String?
+    /// Include raw content blocks (tool_use, tool_result, thinking)
+    let includeRawContent: Bool?
+
+    init(
+        limit: Int? = nil,
+        offset: Int? = nil,
+        before: String? = nil,
+        after: String? = nil,
+        types: String? = nil,
+        order: String? = nil,
+        includeRawContent: Bool? = nil
+    ) {
+        self.limit = limit
+        self.offset = offset
+        self.before = before
+        self.after = after
+        self.types = types
+        self.order = order
+        self.includeRawContent = includeRawContent
+    }
+
+    /// Convert to URL query items for the API request
+    var queryItems: [URLQueryItem] {
+        var items: [URLQueryItem] = []
+        if let limit = limit {
+            items.append(URLQueryItem(name: "limit", value: String(limit)))
+        }
+        if let offset = offset {
+            items.append(URLQueryItem(name: "offset", value: String(offset)))
+        }
+        if let before = before {
+            items.append(URLQueryItem(name: "before", value: before))
+        }
+        if let after = after {
+            items.append(URLQueryItem(name: "after", value: after))
+        }
+        if let types = types {
+            items.append(URLQueryItem(name: "types", value: types))
+        }
+        if let order = order {
+            items.append(URLQueryItem(name: "order", value: order))
+        }
+        if let includeRawContent = includeRawContent, includeRawContent {
+            items.append(URLQueryItem(name: "includeRawContent", value: "true"))
+        }
+        return items
+    }
+}
+
+/// Wrapper for a paginated message entry (contains id, timestamp, and nested message)
+struct CLIPaginatedMessageEntry: Decodable, Identifiable {
+    let id: String
+    let timestamp: String
+    let message: CLIPaginatedMessageContent
+
+    /// Convert to ChatMessage for UI display
+    func toChatMessage() -> ChatMessage {
+        // Parse timestamp
+        var date = Date()
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let parsedDate = formatter.date(from: timestamp) {
+            date = parsedDate
+        } else {
+            formatter.formatOptions = [.withInternetDateTime]
+            date = formatter.date(from: timestamp) ?? Date()
+        }
+
+        return message.toChatMessage(timestamp: date)
+    }
+}
+
+/// The actual message content inside a paginated message entry
+struct CLIPaginatedMessageContent: Decodable {
+    let type: String           // "user", "assistant", "system", "tool_use", "tool_result", "thinking"
+    let content: String?       // Text content (for user/assistant/system)
+    let name: String?          // Tool name (for tool_use)
+    let input: AnyCodableValue? // Tool input (for tool_use)
+    let output: String?        // Tool output (for tool_result)
+    let toolUseId: String?     // Reference to tool_use (for tool_result)
+    let isError: Bool?         // Whether tool result is an error
+
+    /// Convert to ChatMessage for UI display
+    func toChatMessage(timestamp: Date) -> ChatMessage {
+        // Map type to role
+        let role: ChatMessage.Role
+        switch type {
+        case "user":
+            role = .user
+        case "assistant":
+            role = .assistant
+        case "system":
+            role = .system
+        case "tool_use":
+            role = .toolUse
+        case "tool_result":
+            role = isError == true ? .error : .toolResult
+        case "thinking":
+            role = .thinking
+        default:
+            role = .system
+        }
+
+        // Build content based on type
+        let messageContent: String
+        switch type {
+        case "tool_use":
+            if let toolName = name {
+                if let toolInput = input?.stringValue {
+                    messageContent = "\(toolName)(\(toolInput))"
+                } else {
+                    messageContent = toolName
+                }
+            } else {
+                messageContent = content ?? ""
+            }
+        case "tool_result":
+            messageContent = output ?? content ?? ""
+        default:
+            messageContent = content ?? ""
+        }
+
+        return ChatMessage(role: role, content: messageContent, timestamp: timestamp)
+    }
+}
+
+/// Pagination info from paginated messages endpoint
+struct CLIPaginationInfo: Decodable {
+    let total: Int
+    let limit: Int
+    let offset: Int
+    let hasMore: Bool
+    let nextCursor: String?    // Message ID for "before" parameter to get older messages
+    let prevCursor: String?    // Message ID for "after" parameter to get newer messages
+}
+
+/// Response from paginated messages endpoint
+/// GET /projects/:path/sessions/:id/messages
+struct CLIPaginatedMessagesResponse: Decodable {
+    let messages: [CLIPaginatedMessageEntry]
+    let pagination: CLIPaginationInfo
+
+    // Convenience accessors for backwards compatibility
+    var total: Int { pagination.total }
+    var hasMore: Bool { pagination.hasMore }
+    var nextCursor: String? { pagination.nextCursor }
+}
+
+// MARK: - Bulk Operation Types
+
+/// Request for bulk session operations
+/// POST /projects/:path/sessions/bulk
+struct CLIBulkOperationRequest: Encodable {
+    /// Session IDs to operate on
+    let sessionIds: [String]
+
+    /// Operation to perform
+    let operation: Operation
+
+    struct Operation: Encodable {
+        /// Action: "archive", "unarchive", "delete", "update"
+        let action: String
+
+        /// For update action: new custom title
+        let customTitle: String?
+
+        init(action: String, customTitle: String? = nil) {
+            self.action = action
+            self.customTitle = customTitle
+        }
+    }
+
+    init(sessionIds: [String], action: String, customTitle: String? = nil) {
+        self.sessionIds = sessionIds
+        self.operation = Operation(action: action, customTitle: customTitle)
+    }
+}
+
+/// Failure detail for a single session in bulk operation
+struct CLIBulkOperationFailure: Decodable {
+    let sessionId: String
+    let error: String
+}
+
+/// Response from bulk session operations
+struct CLIBulkOperationResponse: Decodable {
+    /// Session IDs that succeeded
+    let success: [String]
+
+    /// Sessions that failed with error details
+    let failed: [CLIBulkOperationFailure]
+
+    /// Number of successful operations
+    var successCount: Int { success.count }
+
+    /// Number of failed operations
+    var failedCount: Int { failed.count }
 }

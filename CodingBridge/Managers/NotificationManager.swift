@@ -1,5 +1,18 @@
 import UserNotifications
 
+protocol UserNotificationCenterProtocol: AnyObject {
+    var delegate: UNUserNotificationCenterDelegate? { get set }
+    func requestAuthorization(options: UNAuthorizationOptions) async throws -> Bool
+    func notificationSettings() async -> UNNotificationSettings
+    func setNotificationCategories(_ categories: Set<UNNotificationCategory>)
+    func add(_ request: UNNotificationRequest) async throws
+    func removeDeliveredNotifications(withIdentifiers identifiers: [String])
+    func removeAllDeliveredNotifications()
+    func setBadgeCount(_ count: Int) async throws
+}
+
+extension UNUserNotificationCenter: UserNotificationCenterProtocol {}
+
 /// Manages local notifications for background task updates
 /// Uses @preconcurrency for UNUserNotificationCenterDelegate to handle Swift 6 concurrency
 @MainActor
@@ -20,16 +33,25 @@ final class NotificationManager: NSObject, ObservableObject, @preconcurrency UNU
     @Published private(set) var hasPermission = false
     @Published private(set) var pendingApprovalId: String?
 
+    private let notificationCenter: UserNotificationCenterProtocol
+
     // MARK: - Initialization
 
-    private override init() {
+    private init(notificationCenter: UserNotificationCenterProtocol = UNUserNotificationCenter.current()) {
+        self.notificationCenter = notificationCenter
         super.init()
     }
+
+#if DEBUG
+    static func makeForTesting(notificationCenter: UserNotificationCenterProtocol) -> NotificationManager {
+        NotificationManager(notificationCenter: notificationCenter)
+    }
+#endif
 
     // MARK: - Setup
 
     func configure() {
-        UNUserNotificationCenter.current().delegate = self
+        notificationCenter.delegate = self
         configureCategories()
         log.info("[Notification] Configured notification manager with delegate")
         Task {
@@ -39,7 +61,7 @@ final class NotificationManager: NSObject, ObservableObject, @preconcurrency UNU
 
     func requestPermissions() async -> Bool {
         do {
-            let granted = try await UNUserNotificationCenter.current()
+            let granted = try await notificationCenter
                 .requestAuthorization(options: [.alert, .sound, .badge])
             hasPermission = granted
             log.info("[Notification] Permission \(granted ? "granted" : "denied")")
@@ -51,7 +73,7 @@ final class NotificationManager: NSObject, ObservableObject, @preconcurrency UNU
     }
 
     private func checkPermissionStatus() async {
-        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        let settings = await notificationCenter.notificationSettings()
         hasPermission = settings.authorizationStatus == .authorized
     }
 
@@ -110,7 +132,7 @@ final class NotificationManager: NSObject, ObservableObject, @preconcurrency UNU
             options: []
         )
 
-        UNUserNotificationCenter.current().setNotificationCategories([
+        notificationCenter.setNotificationCategories([
             approvalCategory,
             questionCategory,
             completeCategory,
@@ -195,7 +217,7 @@ final class NotificationManager: NSObject, ObservableObject, @preconcurrency UNU
         )
 
         do {
-            try await UNUserNotificationCenter.current().add(request)
+            try await notificationCenter.add(request)
             log.info("[Notification] Test notification scheduled for 3 seconds")
         } catch {
             log.error("[Notification] Test notification failed: \(error)")
@@ -212,7 +234,7 @@ final class NotificationManager: NSObject, ObservableObject, @preconcurrency UNU
         let request = UNNotificationRequest(identifier: id, content: content, trigger: nil)
 
         do {
-            try await UNUserNotificationCenter.current().add(request)
+            try await notificationCenter.add(request)
             log.info("[Notification] Scheduled: \(content.title) - \(content.body)")
         } catch {
             log.error("[Notification] Failed to schedule: \(error)")
@@ -222,7 +244,7 @@ final class NotificationManager: NSObject, ObservableObject, @preconcurrency UNU
     // MARK: - Clear Notifications
 
     func clearApprovalNotification(requestId: String) {
-        UNUserNotificationCenter.current().removeDeliveredNotifications(
+        notificationCenter.removeDeliveredNotifications(
             withIdentifiers: ["approval-\(requestId)"]
         )
         if pendingApprovalId == requestId {
@@ -231,7 +253,7 @@ final class NotificationManager: NSObject, ObservableObject, @preconcurrency UNU
     }
 
     func clearAllNotifications() {
-        UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+        notificationCenter.removeAllDeliveredNotifications()
         pendingApprovalId = nil
         log.debug("[Notification] Cleared all delivered notifications")
     }
@@ -240,7 +262,7 @@ final class NotificationManager: NSObject, ObservableObject, @preconcurrency UNU
 
     func updateBadge(count: Int) async {
         do {
-            try await UNUserNotificationCenter.current().setBadgeCount(count)
+            try await notificationCenter.setBadgeCount(count)
         } catch {
             log.error("[Notification] Failed to update badge: \(error)")
         }

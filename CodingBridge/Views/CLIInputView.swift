@@ -18,15 +18,11 @@ struct CLIInputView: View {
     let onSend: () -> Void
     let onAbort: () -> Void
     var recentMessages: [ChatMessage]
-    var claudeHelper: ClaudeHelper?
 
     // Ideas FAB properties
     var ideaCount: Int
     var onIdeasTap: () -> Void
     var onIdeasLongPress: () -> Void
-
-    // Session ID for AI file suggestions (avoids creating orphan sessions)
-    var sessionId: String?
 
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
@@ -47,11 +43,9 @@ struct CLIInputView: View {
         onSend: @escaping () -> Void,
         onAbort: @escaping () -> Void,
         recentMessages: [ChatMessage] = [],
-        claudeHelper: ClaudeHelper? = nil,
         ideaCount: Int = 0,
         onIdeasTap: @escaping () -> Void = {},
-        onIdeasLongPress: @escaping () -> Void = {},
-        sessionId: String? = nil
+        onIdeasLongPress: @escaping () -> Void = {}
     ) {
         self._text = text
         self._selectedImages = selectedImages
@@ -62,11 +56,9 @@ struct CLIInputView: View {
         self.onSend = onSend
         self.onAbort = onAbort
         self.recentMessages = recentMessages
-        self.claudeHelper = claudeHelper
         self.ideaCount = ideaCount
         self.onIdeasTap = onIdeasTap
         self.onIdeasLongPress = onIdeasLongPress
-        self.sessionId = sessionId
     }
 
     var body: some View {
@@ -118,10 +110,7 @@ struct CLIInputView: View {
         .sheet(isPresented: $showFilePicker) {
             if let projectPath = projectPath {
                 FilePickerSheet(
-                    projectPath: projectPath,
-                    recentMessages: recentMessages,
-                    claudeHelper: claudeHelper,
-                    sessionId: sessionId
+                    projectPath: projectPath
                 ) { selectedPath in
                     insertFileReference(selectedPath)
                 }

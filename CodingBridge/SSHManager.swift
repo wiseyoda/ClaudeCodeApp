@@ -793,49 +793,24 @@ class SSHManager: ObservableObject {
 
     /// Check git status for a project path
     /// Returns a GitStatus enum indicating the sync state
-    func checkGitStatus(_ path: String) async throws -> GitStatus {
-        guard let client = client, isConnected else {
-            throw SSHError.notConnected
-        }
-
-        // First check if it's a git repo
-        // Use `|| echo "false"` to ensure command succeeds even if not a git repo
-        let escapedPath = shellEscape(path)
-        let isGitCmd = "cd \(escapedPath) && git rev-parse --is-inside-work-tree 2>/dev/null || echo 'false'"
-        let isGitResult = try await client.executeCommand(isGitCmd)
-        let isGit = String(buffer: isGitResult).trimmingCharacters(in: .whitespacesAndNewlines)
-
+    static func parseGitStatus(isGitResult: String, statusOutput: String, revListOutput: String) -> GitStatus {
+        let isGit = isGitResult.trimmingCharacters(in: .whitespacesAndNewlines)
         if isGit != "true" {
             return .notGitRepo
         }
 
-        // Check for uncommitted changes (including untracked files)
-        // Use `|| true` to ensure command succeeds even on git errors
-        let statusCmd = "cd \(escapedPath) && git status --porcelain 2>/dev/null || true"
-        let statusResult = try await client.executeCommand(statusCmd)
-        let statusOutput = String(buffer: statusResult).trimmingCharacters(in: .whitespacesAndNewlines)
-        let hasUncommittedChanges = !statusOutput.isEmpty
-
-        // Fetch remote to get accurate ahead/behind (non-blocking, with timeout)
-        _ = try? await client.executeCommand("cd \(escapedPath) && timeout 5s git fetch --quiet 2>/dev/null || true")
-
-        // Check ahead/behind status relative to upstream
-        // Use `|| echo ""` to handle repos without upstream configured (returns empty string)
-        let revListCmd = "cd \(escapedPath) && git rev-list --left-right --count HEAD...@{upstream} 2>/dev/null || echo ''"
-        let revListResult = try await client.executeCommand(revListCmd)
-        let revListOutput = String(buffer: revListResult).trimmingCharacters(in: .whitespacesAndNewlines)
+        let hasUncommittedChanges = !statusOutput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let trimmedRevList = revListOutput.trimmingCharacters(in: .whitespacesAndNewlines)
 
         var aheadCount = 0
         var behindCount = 0
 
-        // Parse "ahead\tbehind" format
-        let parts = revListOutput.split(separator: "\t")
+        let parts = trimmedRevList.split(separator: "\t")
         if parts.count == 2 {
             aheadCount = Int(parts[0]) ?? 0
             behindCount = Int(parts[1]) ?? 0
         }
 
-        // Determine status based on combinations
         if hasUncommittedChanges {
             if aheadCount > 0 {
                 return .dirtyAndAhead
@@ -856,6 +831,40 @@ class SSHManager: ObservableObject {
         }
 
         return .clean
+    }
+
+    func checkGitStatus(_ path: String) async throws -> GitStatus {
+        guard let client = client, isConnected else {
+            throw SSHError.notConnected
+        }
+
+        // First check if it's a git repo
+        // Use `|| echo "false"` to ensure command succeeds even if not a git repo
+        let escapedPath = shellEscape(path)
+        let isGitCmd = "cd \(escapedPath) && git rev-parse --is-inside-work-tree 2>/dev/null || echo 'false'"
+        let isGitResult = try await client.executeCommand(isGitCmd)
+        let isGitOutput = String(buffer: isGitResult)
+
+        // Check for uncommitted changes (including untracked files)
+        // Use `|| true` to ensure command succeeds even on git errors
+        let statusCmd = "cd \(escapedPath) && git status --porcelain 2>/dev/null || true"
+        let statusResult = try await client.executeCommand(statusCmd)
+        let statusOutput = String(buffer: statusResult)
+
+        // Fetch remote to get accurate ahead/behind (non-blocking, with timeout)
+        _ = try? await client.executeCommand("cd \(escapedPath) && timeout 5s git fetch --quiet 2>/dev/null || true")
+
+        // Check ahead/behind status relative to upstream
+        // Use `|| echo ""` to handle repos without upstream configured (returns empty string)
+        let revListCmd = "cd \(escapedPath) && git rev-list --left-right --count HEAD...@{upstream} 2>/dev/null || echo ''"
+        let revListResult = try await client.executeCommand(revListCmd)
+        let revListOutput = String(buffer: revListResult)
+
+        return Self.parseGitStatus(
+            isGitResult: isGitOutput,
+            statusOutput: statusOutput,
+            revListOutput: revListOutput
+        )
     }
 
     /// Check git status with auto-connect

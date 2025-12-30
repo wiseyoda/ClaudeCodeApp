@@ -5,7 +5,6 @@ import SwiftUI
 struct FilePickerSheet: View {
     let projectPath: String
     let onSelect: (String) -> Void
-    var recentMessages: [ChatMessage]
 
     @Environment(\.dismiss) var dismiss
     @EnvironmentObject var settings: AppSettings
@@ -18,17 +17,8 @@ struct FilePickerSheet: View {
     @State private var searchText = ""
     @State private var pathHistory: [String] = []
 
-    // AI file suggestions
-    var claudeHelper: ClaudeHelper?
-    var sessionId: String?  // Current session ID to avoid creating orphan sessions
-    @State private var suggestedFiles: [String] = []
-    @State private var isLoadingSuggestions = false
-
-    init(projectPath: String, recentMessages: [ChatMessage] = [], claudeHelper: ClaudeHelper? = nil, sessionId: String? = nil, onSelect: @escaping (String) -> Void) {
+    init(projectPath: String, onSelect: @escaping (String) -> Void) {
         self.projectPath = projectPath
-        self.recentMessages = recentMessages
-        self.claudeHelper = claudeHelper
-        self.sessionId = sessionId
         self.onSelect = onSelect
     }
 
@@ -90,7 +80,7 @@ struct FilePickerSheet: View {
                     }
                     .padding()
                     Spacer()
-                } else if filteredFiles.isEmpty && suggestedFiles.isEmpty {
+                } else if filteredFiles.isEmpty {
                     Spacer()
                     Text(searchText.isEmpty ? "No files found" : "No matching files")
                         .font(settings.scaledFont(.body))
@@ -98,99 +88,47 @@ struct FilePickerSheet: View {
                     Spacer()
                 } else {
                     List {
-                        // AI-suggested files section (at root only)
-                        if currentPath == projectPath && searchText.isEmpty && (!suggestedFiles.isEmpty || isLoadingSuggestions) {
-                            Section {
-                                if isLoadingSuggestions {
-                                    HStack {
-                                        ProgressView()
-                                            .scaleEffect(0.8)
-                                        Text("Finding relevant files...")
-                                            .font(settings.scaledFont(.small))
-                                            .foregroundColor(CLITheme.mutedText(for: colorScheme))
-                                    }
-                                    .listRowBackground(CLITheme.background(for: colorScheme))
+                        ForEach(filteredFiles) { file in
+                            Button {
+                                if file.isDirectory {
+                                    navigateTo(file.path)
+                                } else {
+                                    let relativePath = makeRelativePath(file.path)
+                                    onSelect(relativePath)
+                                    dismiss()
                                 }
-                                ForEach(suggestedFiles, id: \.self) { file in
-                                    Button {
-                                        onSelect(file)
-                                        dismiss()
-                                    } label: {
-                                        HStack(spacing: 12) {
-                                            Image(systemName: "sparkles")
-                                                .foregroundColor(CLITheme.yellow(for: colorScheme))
-                                                .frame(width: 24)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: file.icon)
+                                        .foregroundColor(file.isDirectory ?
+                                            CLITheme.yellow(for: colorScheme) :
+                                            CLITheme.cyan(for: colorScheme))
+                                        .frame(width: 24)
 
-                                            Text(file)
-                                                .font(settings.scaledFont(.body))
-                                                .foregroundColor(CLITheme.primaryText(for: colorScheme))
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(file.name)
+                                            .font(settings.scaledFont(.body))
+                                            .foregroundColor(CLITheme.primaryText(for: colorScheme))
 
-                                            Spacer()
-
-                                            Image(systemName: "plus.circle")
-                                                .foregroundColor(CLITheme.cyan(for: colorScheme))
-                                                .font(.system(size: 14))
-                                        }
-                                    }
-                                    .buttonStyle(.plain)
-                                    .listRowBackground(CLITheme.cyan(for: colorScheme).opacity(0.05))
-                                }
-                            } header: {
-                                HStack {
-                                    Image(systemName: "sparkles")
-                                        .font(.caption2)
-                                    Text("Suggested")
-                                        .font(.caption)
-                                }
-                                .foregroundColor(CLITheme.yellow(for: colorScheme))
-                            }
-                        }
-
-                        // Regular files section
-                        Section(header: suggestedFiles.isEmpty || currentPath != projectPath ? nil : Text("All Files").font(.caption).foregroundColor(CLITheme.mutedText(for: colorScheme))) {
-                            ForEach(filteredFiles) { file in
-                                Button {
-                                    if file.isDirectory {
-                                        navigateTo(file.path)
-                                    } else {
-                                        // Select this file
-                                        let relativePath = makeRelativePath(file.path)
-                                        onSelect(relativePath)
-                                        dismiss()
-                                    }
-                                } label: {
-                                    HStack(spacing: 12) {
-                                        Image(systemName: file.icon)
-                                            .foregroundColor(file.isDirectory ?
-                                                CLITheme.yellow(for: colorScheme) :
-                                                CLITheme.cyan(for: colorScheme))
-                                            .frame(width: 24)
-
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(file.name)
-                                                .font(settings.scaledFont(.body))
-                                                .foregroundColor(CLITheme.primaryText(for: colorScheme))
-
-                                            if !file.isDirectory {
-                                                Text(file.formattedSize)
-                                                    .font(settings.scaledFont(.small))
-                                                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
-                                            }
-                                        }
-
-                                        Spacer()
-
-                                        if file.isDirectory {
-                                            Image(systemName: "chevron.right")
+                                        if !file.isDirectory {
+                                            Text(file.formattedSize)
+                                                .font(settings.scaledFont(.small))
                                                 .foregroundColor(CLITheme.mutedText(for: colorScheme))
-                                                .font(.system(size: 12))
                                         }
                                     }
-                                    .contentShape(Rectangle())
+
+                                    Spacer()
+
+                                    if file.isDirectory {
+                                        Image(systemName: "chevron.right")
+                                            .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                                            .font(.system(size: 12))
+                                    }
                                 }
-                                .buttonStyle(.plain)
-                                .listRowBackground(CLITheme.background(for: colorScheme))
+                                .contentShape(Rectangle())
                             }
+                            .buttonStyle(.plain)
+                            .listRowBackground(CLITheme.background(for: colorScheme))
                         }
                     }
                     .listStyle(.plain)
@@ -222,24 +160,7 @@ struct FilePickerSheet: View {
         }
         .task {
             currentPath = projectPath
-            let loadedFiles = await loadFilesAndReturn()
-
-            // Generate AI file suggestions if we have context
-            if let helper = claudeHelper, !recentMessages.isEmpty, !loadedFiles.isEmpty {
-                isLoadingSuggestions = true
-                let availableFilePaths = loadedFiles
-                    .filter { !$0.isDirectory }
-                    .map { makeRelativePath($0.path) }
-
-                await helper.suggestRelevantFiles(
-                    recentMessages: recentMessages,
-                    availableFiles: availableFilePaths,
-                    projectPath: projectPath,
-                    sessionId: sessionId
-                )
-                suggestedFiles = helper.suggestedFiles
-                isLoadingSuggestions = false
-            }
+            await loadFiles()
         }
     }
 
@@ -280,33 +201,21 @@ struct FilePickerSheet: View {
     }
 
     private func loadFiles() async {
-        _ = await loadFilesAndReturn()
-    }
-
-    /// Load files and return them directly (avoids state timing issues)
-    /// Uses REST API when cli-bridge is enabled, otherwise uses SSH
-    private func loadFilesAndReturn() async -> [FileEntry] {
         isLoading = true
         error = nil
 
         do {
-            // Use CLI Bridge REST API
             let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
-            // Calculate relative directory path from project root
             let relativeDir = currentPath.hasPrefix(projectPath)
                 ? String(currentPath.dropFirst(projectPath.count))
                 : "/"
             let directory = relativeDir.isEmpty ? "/" : relativeDir
             let response = try await apiClient.listFiles(projectPath: projectPath, directory: directory)
-            let loadedFiles = response.entries.toFileEntries()
-
-            files = loadedFiles
+            files = response.entries.toFileEntries()
             isLoading = false
-            return loadedFiles
         } catch {
             self.error = error.localizedDescription
             isLoading = false
-            return []
         }
     }
 

@@ -12,18 +12,17 @@ final class ProjectSessionFilterTests: XCTestCase {
         ProjectSession(
             id: id,
             summary: summary,
-            messageCount: messageCount,
             lastActivity: lastActivity,
+            messageCount: messageCount,
             lastUserMessage: lastUserMessage,
             lastAssistantMessage: nil
         )
     }
 
-    func testFilterForDisplayExcludesHelperSession() {
-        let projectPath = "/tmp/filter-helper"
-        let helperId = ClaudeHelper.createHelperSessionId(for: projectPath)
+    func testFilterForDisplayExcludesAgentSession() {
+        let projectPath = "/tmp/filter-agent"
         let sessions = [
-            makeSession(id: helperId, messageCount: 2),
+            makeSession(id: "agent-test-123", messageCount: 2),
             makeSession(id: "user", messageCount: 2)
         ]
 
@@ -85,9 +84,8 @@ final class ProjectSessionFilterTests: XCTestCase {
 
     func testProjectDisplaySessionsUsesFilter() {
         let projectPath = "/tmp/project-display"
-        let helperId = ClaudeHelper.createHelperSessionId(for: projectPath)
         let sessions = [
-            makeSession(id: helperId, messageCount: 1),
+            makeSession(id: "agent-test-123", messageCount: 1),
             makeSession(id: "empty", messageCount: 0),
             makeSession(id: "kept", messageCount: 2)
         ]
@@ -107,9 +105,9 @@ final class ProjectSessionFilterTests: XCTestCase {
         XCTAssertEqual(project.sortedDisplaySessions.map { $0.id }, ["newest", "older"])
     }
 
-    // MARK: - Content-Based Helper Filtering Tests
-    // Note: Content-based filtering is NO LONGER used because ClaudeHelper correctly
-    // reuses the existing session - so a real session may have a helper prompt as lastUserMessage.
+    // MARK: - Content-Based Filtering Tests
+    // Note: Content-based filtering is not used - sessions are only filtered by
+    // ID patterns (like "agent" prefix) and message count.
 
     func testFilterForDisplayDoesNotFilterByContent() {
         let projectPath = "/tmp/filter-helper-content"

@@ -92,10 +92,6 @@ struct QuickSettingsSheet: View {
                         Label("Auto-scroll", systemImage: "arrow.down.to.line")
                     }
 
-                    Toggle(isOn: $settings.autoSuggestionsEnabled) {
-                        Label("Auto Suggestions", systemImage: "sparkles")
-                    }
-
                     Picker(selection: Binding(
                         get: { settings.historyLimit },
                         set: { settings.historyLimit = $0 }
@@ -108,8 +104,6 @@ struct QuickSettingsSheet: View {
                     }
                 } header: {
                     Text("Display")
-                } footer: {
-                    Text("Auto suggestions uses AI to suggest next actions after each response.")
                 }
 
                 // Background & Notifications Section

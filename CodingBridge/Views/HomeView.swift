@@ -16,6 +16,8 @@ struct HomeView: View {
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
     @ObservedObject private var archivedStore = ArchivedProjectsStore.shared
+    @ObservedObject private var sessionStore = SessionStore.shared
+    @ObservedObject private var projectCache = ProjectCache.shared
 
     // Grid layout: 2 flexible columns with spacing
     private let columns = [
@@ -74,6 +76,25 @@ struct HomeView: View {
         }
     }
 
+    /// Get filtered session count for a project
+    /// Priority: count API (most accurate) → display filter → cache → raw total
+    private func sessionCountFor(_ project: Project) -> Int {
+        // 1. Best: Count API provides user/agent/helper breakdown
+        if sessionStore.hasCountsLoaded(for: project.path) {
+            return sessionStore.userSessionCount(for: project.path)
+        }
+        // 2. Good: Sessions loaded and filtered from full list
+        if sessionStore.hasLoaded(for: project.path) {
+            return sessionStore.displaySessionCount(for: project.path)
+        }
+        // 3. Cache: Use cached session count from previous run
+        if let cachedCount = projectCache.sessionCount(for: project.path) {
+            return cachedCount
+        }
+        // 4. Fallback: Use raw total from project (better than 0)
+        return project.totalSessionCount
+    }
+
     // MARK: - Projects Section
 
     private var projectsSection: some View {
@@ -101,6 +122,7 @@ struct HomeView: View {
                             gitStatus: gitStatuses[project.path] ?? .unknown,
                             branchName: branchNames[project.path],
                             onTap: { onSelectProject(project) },
+                            sessionCount: sessionCountFor(project),
                             onRename: onRenameProject != nil ? { onRenameProject?(project) } : nil,
                             onArchive: {
                                 if archivedStore.isArchived(project.path) {
@@ -149,11 +171,13 @@ struct HomeView: View {
 // MARK: - Recent Activity Section
 
 /// Shows recent sessions across all projects
+/// Uses cache-first pattern for instant display
 struct RecentActivitySection: View {
     let onSelectSession: (CLISessionMetadata) -> Void
 
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
+    @ObservedObject private var projectCache = ProjectCache.shared
 
     @State private var recentSessions: [CLISessionMetadata] = []
     @State private var isLoading = false
@@ -169,7 +193,7 @@ struct RecentActivitySection: View {
                 .padding(.horizontal, 4)
 
             // Activity list in glass panel
-            if isLoading && !hasLoaded {
+            if isLoading && !hasLoaded && recentSessions.isEmpty {
                 loadingState
             } else if recentSessions.isEmpty {
                 emptyActivityState
@@ -187,7 +211,15 @@ struct RecentActivitySection: View {
                 .glassBackground(cornerRadius: 16)
             }
         }
+        .onAppear {
+            // INSTANT: Load from cache first
+            if projectCache.hasRecentSessions {
+                recentSessions = projectCache.cachedRecentSessions
+                hasLoaded = true
+            }
+        }
         .task {
+            // BACKGROUND: Refresh from API
             await loadRecentSessions()
         }
     }
@@ -198,10 +230,17 @@ struct RecentActivitySection: View {
 
         do {
             let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
-            recentSessions = try await apiClient.fetchRecentSessions(limit: 5)
+            let freshSessions = try await apiClient.fetchRecentSessions(limit: 5)
+            recentSessions = freshSessions
             hasLoaded = true
+
+            // Update cache for next startup
+            projectCache.updateRecentSessions(freshSessions)
         } catch {
-            // Silently fail - empty state is fine for activity feed
+            // If we have cached data, keep showing it
+            if recentSessions.isEmpty && projectCache.hasRecentSessions {
+                recentSessions = projectCache.cachedRecentSessions
+            }
             log.debug("[HomeView] Failed to load recent sessions: \(error)")
         }
 

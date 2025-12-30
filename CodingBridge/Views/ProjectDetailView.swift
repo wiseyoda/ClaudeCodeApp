@@ -10,6 +10,7 @@ struct ProjectDetailView: View {
     @Environment(\.dismiss) var dismiss
     @Environment(\.colorScheme) var colorScheme
     @EnvironmentObject var settings: AppSettings
+    @ObservedObject private var projectSettingsStore = ProjectSettingsStore.shared
 
     @State private var projectDetail: CLIProjectDetail?
     @State private var isLoading = true
@@ -115,6 +116,9 @@ struct ProjectDetailView: View {
 
             // Quick actions
             actionsSection
+
+            // Project settings
+            projectSettingsSection
 
             // README preview
             if let readme = projectDetail?.readme, !readme.isEmpty {
@@ -327,6 +331,39 @@ struct ProjectDetailView: View {
                 .foregroundColor(CLITheme.primaryText(for: colorScheme))
             }
         }
+    }
+
+    private var projectSettingsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Project Settings")
+                .font(settings.scaledFont(.small))
+                .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                .textCase(.uppercase)
+
+            // Subrepo discovery toggle
+            Toggle(isOn: Binding(
+                get: { projectSettingsStore.isSubrepoDiscoveryEnabled(for: project.path) },
+                set: { projectSettingsStore.setSubrepoDiscoveryEnabled(for: project.path, enabled: $0) }
+            )) {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "arrow.triangle.branch")
+                            .foregroundColor(CLITheme.cyan(for: colorScheme))
+                        Text("Sub-repo Discovery")
+                            .font(settings.scaledFont(.body))
+                            .foregroundColor(CLITheme.primaryText(for: colorScheme))
+                    }
+                    Text("Scan for nested git repositories (monorepo support)")
+                        .font(settings.scaledFont(.small))
+                        .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                }
+            }
+            .tint(CLITheme.cyan(for: colorScheme))
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(CLITheme.secondaryBackground(for: colorScheme))
+        .cornerRadius(8)
     }
 
     private func readmeSection(_ readme: String) -> some View {

@@ -12,7 +12,6 @@ class ChatViewModel: ObservableObject {
 
     // MARK: - Managers
     let wsManager: CLIBridgeAdapter
-    let claudeHelper: ClaudeHelper
     let ideasStore: IdeasStore
     let scrollManager = ScrollStateManager()
     let sessionStore = SessionStore.shared
@@ -35,8 +34,10 @@ class ChatViewModel: ObservableObject {
     @Published var streamingMessageId = UUID()
     @Published var streamingMessageTimestamp = Date()
 
-    // MARK: - Tool Use Tracking
+    // MARK: - Tool Use Tracking (internal state, no UI updates needed)
+    /// Maps tool_use_id to tool name for result filtering - not @Published as changes don't affect UI
     var toolUseMap: [String: String] = [:]
+    /// Tool IDs created while a subagent was active - not @Published as changes don't affect UI
     var subagentToolIds: Set<String> = []
 
     // MARK: - Search State
@@ -48,7 +49,9 @@ class ChatViewModel: ObservableObject {
     @Published var gitStatus: GitStatus = .unknown
     @Published var isAutoPulling = false
     @Published var showGitBanner = true
+    /// Tracks if cleanup prompt was shown - not @Published as it's one-time flag
     var hasPromptedCleanup = false
+    /// Background task for periodic git refresh - not @Published, managed internally
     var gitRefreshTask: Task<Void, Never>?
 
     // MARK: - Model State
@@ -68,11 +71,11 @@ class ChatViewModel: ObservableObject {
     @Published var currentTodos: [TodoListView.TodoItem] = []
     @Published var isTodoDrawerExpanded = false
     @Published var showTodoDrawer = false
+    /// Timer to auto-hide todo drawer - not @Published, managed internally
     var todoHideTimer: Task<Void, Never>?
 
-    // MARK: - Background Tasks
+    // MARK: - Background Tasks (internal task management, not @Published)
     var disconnectTask: Task<Void, Never>?
-    var analyzeTask: Task<Void, Never>?
     var saveDebounceTask: Task<Void, Never>?
     var draftDebounceTask: Task<Void, Never>?
 
@@ -91,9 +94,25 @@ class ChatViewModel: ObservableObject {
 
         // Initialize managers
         self.wsManager = CLIBridgeAdapter()
-        self.claudeHelper = ClaudeHelper(settings: settings)
         self.ideasStore = IdeasStore(projectPath: project.path)
     }
+
+#if DEBUG
+    init(
+        project: Project,
+        initialGitStatus: GitStatus = .unknown,
+        settings: AppSettings,
+        wsManager: CLIBridgeAdapter,
+        onSessionsChanged: (() -> Void)? = nil
+    ) {
+        self.project = project
+        self.initialGitStatus = initialGitStatus
+        self.settings = settings
+        self.onSessionsChanged = onSessionsChanged
+        self.wsManager = wsManager
+        self.ideasStore = IdeasStore(projectPath: project.path)
+    }
+#endif
 
     // MARK: - Lifecycle
 
@@ -107,7 +126,6 @@ class ChatViewModel: ObservableObject {
 
         // Update managers with actual settings
         wsManager.updateSettings(settings)
-        claudeHelper.updateSettings(settings)
         setupWebSocketCallbacks()
 
         // Start health monitoring for status bar
@@ -120,6 +138,12 @@ class ChatViewModel: ObservableObject {
         // Load persisted messages as temporary content while history loads
         Task {
             let savedMessages = await MessageStore.loadMessages(for: project.path)
+            // Only use persisted messages if history isn't loading yet
+            // This prevents race condition where persisted messages overwrite empty state
+            guard !isLoadingHistory else {
+                log.debug("[ChatViewModel] Skipping persisted messages - history loading from API")
+                return
+            }
             if !savedMessages.isEmpty {
                 // Apply history limit on load for safety
                 let limit = settings.historyLimit.rawValue
@@ -141,7 +165,7 @@ class ChatViewModel: ObservableObject {
 
             // Connect based on selected session
             if let session = selectedSession {
-                print("[ChatViewModel] Opening project with session: \(session.id.prefix(8))...")
+                log.debug("[ChatViewModel] Opening project with session: \(session.id.prefix(8))...")
                 wsManager.sessionId = session.id
                 wsManager.connect(projectPath: project.path, sessionId: session.id)
                 MessageStore.saveSessionId(session.id, for: project.path)
@@ -149,12 +173,12 @@ class ChatViewModel: ObservableObject {
 
                 // Check if we need to reattach to an active session
                 if wasProcessing {
-                    print("[ChatViewModel] Session was processing when app closed - attempting reattachment...")
+                    log.debug("[ChatViewModel] Session was processing when app closed - attempting reattachment...")
                     attemptSessionReattachment(sessionId: session.id)
                 }
             } else {
                 // No sessions exist - connect without sessionId
-                print("[ChatViewModel] No sessions found for project - connecting without session")
+                log.debug("[ChatViewModel] No sessions found for project - connecting without session")
                 wsManager.connect(projectPath: project.path)
                 if wasProcessing {
                     MessageStore.clearProcessingState(for: project.path)
@@ -183,18 +207,8 @@ class ChatViewModel: ObservableObject {
                 refreshGitStatus()
             }
         }
-
-        // Initialize sessions via API
-        if !sessionStore.hasLoaded(for: project.path) {
-            if localSessions.isEmpty {
-                for session in project.sessions ?? [] {
-                    sessionStore.addSession(session, for: project.path)
-                }
-            }
-            Task {
-                await sessionStore.loadSessions(for: project.path, forceRefresh: true)
-            }
-        }
+        // Note: Session loading is already handled in the Task above (lines 140-168)
+        // with forceRefresh: true, so no additional loading is needed here.
     }
 
     func onDisappear() {
@@ -209,10 +223,6 @@ class ChatViewModel: ObservableObject {
         // Cancel git refresh task
         gitRefreshTask?.cancel()
         gitRefreshTask = nil
-
-        // Cancel any running message analysis
-        analyzeTask?.cancel()
-        analyzeTask = nil
 
         // Cancel todo hide timer
         todoHideTimer?.cancel()
@@ -266,21 +276,32 @@ class ChatViewModel: ObservableObject {
     }
 
     func startNewSession() {
+        log.debug("[ChatViewModel] Starting new session - clearing state and reconnecting")
+
+        // Clear UI state
         messages = []
-        wsManager.sessionId = nil
         scrollManager.reset()
         MessageStore.clearMessages(for: project.path)
         MessageStore.clearSessionId(for: project.path)
+        sessionStore.clearActiveSessionId(for: project.path)
 
+        // Create ephemeral session placeholder
         let ephemeralSession = ProjectSession(
             id: "new-session-\(UUID().uuidString)",
             summary: "New Session",
-            messageCount: 0,
             lastActivity: ISO8601DateFormatter().string(from: Date()),
+            messageCount: 0,
             lastUserMessage: nil,
             lastAssistantMessage: nil
         )
         selectedSession = ephemeralSession
+
+        // CRITICAL: Disconnect and reconnect WebSocket WITHOUT a sessionId
+        // This ensures the backend creates a new session when the user sends their first message
+        wsManager.disconnect()
+        wsManager.sessionId = nil
+        log.debug("[ChatViewModel] Reconnecting WebSocket without sessionId for fresh session")
+        wsManager.connect(projectPath: project.path, sessionId: nil)
 
         let welcomeMessage = ChatMessage(
             role: .system,
@@ -294,15 +315,15 @@ class ChatViewModel: ObservableObject {
     func selectInitialSession() {
         if let preSelectedId = sessionStore.loadActiveSessionId(for: project.path) {
             if let preSelectedSession = sessionStore.sessions(for: project.path).first(where: { $0.id == preSelectedId }) {
-                print("[ChatViewModel] Using pre-selected session: \(preSelectedId.prefix(8))...")
+                log.debug("[ChatViewModel] Using pre-selected session: \(preSelectedId.prefix(8))...")
                 selectedSession = preSelectedSession
             } else {
-                print("[ChatViewModel] Pre-selected session \(preSelectedId.prefix(8)) not in list, creating ephemeral...")
+                log.debug("[ChatViewModel] Pre-selected session \(preSelectedId.prefix(8)) not in list, creating ephemeral...")
                 let ephemeralSession = ProjectSession(
                     id: preSelectedId,
                     summary: nil,
-                    messageCount: nil,
                     lastActivity: nil,
+                    messageCount: nil,
                     lastUserMessage: nil,
                     lastAssistantMessage: nil
                 )
@@ -334,7 +355,7 @@ class ChatViewModel: ObservableObject {
     func selectMostRecentSession(from sessions: [ProjectSession]) {
         guard let mostRecent = sessions.first else { return }
 
-        print("[ChatViewModel] Selecting most recent session: \(mostRecent.id.prefix(8))...")
+        log.debug("[ChatViewModel] Selecting most recent session: \(mostRecent.id.prefix(8))...")
         wsManager.sessionId = mostRecent.id
         selectedSession = mostRecent
         MessageStore.saveSessionId(mostRecent.id, for: project.path)
@@ -353,10 +374,10 @@ class ChatViewModel: ObservableObject {
             }
 
             if wsManager.connectionState.isConnected {
-                print("[ChatViewModel] Reattaching to session: \(sessionId.prefix(8))...")
+                log.debug("[ChatViewModel] Reattaching to session: \(sessionId.prefix(8))...")
                 wsManager.attachToSession(sessionId: sessionId, projectPath: project.path)
             } else {
-                print("[ChatViewModel] Could not reattach - WebSocket not connected after wait")
+                log.debug("[ChatViewModel] Could not reattach - WebSocket not connected after wait")
                 MessageStore.clearProcessingState(for: project.path)
             }
         }
@@ -376,55 +397,96 @@ class ChatViewModel: ObservableObject {
 
         Task {
             do {
-                print("[ChatViewModel] Loading session history via export API for: \(session.id)")
+                let limit = settings.historyLimit.rawValue
+                log.debug("[ChatViewModel] Loading session history via paginated API for: \(session.id) (limit: \(limit))")
 
                 let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
-                let exportResponse = try await apiClient.exportSession(
+
+                // Use the new paginated messages endpoint - fetches only what we need
+                let response = try await apiClient.fetchInitialMessages(
                     projectPath: project.path,
                     sessionId: session.id,
-                    format: .json,
-                    includeStructuredContent: true
+                    limit: limit
                 )
 
                 await wsManager.refreshTokenUsage(projectPath: project.path, sessionId: session.id)
 
-                let historyMessages = parseJSONLToMessages(exportResponse.content)
+                // Convert paginated messages to ChatMessages
+                // Response is in "desc" order (newest first), reverse for chronological display
+                let historyMessages = response.messages.reversed().map { $0.toChatMessage() }
 
                 if historyMessages.isEmpty {
                     if let lastMsg = session.lastAssistantMessage {
                         messages.append(ChatMessage(role: .assistant, content: lastMsg, timestamp: Date()))
                     }
                 } else {
-                    // Apply history limit when loading to avoid memory bloat from large sessions
-                    let limit = settings.historyLimit.rawValue
-                    if historyMessages.count > limit {
-                        messages = Array(historyMessages.suffix(limit))
-                        print("[ChatViewModel] Loaded \(historyMessages.count) messages, pruned to \(limit)")
-                    } else {
-                        messages = historyMessages
-                        print("[ChatViewModel] Loaded \(historyMessages.count) messages from session export")
-                    }
+                    messages = historyMessages
+                    log.debug("[ChatViewModel] Loaded \(historyMessages.count) messages via paginated API (total: \(response.total), hasMore: \(response.hasMore))")
                 }
                 isLoadingHistory = false
+                refreshDisplayMessagesCache()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
                     self?.scrollManager.forceScrollToBottom()
                 }
             } catch {
-                print("[ChatViewModel] Failed to load session history via export: \(error)")
+                log.debug("[ChatViewModel] Failed to load session history via paginated API: \(error)")
+                // Fall back to export API for backwards compatibility
+                await loadSessionHistoryFallback(session)
+            }
+        }
+    }
+
+    /// Fallback to export API if paginated endpoint fails (backwards compatibility)
+    private func loadSessionHistoryFallback(_ session: ProjectSession) async {
+        do {
+            log.debug("[ChatViewModel] Falling back to export API for: \(session.id)")
+
+            let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
+            let exportResponse = try await apiClient.exportSession(
+                projectPath: project.path,
+                sessionId: session.id,
+                format: .json,
+                includeStructuredContent: true
+            )
+
+            let historyMessages = parseJSONLToMessages(exportResponse.content)
+
+            if historyMessages.isEmpty {
                 if let lastMsg = session.lastAssistantMessage {
                     messages.append(ChatMessage(role: .assistant, content: lastMsg, timestamp: Date()))
                 }
-                messages.append(ChatMessage(role: .system, content: "Could not load history: \(error.localizedDescription)", timestamp: Date()))
-                isLoadingHistory = false
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-                    self?.scrollManager.forceScrollToBottom()
+            } else {
+                // Apply history limit when loading to avoid memory bloat from large sessions
+                let limit = settings.historyLimit.rawValue
+                if historyMessages.count > limit {
+                    messages = Array(historyMessages.suffix(limit))
+                    log.debug("[ChatViewModel] Fallback: Loaded \(historyMessages.count) messages, pruned to \(limit)")
+                } else {
+                    messages = historyMessages
+                    log.debug("[ChatViewModel] Fallback: Loaded \(historyMessages.count) messages from session export")
                 }
+            }
+            isLoadingHistory = false
+            refreshDisplayMessagesCache()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self?.scrollManager.forceScrollToBottom()
+            }
+        } catch {
+            log.debug("[ChatViewModel] Fallback also failed: \(error)")
+            if let lastMsg = session.lastAssistantMessage {
+                messages.append(ChatMessage(role: .assistant, content: lastMsg, timestamp: Date()))
+            }
+            messages.append(ChatMessage(role: .system, content: "Could not load history: \(error.localizedDescription)", timestamp: Date()))
+            isLoadingHistory = false
+            refreshDisplayMessagesCache()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self?.scrollManager.forceScrollToBottom()
             }
         }
     }
 
     func deleteSession(_ session: ProjectSession) async {
-        print("[ChatViewModel] Deleting session: \(session.id)")
+        log.debug("[ChatViewModel] Deleting session: \(session.id)")
 
         let success = await sessionStore.deleteSession(session, for: project.path)
 
@@ -437,7 +499,7 @@ class ChatViewModel: ObservableObject {
             }
             onSessionsChanged?()
         } else {
-            print("[ChatViewModel] Failed to delete session: \(session.id)")
+            log.debug("[ChatViewModel] Failed to delete session: \(session.id)")
         }
     }
 
@@ -485,9 +547,9 @@ class ChatViewModel: ObservableObject {
         let sessionToResume = effectiveSessionToResume
 
         if let sid = sessionToResume {
-            print("[ChatViewModel] Sending message with sessionToResume: \(sid.prefix(8))...")
+            log.debug("[ChatViewModel] Sending message with sessionToResume: \(sid.prefix(8))...")
         } else {
-            print("[ChatViewModel] Sending message with NO session ID - new session will be created")
+            log.debug("[ChatViewModel] Sending message with NO session ID - new session will be created")
         }
 
         let defaultPrompt = imagesToSend.count == 1 ? "What is this image?" : "What are these images?"
@@ -702,25 +764,14 @@ class ChatViewModel: ObservableObject {
 
             self.refreshGitStatus()
 
-            if self.settings.autoSuggestionsEnabled {
-                Task {
-                    await self.claudeHelper.generateSuggestions(
-                        recentMessages: self.messages,
-                        projectPath: self.project.path,
-                        currentSessionId: self.wsManager.sessionId
-                    )
-                }
-            }
-
             if self.showTodoDrawer && !self.currentTodos.isEmpty {
                 self.todoHideTimer?.cancel()
-                self.todoHideTimer = Task {
+                self.todoHideTimer = Task { [weak self] in
                     try? await Task.sleep(nanoseconds: 15_000_000_000)
-                    if !Task.isCancelled {
-                        withAnimation(.easeOut(duration: 0.3)) {
-                            self.showTodoDrawer = false
-                            self.isTodoDrawerExpanded = false
-                        }
+                    guard let self, !Task.isCancelled else { return }
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        self.showTodoDrawer = false
+                        self.isTodoDrawerExpanded = false
                     }
                 }
             }
@@ -767,8 +818,8 @@ class ChatViewModel: ObservableObject {
             let newSession = ProjectSession(
                 id: sessionId,
                 summary: summary,
-                messageCount: 1,
                 lastActivity: ISO8601DateFormatter().string(from: Date()),
+                messageCount: 1,
                 lastUserMessage: summary,
                 lastAssistantMessage: nil
             )
@@ -809,7 +860,7 @@ class ChatViewModel: ObservableObject {
                 timestamp: Date()
             )
             self.messages.append(attachMsg)
-            print("[ChatViewModel] Successfully reattached to active session")
+            log.debug("[ChatViewModel] Successfully reattached to active session")
         }
 
         wsManager.onSessionEvent = { [weak self] event in
@@ -831,7 +882,7 @@ class ChatViewModel: ObservableObject {
                     self.scrollToBottomTrigger = true
                 }
             }
-            print("[ChatViewModel] Loaded \(historyMessages.count) history messages, hasMore: \(payload.hasMore)")
+            log.debug("[ChatViewModel] Loaded \(historyMessages.count) history messages, hasMore: \(payload.hasMore)")
         }
     }
 
@@ -890,8 +941,6 @@ class ChatViewModel: ObservableObject {
     private func computeDisplayMessages() -> [ChatMessage] {
         var filtered = messages
 
-        filtered = filtered.filter { !isClaudeHelperPrompt($0.content) }
-
         if !settings.showThinkingBlocks {
             filtered = filtered.filter { $0.role != .thinking }
         }
@@ -913,53 +962,6 @@ class ChatViewModel: ObservableObject {
         }
 
         return filtered
-    }
-
-    private func isClaudeHelperPrompt(_ content: String) -> Bool {
-        let helperPrefixes = [
-            "Based on this conversation context, suggest",
-            "Based on this conversation, which files would be most relevant",
-            "You are helping a developer expand a quick idea into an actionable prompt",
-            "Analyze this Claude Code response and suggest"
-        ]
-        if helperPrefixes.contains(where: { content.hasPrefix($0) }) {
-            return true
-        }
-
-        var trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        if trimmed.hasPrefix("```") {
-            if let firstNewline = trimmed.firstIndex(of: "\n") {
-                trimmed = String(trimmed[trimmed.index(after: firstNewline)...])
-            }
-            if trimmed.hasSuffix("```") {
-                trimmed = String(trimmed.dropLast(3))
-            }
-            trimmed = trimmed.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-
-        if trimmed.hasPrefix("[") && trimmed.contains("\"label\"") && trimmed.contains("\"prompt\"") {
-            return true
-        }
-
-        if trimmed.hasPrefix("{") && trimmed.contains("\"expandedPrompt\"") {
-            return true
-        }
-
-        return false
-    }
-
-    func handleAnalyze(_ msg: ChatMessage) {
-        analyzeTask?.cancel()
-        analyzeTask = Task {
-            guard !Task.isCancelled else { return }
-            await claudeHelper.analyzeMessage(
-                msg,
-                recentMessages: messages,
-                projectPath: project.path,
-                sessionId: wsManager.sessionId
-            )
-        }
     }
 
     // MARK: - Git Status
@@ -994,7 +996,7 @@ class ChatViewModel: ObservableObject {
                     newStatus = .notGitRepo
                 }
             } catch {
-                print("[ChatViewModel] Failed to fetch git status from API: \(error)")
+                log.debug("[ChatViewModel] Failed to fetch git status from API: \(error)")
                 newStatus = .error(error.localizedDescription)
             }
 
@@ -1029,7 +1031,7 @@ class ChatViewModel: ObservableObject {
                     messages = historyMessages
                 }
             } catch {
-                print("[ChatViewModel] Failed to refresh session history: \(error)")
+                log.debug("[ChatViewModel] Failed to refresh session history: \(error)")
             }
         }
     }
@@ -1222,18 +1224,18 @@ class ChatViewModel: ObservableObject {
 
     func parseJSONLToMessages(_ jsonContent: String) -> [ChatMessage] {
         guard let data = jsonContent.data(using: .utf8) else {
-            print("[ChatViewModel] Failed to convert export content to data")
+            log.debug("[ChatViewModel] Failed to convert export content to data")
             return []
         }
 
         do {
             if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                let messagesArray = json["messages"] as? [[String: Any]] {
-                print("[ChatViewModel] Found \(messagesArray.count) messages in export")
+                log.debug("[ChatViewModel] Found \(messagesArray.count) messages in export")
                 return messagesArray.flatMap { parseExportMessage($0) }
             }
         } catch {
-            print("[ChatViewModel] Failed to parse export JSON: \(error)")
+            log.debug("[ChatViewModel] Failed to parse export JSON: \(error)")
         }
 
         return []
@@ -1258,16 +1260,10 @@ class ChatViewModel: ObservableObject {
         case "tool_use":
             if let name = json["name"] as? String {
                 var toolContent = name
-                if let inputDict = json["input"] as? [String: Any] {
-                    if let data = try? JSONSerialization.data(withJSONObject: inputDict),
-                       let inputStr = String(data: data, encoding: .utf8) {
-                        toolContent = "\(name)(\(inputStr))"
-                        print("[ChatViewModel] ✅ Parsed tool_use \(name) with JSON: \(inputStr.prefix(50))...")
-                    } else {
-                        print("[ChatViewModel] ❌ JSONSerialization failed for \(name)")
-                    }
-                } else if json["input"] != nil {
-                    print("[ChatViewModel] ❌ input not [String: Any] for \(name), keys: \(json.keys)")
+                if let inputDict = json["input"] as? [String: Any],
+                   let data = try? JSONSerialization.data(withJSONObject: inputDict),
+                   let inputStr = String(data: data, encoding: .utf8) {
+                    toolContent = "\(name)(\(inputStr))"
                 }
                 return [ChatMessage(role: .toolUse, content: toolContent, timestamp: timestamp)]
             }
@@ -1313,7 +1309,7 @@ class ChatViewModel: ObservableObject {
             return []
 
         default:
-            print("[ChatViewModel] Unknown message type: \(type)")
+            log.debug("[ChatViewModel] Unknown message type: \(type)")
             return []
         }
     }
@@ -1331,7 +1327,7 @@ class ChatViewModel: ObservableObject {
                     messages.append(ChatMessage(role: role, content: text, timestamp: timestamp))
                 }
             default:
-                print("[ChatViewModel] Unexpected nested block type '\(blockType)' - cli-bridge should flatten this")
+                log.debug("[ChatViewModel] Unexpected nested block type '\(blockType)' - cli-bridge should flatten this")
             }
         }
 
@@ -1416,10 +1412,6 @@ class ChatViewModel: ObservableObject {
     /// Cleanup transient state after a processing cycle completes.
     /// Called from onComplete to prevent accumulation of lingering tasks/state.
     private func cleanupAfterProcessingComplete() {
-        // Cancel any pending analyze task from previous response
-        analyzeTask?.cancel()
-        analyzeTask = nil
-
         // Clear tool tracking maps that may have grown during session
         toolUseMap.removeAll(keepingCapacity: true)
         subagentToolIds.removeAll(keepingCapacity: true)
@@ -1436,10 +1428,6 @@ class ChatViewModel: ObservableObject {
             guard !Task.isCancelled else { return }
             MessageStore.saveDraft(newText, for: projectPath)
         }
-
-        if !newText.isEmpty && !claudeHelper.suggestedActions.isEmpty {
-            claudeHelper.clearSuggestions()
-        }
     }
 
     func handleProcessingChange(oldValue: Bool, isProcessing: Bool) {
@@ -1454,7 +1442,7 @@ class ChatViewModel: ObservableObject {
     func handleModelChange(oldModel: ClaudeModel, newModel: ClaudeModel) {
         guard oldModel != newModel else { return }
         guard wsManager.connectionState.isConnected else { return }
-        print("[ChatViewModel] Model changed from \(oldModel.shortName) to \(newModel.shortName) - calling switchModel")
+        log.debug("[ChatViewModel] Model changed from \(oldModel.shortName) to \(newModel.shortName) - calling switchModel")
         wsManager.switchModel(to: newModel)
     }
 }

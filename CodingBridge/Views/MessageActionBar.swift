@@ -1,11 +1,10 @@
 import SwiftUI
 
-/// Action bar shown below assistant messages with copy, time, tokens, and analyze options
+/// Action bar shown below assistant messages with copy, time, and token info
 struct MessageActionBar: View {
     let message: ChatMessage
     let projectPath: String
     let onCopy: () -> Void
-    let onAnalyze: () -> Void
 
     @Environment(\.colorScheme) var colorScheme
     @EnvironmentObject var settings: AppSettings
@@ -33,18 +32,6 @@ struct MessageActionBar: View {
             }
 
             Spacer()
-
-            // Analyze button - sends to Haiku for follow-up suggestions
-            Button {
-                onAnalyze()
-            } label: {
-                Label("Analyze", systemImage: "sparkles")
-                    .font(.caption)
-                    .foregroundColor(CLITheme.purple(for: colorScheme))
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Analyze response")
-            .accessibilityHint("Get AI-powered follow-up suggestions")
 
             // Copy button
             Button {
@@ -124,8 +111,7 @@ private struct StatLabel: View {
                 tokenCount: 1234
             ),
             projectPath: "/test/project",
-            onCopy: { print("Copy") },
-            onAnalyze: { print("Analyze") }
+            onCopy: { print("Copy") }
         )
         .environmentObject(AppSettings())
 
@@ -137,8 +123,7 @@ private struct StatLabel: View {
                 tokenCount: 89
             ),
             projectPath: "/test/project",
-            onCopy: { print("Copy") },
-            onAnalyze: { print("Analyze") }
+            onCopy: { print("Copy") }
         )
         .environmentObject(AppSettings())
 
@@ -150,8 +135,7 @@ private struct StatLabel: View {
                 tokenCount: 15432
             ),
             projectPath: "/test/project",
-            onCopy: { print("Copy") },
-            onAnalyze: { print("Analyze") }
+            onCopy: { print("Copy") }
         )
         .environmentObject(AppSettings())
     }

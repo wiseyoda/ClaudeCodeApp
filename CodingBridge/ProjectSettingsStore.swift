@@ -5,8 +5,25 @@ struct ProjectSettings: Codable, Equatable {
     /// Override for permission mode: nil = use global, otherwise use this mode
     var permissionModeOverride: PermissionMode?
 
-    init(permissionModeOverride: PermissionMode? = nil) {
+    /// Enable sub-repository discovery for this project (default: false)
+    /// When enabled, the app will scan for nested git repos within the project
+    var enableSubrepoDiscovery: Bool
+
+    init(permissionModeOverride: PermissionMode? = nil, enableSubrepoDiscovery: Bool = false) {
         self.permissionModeOverride = permissionModeOverride
+        self.enableSubrepoDiscovery = enableSubrepoDiscovery
+    }
+
+    // Custom decoder for backwards compatibility with cached data missing new fields
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        permissionModeOverride = try container.decodeIfPresent(PermissionMode.self, forKey: .permissionModeOverride)
+        enableSubrepoDiscovery = try container.decodeIfPresent(Bool.self, forKey: .enableSubrepoDiscovery) ?? false
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case permissionModeOverride
+        case enableSubrepoDiscovery
     }
 }
 
@@ -94,6 +111,18 @@ class ProjectSettingsStore: ObservableObject {
         let encodedPath = encodeProjectPath(projectPath)
         projectSettings.removeValue(forKey: encodedPath)
         save()
+    }
+
+    /// Check if sub-repository discovery is enabled for a project (default: false)
+    func isSubrepoDiscoveryEnabled(for projectPath: String) -> Bool {
+        return settings(for: projectPath).enableSubrepoDiscovery
+    }
+
+    /// Set whether sub-repository discovery is enabled for a project
+    func setSubrepoDiscoveryEnabled(for projectPath: String, enabled: Bool) {
+        var currentSettings = settings(for: projectPath)
+        currentSettings.enableSubrepoDiscovery = enabled
+        updateSettings(for: projectPath, settings: currentSettings)
     }
 
     // MARK: - Private Helpers

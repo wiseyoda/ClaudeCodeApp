@@ -199,7 +199,6 @@ class AppSettings: ObservableObject {
     // Chat Display Settings
     @AppStorage("showThinkingBlocks") var showThinkingBlocks: Bool = true
     @AppStorage("autoScrollEnabled") var autoScrollEnabled: Bool = true
-    @AppStorage("autoSuggestionsEnabled") var autoSuggestionsEnabled: Bool = true  // AI-powered next action suggestions
     @AppStorage("historyLimit") private var historyLimitRaw: Int = HistoryLimit.medium.rawValue
     @AppStorage("lockToPortrait") var lockToPortrait: Bool = true  // Lock to portrait mode by default
 

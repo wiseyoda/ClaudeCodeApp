@@ -18,6 +18,42 @@ protocol SessionRepository {
     ///   - projectName: The encoded project name
     ///   - sessionId: The session ID to delete
     func deleteSession(projectName: String, sessionId: String) async throws
+
+    // MARK: - New Session Management Methods
+
+    /// Get session count with breakdown by source
+    /// - Parameters:
+    ///   - projectName: The encoded project name
+    ///   - source: Optional source filter
+    func getSessionCount(projectName: String, source: CLISessionMetadata.SessionSource?) async throws -> CLISessionCountResponse
+
+    /// Search sessions by keyword
+    /// - Parameters:
+    ///   - projectName: The encoded project name
+    ///   - query: Search query string
+    ///   - limit: Maximum results to return
+    ///   - offset: Pagination offset
+    func searchSessions(projectName: String, query: String, limit: Int, offset: Int) async throws -> CLISessionSearchResponse
+
+    /// Archive a session (soft delete)
+    /// - Parameters:
+    ///   - projectName: The encoded project name
+    ///   - sessionId: Session ID to archive
+    func archiveSession(projectName: String, sessionId: String) async throws -> CLISessionMetadata
+
+    /// Unarchive a session (restore from archive)
+    /// - Parameters:
+    ///   - projectName: The encoded project name
+    ///   - sessionId: Session ID to unarchive
+    func unarchiveSession(projectName: String, sessionId: String) async throws -> CLISessionMetadata
+
+    /// Execute bulk operation on multiple sessions
+    /// - Parameters:
+    ///   - projectName: The encoded project name
+    ///   - sessionIds: Session IDs to operate on
+    ///   - action: Operation type: "archive", "unarchive", "delete", "update"
+    ///   - customTitle: For update action, the new custom title
+    func bulkOperation(projectName: String, sessionIds: [String], action: String, customTitle: String?) async throws -> CLIBulkOperationResponse
 }
 
 // MARK: - Response Models
@@ -47,10 +83,13 @@ final class CLIBridgeSessionRepository: SessionRepository {
         self.settings = settings
     }
 
+    /// Convert encoded project name back to path
+    private func projectPath(from projectName: String) -> String {
+        projectName.replacingOccurrences(of: "-", with: "/")
+    }
+
     func fetchSessions(projectName: String, limit: Int = 100, offset: Int = 0) async throws -> SessionsResponse {
-        // Convert project name back to path for cli-bridge API
-        // Note: cli-bridge uses the path encoding directly in URL
-        let projectPath = projectName.replacingOccurrences(of: "-", with: "/")
+        let projectPath = projectPath(from: projectName)
 
         let response = try await apiClient.fetchSessions(
             projectPath: projectPath,
@@ -61,20 +100,67 @@ final class CLIBridgeSessionRepository: SessionRepository {
         // Convert CLISessionMetadata to ProjectSession
         let projectSessions = response.sessions.toProjectSessions()
 
+        // Use the actual total from API if available, otherwise approximate
+        let total = response.total ?? (projectSessions.count + (response.hasMore ? 1 : 0))
+
         return SessionsResponse(
             sessions: projectSessions,
             hasMore: response.hasMore,
-            total: projectSessions.count + (response.hasMore ? 1 : 0)  // Approximate total
+            total: total
         )
     }
 
     func deleteSession(projectName: String, sessionId: String) async throws {
-        // Convert project name back to path
-        let projectPath = projectName.replacingOccurrences(of: "-", with: "/")
-
+        let projectPath = projectPath(from: projectName)
         try await apiClient.deleteSession(
             projectPath: projectPath,
             sessionId: sessionId
+        )
+    }
+
+    // MARK: - New Session Management Methods
+
+    func getSessionCount(projectName: String, source: CLISessionMetadata.SessionSource?) async throws -> CLISessionCountResponse {
+        let projectPath = projectPath(from: projectName)
+        return try await apiClient.getSessionCount(
+            projectPath: projectPath,
+            source: source
+        )
+    }
+
+    func searchSessions(projectName: String, query: String, limit: Int, offset: Int) async throws -> CLISessionSearchResponse {
+        let projectPath = projectPath(from: projectName)
+        return try await apiClient.searchSessions(
+            projectPath: projectPath,
+            query: query,
+            limit: limit,
+            offset: offset
+        )
+    }
+
+    func archiveSession(projectName: String, sessionId: String) async throws -> CLISessionMetadata {
+        let projectPath = projectPath(from: projectName)
+        return try await apiClient.archiveSession(
+            projectPath: projectPath,
+            sessionId: sessionId
+        )
+    }
+
+    func unarchiveSession(projectName: String, sessionId: String) async throws -> CLISessionMetadata {
+        let projectPath = projectPath(from: projectName)
+        return try await apiClient.unarchiveSession(
+            projectPath: projectPath,
+            sessionId: sessionId
+        )
+    }
+
+    func bulkOperation(projectName: String, sessionIds: [String], action: String, customTitle: String?) async throws -> CLIBulkOperationResponse {
+        let projectPath = projectPath(from: projectName)
+        return try await apiClient.bulkSessionOperation(
+            projectPath: projectPath,
+            sessionIds: sessionIds,
+            action: action,
+            customTitle: customTitle
         )
     }
 }
@@ -90,6 +176,14 @@ final class MockSessionRepository: SessionRepository {
     var fetchSessionsCalled = false
     var deleteSessionCalled = false
     var shouldThrowError = false
+
+    // New mock data
+    var mockCountResponse = CLISessionCountResponse(total: 0, user: nil, agent: nil, helper: nil, count: nil, source: nil)
+    var mockSearchResponse = CLISessionSearchResponse(query: "", total: 0, results: [], hasMore: false)
+    var archiveSessionCalled = false
+    var unarchiveSessionCalled = false
+    var bulkOperationCalled = false
+    var lastBulkAction: String?
 
     func fetchSessions(projectName: String, limit: Int, offset: Int) async throws -> SessionsResponse {
         fetchSessionsCalled = true
@@ -115,6 +209,46 @@ final class MockSessionRepository: SessionRepository {
             throw CLIBridgeAPIError.serverError(500)
         }
         mockSessions.removeAll { $0.id == sessionId }
+    }
+
+    func getSessionCount(projectName: String, source: CLISessionMetadata.SessionSource?) async throws -> CLISessionCountResponse {
+        if shouldThrowError {
+            throw CLIBridgeAPIError.serverError(500)
+        }
+        return mockCountResponse
+    }
+
+    func searchSessions(projectName: String, query: String, limit: Int, offset: Int) async throws -> CLISessionSearchResponse {
+        if shouldThrowError {
+            throw CLIBridgeAPIError.serverError(500)
+        }
+        return mockSearchResponse
+    }
+
+    func archiveSession(projectName: String, sessionId: String) async throws -> CLISessionMetadata {
+        archiveSessionCalled = true
+        if shouldThrowError {
+            throw CLIBridgeAPIError.serverError(500)
+        }
+        // Return a mock metadata - in real tests, you'd set this up properly
+        fatalError("Mock archiveSession needs proper CLISessionMetadata setup")
+    }
+
+    func unarchiveSession(projectName: String, sessionId: String) async throws -> CLISessionMetadata {
+        unarchiveSessionCalled = true
+        if shouldThrowError {
+            throw CLIBridgeAPIError.serverError(500)
+        }
+        fatalError("Mock unarchiveSession needs proper CLISessionMetadata setup")
+    }
+
+    func bulkOperation(projectName: String, sessionIds: [String], action: String, customTitle: String?) async throws -> CLIBulkOperationResponse {
+        bulkOperationCalled = true
+        lastBulkAction = action
+        if shouldThrowError {
+            throw CLIBridgeAPIError.serverError(500)
+        }
+        return CLIBulkOperationResponse(success: sessionIds, failed: [])
     }
 }
 #endif
