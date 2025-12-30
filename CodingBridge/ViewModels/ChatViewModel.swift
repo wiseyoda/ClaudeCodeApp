@@ -78,6 +78,7 @@ class ChatViewModel: ObservableObject {
 
     // MARK: - Display Messages Cache
     private var cachedDisplayMessages: [ChatMessage] = []
+    private var cachedGroupedDisplayItems: [DisplayItem] = []
     private var displayMessagesInvalidationKey: Int = 0
 
     // MARK: - Initialization
@@ -830,7 +831,7 @@ class ChatViewModel: ObservableObject {
     }
 
     var groupedDisplayItems: [DisplayItem] {
-        groupMessagesForDisplay(displayMessages)
+        cachedGroupedDisplayItems
     }
 
     private var currentDisplayMessagesKey: Int {
@@ -841,6 +842,7 @@ class ChatViewModel: ObservableObject {
         hasher.combine(searchText)
         hasher.combine(messageFilter)
         hasher.combine(settings.showThinkingBlocks)
+        hasher.combine(settings.historyLimit)
         return hasher.finalize()
     }
 
@@ -849,6 +851,7 @@ class ChatViewModel: ObservableObject {
         guard newKey != displayMessagesInvalidationKey else { return }
         displayMessagesInvalidationKey = newKey
         cachedDisplayMessages = computeDisplayMessages()
+        cachedGroupedDisplayItems = groupMessagesForDisplay(cachedDisplayMessages)
     }
 
     private func computeDisplayMessages() -> [ChatMessage] {
@@ -868,6 +871,12 @@ class ChatViewModel: ObservableObject {
             filtered = filtered.filter {
                 $0.content.localizedCaseInsensitiveContains(searchText)
             }
+        }
+
+        // Apply history limit - keep only the most recent messages
+        let limit = settings.historyLimit.rawValue
+        if filtered.count > limit {
+            filtered = Array(filtered.suffix(limit))
         }
 
         return filtered
