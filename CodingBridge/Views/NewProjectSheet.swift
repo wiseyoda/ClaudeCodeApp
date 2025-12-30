@@ -148,65 +148,32 @@ struct NewProjectSheet: View {
     private func createProject() async {
         isCreating = true
         error = nil
-        progress = "Connecting to server..."
+        progress = "Creating project..."
 
         do {
-            let workspaceDir = "$HOME/workspace"
-            // sanitizedName is already validated to contain only alphanumerics and -_
-            let escapedSanitizedName = shellEscape(sanitizedName)
+            let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
 
-            // Check if directory already exists
-            progress = "Checking if project exists..."
-            let checkCmd = "test -d \"\(workspaceDir)\"/\(escapedSanitizedName) && echo 'EXISTS' || echo 'NOT_FOUND'"
-            let checkOutput = try await sshManager.executeCommandWithAutoConnect(checkCmd, settings: settings)
+            // TODO: Replace with cli-bridge API endpoint when available
+            // POST /projects/create { name: string, initializeClaude: bool }
+            // For now, show error that this feature requires cli-bridge support
+            throw CLIBridgeAPIError.endpointNotAvailable(
+                "Create project requires cli-bridge API support. " +
+                "See CLI-BRIDGE-FEATURE-REQUEST.md for details."
+            )
 
-            if checkOutput.contains("EXISTS") {
-                throw SSHError.connectionFailed("Project '\(sanitizedName)' already exists")
-            }
-
-            // Create the project directory
-            progress = "Creating project directory..."
-            let mkdirCmd = "mkdir -p \"\(workspaceDir)\"/\(escapedSanitizedName)"
-            _ = try await sshManager.executeCommand(mkdirCmd)
-
-            // Get the absolute path
-            let realpathCmd = "realpath \"\(workspaceDir)\"/\(escapedSanitizedName)"
-            let absolutePath = try await sshManager.executeCommand(realpathCmd)
-            let cleanPath = absolutePath.trimmingCharacters(in: .whitespacesAndNewlines)
-
-            // Register with Claude
-            progress = "Registering project..."
-            let encodedPath = cleanPath.replacingOccurrences(of: "/", with: "-")
-            // Shell-escape the encoded path for safe use in shell commands
-            let escapedEncodedPath = shellEscape(encodedPath)
-            // Use $HOME with double quotes for proper shell expansion, then append escaped path
-            let claudeProjectDir = "\"$HOME/.claude/projects/\"\(escapedEncodedPath)"
-            let timestamp = ISO8601DateFormatter().string(from: Date())
-            // Escape cleanPath for JSON embedding (escape backslashes and quotes)
-            let jsonEscapedPath = cleanPath
-                .replacingOccurrences(of: "\\", with: "\\\\")
-                .replacingOccurrences(of: "\"", with: "\\\"")
-            let sessionContent = "{\"type\":\"init\",\"cwd\":\"\(jsonEscapedPath)\",\"timestamp\":\"\(timestamp)\"}"
-            // Shell-escape the JSON content for safe use in echo command
-            let setupCmd = "mkdir -p \(claudeProjectDir) && echo \(shellEscape(sessionContent)) > \(claudeProjectDir)/init.jsonl"
-            _ = try? await sshManager.executeCommand(setupCmd)
-
-            // Optionally initialize Claude
-            if initializeClaude {
-                progress = "Initializing Claude..."
-                let initCmd = "cd \(shellEscape(cleanPath)) && claude init --yes 2>&1 || claude init 2>&1 || true"
-                _ = await sshManager.executeCommandWithTimeout(initCmd, timeoutSeconds: 10)
-            }
-
-            progress = "Project created!"
-
-            // Small delay to show success
-            try await Task.sleep(nanoseconds: 500_000_000)
-
-            await MainActor.run {
-                onComplete()
-                dismiss()
-            }
+            // When API is available:
+            // let response = try await apiClient.createProject(
+            //     name: sanitizedName,
+            //     initializeClaude: initializeClaude
+            // )
+            //
+            // progress = "Project created!"
+            // try await Task.sleep(nanoseconds: 500_000_000)
+            //
+            // await MainActor.run {
+            //     onComplete()
+            //     dismiss()
+            // }
 
         } catch {
             await MainActor.run {

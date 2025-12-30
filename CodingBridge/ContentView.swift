@@ -693,43 +693,40 @@ struct ContentView: View {
     }
 
     private func deleteProject(_ project: Project) async {
-        // Remove project from Claude's project list (not the actual files)
-        // The project directory in ~/.claude/projects/ is what makes it appear in the list
-        let encodedPath = project.path.replacingOccurrences(of: "/", with: "-")
-        // Shell-escape the encoded path to prevent command injection
-        let escapedEncodedPath = shellEscape(encodedPath)
-        // Use $HOME with double quotes for proper shell expansion, then append escaped path
-        let claudeProjectDir = "\"$HOME/.claude/projects/\"\(escapedEncodedPath)"
-
+        // TODO: Replace with cli-bridge API endpoint when available
+        // DELETE /projects/{path}
         do {
-            // Connect if needed and delete the Claude project directory
-            let deleteCmd = "rm -rf \(claudeProjectDir)"
-            _ = try await sshManager.executeCommandWithAutoConnect(deleteCmd, settings: settings)
+            let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
 
-            // Remove from local list immediately for responsive UI
+            // cli-bridge doesn't have delete project endpoint yet
+            // For now, just remove from local UI and show it will reappear on refresh
+            throw CLIBridgeAPIError.endpointNotAvailable(
+                "Delete project requires cli-bridge API support. " +
+                "See CLI-BRIDGE-FEATURE-REQUEST.md for details."
+            )
+
+            // When API is available:
+            // try await apiClient.deleteProject(projectPath: project.path)
+            //
+            // await MainActor.run {
+            //     projects.removeAll { $0.id == project.id }
+            //     gitStatuses.removeValue(forKey: project.path)
+            //     projectToDelete = nil
+            // }
+        } catch {
+            // Show error but don't block UI
+            log.error("[Projects] Failed to delete project: \(error)")
             await MainActor.run {
-                projects.removeAll { $0.id == project.id }
-                gitStatuses.removeValue(forKey: project.path)
                 projectToDelete = nil
             }
-        } catch {
-            // Still try to refresh the list
-            await loadProjects()
         }
     }
 
     // MARK: - Git Status Checking
 
-    /// Check git status for all projects in background
+    /// Refresh git status for all projects via cli-bridge API
     private func checkAllGitStatuses() async {
         guard !isCheckingGitStatus else { return }
-
-        // Skip SSH git checks if SSH is not configured
-        // Git status is provided by cli-bridge in the project list response
-        guard settings.isSSHConfigured else {
-            log.info("[Git] SSH not configured, skipping git status checks (using cli-bridge data)")
-            return
-        }
 
         isCheckingGitStatus = true
 
@@ -738,285 +735,92 @@ struct ContentView: View {
             gitStatuses[project.path] = .checking
         }
 
-        // Pre-connect SSH once before parallel git checks to avoid race condition
-        // where all concurrent tasks try to connect simultaneously
-        if !sshManager.isConnected {
-            do {
-                try await sshManager.autoConnect(settings: settings)
-            } catch {
-                // SSH not available, all projects will show .unknown
-                isCheckingGitStatus = false
-                return
-            }
-        }
+        do {
+            let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
+            let cliProjects = try await apiClient.fetchProjects()
 
-        // Check each project's git status concurrently but with some batching
-        await withTaskGroup(of: (String, GitStatus).self) { group in
-            for project in projects {
-                group.addTask {
-                    let status = await sshManager.checkGitStatusWithAutoConnect(
-                        project.path,
-                        settings: settings
-                    )
-                    return (project.path, status)
+            // Extract git statuses from cli-bridge response
+            for cliProject in cliProjects {
+                if let git = cliProject.git {
+                    gitStatuses[cliProject.path] = git.toGitStatus
+                    projectCache.updateGitStatus(for: cliProject.path, status: git.toGitStatus)
                 }
             }
-
-            for await (path, status) in group {
-                gitStatuses[path] = status
-            }
+        } catch {
+            log.error("[Git] Failed to fetch git statuses from API: \(error)")
+            gitRefreshError = "Failed to refresh git status: \(error.localizedDescription)"
+            showGitRefreshError = true
         }
 
         isCheckingGitStatus = false
-
-        // Check for errors and notify user
-        let errorStatuses = gitStatuses.compactMap { (path, status) -> String? in
-            if case .error(let message) = status {
-                let projectName = projects.first { $0.path == path }?.title ?? path
-                return "\(projectName): \(message)"
-            }
-            return nil
-        }
-
-        if !errorStatuses.isEmpty {
-            if errorStatuses.count == 1 {
-                gitRefreshError = errorStatuses[0]
-            } else {
-                gitRefreshError = "\(errorStatuses.count) projects failed to refresh git status"
-            }
-            showGitRefreshError = true
-        }
     }
 
     /// Check git status for all projects with progressive UI updates
-    /// Unlike checkAllGitStatuses, this updates the UI as each status comes in
+    /// For API-based refresh, this behaves the same as checkAllGitStatuses
     private func checkAllGitStatusesProgressive() async {
-        guard !isCheckingGitStatus else { return }
-
-        // Skip SSH git checks if SSH is not configured
-        // Git status is provided by cli-bridge in the project list response
-        guard settings.isSSHConfigured else {
-            log.info("[Git] SSH not configured, skipping progressive git status checks (using cli-bridge data)")
-            return
-        }
-
-        isCheckingGitStatus = true
-
-        // Don't mark all as checking - let cached statuses show while we update
-        // This provides a smoother visual experience
-
-        // Pre-connect SSH once before parallel git checks
-        if !sshManager.isConnected {
-            do {
-                try await sshManager.autoConnect(settings: settings)
-            } catch {
-                isCheckingGitStatus = false
-                return
-            }
-        }
-
-        // Check each project's git status concurrently
-        // Update UI immediately as each result comes in (progressive loading)
-        await withTaskGroup(of: (String, GitStatus).self) { group in
-            for project in projects {
-                group.addTask {
-                    let status = await sshManager.checkGitStatusWithAutoConnect(
-                        project.path,
-                        settings: settings
-                    )
-                    return (project.path, status)
-                }
-            }
-
-            // Progressive update: update UI as each status comes in
-            for await (path, status) in group {
-                gitStatuses[path] = status
-                // Also update the cache progressively
-                projectCache.updateGitStatus(for: path, status: status)
-            }
-        }
-
-        isCheckingGitStatus = false
-
-        // Silent error handling for progressive loading
-        // Errors are shown in the UI via status indicators
+        await checkAllGitStatuses()
     }
 
-    /// Refresh git status for a single project
+    /// Refresh git status for a single project via cli-bridge API
     private func refreshGitStatus(for project: Project) async {
         gitStatuses[project.path] = .checking
-        let status = await sshManager.checkGitStatusWithAutoConnect(
-            project.path,
-            settings: settings
-        )
-        gitStatuses[project.path] = status
+
+        do {
+            let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
+            let cliProjects = try await apiClient.fetchProjects()
+
+            if let cliProject = cliProjects.first(where: { $0.path == project.path }),
+               let git = cliProject.git {
+                gitStatuses[project.path] = git.toGitStatus
+                projectCache.updateGitStatus(for: project.path, status: git.toGitStatus)
+            } else {
+                gitStatuses[project.path] = .notGitRepo
+            }
+        } catch {
+            log.error("[Git] Failed to refresh git status for \(project.path): \(error)")
+            gitStatuses[project.path] = .error(error.localizedDescription)
+        }
     }
 
     // MARK: - Multi-Repo (Monorepo) Support
+    // TODO: These features require cli-bridge API support
+    // See CLI-BRIDGE-FEATURE-REQUEST.md for details
 
     /// Discover sub-repos for all projects in background
+    /// Stubbed - requires cli-bridge API: GET /projects/{path}/subrepos
     private func discoverAllSubRepos() async {
-        // Skip if SSH not configured (cli-bridge doesn't provide sub-repo discovery yet)
-        guard settings.isSSHConfigured else { return }
-        guard sshManager.isConnected else { return }
-
-        await withTaskGroup(of: (String, [String]).self) { group in
-            for project in projects {
-                group.addTask {
-                    let subRepoPaths = await sshManager.discoverSubReposWithAutoConnect(
-                        project.path,
-                        maxDepth: 2,
-                        settings: settings
-                    )
-                    return (project.path, subRepoPaths)
-                }
-            }
-
-            for await (projectPath, subRepoPaths) in group {
-                if !subRepoPaths.isEmpty {
-                    // Create SubRepo objects with unknown status
-                    let subRepos = subRepoPaths.map { relativePath in
-                        SubRepo(
-                            relativePath: relativePath,
-                            fullPath: (projectPath as NSString).appendingPathComponent(relativePath),
-                            status: .unknown
-                        )
-                    }
-                    multiRepoStatuses[projectPath] = MultiRepoStatus(subRepos: subRepos, isScanning: true)
-
-                    // Now check their statuses
-                    Task {
-                        await checkSubRepoStatuses(for: projectPath, subRepoPaths: subRepoPaths)
-                    }
-                }
-            }
-        }
+        // Multi-repo discovery not yet supported via API
+        // When available, will call: GET /projects/{path}/subrepos
     }
 
     /// Check git status for all sub-repos of a project
+    /// Stubbed - requires cli-bridge API: GET /projects/{path}/subrepos/status
     private func checkSubRepoStatuses(for projectPath: String, subRepoPaths: [String]) async {
-        let statuses = await sshManager.checkMultiRepoStatusWithAutoConnect(
-            projectPath,
-            subRepoPaths: subRepoPaths,
-            settings: settings
-        )
-
-        // Update the sub-repos with their statuses
-        if var multiRepoStatus = multiRepoStatuses[projectPath] {
-            multiRepoStatus.isScanning = false
-            multiRepoStatus.subRepos = multiRepoStatus.subRepos.map { subRepo in
-                var updated = subRepo
-                if let status = statuses[subRepo.relativePath] {
-                    updated.status = status
-                }
-                return updated
-            }
-            multiRepoStatuses[projectPath] = multiRepoStatus
-        }
+        // Sub-repo status checking not yet supported via API
     }
 
     /// Refresh a single sub-repo's status
+    /// Stubbed - requires cli-bridge API
     private func refreshSubRepoStatus(project: Project, subRepo: SubRepo) async {
-        guard var multiRepoStatus = multiRepoStatuses[project.path] else { return }
-
-        // Mark as checking
-        if let index = multiRepoStatus.subRepos.firstIndex(where: { $0.relativePath == subRepo.relativePath }) {
-            multiRepoStatus.subRepos[index].status = .checking
-            multiRepoStatuses[project.path] = multiRepoStatus
-        }
-
-        // Check status
-        let status = await sshManager.checkGitStatusWithAutoConnect(
-            subRepo.fullPath,
-            settings: settings
-        )
-
-        // Update status
-        if var updatedStatus = multiRepoStatuses[project.path],
-           let index = updatedStatus.subRepos.firstIndex(where: { $0.relativePath == subRepo.relativePath }) {
-            updatedStatus.subRepos[index].status = status
-            multiRepoStatuses[project.path] = updatedStatus
-        }
+        // Sub-repo status refresh not yet supported via API
     }
 
     /// Refresh all sub-repos for a project
+    /// Stubbed - requires cli-bridge API
     private func refreshAllSubRepos(project: Project) async {
-        guard let multiRepoStatus = multiRepoStatuses[project.path] else { return }
-
-        let subRepoPaths = multiRepoStatus.subRepos.map { $0.relativePath }
-
-        // Mark all as checking
-        var updatedStatus = multiRepoStatus
-        updatedStatus.isScanning = true
-        updatedStatus.subRepos = updatedStatus.subRepos.map { subRepo in
-            var updated = subRepo
-            updated.status = .checking
-            return updated
-        }
-        multiRepoStatuses[project.path] = updatedStatus
-
-        // Check all statuses
-        await checkSubRepoStatuses(for: project.path, subRepoPaths: subRepoPaths)
+        // Sub-repo refresh not yet supported via API
     }
 
     /// Pull a single sub-repo
+    /// Stubbed - requires cli-bridge API: POST /projects/{path}/subrepos/{subpath}/pull
     private func pullSubRepo(project: Project, subRepo: SubRepo) async {
-        guard var multiRepoStatus = multiRepoStatuses[project.path],
-              let index = multiRepoStatus.subRepos.firstIndex(where: { $0.relativePath == subRepo.relativePath }) else {
-            return
-        }
-
-        // Mark as checking
-        multiRepoStatus.subRepos[index].status = .checking
-        multiRepoStatuses[project.path] = multiRepoStatus
-
-        // Perform pull
-        let success = await sshManager.pullSubRepo(
-            project.path,
-            relativePath: subRepo.relativePath,
-            settings: settings
-        )
-
-        // Refresh status after pull
-        let newStatus = await sshManager.checkGitStatusWithAutoConnect(
-            subRepo.fullPath,
-            settings: settings
-        )
-
-        // Update status
-        if var updatedStatus = multiRepoStatuses[project.path],
-           let updatedIndex = updatedStatus.subRepos.firstIndex(where: { $0.relativePath == subRepo.relativePath }) {
-            updatedStatus.subRepos[updatedIndex].status = success ? newStatus : .error("Pull failed")
-            multiRepoStatuses[project.path] = updatedStatus
-        }
+        // Sub-repo pull not yet supported via API
     }
 
     /// Pull all sub-repos that are behind
+    /// Stubbed - requires cli-bridge API
     private func pullAllBehindSubRepos(project: Project) async {
-        guard var multiRepoStatus = multiRepoStatuses[project.path] else { return }
-
-        let behindRepos = multiRepoStatus.subRepos.filter { $0.status.canAutoPull }
-        guard !behindRepos.isEmpty else { return }
-
-        // Mark all as checking
-        multiRepoStatus.isScanning = true
-        for subRepo in behindRepos {
-            if let index = multiRepoStatus.subRepos.firstIndex(where: { $0.relativePath == subRepo.relativePath }) {
-                multiRepoStatus.subRepos[index].status = .checking
-            }
-        }
-        multiRepoStatuses[project.path] = multiRepoStatus
-
-        // Pull all in parallel
-        _ = await sshManager.pullAllBehindSubRepos(
-            project.path,
-            subRepos: behindRepos,
-            settings: settings
-        )
-
-        // Refresh all statuses
-        let subRepoPaths = behindRepos.map { $0.relativePath }
-        await checkSubRepoStatuses(for: project.path, subRepoPaths: subRepoPaths)
+        // Batch sub-repo pull not yet supported via API
     }
 
     // MARK: - Session Count Loading

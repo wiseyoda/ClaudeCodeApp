@@ -157,82 +157,29 @@ struct CloneProjectSheet: View {
     private func cloneRepository() async {
         isCloning = true
         error = nil
-        progress = "Connecting to server..."
+        progress = "Cloning repository..."
 
         do {
-            progress = "Cloning repository..."
+            let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
 
-            // Clone to workspace directory
-            let workspaceDir = "$HOME/workspace"
-            let cloneCmd = "mkdir -p \"\(workspaceDir)\" && cd \"\(workspaceDir)\" && git clone \(shellEscape(gitURL)) 2>&1"
+            // TODO: Replace with cli-bridge API endpoint when available
+            // POST /projects/clone { url: string }
+            // For now, show error that this feature requires cli-bridge support
+            throw CLIBridgeAPIError.endpointNotAvailable(
+                "Clone repository requires cli-bridge API support. " +
+                "See CLI-BRIDGE-FEATURE-REQUEST.md for details."
+            )
 
-            // Execute clone command
-            let output = try await sshManager.executeCommandWithAutoConnect(cloneCmd, settings: settings)
-
-            // Check for errors - but ignore "already exists" which is fine
-            if output.contains("fatal:") || output.contains("error:") {
-                // Allow "already exists" - user might want to re-clone
-                if !output.contains("already exists") {
-                    throw SSHError.connectionFailed(output.trimmingCharacters(in: .whitespacesAndNewlines))
-                }
-            }
-
-            // Verify the clone succeeded by checking if directory exists
-            let escapedRepoName = shellEscape(repoName)
-            let verifyCmd = "test -d \"\(workspaceDir)\"/\(escapedRepoName) && echo 'EXISTS' || echo 'NOT_FOUND'"
-            let verifyOutput = try await sshManager.executeCommand(verifyCmd)
-            if verifyOutput.contains("NOT_FOUND") {
-                throw SSHError.connectionFailed("Clone failed - repository directory not created")
-            }
-
-            progress = "Registering project..."
-
-            // Get the absolute path of the cloned repo
-            let realpathCmd = "realpath \"\(workspaceDir)\"/\(escapedRepoName)"
-            let absolutePath = try await sshManager.executeCommand(realpathCmd)
-            let cleanPath = absolutePath.trimmingCharacters(in: .whitespacesAndNewlines)
-
-            // Create Claude project directory structure
-            // Path encoding: /home/user/workspace/repo -> -home-user-workspace-repo
-            let encodedPath = cleanPath.replacingOccurrences(of: "/", with: "-")
-            // Shell-escape the encoded path for safe use in shell commands
-            let escapedEncodedPath = shellEscape(encodedPath)
-            // Use $HOME with double quotes for proper shell expansion, then append escaped path
-            let claudeProjectDir = "\"$HOME/.claude/projects/\"\(escapedEncodedPath)"
-
-            // Create the project directory and a session file with cwd so it appears in the project list
-            // The backend reads 'cwd' from session files to determine project paths
-            let timestamp = ISO8601DateFormatter().string(from: Date())
-            // Escape cleanPath for JSON (escape backslashes and quotes)
-            let jsonEscapedPath = cleanPath
-                .replacingOccurrences(of: "\\", with: "\\\\")
-                .replacingOccurrences(of: "\"", with: "\\\"")
-            let sessionContent = "{\"type\":\"init\",\"cwd\":\"\(jsonEscapedPath)\",\"timestamp\":\"\(timestamp)\"}"
-            // Shell-escape the JSON content for safe use in echo command
-            let setupCmd = "mkdir -p \(claudeProjectDir) && echo \(shellEscape(sessionContent)) > \(claudeProjectDir)/init.jsonl"
-            _ = try? await sshManager.executeCommand(setupCmd)
-
-            progress = "Initializing Claude..."
-
-            // Try to initialize Claude in the cloned repo with timeout
-            // Use --yes flag if available, and timeout after 10 seconds
-            let initCmd = "cd \(shellEscape(cleanPath)) && claude init --yes 2>&1 || claude init 2>&1 || true"
-            let initResult = await sshManager.executeCommandWithTimeout(initCmd, timeoutSeconds: 10)
-
-            if initResult == nil {
-                // Claude init timed out - that's OK, project dir is created
-                progress = "Clone complete!"
-            } else {
-                progress = "Clone complete!"
-            }
-
-            // Small delay to show success
-            try await Task.sleep(nanoseconds: 500_000_000)
-
-            await MainActor.run {
-                onComplete()
-                dismiss()
-            }
+            // When API is available:
+            // let response = try await apiClient.cloneProject(url: gitURL)
+            //
+            // progress = "Clone complete!"
+            // try await Task.sleep(nanoseconds: 500_000_000)
+            //
+            // await MainActor.run {
+            //     onComplete()
+            //     dismiss()
+            // }
 
         } catch {
             await MainActor.run {

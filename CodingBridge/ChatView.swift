@@ -1776,6 +1776,11 @@ struct ChatView: View {
             return []
 
         case "user", "assistant", "system":
+            // Skip meta messages (local command metadata that shouldn't appear in chat)
+            if json["isMeta"] as? Bool == true {
+                return []
+            }
+
             // Plain text content
             if let content = json["content"] as? String, !content.isEmpty {
                 let role: ChatMessage.Role
@@ -1906,18 +1911,25 @@ struct ChatView: View {
     }
 
     private func refreshGitStatus() {
-        // Skip SSH git checks if SSH is not configured
-        // Git status is provided by cli-bridge in the project list response
-        guard settings.isSSHConfigured else {
-            return
-        }
-
         Task {
             gitStatus = .checking
-            let newStatus = await sshManager.checkGitStatusWithAutoConnect(
-                project.path,
-                settings: settings
-            )
+
+            // Fetch git status from cli-bridge API
+            let newStatus: GitStatus
+            do {
+                let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
+                let projects = try await apiClient.fetchProjects()
+                if let cliProject = projects.first(where: { $0.path == project.path }),
+                   let git = cliProject.git {
+                    newStatus = git.toGitStatus
+                } else {
+                    newStatus = .notGitRepo
+                }
+            } catch {
+                print("[ChatView] Failed to fetch git status from API: \(error)")
+                newStatus = .error(error.localizedDescription)
+            }
+
             await MainActor.run {
                 gitStatus = newStatus
 
@@ -1939,31 +1951,40 @@ struct ChatView: View {
     private func performAutoPull() async {
         isAutoPulling = true
 
-        let success = await sshManager.gitPullWithAutoConnect(project.path, settings: settings)
-
+        // TODO: Replace with cli-bridge API endpoint when available
+        // POST /projects/{path}/git/pull
+        // For now, show error that this feature requires cli-bridge support
         await MainActor.run {
             isAutoPulling = false
-            if success {
-                // Update status to clean after successful pull
-                gitStatus = .clean
-                showGitBanner = false
-
-                // Sync to ProjectCache so ContentView sees the update
-                ProjectCache.shared.updateGitStatus(for: project.path, status: .clean)
-
-                // Add system message about the pull
-                messages.append(ChatMessage(
-                    role: .system,
-                    content: "✓ Auto-pulled latest changes from remote",
-                    timestamp: Date()
-                ))
-            } else {
-                // Show error in banner
-                let errorStatus = GitStatus.error("Auto-pull failed")
-                gitStatus = errorStatus
-                ProjectCache.shared.updateGitStatus(for: project.path, status: errorStatus)
-            }
+            let errorStatus = GitStatus.error("Git pull requires cli-bridge API support. See CLI-BRIDGE-FEATURE-REQUEST.md")
+            gitStatus = errorStatus
+            ProjectCache.shared.updateGitStatus(for: project.path, status: errorStatus)
         }
+
+        // When API is available:
+        // do {
+        //     let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
+        //     try await apiClient.gitPull(projectPath: project.path)
+        //
+        //     await MainActor.run {
+        //         isAutoPulling = false
+        //         gitStatus = .clean
+        //         showGitBanner = false
+        //         ProjectCache.shared.updateGitStatus(for: project.path, status: .clean)
+        //         messages.append(ChatMessage(
+        //             role: .system,
+        //             content: "✓ Auto-pulled latest changes from remote",
+        //             timestamp: Date()
+        //         ))
+        //     }
+        // } catch {
+        //     await MainActor.run {
+        //         isAutoPulling = false
+        //         let errorStatus = GitStatus.error("Auto-pull failed: \(error.localizedDescription)")
+        //         gitStatus = errorStatus
+        //         ProjectCache.shared.updateGitStatus(for: project.path, status: errorStatus)
+        //     }
+        // }
     }
 
     /// Send a message to Claude asking to help with local changes
