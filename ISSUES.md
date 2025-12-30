@@ -78,6 +78,17 @@ When reporting a bug, include:
   - iOS 26+ BGContinuedProcessingTask is the primary mechanism anyway
 - **Priority**: Low - doesn't block functionality
 
+### #30: Session Manager Not Showing All Sessions
+- **What happened**: Home screen shows 38 sessions for a project, but Session Manager only shows 1
+- **Expected**: Session Manager should display the same sessions as home screen
+- **Investigation needed**:
+  - Compare endpoints used: home screen uses `/sessions/recent`, session manager uses `/projects/{path}/sessions`
+  - Verify both endpoints return consistent data
+  - Check if source filter or pagination is causing mismatch
+  - Ensure SessionStore properly loads and displays all sessions
+- **Location**: `SessionPickerViews.swift`, `SessionStore.swift`, `HomeView.swift`
+- **Priority**: High - affects session navigation and resume functionality
+
 ---
 
 ## Feature Requests
