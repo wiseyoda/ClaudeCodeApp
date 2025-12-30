@@ -14,16 +14,15 @@ When reporting a bug, include:
 
 ## Open Issues
 
-### #24: Token Usage Calculation Wildly Inaccurate (To Investigate)
-- **What happened**: Token counts displayed in the app are significantly wrong compared to actual usage
-- **Expected**: Token usage should reflect actual consumption accurately
-- **Location**: Token display UI, SSE response parsing
+### #24: Investigate New Token Calculation in cli-bridge
+- **What happened**: Token counts displayed in the app may not reflect actual usage accurately
+- **Expected**: Token usage should match what Claude Code CLI reports
 - **Investigation needed**:
-  - Audit what the backend/API is actually sending for token counts
-  - Compare API-reported tokens vs actual message content size
-  - Determine if issue is API-side or client-side parsing
-  - Consider client-side token estimation as fallback/validation
-  - Check if SSE events have different token reporting than complete messages
+  - Check what token fields cli-bridge API returns in SSE events
+  - Compare with Claude Code CLI token reporting
+  - Determine if iOS app is parsing/displaying tokens correctly
+  - Consider adding token breakdown (input/output/cache) if available
+- **Location**: `CLIBridgeAdapter.swift`, token display UI
 - **Priority**: Medium - affects user's ability to monitor usage
 
 ### #32: ClaudeHelper AI Suggestions Not Working
