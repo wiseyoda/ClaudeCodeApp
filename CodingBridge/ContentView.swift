@@ -198,8 +198,8 @@ struct ContentView: View {
                 isLoading: isLoading,
                 onRefresh: {
                     await loadProjects()
+                    // Note: loadProjects() already extracts git statuses from API
                     if !projects.isEmpty {
-                        await checkAllGitStatuses()
                         await loadAllSessionCounts()
                     }
                 },
@@ -266,8 +266,8 @@ struct ContentView: View {
                     Button {
                         Task {
                             await loadProjects()
+                            // Note: loadProjects() already extracts git statuses from API
                             if !projects.isEmpty {
-                                await checkAllGitStatuses()
                                 await loadAllSessionCounts()
                             }
                         }
@@ -340,8 +340,8 @@ struct ContentView: View {
                         Button {
                             Task {
                                 await loadProjects()
+                                // Note: loadProjects() already extracts git statuses from API
                                 if !projects.isEmpty {
-                                    await checkAllGitStatuses()
                                     await loadAllSessionCounts()
                                 }
                             }
@@ -393,15 +393,9 @@ struct ContentView: View {
         log.info("[Startup] loadProjects() took \(String(format: "%.2f", (CFAbsoluteTimeGetCurrent() - apiStart) * 1000))ms")
 
         // Step 3: Defer heavy operations to after UI is shown
-        // Use a small delay to let the UI render first
+        // Note: loadProjects() already extracts git statuses from API
         if !projects.isEmpty {
-            // Start git checks in background (progressive loading)
-            loadingStatus = "Checking git..."
-            let gitStart = CFAbsoluteTimeGetCurrent()
-            await checkAllGitStatusesProgressive()
-            log.info("[Startup] Git status checks took \(String(format: "%.2f", (CFAbsoluteTimeGetCurrent() - gitStart) * 1000))ms")
-
-            // Discover sub-repos (lower priority)
+            // Discover sub-repos (stubbed pending cli-bridge API support)
             loadingStatus = "Scanning repos..."
             let repoStart = CFAbsoluteTimeGetCurrent()
             await discoverAllSubRepos()
@@ -627,8 +621,8 @@ struct ContentView: View {
         .scrollContentBackground(.hidden)
         .refreshable {
             await loadProjects()
+            // Note: loadProjects() already extracts git statuses from API
             if !projects.isEmpty {
-                await checkAllGitStatuses()
                 await discoverAllSubRepos()
                 await loadAllSessionCounts()
             }
