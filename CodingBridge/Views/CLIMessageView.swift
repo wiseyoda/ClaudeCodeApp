@@ -10,7 +10,8 @@ struct CLIMessageView: View {
     @State private var isExpanded: Bool
     @State private var showCopied = false
     @State private var showActionBar = false  // Track whether to show action bar
-    @ObservedObject private var bookmarkStore = BookmarkStore.shared
+    // PERF: Removed @ObservedObject - was causing all 200 messages to re-render on any bookmark change
+    // Bookmark state is checked on-demand when context menu opens
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
 
@@ -83,7 +84,7 @@ struct CLIMessageView: View {
     }
 
     private var isBookmarked: Bool {
-        bookmarkStore.isBookmarked(messageId: message.id)
+        BookmarkStore.shared.isBookmarked(messageId: message.id)
     }
 
     var body: some View {
@@ -326,7 +327,7 @@ struct CLIMessageView: View {
             // Bookmark button (only if project context available)
             if let path = projectPath, let title = projectTitle {
                 Button {
-                    bookmarkStore.toggleBookmark(
+                    BookmarkStore.shared.toggleBookmark(
                         message: message,
                         projectPath: path,
                         projectTitle: title

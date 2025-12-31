@@ -348,44 +348,69 @@ struct ChatView: View {
     private var messagesScrollView: some View {
         ScrollViewReader { proxy in
             ZStack(alignment: .bottom) {
-                ScrollView(.vertical, showsIndicators: true) {
-                    messagesListView
-                        .frame(maxWidth: .infinity)  // Prevent horizontal overflow
-                        .background(
-                            // Track when bottom anchor is visible
-                            GeometryReader { geo in
-                                Color.clear
-                                    .preference(
-                                        key: BottomVisiblePreferenceKey.self,
-                                        value: geo.frame(in: .named("scrollArea")).maxY
-                                    )
-                            }
+                // PERF: Using List instead of ScrollView+VStack for cell recycling
+                // List reuses cells like UITableView, critical for 200+ messages
+                List {
+                    // Loading indicator
+                    if viewModel.isLoadingHistory && viewModel.messages.isEmpty {
+                        loadingHistoryView
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets())
+                            .listRowBackground(Color.clear)
+                    }
+
+                    ForEach(viewModel.groupedDisplayItems) { item in
+                        DisplayItemView(
+                            item: item,
+                            projectPath: project.path,
+                            projectTitle: project.title,
+                            hideTodoInline: viewModel.showTodoDrawer
                         )
+                        .id(item.id)
+                        .environment(\.retryAction, viewModel.retryMessage)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
+                        .listRowBackground(Color.clear)
+                    }
+
+                    if viewModel.isProcessing {
+                        streamingIndicatorView
+                            .listRowSeparator(.hidden)
+                            .listRowInsets(EdgeInsets(top: 2, leading: 12, bottom: 2, trailing: 12))
+                            .listRowBackground(Color.clear)
+                    }
+
+                    // Bottom anchor for scrollTo target
+                    // Extra space ensures last message appears above status bar
+                    Spacer()
+                        .frame(height: viewModel.wsManager.agentState.isWorking ? 65 : 25)
+                        .id("bottomAnchor")
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
                 }
-                .scrollBounceBehavior(.basedOnSize, axes: .horizontal)  // Disable horizontal bounce
-                .coordinateSpace(name: "scrollArea")
-                .scrollDismissesKeyboard(.interactively)
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
                 .background(CLITheme.background(for: colorScheme))
+                .scrollDismissesKeyboard(.interactively)
                 .refreshable {
                     await viewModel.refreshChatContent()
                 }
-                .onPreferenceChange(BottomVisiblePreferenceKey.self) { maxY in
-                    // If content bottom is near or below the scroll view bottom, we're at bottom
-                    // Hide the scroll button when at bottom
-                    if maxY < UIScreen.main.bounds.height + 100 {
-                        if viewModel.showScrollToBottom {
-                            viewModel.showScrollToBottom = false
+                // PERF: Simplified scroll detection - only track when user manually scrolls
+                .onScrollPhaseChange { oldPhase, newPhase in
+                    // Show scroll button when user starts interacting
+                    if newPhase == .interacting {
+                        isInputFocused = false
+                        viewModel.showScrollToBottom = true
+                    }
+                    // Hide when scroll ends and we're likely at bottom
+                    if oldPhase == .decelerating && newPhase == .idle {
+                        // Give a moment for scroll to settle
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                            // Will be hidden by auto-scroll if at bottom
                         }
                     }
                 }
-                .simultaneousGesture(
-                    DragGesture(minimumDistance: 20)
-                        .onChanged { _ in
-                            isInputFocused = false
-                            // Only show button if not already at bottom
-                            viewModel.showScrollToBottom = true
-                        }
-                )
 
                 // Manual scroll to bottom button
                 if viewModel.showScrollToBottom {
@@ -445,39 +470,6 @@ struct ChatView: View {
                 viewModel.wsManager.recoverFromBackground(sessionId: sessionId, projectPath: projectPath)
             }
         }
-    }
-
-    private var messagesListView: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            // Show loading indicator when loading history with no messages yet
-            if viewModel.isLoadingHistory && viewModel.messages.isEmpty {
-                loadingHistoryView
-            }
-
-            ForEach(viewModel.groupedDisplayItems) { item in
-                DisplayItemView(
-                    item: item,
-                    projectPath: project.path,
-                    projectTitle: project.title,
-                    hideTodoInline: viewModel.showTodoDrawer
-                )
-                .id(item.id)
-                .environment(\.retryAction, viewModel.retryMessage)
-            }
-
-            if viewModel.isProcessing {
-                streamingIndicatorView
-            }
-
-            // Bottom anchor for scrollTo target
-            // Extra space ensures last message appears above status bar when scrolled to bottom
-            Spacer()
-                .frame(height: 1)
-                .id("bottomAnchor")
-        }
-        .padding(.horizontal, 12)
-        .padding(.top, 8)
-        .padding(.bottom, viewModel.wsManager.agentState.isWorking ? 65 : 25)  // Extra space when status bubble showing
     }
 
     @ViewBuilder
