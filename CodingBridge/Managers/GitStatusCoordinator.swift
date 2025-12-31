@@ -2,9 +2,12 @@ import SwiftUI
 
 /// Coordinates git status checking and multi-repo management for projects.
 /// Extracts git-related logic from ContentView to keep it focused on navigation/layout.
+///
+/// Note: Git statuses are stored in ProjectCache as the single source of truth.
+/// This coordinator handles refresh operations and the `.checking` intermediate state.
 @MainActor
 class GitStatusCoordinator: ObservableObject {
-    @Published var gitStatuses: [String: GitStatus] = [:]
+    @Published var gitStatuses: [String: GitStatus] = [:]  // Local state for .checking during refresh
     @Published var branchNames: [String: String] = [:]
     @Published var multiRepoStatuses: [String: MultiRepoStatus] = [:]
     @Published var expandedProjects: Set<String> = []
@@ -37,7 +40,10 @@ class GitStatusCoordinator: ObservableObject {
     func updateFromCLIProjects(_ cliProjects: [CLIProject]) {
         for cliProject in cliProjects {
             if let git = cliProject.git {
-                gitStatuses[cliProject.path] = git.toGitStatus
+                let status = git.toGitStatus
+                gitStatuses[cliProject.path] = status
+                // Also update the cache so HomeView gets the fresh status
+                projectCache.updateGitStatus(for: cliProject.path, status: status, branchName: git.branch)
                 if let branch = git.branch {
                     branchNames[cliProject.path] = branch
                 }

@@ -355,24 +355,14 @@ final class CLIBridgeManagerTests: XCTestCase {
         XCTAssertEqual(manager.sessionId, "session-1")
     }
 
-    func test_parseMessage_assistantTextAccumulatesText() {
-        let (manager, _, _) = makeManager()
-        let content = assistantStreamContent(text: "Hello", delta: true)
-
-        manager.test_handleStreamMessage(storedMessage(from: content))
-
-        XCTAssertEqual(manager.currentText, "")
-        XCTAssertEqual(manager.test_textBuffer, "Hello")
-    }
-
-    func test_parseMessage_assistantTextFinalCommits() {
+    func test_parseMessage_assistantTextSetsCurrentText() {
+        // Server now sends only complete messages (delta filtering done server-side)
         let (manager, _, _) = makeManager()
         let content = assistantStreamContent(text: "Complete", delta: false)
 
         manager.test_handleStreamMessage(storedMessage(from: content))
 
         XCTAssertEqual(manager.currentText, "Complete")
-        XCTAssertEqual(manager.test_textBuffer, "")
     }
 
     func test_parseMessage_thinkingCallsCallback() async {
@@ -854,48 +844,29 @@ final class CLIBridgeManagerTests: XCTestCase {
         XCTAssertEqual(json["type"] as? String, "cancel_queued")
     }
 
-    func test_textBuffer_accumulatesBeforeFlush() {
+    func test_clearCurrentText_clearsText() {
+        // Server sends complete messages, clearCurrentText just resets currentText
         let (manager, _, _) = makeManager()
-        let content = assistantStreamContent(text: "Hello", delta: true)
+        let content = assistantStreamContent(text: "Hello", delta: false)
 
         manager.test_handleStreamMessage(storedMessage(from: content))
-
-        XCTAssertEqual(manager.currentText, "")
-        XCTAssertEqual(manager.test_textBuffer, "Hello")
-    }
-
-    func test_textBuffer_flushesAfterDelay() async {
-        let (manager, _, _) = makeManager()
-        let content = assistantStreamContent(text: "Hello", delta: true)
-
-        manager.test_handleStreamMessage(storedMessage(from: content))
-        try? await Task.sleep(nanoseconds: 80_000_000)
-
         XCTAssertEqual(manager.currentText, "Hello")
-        XCTAssertEqual(manager.test_textBuffer, "")
-    }
 
-    func test_clearCurrentText_clearsBuffer() {
-        let (manager, _, _) = makeManager()
-        let content = assistantStreamContent(text: "Hello", delta: true)
-
-        manager.test_handleStreamMessage(storedMessage(from: content))
         manager.clearCurrentText()
-
         XCTAssertEqual(manager.currentText, "")
-        XCTAssertEqual(manager.test_textBuffer, "")
     }
 
-    func test_onText_calledWithContent() async {
+    func test_onText_calledWithFinalContent() async {
+        // Server now only sends complete messages (delta=false)
         let (manager, _, _) = makeManager()
         let expectation = expectation(description: "onText")
         manager.onText = { content, isFinal in
             XCTAssertEqual(content, "Hi")
-            XCTAssertFalse(isFinal)
+            XCTAssertTrue(isFinal)  // Always final now
             expectation.fulfill()
         }
 
-        manager.test_handleStreamMessage(storedMessage(from: assistantStreamContent(text: "Hi", delta: true)))
+        manager.test_handleStreamMessage(storedMessage(from: assistantStreamContent(text: "Hi", delta: false)))
 
         await fulfillment(of: [expectation], timeout: 1)
     }
@@ -1216,11 +1187,11 @@ final class CLIBridgeManagerTests: XCTestCase {
         await manager.test_handleMessage(.string("not json"))
 
         XCTAssertEqual(manager.currentText, "")
-        XCTAssertEqual(manager.test_textBuffer, "")
 
-        await manager.test_handleMessage(assistantStreamMessage(content: "Hi", delta: true))
+        // Server sends complete messages (delta=false)
+        await manager.test_handleMessage(assistantStreamMessage(content: "Hi", delta: false))
 
-        XCTAssertEqual(manager.currentText + manager.test_textBuffer, "Hi")
+        XCTAssertEqual(manager.currentText, "Hi")
     }
 
     func test_stream_unexpectedEventType_ignoresGracefully() async throws {

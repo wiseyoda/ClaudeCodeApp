@@ -238,6 +238,12 @@ struct CodingBridgeApp: App {
         // End any legacy background tasks
         BackgroundManager.shared.endBackgroundTask()
 
+        // Invalidate git status cache (may be stale from background)
+        ProjectCache.shared.invalidateAllGitStatuses()
+
+        // Notify views to refresh git status
+        NotificationCenter.default.post(name: .gitStatusRefreshNeeded, object: nil)
+
         // Clear notifications since user is now in app
         await NotificationManager.shared.updateBadge(count: 0)
         NotificationManager.shared.clearAllNotifications()
@@ -275,4 +281,10 @@ struct CodingBridgeApp: App {
 extension Notification.Name {
     /// Posted when app returns to foreground and needs to recover a background session
     static let backgroundRecoveryNeeded = Notification.Name("backgroundRecoveryNeeded")
+
+    /// Posted when git status cache is invalidated and views should refresh
+    static let gitStatusRefreshNeeded = Notification.Name("gitStatusRefreshNeeded")
+
+    /// Posted when a project's git status is updated (includes projectPath and status in userInfo)
+    static let gitStatusUpdated = Notification.Name("gitStatusUpdated")
 }

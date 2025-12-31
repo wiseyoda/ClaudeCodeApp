@@ -72,18 +72,16 @@ struct ChatView: View {
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
             ToolbarItem(placement: .principal) {
-                ChatTitleView(
-                    displayName: displayName,
-                    gitStatus: viewModel.gitStatus,
-                    onRefreshGitStatus: viewModel.refreshGitStatus
-                )
+                ChatTitleView(displayName: displayName)
             }
 
             ToolbarItem(placement: .navigationBarTrailing) {
                 ChatToolbarActions(
+                    gitStatus: viewModel.gitStatus,
                     isSearching: viewModel.isSearching,
                     ideasCount: viewModel.ideasStore.ideas.count,
                     isProcessing: viewModel.isProcessing,
+                    onGitStatusTap: viewModel.showGitBannerAndRefresh,
                     onToggleSearch: {
                         withAnimation {
                             viewModel.isSearching.toggle()
@@ -350,8 +348,9 @@ struct ChatView: View {
     private var messagesScrollView: some View {
         ScrollViewReader { proxy in
             ZStack(alignment: .bottom) {
-                ScrollView {
+                ScrollView(.vertical, showsIndicators: true) {
                     messagesListView
+                        .frame(maxWidth: .infinity)  // Prevent horizontal overflow
                         .background(
                             // Track when bottom anchor is visible
                             GeometryReader { geo in
@@ -363,6 +362,7 @@ struct ChatView: View {
                             }
                         )
                 }
+                .scrollBounceBehavior(.basedOnSize, axes: .horizontal)  // Disable horizontal bounce
                 .coordinateSpace(name: "scrollArea")
                 .scrollDismissesKeyboard(.interactively)
                 .background(CLITheme.background(for: colorScheme))
@@ -462,6 +462,7 @@ struct ChatView: View {
                     hideTodoInline: viewModel.showTodoDrawer
                 )
                 .id(item.id)
+                .environment(\.retryAction, viewModel.retryMessage)
             }
 
             if viewModel.isProcessing {
@@ -596,6 +597,8 @@ struct ChatView: View {
                 tokenUsage: viewModel.tokenUsage,
                 effectivePermissionMode: viewModel.effectivePermissionModeValue,
                 projectPath: project.path,
+                gitStatus: viewModel.gitStatus,
+                onGitStatusTap: viewModel.showGitBannerAndRefresh,
                 showQuickSettings: $viewModel.showQuickSettings
             )
 

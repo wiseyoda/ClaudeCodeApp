@@ -202,6 +202,9 @@ class AppSettings: ObservableObject {
     @AppStorage("historyLimit") private var historyLimitRaw: Int = HistoryLimit.medium.rawValue
     @AppStorage("lockToPortrait") var lockToPortrait: Bool = true  // Lock to portrait mode by default
 
+    // Status Message Settings
+    @AppStorage("showMessageCollection") var showMessageCollection: Bool = true  // Show collection progress in settings
+
     // Debug Settings
     @AppStorage("debugLoggingEnabled") var debugLoggingEnabled: Bool = false
 

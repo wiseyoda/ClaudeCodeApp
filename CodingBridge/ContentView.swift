@@ -173,8 +173,6 @@ struct ContentView: View {
         NavigationStack {
             HomeView(
                 projects: projects,
-                gitStatuses: gitStatusCoordinator.gitStatuses,
-                branchNames: projectCache.cachedBranchNames.merging(gitStatusCoordinator.branchNames) { _, new in new },
                 isLoading: isLoading,
                 onRefresh: {
                     await loadProjects()

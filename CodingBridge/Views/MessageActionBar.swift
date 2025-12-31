@@ -1,12 +1,30 @@
 import SwiftUI
 
-/// Action bar shown below assistant messages with copy, time, and token info
+// MARK: - Environment Key for Retry Action
+
+/// Environment key for passing retry action from ChatView to message action bars
+struct RetryActionKey: EnvironmentKey {
+    static let defaultValue: ((UUID) -> Void)? = nil
+}
+
+extension EnvironmentValues {
+    /// Action to retry a message - called with the message ID to regenerate
+    var retryAction: ((UUID) -> Void)? {
+        get { self[RetryActionKey.self] }
+        set { self[RetryActionKey.self] = newValue }
+    }
+}
+
+// MARK: - Message Action Bar
+
+/// Action bar shown below assistant messages with copy, time, token info, and retry button
 struct MessageActionBar: View {
     let message: ChatMessage
     let projectPath: String
     let onCopy: () -> Void
 
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.retryAction) var retryAction
     @EnvironmentObject var settings: AppSettings
     @State private var showCopied = false
     @State private var copyResetTask: Task<Void, Never>?
@@ -32,6 +50,20 @@ struct MessageActionBar: View {
             }
 
             Spacer()
+
+            // Retry button
+            if retryAction != nil {
+                Button {
+                    retryAction?(message.id)
+                } label: {
+                    Image(systemName: "arrow.counterclockwise")
+                        .font(.system(size: 14))
+                        .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Try again")
+                .accessibilityHint("Regenerate this response")
+            }
 
             // Copy button
             Button {

@@ -281,7 +281,7 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.messages.last?.content.contains("Tokens: 5/10") == true)
     }
 
-    func test_handleClearCommand_clearsMessagesAndSession() {
+    func test_handleClearCommand_clearsMessagesAndCreatesEphemeralSession() {
         let (viewModel, adapter, _, _) = makeFixture()
         viewModel.messages = [ChatMessage(role: .user, content: "Hello")]
         viewModel.selectedSession = makeSession(id: "session-1")
@@ -289,7 +289,9 @@ final class ChatViewModelTests: XCTestCase {
 
         viewModel.handleClearCommand()
 
-        XCTAssertNil(viewModel.selectedSession)
+        // Should create ephemeral session (not nil) to prevent invalid state
+        XCTAssertNotNil(viewModel.selectedSession)
+        XCTAssertTrue(viewModel.selectedSession?.id.hasPrefix("new-session-") ?? false)
         XCTAssertNil(adapter.sessionId)
         XCTAssertEqual(viewModel.messages.count, 1)
         XCTAssertEqual(viewModel.messages.first?.role, .system)

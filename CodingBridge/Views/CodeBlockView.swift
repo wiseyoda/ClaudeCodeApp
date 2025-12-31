@@ -40,6 +40,7 @@ struct CodeBlockView: View {
                 Text(code)
                     .font(settings.scaledFont(.small))
                     .foregroundColor(CLITheme.cyan(for: colorScheme))
+                    .fixedSize(horizontal: false, vertical: true)  // Force word wrap
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(8)
 

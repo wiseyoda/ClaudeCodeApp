@@ -871,6 +871,7 @@ struct SessionExportSheet: View {
                 Text(markdown)
                     .font(.system(.body, design: .monospaced))
                     .foregroundColor(CLITheme.primaryText(for: colorScheme))
+                    .fixedSize(horizontal: false, vertical: true)  // Force word wrap
                     .padding()
                     .frame(maxWidth: .infinity, alignment: .leading)
             }

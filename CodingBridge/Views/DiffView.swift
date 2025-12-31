@@ -369,6 +369,7 @@ struct DiffLineView: View {
             Text(line.content.isEmpty ? " " : line.content)
                 .font(settings.scaledFont(.small))
                 .foregroundColor(contentColor)
+                .fixedSize(horizontal: false, vertical: true)  // Force word wrap
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 4)
                 .padding(.vertical, 2)

@@ -184,6 +184,23 @@ class ProjectCache: ObservableObject {
             try? FileManager.default.removeItem(at: cacheFile)
         }
     }
+
+    // MARK: - Git Status Cache Invalidation
+
+    /// Invalidate git status for a single project (forces refresh on next access)
+    func invalidateGitStatus(for projectPath: String) {
+        cachedGitStatuses[projectPath] = .checking
+        log.debug("[ProjectCache] Invalidated git status for: \(projectPath)")
+    }
+
+    /// Invalidate all git statuses (e.g., on app foreground)
+    func invalidateAllGitStatuses() {
+        for path in cachedGitStatuses.keys {
+            cachedGitStatuses[path] = .checking
+        }
+        isStale = true
+        log.debug("[ProjectCache] Invalidated all git statuses")
+    }
 }
 
 // MARK: - Cache Data Model

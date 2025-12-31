@@ -157,11 +157,6 @@ class CLIBridgeManager: ObservableObject {
     private var lastMessageId: String?
     private var currentAgentId: String?
 
-    /// Buffer for text to reduce UI updates
-    private var textBuffer: String = ""
-    private var textFlushTask: Task<Void, Never>?
-    private let textFlushDelay: UInt64 = 50_000_000  // 50ms
-
     /// Track receive loop to detect stale callbacks
     private var connectionId = UUID()
 
@@ -475,8 +470,6 @@ class CLIBridgeManager: ObservableObject {
 
         reconnectTask?.cancel()
         reconnectTask = nil
-        textFlushTask?.cancel()
-        textFlushTask = nil
 
         webSocket?.cancel(with: .goingAway, reason: nil)
         webSocket = nil
@@ -491,7 +484,6 @@ class CLIBridgeManager: ObservableObject {
         }
 
         currentText = ""
-        textBuffer = ""
         pendingPermission = nil
         pendingQuestion = nil
         isInputQueued = false
@@ -536,8 +528,6 @@ class CLIBridgeManager: ObservableObject {
 
         reconnectTask?.cancel()
         reconnectTask = nil
-        textFlushTask?.cancel()
-        textFlushTask = nil
 
         webSocket?.cancel(with: .goingAway, reason: nil)
         webSocket = nil
@@ -769,14 +759,12 @@ class CLIBridgeManager: ObservableObject {
             agentState = .idle
             activeSubagent = nil  // Clear in case subagent_complete wasn't received
             toolProgress = nil
-            flushTextBuffer()
             onStopped?(payload.reason)
 
         case .interrupted:
             agentState = .idle
             activeSubagent = nil  // Clear in case subagent_complete wasn't received
             toolProgress = nil
-            flushTextBuffer()
             onStopped?("interrupted")
         }
     }
@@ -836,6 +824,11 @@ class CLIBridgeManager: ObservableObject {
             tokenUsage = usageContent
 
         case .state(let stateContent):
+            // Skip duplicate state updates (cli-bridge may send idle twice at end of turn)
+            if agentState == stateContent.state && currentTool == stateContent.tool {
+                log.debug("[CLIBridge] Skipping duplicate state: \(stateContent.state)")
+                return
+            }
             agentState = stateContent.state
             currentTool = stateContent.tool  // Track tool name for StatusBubbleView
 
@@ -997,48 +990,19 @@ class CLIBridgeManager: ObservableObject {
         }
     }
 
-    // MARK: - Text Buffering
+    // MARK: - Text Handling
 
+    /// Process assistant text message
+    /// Note: cli-bridge server filters deltas, so we only receive complete messages (delta=false)
     private func appendText(_ text: String, isFinal: Bool) {
-        if isFinal {
-            // cli-bridge sends delta=false with the COMPLETE accumulated text (not a delta)
-            // Clear buffer since the final message has the complete text
-            textBuffer = ""
-            textFlushTask?.cancel()
-            textFlushTask = nil
-            currentText = text  // SET to complete text (replaces any accumulated text)
-            onText?(text, true)
-        } else {
-            // Delta message - append to buffer for UI display
-            textBuffer += text
-
-            // Debounce UI updates
-            textFlushTask?.cancel()
-            textFlushTask = Task {
-                try? await Task.sleep(nanoseconds: textFlushDelay)
-                guard !Task.isCancelled else { return }
-                await MainActor.run {
-                    self.flushTextBuffer()
-                }
-            }
-            onText?(text, false)
-        }
+        // Server sends complete text (delta=false), just set it directly
+        currentText = text
+        onText?(text, isFinal)
     }
 
-    private func flushTextBuffer() {
-        guard !textBuffer.isEmpty else { return }
-        currentText += textBuffer
-        textBuffer = ""
-        textFlushTask?.cancel()
-        textFlushTask = nil
-    }
-
-    /// Clear accumulated text (call when starting new message)
+    /// Clear current text (call when starting new message)
     func clearCurrentText() {
         currentText = ""
-        textBuffer = ""
-        textFlushTask?.cancel()
-        textFlushTask = nil
     }
 }
 
@@ -1095,10 +1059,6 @@ extension CLIBridgeManager {
     var test_isManualDisconnect: Bool {
         get { isManualDisconnect }
         set { isManualDisconnect = newValue }
-    }
-
-    var test_textBuffer: String {
-        textBuffer
     }
 }
 #endif

@@ -9,6 +9,8 @@ struct UnifiedStatusBar: View {
     let tokenUsage: TokenUsage?
     let effectivePermissionMode: PermissionMode
     let projectPath: String?
+    let gitStatus: GitStatus
+    let onGitStatusTap: (() -> Void)?
     @Binding var showQuickSettings: Bool
     @EnvironmentObject var settings: AppSettings
     @ObservedObject private var projectSettingsStore = ProjectSettingsStore.shared
@@ -20,15 +22,19 @@ struct UnifiedStatusBar: View {
         self.tokenUsage = tokenUsage
         self.effectivePermissionMode = .default
         self.projectPath = nil
+        self.gitStatus = .unknown
+        self.onGitStatusTap = nil
         self._showQuickSettings = showQuickSettings
     }
 
-    /// Full initializer with per-project permission support
-    init(isProcessing: Bool, tokenUsage: TokenUsage?, effectivePermissionMode: PermissionMode, projectPath: String, showQuickSettings: Binding<Bool>) {
+    /// Full initializer with per-project permission and git status support
+    init(isProcessing: Bool, tokenUsage: TokenUsage?, effectivePermissionMode: PermissionMode, projectPath: String, gitStatus: GitStatus = .unknown, onGitStatusTap: (() -> Void)? = nil, showQuickSettings: Binding<Bool>) {
         self.isProcessing = isProcessing
         self.tokenUsage = tokenUsage
         self.effectivePermissionMode = effectivePermissionMode
         self.projectPath = projectPath
+        self.gitStatus = gitStatus
+        self.onGitStatusTap = onGitStatusTap
         self._showQuickSettings = showQuickSettings
     }
 
@@ -99,6 +105,19 @@ struct UnifiedStatusBar: View {
                 }
                 .accessibilityLabel("Permission mode: \(effectivePermissionMode.displayName)" + (hasProjectOverride ? " for this project" : " globally"))
                 .accessibilityHint("Tap to change permission mode")
+            }
+
+            // Git status indicator (tappable to refresh and show details)
+            if gitStatus != .unknown && gitStatus != .notGitRepo {
+                Button {
+                    onGitStatusTap?()
+                } label: {
+                    GitStatusIndicator(status: gitStatus)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Git status")
+                .accessibilityHint("Tap to refresh git status and show details")
+                .accessibilityValue(gitStatus.accessibilityLabel)
             }
 
             Spacer()

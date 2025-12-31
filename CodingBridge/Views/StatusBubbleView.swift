@@ -25,12 +25,16 @@ struct StatusBubbleView: View {
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
 
-    // Timer for message rotation (4-5 seconds, randomized)
+    // Timer for message rotation (8-12 seconds, randomized)
     @State private var rotationTimer: Timer?
     // Timer for elapsed time updates
     @State private var elapsedTimer: Timer?
     // Start time for tracking duration
     @State private var startTime: Date = Date()
+    // Time when current message was displayed (for minimum display enforcement)
+    @State private var messageDisplayTime: Date = Date()
+    // Minimum seconds a message must stay on screen before switching
+    private let minimumDisplaySeconds: TimeInterval = 5.0
 
     var body: some View {
         if state != .idle && state != .stopped {
@@ -181,8 +185,26 @@ struct StatusBubbleView: View {
     }
 
     private func resetForNewState() {
-        stopAnimations()
-        startAnimations()
+        // Check if minimum display time has elapsed
+        let timeSinceLastMessage = Date().timeIntervalSince(messageDisplayTime)
+
+        if timeSinceLastMessage >= minimumDisplaySeconds {
+            // Enough time has passed - switch immediately
+            stopAnimations()
+            startAnimations()
+        } else {
+            // Schedule a switch after the remaining minimum time
+            let remainingTime = minimumDisplaySeconds - timeSinceLastMessage
+            rotationTimer?.invalidate()
+            rotationTimer = Timer.scheduledTimer(withTimeInterval: remainingTime, repeats: false) { _ in
+                Task { @MainActor in
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        selectNewMessage()
+                    }
+                    scheduleRotation()
+                }
+            }
+        }
     }
 
     private func scheduleRotation() {
@@ -203,6 +225,7 @@ struct StatusBubbleView: View {
 
     private func selectNewMessage() {
         currentMessage = messageStore.selectMessage(for: state, tool: tool)
+        messageDisplayTime = Date()
     }
 }
 

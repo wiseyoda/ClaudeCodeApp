@@ -13,10 +13,15 @@ struct ToolUseContentView: View {
         if content.hasPrefix("Edit"),
            let parsed = DiffView.parseEditContent(content) {
             DiffView(oldString: parsed.old, newString: parsed.new)
+        } else if content.hasPrefix("Write"),
+                  let parsed = WritePreviewView.parseWriteContent(content) {
+            WritePreviewView(filePath: parsed.filePath, content: parsed.content)
         } else if content.hasPrefix("TodoWrite"),
                   let todos = TodoListView.parseTodoContent(content),
                   !hideTodoInline {
             TodoListView(todos: todos)
+        } else if content.hasPrefix("WebFetch") {
+            WebFetchView(content: content)
         } else {
             // Format and truncate tool use content
             TruncatableText(
@@ -24,6 +29,82 @@ struct ToolUseContentView: View {
                 defaultLineLimit: 10,
                 isExpanded: $isExpanded
             )
+        }
+    }
+}
+
+// MARK: - WebFetch View
+
+/// Compact view for WebFetch tool showing URL with clickable link
+/// Per spec: Content hidden - Claude summarizes in response
+struct WebFetchView: View {
+    let content: String
+    @Environment(\.colorScheme) var colorScheme
+    @EnvironmentObject var settings: AppSettings
+    @State private var showCopied = false
+
+    private var url: String? {
+        ToolParser.extractParam(from: content, key: "url")
+    }
+
+    private var domain: String {
+        guard let urlString = url else { return "Unknown" }
+        return ToolParser.shortenURL(urlString)
+    }
+
+    var body: some View {
+        if let urlString = url {
+            HStack(spacing: 8) {
+                // URL text (tappable to open)
+                Button {
+                    if let urlObj = URL(string: urlString) {
+                        HapticManager.light()
+                        UIApplication.shared.open(urlObj)
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(domain)
+                            .font(settings.scaledFont(.small))
+                            .foregroundColor(CLITheme.cyan(for: colorScheme))
+                            .lineLimit(1)
+
+                        Image(systemName: "arrow.up.right.square")
+                            .font(.system(size: 10))
+                            .foregroundColor(CLITheme.cyan(for: colorScheme).opacity(0.7))
+                    }
+                }
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                // Copy URL button
+                Button {
+                    HapticManager.light()
+                    UIPasteboard.general.string = urlString
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showCopied = true
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showCopied = false
+                        }
+                    }
+                } label: {
+                    Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 11))
+                        .foregroundColor(
+                            showCopied
+                                ? CLITheme.green(for: colorScheme)
+                                : CLITheme.mutedText(for: colorScheme).opacity(0.6)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(.vertical, 2)
+        } else {
+            Text("No URL")
+                .font(settings.scaledFont(.small))
+                .foregroundColor(CLITheme.mutedText(for: colorScheme))
         }
     }
 }

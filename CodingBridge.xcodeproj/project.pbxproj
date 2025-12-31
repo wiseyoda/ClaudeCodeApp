@@ -119,8 +119,10 @@
 		SBV00001 /* StatusBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SBV00002 /* StatusBubbleView.swift */; };
 		SMS00001 /* StatusMessageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = SMS00002 /* StatusMessageStore.swift */; };
 		SMO00001 /* StatusMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = SMO00002 /* StatusMessage.swift */; };
+		MCV00001 /* MessageCollectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = MCV00002 /* MessageCollectionView.swift */; };
 		TTV00001 /* ToolTestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = TTV00002 /* ToolTestView.swift */; };
 		TTJ00001 /* ToolTestMessages.json in Resources */ = {isa = PBXBuildFile; fileRef = TTJ00002 /* ToolTestMessages.json */; };
+		FA9FE172C26A2B38DDA5994D /* WritePreviewView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2EE631238C2945D2E312D23 /* WritePreviewView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -242,6 +244,7 @@
 		SBV00002 /* StatusBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBubbleView.swift; sourceTree = "<group>"; };
 		SMS00002 /* StatusMessageStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusMessageStore.swift; sourceTree = "<group>"; };
 		SMO00002 /* StatusMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusMessage.swift; sourceTree = "<group>"; };
+		MCV00002 /* MessageCollectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageCollectionView.swift; sourceTree = "<group>"; };
 		SK100002 /* SSHKeyImportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHKeyImportSheet.swift; sourceTree = "<group>"; };
 		SR000051 /* SessionRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionRepository.swift; sourceTree = "<group>"; };
 		SS000049 /* ScrollStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollStateManager.swift; sourceTree = "<group>"; };
@@ -256,6 +259,7 @@
 		PSC00002 /* ProjectSidebarContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSidebarContent.swift; sourceTree = "<group>"; };
 		TTV00002 /* ToolTestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolTestView.swift; sourceTree = "<group>"; };
 		TTJ00002 /* ToolTestMessages.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ToolTestMessages.json; sourceTree = "<group>"; };
+		D2EE631238C2945D2E312D23 /* WritePreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WritePreviewView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -398,9 +402,11 @@
 				PCD0002 /* ProjectCard.swift */,
 				MTV0002 /* MainTabView.swift */,
 				SV000002 /* SettingsView.swift */,
+				MCV00002 /* MessageCollectionView.swift */,
 				SK100002 /* SSHKeyImportSheet.swift */,
 				A2000016 /* CodeBlockView.swift */,
 				A2000017 /* DiffView.swift */,
+				D2EE631238C2945D2E312D23 /* WritePreviewView.swift */,
 				A2000018 /* TodoListView.swift */,
 				TD000002 /* TodoProgressDrawer.swift */,
 				A2000019 /* SessionPickerViews.swift */,
@@ -665,6 +671,7 @@
 				GI000001 /* GitStatusIndicator.swift in Sources */,
 				PL000001 /* ProjectListViews.swift in Sources */,
 				SV000001 /* SettingsView.swift in Sources */,
+				MCV00001 /* MessageCollectionView.swift in Sources */,
 				SK100001 /* SSHKeyImportSheet.swift in Sources */,
 				KH000001 /* KeychainHelper.swift in Sources */,
 				GM000001 /* GitModels.swift in Sources */,
@@ -690,6 +697,7 @@
 				A1000016 /* String+Markdown.swift in Sources */,
 				A1000017 /* CodeBlockView.swift in Sources */,
 				A1000018 /* DiffView.swift in Sources */,
+				FA9FE172C26A2B38DDA5994D /* WritePreviewView.swift in Sources */,
 				A1000019 /* TodoListView.swift in Sources */,
 				TD000001 /* TodoProgressDrawer.swift in Sources */,
 				A1000020 /* SessionPickerViews.swift in Sources */,

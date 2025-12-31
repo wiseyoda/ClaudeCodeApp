@@ -20,6 +20,7 @@ struct CLIMessageView: View {
     private let cachedResultCountBadge: String?
     private let cachedToolErrorInfo: ToolErrorInfo?
     private let cachedTimestamp: String
+    private let isLongMessage: Bool  // True if assistant message exceeds 50 lines
 
     // MARK: - Shared Formatters (expensive to create, so share across all instances)
     private static let relativeFormatter: RelativeDateTimeFormatter = {
@@ -66,10 +67,17 @@ struct CLIMessageView: View {
             self.cachedTimestamp = Self.relativeFormatter.localizedString(for: message.timestamp, relativeTo: Date())
         }
 
-        // Collapse result messages, common tool uses (Bash/Read/Grep/Glob), and thinking blocks by default
+        // Check if assistant message exceeds line limit (50 lines per MESSAGE-TYPES.md)
+        let isLong = message.role == .assistant && CollapsibleMarkdownText.isLongContent(message.content)
+        self.isLongMessage = isLong
+
+        // Collapse result messages, system/init, common tool uses (Bash/Read/Grep/Glob), thinking blocks,
+        // and long assistant messages by default
         let shouldStartCollapsed = message.role == .resultSuccess ||
             message.role == .toolResult ||
             message.role == .thinking ||
+            message.role == .system ||
+            isLong ||  // Collapse long assistant messages
             (message.role == .toolUse && (message.content.hasPrefix("Bash") || message.content.hasPrefix("Read") || message.content.hasPrefix("Grep") || message.content.hasPrefix("Glob")))
         self._isExpanded = State(initialValue: !shouldStartCollapsed)
     }
@@ -521,6 +529,7 @@ struct CLIMessageView: View {
     private var isCollapsible: Bool {
         switch message.role {
         case .system, .toolUse, .toolResult, .resultSuccess, .thinking: return true
+        case .assistant: return isLongMessage  // Long assistant messages are collapsible
         default: return false
         }
     }
@@ -545,8 +554,12 @@ struct CLIMessageView: View {
             // Show image if attached (supports both eager and lazy loading)
             LazyMessageImage(imageData: message.imageData, imagePath: message.imagePath)
         case .assistant:
-            MarkdownText(message.content)
-                .textSelection(.enabled)
+            if isLongMessage {
+                CollapsibleMarkdownText(content: message.content, isExpanded: $isExpanded)
+            } else {
+                MarkdownText(message.content)
+                    .textSelection(.enabled)
+            }
         case .system, .resultSuccess:
             Text(message.content)
                 .font(settings.scaledFont(.small))
@@ -651,12 +664,14 @@ struct QuickActionButton: View {
 /// Lazy-loading image view for chat message attachments.
 /// Supports both eager (imageData) and lazy (imagePath) loading patterns.
 /// Images are loaded asynchronously to avoid blocking the main thread.
+/// Tap to open full-screen viewer with pinch-zoom.
 struct LazyMessageImage: View {
     let imageData: Data?
     let imagePath: String?
 
     @State private var loadedImage: UIImage?
     @State private var isLoading = false
+    @State private var showFullScreen = false
 
     var body: some View {
         Group {
@@ -666,6 +681,14 @@ struct LazyMessageImage: View {
                     .scaledToFit()
                     .frame(maxWidth: 200, maxHeight: 150)
                     .cornerRadius(8)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        HapticManager.light()
+                        showFullScreen = true
+                    }
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityLabel("Attached image")
+                    .accessibilityHint("Tap to view full screen")
             } else if isLoading {
                 ProgressView()
                     .frame(width: 200, height: 100)
@@ -673,6 +696,11 @@ struct LazyMessageImage: View {
         }
         .task {
             await loadImageIfNeeded()
+        }
+        .fullScreenCover(isPresented: $showFullScreen) {
+            if let image = loadedImage ?? eagerImage {
+                FullScreenImageViewer(image: image)
+            }
         }
     }
 
@@ -703,5 +731,140 @@ struct LazyMessageImage: View {
         await MainActor.run {
             loadedImage = image
         }
+    }
+}
+
+// MARK: - Full Screen Image Viewer
+
+/// Full-screen image viewer with pinch-zoom, double-tap zoom, and swipe-to-dismiss
+struct FullScreenImageViewer: View {
+    let image: UIImage
+    @Environment(\.dismiss) var dismiss
+
+    // Zoom state
+    @State private var currentScale: CGFloat = 1.0
+    @State private var previousScale: CGFloat = 1.0
+    @State private var offset: CGSize = .zero
+    @State private var previousOffset: CGSize = .zero
+
+    // Dismiss gesture state
+    @State private var dragOffset: CGFloat = 0
+    @State private var isDragging = false
+
+    private let minScale: CGFloat = 1.0
+    private let maxScale: CGFloat = 5.0
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                // Dark background with opacity based on drag
+                Color.black
+                    .opacity(1.0 - Double(abs(dragOffset)) / 400.0)
+                    .ignoresSafeArea()
+
+                // Zoomable image
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .scaleEffect(currentScale)
+                    .offset(x: offset.width, y: offset.height + dragOffset)
+                    .gesture(zoomGesture)
+                    .gesture(panGesture)
+                    .gesture(dismissDragGesture)
+                    .onTapGesture(count: 2) {
+                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                            if currentScale > 1.0 {
+                                // Reset to 1x
+                                currentScale = 1.0
+                                previousScale = 1.0
+                                offset = .zero
+                                previousOffset = .zero
+                            } else {
+                                // Zoom to 2x
+                                currentScale = 2.0
+                                previousScale = 2.0
+                            }
+                        }
+                        HapticManager.light()
+                    }
+            }
+            .overlay(alignment: .topTrailing) {
+                // Close button
+                Button {
+                    HapticManager.light()
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 30))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(.white.opacity(0.8))
+                }
+                .padding(20)
+            }
+        }
+        .statusBarHidden()
+    }
+
+    // MARK: - Gestures
+
+    /// Pinch-to-zoom gesture
+    private var zoomGesture: some Gesture {
+        MagnifyGesture()
+            .onChanged { value in
+                let delta = value.magnification / previousScale
+                previousScale = value.magnification
+                currentScale = min(max(currentScale * delta, minScale), maxScale)
+            }
+            .onEnded { _ in
+                previousScale = 1.0
+                // Reset if zoomed out too far
+                if currentScale < minScale {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        currentScale = minScale
+                        offset = .zero
+                        previousOffset = .zero
+                    }
+                }
+            }
+    }
+
+    /// Pan gesture for moving zoomed image
+    private var panGesture: some Gesture {
+        DragGesture()
+            .onChanged { value in
+                guard currentScale > 1.0 else { return }
+                offset = CGSize(
+                    width: previousOffset.width + value.translation.width,
+                    height: previousOffset.height + value.translation.height
+                )
+            }
+            .onEnded { _ in
+                previousOffset = offset
+            }
+    }
+
+    /// Swipe down to dismiss gesture (only when not zoomed)
+    private var dismissDragGesture: some Gesture {
+        DragGesture()
+            .onChanged { value in
+                guard currentScale <= 1.0 else { return }
+                dragOffset = value.translation.height
+                isDragging = true
+            }
+            .onEnded { value in
+                guard currentScale <= 1.0 else { return }
+                isDragging = false
+
+                // Dismiss if dragged far enough or fast enough
+                let velocity = value.velocity.height
+                if abs(dragOffset) > 100 || abs(velocity) > 500 {
+                    HapticManager.light()
+                    dismiss()
+                } else {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        dragOffset = 0
+                    }
+                }
+            }
     }
 }

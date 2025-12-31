@@ -4,8 +4,6 @@ import SwiftUI
 /// Shows project cards with git status, session counts, and branch badges
 struct HomeView: View {
     let projects: [Project]
-    let gitStatuses: [String: GitStatus]
-    let branchNames: [String: String]
     let isLoading: Bool
     let onRefresh: () async -> Void
     let onSelectProject: (Project) -> Void
@@ -119,8 +117,8 @@ struct HomeView: View {
                     ForEach(Array(activeProjects.enumerated()), id: \.element.id) { index, project in
                         ProjectCard(
                             project: project,
-                            gitStatus: gitStatuses[project.path] ?? .unknown,
-                            branchName: branchNames[project.path],
+                            gitStatus: projectCache.cachedGitStatuses[project.path] ?? .unknown,
+                            branchName: projectCache.cachedBranchNames[project.path],
                             onTap: { onSelectProject(project) },
                             sessionCount: sessionCountFor(project),
                             onRename: onRenameProject != nil ? { onRenameProject?(project) } : nil,
@@ -411,18 +409,6 @@ struct RecentActivitySection: View {
                 Project(name: "backend-service-v2", path: "/dev/backend", displayName: nil, fullPath: nil, sessions: nil, sessionMeta: ProjectSessionMeta(hasMore: false, total: 5)),
                 Project(name: "new-ml-pipeline", path: "/dev/ml", displayName: nil, fullPath: nil, sessions: nil, sessionMeta: nil)
             ],
-            gitStatuses: [
-                "/dev/ClaudeCodeApp": .clean,
-                "/dev/agent-ui-kit": .unknown,
-                "/dev/backend": .checking,
-                "/dev/ml": .dirty
-            ],
-            branchNames: [
-                "/dev/ClaudeCodeApp": "main",
-                "/dev/agent-ui-kit": "dev",
-                "/dev/backend": "feature/api",
-                "/dev/ml": "main"
-            ],
             isLoading: false,
             onRefresh: {},
             onSelectProject: { _ in },
@@ -437,8 +423,6 @@ struct RecentActivitySection: View {
     NavigationStack {
         HomeView(
             projects: [],
-            gitStatuses: [:],
-            branchNames: [:],
             isLoading: true,
             onRefresh: {},
             onSelectProject: { _ in },

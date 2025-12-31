@@ -2,40 +2,28 @@ import SwiftUI
 
 // MARK: - Chat Title View
 
-/// Principal toolbar content showing project name and git status indicator
+/// Principal toolbar content showing project name
 struct ChatTitleView: View {
     let displayName: String
-    let gitStatus: GitStatus
-    let onRefreshGitStatus: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        HStack(spacing: 6) {
-            Text(displayName)
-                .font(.headline)
-                .foregroundColor(CLITheme.primaryText(for: colorScheme))
-
-            Button {
-                onRefreshGitStatus()
-            } label: {
-                GitStatusIndicator(status: gitStatus)
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Git status")
-            .accessibilityHint("Tap to refresh git status")
-            .accessibilityValue(gitStatus.accessibilityLabel)
-        }
+        Text(displayName)
+            .font(.headline)
+            .foregroundColor(CLITheme.primaryText(for: colorScheme))
     }
 }
 
 // MARK: - Chat Toolbar Actions
 
-/// Trailing toolbar actions: search, ideas, and menu
+/// Trailing toolbar actions: search, ideas, and menu (git status moved to bottom status bar)
 struct ChatToolbarActions: View {
+    let gitStatus: GitStatus  // Kept for API compatibility
     let isSearching: Bool
     let ideasCount: Int
     let isProcessing: Bool
+    let onGitStatusTap: () -> Void  // Kept for API compatibility
     let onToggleSearch: () -> Void
     let onShowIdeas: () -> Void
     let onQuickCapture: () -> Void
@@ -47,6 +35,7 @@ struct ChatToolbarActions: View {
 
     var body: some View {
         HStack(spacing: 12) {
+            // Git status indicator removed - now in bottom status bar
             searchButton
             ideasButton
             moreOptionsMenu
@@ -135,11 +124,7 @@ struct ChatToolbarActions: View {
         Text("Content")
             .toolbar {
                 ToolbarItem(placement: .principal) {
-                    ChatTitleView(
-                        displayName: "My Project",
-                        gitStatus: .clean,
-                        onRefreshGitStatus: {}
-                    )
+                    ChatTitleView(displayName: "My Project")
                 }
             }
     }
@@ -151,9 +136,11 @@ struct ChatToolbarActions: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     ChatToolbarActions(
+                        gitStatus: .dirty,
                         isSearching: false,
                         ideasCount: 5,
                         isProcessing: false,
+                        onGitStatusTap: {},
                         onToggleSearch: {},
                         onShowIdeas: {},
                         onQuickCapture: {},

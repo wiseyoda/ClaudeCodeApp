@@ -531,6 +531,7 @@ struct MarkdownText: View {
                             .font(settings.scaledFont(.small))
                             .foregroundColor(rowIndex == 0 ? CLITheme.cyan(for: colorScheme) : CLITheme.primaryText(for: colorScheme))
                             .fontWeight(rowIndex == 0 ? .semibold : .regular)
+                            .fixedSize(horizontal: false, vertical: true)  // Force word wrap
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -558,5 +559,6 @@ struct MarkdownText: View {
         Text(attributed)
             .font(settings.scaledFont(.body))
             .foregroundColor(CLITheme.primaryText(for: colorScheme))
+            .fixedSize(horizontal: false, vertical: true)  // Force word wrap
     }
 }

@@ -768,8 +768,11 @@ struct StoredMessage: Codable, Identifiable, Equatable {
             return ChatMessage(role: .user, content: content.content, timestamp: timestamp)
 
         case .system(let content):
-            // Only show "result" subtype messages
-            if content.subtype == "result" {
+            // Skip system messages in history display:
+            // - "result" subtype duplicates assistant content (server sends both)
+            // - "init" subtype is session initialization metadata
+            // Only show system messages that aren't duplicates of assistant content
+            if content.subtype == nil {
                 return ChatMessage(role: .system, content: content.content, timestamp: timestamp)
             }
             return nil
@@ -969,11 +972,32 @@ struct CLIThinkingContent: Codable, Equatable {
     let content: String
 }
 
+/// Embedded tool result for denormalized history messages
+/// When fetching history, tool_use messages include the result inline
+struct CLIToolResult: Codable, Equatable {
+    let output: String
+    let success: Bool
+    let isError: Bool?
+}
+
 /// Tool use message - when a tool starts executing
+/// In history responses (denormalize=true), includes embedded `result`
 struct CLIToolUseContent: Codable, Equatable {
     let id: String
     let name: String  // Tool name (e.g., "Bash", "Read", "Edit")
     let input: [String: AnyCodableValue]
+
+    /// Embedded result from history API (denormalize=true, default)
+    /// Only present in history responses, not streaming.
+    /// nil when tool execution was incomplete or interrupted.
+    let result: CLIToolResult?
+
+    init(id: String, name: String, input: [String: AnyCodableValue], result: CLIToolResult? = nil) {
+        self.id = id
+        self.name = name
+        self.input = input
+        self.result = result
+    }
 }
 
 /// Tool result message - when a tool completes
@@ -2269,9 +2293,54 @@ struct CLIPaginatedMessagesResponse: Decodable {
     var nextCursor: String? { pagination.nextCursor }
 
     /// Convert all messages to ChatMessages for UI display
-    /// Filters out ephemeral messages and nil conversions
+    /// Filters out ephemeral messages, nil conversions, and duplicates.
+    /// Handles denormalized tool_use messages with embedded results.
     func toChatMessages() -> [ChatMessage] {
-        messages.compactMap { $0.toChatMessage() }
+        var result: [ChatMessage] = []
+        var seenContent: Set<String> = []
+
+        for storedMsg in messages {
+            // Handle denormalized tool_use with embedded result
+            // Server returns tool_use with result field when denormalize=true (default)
+            if case .toolUse(let content) = storedMsg.message {
+                let timestamp = storedMsg.date ?? Date()
+
+                // Add the tool_use message
+                let inputString: String
+                if let data = try? JSONSerialization.data(withJSONObject: content.input.mapValues { $0.value }),
+                   let str = String(data: data, encoding: .utf8) {
+                    inputString = str
+                } else {
+                    inputString = ""
+                }
+                let displayContent = inputString.isEmpty ? content.name : "\(content.name)(\(inputString))"
+                result.append(ChatMessage(role: .toolUse, content: displayContent, timestamp: timestamp))
+
+                // If there's an embedded result, add it as a separate ChatMessage
+                // This allows existing grouping logic (TerminalGroup, etc.) to work unchanged
+                if let embedded = content.result {
+                    let role: ChatMessage.Role = embedded.isError == true || !embedded.success ? .error : .toolResult
+                    result.append(ChatMessage(role: role, content: embedded.output, timestamp: timestamp))
+                }
+                continue
+            }
+
+            // Normal message conversion
+            guard let msg = storedMsg.toChatMessage() else { continue }
+
+            // Skip duplicate content (server sometimes sends same content multiple times)
+            // Only dedupe text messages (assistant/user), not tools which may repeat legitimately
+            let shouldDedupe = msg.role == .assistant || msg.role == .user
+            if shouldDedupe {
+                let contentKey = "\(msg.role):\(msg.content.prefix(200))"
+                if seenContent.contains(contentKey) {
+                    continue
+                }
+                seenContent.insert(contentKey)
+            }
+            result.append(msg)
+        }
+        return result
     }
 }
 

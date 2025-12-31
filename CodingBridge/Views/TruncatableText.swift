@@ -48,6 +48,7 @@ struct TruncatableText: View {
                     .font(settings.scaledFont(.small))
                     .foregroundColor(CLITheme.secondaryText(for: colorScheme))
                     .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)  // Force word wrap
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 // Fade gradient when truncated
@@ -229,6 +230,7 @@ struct ThinkingBlockText: View {
                     .foregroundColor(CLITheme.purple(for: colorScheme).opacity(0.8))
                     .italic()
                     .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)  // Force word wrap
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 if !isExpanded && isTruncatable {
@@ -279,6 +281,113 @@ struct ThinkingBlockText: View {
                     .padding(.top, 8)
                 }
                 .buttonStyle(.plain)
+            }
+        }
+    }
+}
+
+// MARK: - Collapsible Markdown Text
+
+/// A markdown view that collapses long content (> lineLimit lines) with "Show more" button
+/// Used for long assistant messages to keep the chat scrollable
+struct CollapsibleMarkdownText: View {
+    let content: String
+    @Binding var isExpanded: Bool
+    @EnvironmentObject var settings: AppSettings
+    @Environment(\.colorScheme) var colorScheme
+
+    /// Maximum lines before collapsing (matches MESSAGE-TYPES.md spec of 50 lines)
+    static let defaultLineLimit = 50
+
+    // Cached line data computed once at init
+    private let totalLines: Int
+    private let isTruncatable: Bool
+    private let truncatedContent: String
+    private let hiddenLineCount: Int
+
+    init(content: String, isExpanded: Binding<Bool>, lineLimit: Int = CollapsibleMarkdownText.defaultLineLimit) {
+        self.content = content
+        self._isExpanded = isExpanded
+
+        // Pre-compute line data once
+        let lines = content.components(separatedBy: "\n")
+        self.totalLines = lines.count
+        self.isTruncatable = lines.count > lineLimit
+        self.truncatedContent = lines.prefix(lineLimit).joined(separator: "\n")
+        self.hiddenLineCount = max(0, lines.count - lineLimit)
+    }
+
+    /// Returns true if content exceeds the default line limit
+    static func isLongContent(_ content: String, lineLimit: Int = defaultLineLimit) -> Bool {
+        content.components(separatedBy: "\n").count > lineLimit
+    }
+
+    private var visibleContent: String {
+        if isExpanded || !isTruncatable {
+            return content
+        }
+        return truncatedContent
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ZStack(alignment: .bottom) {
+                MarkdownText(visibleContent)
+                    .textSelection(.enabled)
+
+                // Fade gradient when truncated
+                if !isExpanded && isTruncatable {
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            CLITheme.background(for: colorScheme).opacity(0),
+                            CLITheme.background(for: colorScheme).opacity(0.8),
+                            CLITheme.background(for: colorScheme)
+                        ]),
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 50)
+                }
+            }
+
+            // "Show X more lines" button when truncated
+            if !isExpanded && isTruncatable {
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        isExpanded = true
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 10))
+                        Text("Show \(hiddenLineCount) more lines")
+                            .font(settings.scaledFont(.small))
+                    }
+                    .foregroundColor(CLITheme.blue(for: colorScheme))
+                    .padding(.top, 4)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Show \(hiddenLineCount) more lines")
+            }
+
+            // "Show less" button when expanded and content is long
+            if isExpanded && isTruncatable {
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        isExpanded = false
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Image(systemName: "chevron.up")
+                            .font(.system(size: 10))
+                        Text("Show less")
+                            .font(settings.scaledFont(.small))
+                    }
+                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                    .padding(.top, 8)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Collapse content")
             }
         }
     }

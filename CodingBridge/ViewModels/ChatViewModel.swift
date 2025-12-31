@@ -57,6 +57,10 @@ class ChatViewModel: ObservableObject {
     var hasPromptedCleanup = false
     /// Background task for periodic git refresh - not @Published, managed internally
     var gitRefreshTask: Task<Void, Never>?
+    /// Timer to auto-hide banner after 5 seconds
+    var gitBannerAutoHideTimer: Task<Void, Never>?
+    /// Tracks pending Bash commands that are git operations (for refresh after result)
+    var pendingGitCommands: Set<String> = []
 
     // MARK: - Model State
     @Published var showingModelPicker = false
@@ -82,6 +86,7 @@ class ChatViewModel: ObservableObject {
     var disconnectTask: Task<Void, Never>?
     var saveDebounceTask: Task<Void, Never>?
     var draftDebounceTask: Task<Void, Never>?
+    var historyLoadTask: Task<Void, Never>?
 
     // MARK: - Display Messages Cache
     // Note: @Published wrapper triggers view re-render when cache is refreshed
@@ -110,6 +115,14 @@ class ChatViewModel: ObservableObject {
                 self?.objectWillChange.send()
             }
             .store(in: &cancellables)
+
+        // Listen for git status refresh requests (e.g., app returning from background)
+        NotificationCenter.default.publisher(for: .gitStatusRefreshNeeded)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.refreshGitStatus()
+            }
+            .store(in: &cancellables)
     }
 
 #if DEBUG
@@ -131,6 +144,14 @@ class ChatViewModel: ObservableObject {
         wsManager.objectWillChange
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
+
+        // Listen for git status refresh requests (e.g., app returning from background)
+        NotificationCenter.default.publisher(for: .gitStatusRefreshNeeded)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.refreshGitStatus()
             }
             .store(in: &cancellables)
     }
@@ -198,8 +219,21 @@ class ChatViewModel: ObservableObject {
                     attemptSessionReattachment(sessionId: session.id)
                 }
             } else {
-                // No sessions exist - connect without sessionId
-                log.debug("[ChatViewModel] No sessions found for project - connecting without session")
+                // No sessions exist - create ephemeral placeholder and connect without sessionId
+                log.debug("[ChatViewModel] No sessions found for project - creating ephemeral session")
+
+                // Create ephemeral session placeholder (like startNewSession does)
+                // This ensures selectedSession is set for UI consistency
+                let ephemeralSession = ProjectSession(
+                    id: "new-session-\(UUID().uuidString)",
+                    summary: "New Session",
+                    lastActivity: ISO8601DateFormatter().string(from: Date()),
+                    messageCount: 0,
+                    lastUserMessage: nil,
+                    lastAssistantMessage: nil
+                )
+                selectedSession = ephemeralSession
+
                 wsManager.connect(projectPath: project.path)
                 if wasProcessing {
                     MessageStore.clearProcessingState(for: project.path)
@@ -241,9 +275,17 @@ class ChatViewModel: ObservableObject {
         MessageStore.saveMessages(messages, for: project.path, maxMessages: settings.historyLimit.rawValue)
         MessageStore.saveDraft(inputText, for: project.path)
 
+        // Cancel any pending history load
+        historyLoadTask?.cancel()
+        historyLoadTask = nil
+
         // Cancel git refresh task
         gitRefreshTask?.cancel()
         gitRefreshTask = nil
+
+        // Cancel git banner auto-hide timer
+        gitBannerAutoHideTimer?.cancel()
+        gitBannerAutoHideTimer = nil
 
         // Cancel todo hide timer
         todoHideTimer?.cancel()
@@ -413,11 +455,17 @@ class ChatViewModel: ObservableObject {
     }
 
     func loadSessionHistory(_ session: ProjectSession) {
+        // Cancel any existing history load to prevent race conditions when switching sessions rapidly
+        historyLoadTask?.cancel()
+
         messages = []
         isLoadingHistory = true
         scrollManager.reset()
 
-        Task {
+        // Capture session ID to check for staleness after async operations
+        let targetSessionId = session.id
+
+        historyLoadTask = Task {
             do {
                 let limit = settings.historyLimit.rawValue
                 log.debug("[ChatViewModel] Loading session history via unified API for: \(session.id) (limit: \(limit))")
@@ -430,6 +478,12 @@ class ChatViewModel: ObservableObject {
                     sessionId: session.id,
                     limit: limit
                 )
+
+                // Check if task was cancelled or session changed while loading
+                guard !Task.isCancelled, selectedSession?.id == targetSessionId else {
+                    log.debug("[ChatViewModel] History load cancelled or session changed, discarding results")
+                    return
+                }
 
                 await wsManager.refreshTokenUsage(projectPath: project.path, sessionId: session.id)
 
@@ -451,15 +505,17 @@ class ChatViewModel: ObservableObject {
                     self?.scrollManager.forceScrollToBottom()
                 }
             } catch {
+                // Check if cancelled before falling back
+                guard !Task.isCancelled else { return }
                 log.debug("[ChatViewModel] Failed to load session history: \(error)")
                 // Fall back to export API for backwards compatibility with older cli-bridge
-                await loadSessionHistoryFallback(session)
+                await loadSessionHistoryFallback(session, targetSessionId: targetSessionId)
             }
         }
     }
 
     /// Fallback to export API if paginated endpoint fails (backwards compatibility)
-    private func loadSessionHistoryFallback(_ session: ProjectSession) async {
+    private func loadSessionHistoryFallback(_ session: ProjectSession, targetSessionId: String) async {
         do {
             log.debug("[ChatViewModel] Falling back to export API for: \(session.id)")
 
@@ -470,6 +526,12 @@ class ChatViewModel: ObservableObject {
                 format: .json,
                 includeStructuredContent: true
             )
+
+            // Check if task was cancelled or session changed while loading
+            guard !Task.isCancelled, selectedSession?.id == targetSessionId else {
+                log.debug("[ChatViewModel] Fallback history load cancelled or session changed, discarding results")
+                return
+            }
 
             let historyMessages = parseJSONLToMessages(exportResponse.content)
 
@@ -494,6 +556,8 @@ class ChatViewModel: ObservableObject {
                 self?.scrollManager.forceScrollToBottom()
             }
         } catch {
+            // Check if cancelled before showing error
+            guard !Task.isCancelled else { return }
             log.debug("[ChatViewModel] Fallback also failed: \(error)")
             if let lastMsg = session.lastAssistantMessage {
                 messages.append(ChatMessage(role: .assistant, content: lastMsg, timestamp: Date()))
@@ -584,6 +648,52 @@ class ChatViewModel: ObservableObject {
             resumeSessionId: sessionToResume,
             permissionMode: effectivePermissionMode,
             images: imagesToSend.isEmpty ? nil : imagesToSend,
+            model: effectiveModelId
+        )
+
+        MessageStore.saveMessages(messages, for: project.path, maxMessages: settings.historyLimit.rawValue)
+    }
+
+    /// Retry: Find the previous user message before the given message and resend it
+    /// - Parameter beforeId: The ID of the assistant message to retry (finds previous user message)
+    func retryMessage(beforeId: UUID) {
+        // Find the index of the message with this ID
+        guard let targetIndex = messages.firstIndex(where: { $0.id == beforeId }) else {
+            log.warning("[ChatViewModel] Could not find message with ID \(beforeId) for retry")
+            return
+        }
+
+        // Search backwards for the most recent user message before this one
+        var previousUserMessage: ChatMessage?
+        for i in stride(from: targetIndex - 1, through: 0, by: -1) {
+            if messages[i].role == .user {
+                previousUserMessage = messages[i]
+                break
+            }
+        }
+
+        guard let userMessage = previousUserMessage else {
+            log.warning("[ChatViewModel] No user message found before message \(beforeId)")
+            return
+        }
+
+        HapticManager.medium()
+        log.info("[ChatViewModel] Retrying message: \(userMessage.content.prefix(50))...")
+
+        // Remove messages from targetIndex onwards (the assistant response and everything after)
+        messages.removeSubrange(targetIndex..<messages.count)
+
+        // Scroll to bottom
+        scrollToBottomTrigger = true
+        processingStartTime = Date()
+
+        // Resend the user message
+        wsManager.sendMessage(
+            userMessage.content,
+            projectPath: project.path,
+            resumeSessionId: effectiveSessionToResume,
+            permissionMode: effectivePermissionMode,
+            images: nil,  // TODO: Support retrying messages with images if needed
             model: effectiveModelId
         )
 
@@ -729,23 +839,63 @@ class ChatViewModel: ObservableObject {
     }
 
     func handleClearCommand() {
-        messages.removeAll()
-        wsManager.sessionId = nil
-        selectedSession = nil
+        log.debug("[ChatViewModel] /clear command - clearing state and reconnecting")
+
+        // Clear UI state
+        messages = []
         scrollManager.reset()
-        addSystemMessage("Conversation cleared. Starting fresh.")
         MessageStore.clearMessages(for: project.path)
         MessageStore.clearSessionId(for: project.path)
+        sessionStore.clearActiveSessionId(for: project.path)
+
+        // Create ephemeral session placeholder to prevent nil selectedSession issues
+        let ephemeralSession = ProjectSession(
+            id: "new-session-\(UUID().uuidString)",
+            summary: "New Session",
+            lastActivity: ISO8601DateFormatter().string(from: Date()),
+            messageCount: 0,
+            lastUserMessage: nil,
+            lastAssistantMessage: nil
+        )
+        selectedSession = ephemeralSession
+
+        // Disconnect and reconnect WebSocket without sessionId
+        wsManager.disconnect()
+        wsManager.sessionId = nil
+        wsManager.connect(projectPath: project.path, sessionId: nil)
+
+        addSystemMessage("Conversation cleared. Starting fresh.")
+        refreshDisplayMessagesCache()
     }
 
     func handleNewSessionCommand() {
-        messages.removeAll()
-        wsManager.sessionId = nil
-        selectedSession = nil
+        log.debug("[ChatViewModel] /new command - starting new session")
+
+        // Clear UI state
+        messages = []
         scrollManager.reset()
-        addSystemMessage("New session started.")
         MessageStore.clearMessages(for: project.path)
         MessageStore.clearSessionId(for: project.path)
+        sessionStore.clearActiveSessionId(for: project.path)
+
+        // Create ephemeral session placeholder to prevent nil selectedSession issues
+        let ephemeralSession = ProjectSession(
+            id: "new-session-\(UUID().uuidString)",
+            summary: "New Session",
+            lastActivity: ISO8601DateFormatter().string(from: Date()),
+            messageCount: 0,
+            lastUserMessage: nil,
+            lastAssistantMessage: nil
+        )
+        selectedSession = ephemeralSession
+
+        // Disconnect and reconnect WebSocket without sessionId
+        wsManager.disconnect()
+        wsManager.sessionId = nil
+        wsManager.connect(projectPath: project.path, sessionId: nil)
+
+        addSystemMessage("New session started.")
+        refreshDisplayMessagesCache()
     }
 
     func showStatusInfo() {
@@ -809,6 +959,12 @@ class ChatViewModel: ObservableObject {
             )
             self.messages.append(toolMsg)
 
+            // Track Bash git commands for status refresh after completion
+            if name == "Bash" && self.isGitCommand(input) {
+                self.pendingGitCommands.insert(id)
+                log.debug("[ChatViewModel] Tracking git command: \(id.prefix(8))")
+            }
+
             if name == "TodoWrite" {
                 let content = "\(name)(\(input))"
                 if let todos = TodoListView.parseTodoContent(content), !todos.isEmpty {
@@ -845,6 +1001,13 @@ class ChatViewModel: ObservableObject {
                 timestamp: Date()
             )
             self.messages.append(resultMsg)
+
+            // Refresh git status after git command completes
+            if self.pendingGitCommands.contains(id) {
+                self.pendingGitCommands.remove(id)
+                log.debug("[ChatViewModel] Git command completed, refreshing status")
+                self.refreshGitStatus()
+            }
         }
 
         wsManager.onThinking = { [weak self] thinking in
@@ -977,6 +1140,19 @@ class ChatViewModel: ObservableObject {
             self.messages.append(recoveryMsg)
             MessageStore.clearSessionId(for: self.project.path)
             self.wsManager.sessionId = nil
+
+            // Reset selectedSession to ephemeral to prevent invalid-session-ID loop
+            // Without this, effectiveSessionToResume would keep returning the old invalid ID
+            let ephemeralSession = ProjectSession(
+                id: "new-session-\(UUID().uuidString)",
+                summary: "New Session",
+                lastActivity: ISO8601DateFormatter().string(from: Date()),
+                messageCount: 0,
+                lastUserMessage: nil,
+                lastAssistantMessage: nil
+            )
+            self.selectedSession = ephemeralSession
+            self.sessionStore.clearActiveSessionId(for: self.project.path)
         }
 
         wsManager.onSessionAttached = { [weak self] in
@@ -1014,8 +1190,15 @@ class ChatViewModel: ObservableObject {
 
         wsManager.onSystem = { [weak self] content in
             guard let self = self else { return }
-            // System messages with subtype "result" are greeting/response messages from Claude
-            // Display them as assistant messages for better UX
+            // System messages with subtype "result" are final response messages from Claude
+            // Skip if content matches the last assistant message (cli-bridge sends both)
+            if let lastAssistant = self.messages.last(where: { $0.role == .assistant }) {
+                if lastAssistant.content == content {
+                    log.debug("[ChatViewModel] Skipping duplicate system/result message")
+                    return
+                }
+            }
+            // Display as assistant message if it differs
             let systemMsg = ChatMessage(
                 role: .assistant,
                 content: content,
@@ -1143,12 +1326,50 @@ class ChatViewModel: ObservableObject {
             gitStatus = newStatus
             ProjectCache.shared.updateGitStatus(for: project.path, status: newStatus)
 
+            // Notify other views (e.g., HomeView via GitStatusCoordinator)
+            NotificationCenter.default.post(
+                name: .gitStatusUpdated,
+                object: nil,
+                userInfo: ["projectPath": project.path, "status": newStatus]
+            )
+
             if newStatus == .clean || newStatus == .notGitRepo {
                 showGitBanner = false
             } else {
                 showGitBanner = true
+                // Auto-hide banner after 5 seconds
+                self.startBannerAutoHideTimer()
             }
         }
+    }
+
+    /// Show git banner and start auto-hide timer (for manual refresh from toolbar)
+    func showGitBannerAndRefresh() {
+        showGitBanner = true
+        refreshGitStatus()
+    }
+
+    /// Start auto-hide timer for git banner (5 seconds)
+    private func startBannerAutoHideTimer() {
+        gitBannerAutoHideTimer?.cancel()
+        gitBannerAutoHideTimer = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
+            guard let self, !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.3)) {
+                self.showGitBanner = false
+            }
+        }
+    }
+
+    /// Check if a Bash command input contains a git operation that affects status
+    private func isGitCommand(_ input: String) -> Bool {
+        let gitOperations = [
+            "git push", "git pull", "git commit", "git merge",
+            "git rebase", "git checkout", "git switch", "git restore",
+            "git reset", "git stash", "git fetch", "git add", "git rm"
+        ]
+        let lowercased = input.lowercased()
+        return gitOperations.contains { lowercased.contains($0) }
     }
 
     func refreshChatContent() async {

@@ -708,6 +708,15 @@ class CLIBridgeAdapter: ObservableObject {
         manager.onConnectionError = { [weak self] error in
             log.error("[CLIBridgeAdapter] Connection error: \(error.localizedDescription)")
             self?.onConnectionError?(error)
+
+            // Trigger session recovery for session-related errors
+            // This resets selectedSession to prevent invalid-session-ID loops
+            switch error {
+            case .sessionNotFound, .sessionInvalid:
+                self?.onSessionRecovered?()
+            default:
+                break
+            }
         }
 
         manager.onNetworkStatusChanged = { [weak self] isAvailable in

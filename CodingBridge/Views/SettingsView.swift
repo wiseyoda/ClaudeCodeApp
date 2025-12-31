@@ -107,7 +107,16 @@ struct SettingsView: View {
                     Toggle("Auto-scroll to Bottom", isOn: $settings.autoScrollEnabled)
                 }
 
-                // Section 4: Push Notifications (Experimental)
+                // Section 4: Message Collection
+                Section {
+                    MessageCollectionView()
+                } header: {
+                    Text("Message Collection")
+                } footer: {
+                    Text("Collect fun status messages as Claude works. Rarer messages appear less often!")
+                }
+
+                // Section 5: Push Notifications (Experimental)
                 Section {
                     Toggle("Enable Push Notifications", isOn: $settings.enablePushNotifications)
 

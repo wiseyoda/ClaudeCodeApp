@@ -18,8 +18,11 @@ final class CLIStreamContentTests: XCTestCase {
     // MARK: - Stream Message Wrapper
 
     func test_streamMessage_decodesAssistantPayload() throws {
+        // v0.3.5+ format: CLIStreamMessage includes id and timestamp at top level
         let json = """
         {
+          "id": "msg-123",
+          "timestamp": "2025-01-01T12:00:00.000Z",
           "message": {
             "type": "assistant",
             "content": "Hello",
@@ -29,6 +32,9 @@ final class CLIStreamContentTests: XCTestCase {
         """
 
         let message = try decodeStreamMessage(json)
+
+        XCTAssertEqual(message.id, "msg-123")
+        XCTAssertEqual(message.timestamp, "2025-01-01T12:00:00.000Z")
 
         guard case let .assistant(payload) = message.message else {
             XCTFail("Expected assistant content")
@@ -41,8 +47,11 @@ final class CLIStreamContentTests: XCTestCase {
     }
 
     func test_streamMessage_decodesPermissionPayload() throws {
+        // v0.3.5+ format: CLIStreamMessage includes id and timestamp at top level
         let json = """
         {
+          "id": "msg-456",
+          "timestamp": "2025-01-01T12:00:01.000Z",
           "message": {
             "type": "permission",
             "id": "perm-1",
@@ -54,6 +63,9 @@ final class CLIStreamContentTests: XCTestCase {
         """
 
         let message = try decodeStreamMessage(json)
+
+        XCTAssertEqual(message.id, "msg-456")
+        XCTAssertEqual(message.timestamp, "2025-01-01T12:00:01.000Z")
 
         guard case let .permission(payload) = message.message else {
             XCTFail("Expected permission content")
@@ -941,5 +953,223 @@ final class CLIStreamContentTests: XCTestCase {
         let content = CLISubagentCompleteContent(id: "agent-7", summary: "Merged")
 
         XCTAssertEqual(content.displaySummary, "Merged")
+    }
+
+    // MARK: - StoredMessage to ChatMessage Conversion (History Display)
+
+    func test_storedMessage_toolUse_convertsToCorrectChatMessage() throws {
+        // Real API format from /messages endpoint
+        let json = """
+        {
+          "id": "bf263a34-e1c8-4cf6-a4e6-a3bf6797077d",
+          "timestamp": "2025-12-31T10:00:00.000Z",
+          "message": {
+            "type": "tool_use",
+            "id": "toolu_01VFvN8D2cWVrGYe5VPnNk5n",
+            "name": "Bash",
+            "input": {
+              "command": "git status",
+              "description": "Show git status"
+            }
+          }
+        }
+        """
+
+        let storedMessage = try decodeJSON(json, as: StoredMessage.self)
+        let chatMessage = storedMessage.toChatMessage()
+
+        XCTAssertNotNil(chatMessage)
+        XCTAssertEqual(chatMessage?.role, .toolUse)
+        // Content should be in format: ToolName({"input":"json"})
+        XCTAssertTrue(chatMessage?.content.hasPrefix("Bash(") == true)
+        XCTAssertTrue(chatMessage?.content.contains("git status") == true)
+    }
+
+    func test_storedMessage_toolResult_convertsToCorrectChatMessage() throws {
+        // Real API format from /messages endpoint
+        let json = """
+        {
+          "id": "82d1a5d1-1f75-4404-b87e-f3802b5c9127",
+          "timestamp": "2025-12-31T10:00:01.000Z",
+          "message": {
+            "type": "tool_result",
+            "id": "toolu_01VFvN8D2cWVrGYe5VPnNk5n",
+            "tool": "Bash",
+            "output": "On branch main\\nnothing to commit",
+            "success": true
+          }
+        }
+        """
+
+        let storedMessage = try decodeJSON(json, as: StoredMessage.self)
+        let chatMessage = storedMessage.toChatMessage()
+
+        XCTAssertNotNil(chatMessage)
+        XCTAssertEqual(chatMessage?.role, .toolResult)
+        // JSON \\n decodes to actual newline character
+        XCTAssertEqual(chatMessage?.content, "On branch main\nnothing to commit")
+    }
+
+    func test_storedMessage_toolResultWithError_convertsToErrorRole() throws {
+        let json = """
+        {
+          "id": "error-123",
+          "timestamp": "2025-12-31T10:00:02.000Z",
+          "message": {
+            "type": "tool_result",
+            "id": "toolu_error",
+            "tool": "Bash",
+            "output": "Command failed",
+            "success": false,
+            "isError": true
+          }
+        }
+        """
+
+        let storedMessage = try decodeJSON(json, as: StoredMessage.self)
+        let chatMessage = storedMessage.toChatMessage()
+
+        XCTAssertNotNil(chatMessage)
+        XCTAssertEqual(chatMessage?.role, .error)
+        XCTAssertEqual(chatMessage?.content, "Command failed")
+    }
+
+    func test_storedMessage_editToolUse_convertsWithFullInput() throws {
+        // Edit tool with old_string/new_string should preserve full content
+        let json = """
+        {
+          "id": "edit-123",
+          "timestamp": "2025-12-31T10:00:03.000Z",
+          "message": {
+            "type": "tool_use",
+            "id": "toolu_edit",
+            "name": "Edit",
+            "input": {
+              "file_path": "/path/to/file.swift",
+              "old_string": "func oldCode() {}",
+              "new_string": "func newCode() {}"
+            }
+          }
+        }
+        """
+
+        let storedMessage = try decodeJSON(json, as: StoredMessage.self)
+        let chatMessage = storedMessage.toChatMessage()
+
+        XCTAssertNotNil(chatMessage)
+        XCTAssertEqual(chatMessage?.role, .toolUse)
+        XCTAssertTrue(chatMessage?.content.hasPrefix("Edit(") == true)
+        XCTAssertTrue(chatMessage?.content.contains("old_string") == true)
+        XCTAssertTrue(chatMessage?.content.contains("new_string") == true)
+    }
+
+    func test_storedMessage_todoWriteToolUse_convertsWithTodosArray() throws {
+        let json = """
+        {
+          "id": "todo-123",
+          "timestamp": "2025-12-31T10:00:04.000Z",
+          "message": {
+            "type": "tool_use",
+            "id": "toolu_todo",
+            "name": "TodoWrite",
+            "input": {
+              "todos": [
+                {"content": "Task 1", "status": "completed", "activeForm": "Doing task 1"},
+                {"content": "Task 2", "status": "in_progress", "activeForm": "Doing task 2"}
+              ]
+            }
+          }
+        }
+        """
+
+        let storedMessage = try decodeJSON(json, as: StoredMessage.self)
+        let chatMessage = storedMessage.toChatMessage()
+
+        XCTAssertNotNil(chatMessage)
+        XCTAssertEqual(chatMessage?.role, .toolUse)
+        XCTAssertTrue(chatMessage?.content.hasPrefix("TodoWrite(") == true)
+        XCTAssertTrue(chatMessage?.content.contains("Task 1") == true)
+        XCTAssertTrue(chatMessage?.content.contains("completed") == true)
+    }
+
+    func test_storedMessage_assistantDelta_returnsNil() throws {
+        // Streaming deltas should not create chat messages
+        let json = """
+        {
+          "id": "delta-123",
+          "timestamp": "2025-12-31T10:00:05.000Z",
+          "message": {
+            "type": "assistant",
+            "content": "Streaming...",
+            "delta": true
+          }
+        }
+        """
+
+        let storedMessage = try decodeJSON(json, as: StoredMessage.self)
+        let chatMessage = storedMessage.toChatMessage()
+
+        XCTAssertNil(chatMessage, "Streaming deltas should not create chat messages")
+    }
+
+    func test_storedMessage_assistantFinal_convertsToAssistantRole() throws {
+        let json = """
+        {
+          "id": "final-123",
+          "timestamp": "2025-12-31T10:00:06.000Z",
+          "message": {
+            "type": "assistant",
+            "content": "Final response",
+            "delta": false
+          }
+        }
+        """
+
+        let storedMessage = try decodeJSON(json, as: StoredMessage.self)
+        let chatMessage = storedMessage.toChatMessage()
+
+        XCTAssertNotNil(chatMessage)
+        XCTAssertEqual(chatMessage?.role, .assistant)
+        XCTAssertEqual(chatMessage?.content, "Final response")
+    }
+
+    func test_storedMessage_thinking_convertsToThinkingRole() throws {
+        let json = """
+        {
+          "id": "thinking-123",
+          "timestamp": "2025-12-31T10:00:07.000Z",
+          "message": {
+            "type": "thinking",
+            "content": "Let me think about this..."
+          }
+        }
+        """
+
+        let storedMessage = try decodeJSON(json, as: StoredMessage.self)
+        let chatMessage = storedMessage.toChatMessage()
+
+        XCTAssertNotNil(chatMessage)
+        XCTAssertEqual(chatMessage?.role, .thinking)
+        XCTAssertEqual(chatMessage?.content, "Let me think about this...")
+    }
+
+    func test_storedMessage_user_convertsToUserRole() throws {
+        let json = """
+        {
+          "id": "user-123",
+          "timestamp": "2025-12-31T10:00:08.000Z",
+          "message": {
+            "type": "user",
+            "content": "Hello, Claude!"
+          }
+        }
+        """
+
+        let storedMessage = try decodeJSON(json, as: StoredMessage.self)
+        let chatMessage = storedMessage.toChatMessage()
+
+        XCTAssertNotNil(chatMessage)
+        XCTAssertEqual(chatMessage?.role, .user)
+        XCTAssertEqual(chatMessage?.content, "Hello, Claude!")
     }
 }

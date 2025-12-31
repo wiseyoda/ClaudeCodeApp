@@ -267,6 +267,76 @@ final class CLIProjectFileTypesTests: XCTestCase {
         XCTAssertEqual(status.toGitStatus, .clean)
     }
 
+    // MARK: - cli-bridge specific format tests
+
+    func testCLIGitStatusToGitStatusCleanFromCliBridgeFormat() {
+        // cli-bridge sends: { branch, isClean: true, uncommittedCount: 0 }
+        let status = makeGitStatus(
+            branch: "main",
+            status: nil,
+            remote: nil,
+            remoteUrl: nil,
+            ahead: nil,
+            behind: nil,
+            hasUncommitted: nil,
+            hasUntracked: nil,
+            isClean: true,
+            uncommittedCount: 0
+        )
+        XCTAssertEqual(status.toGitStatus, .clean)
+    }
+
+    func testCLIGitStatusToGitStatusDirtyFromCliBridgeFormat() {
+        // cli-bridge sends: { branch, isClean: false, uncommittedCount: 3 }
+        let status = makeGitStatus(
+            branch: "main",
+            status: nil,
+            remote: nil,
+            remoteUrl: nil,
+            ahead: nil,
+            behind: nil,
+            hasUncommitted: nil,
+            hasUntracked: nil,
+            isClean: false,
+            uncommittedCount: 3
+        )
+        XCTAssertEqual(status.toGitStatus, .dirty)
+    }
+
+    func testCLIGitStatusToGitStatusCleanFromCliBridgeOnlyUncommittedCount() {
+        // When only uncommittedCount is provided (isClean nil)
+        let status = makeGitStatus(
+            branch: "main",
+            status: nil,
+            remote: nil,
+            remoteUrl: nil,
+            ahead: nil,
+            behind: nil,
+            hasUncommitted: nil,
+            hasUntracked: nil,
+            isClean: nil,
+            uncommittedCount: 0
+        )
+        XCTAssertEqual(status.toGitStatus, .clean)
+    }
+
+    func testCLIGitStatusToGitStatusDirtyFromCliBridgeOnlyUncommittedCount() {
+        // When only uncommittedCount is provided (isClean nil)
+        let status = makeGitStatus(
+            branch: "main",
+            status: nil,
+            remote: nil,
+            remoteUrl: nil,
+            ahead: nil,
+            behind: nil,
+            hasUncommitted: nil,
+            hasUntracked: nil,
+            isClean: nil,
+            uncommittedCount: 5
+        )
+        XCTAssertEqual(status.toGitStatus, .dirty)
+    }
+
     func testCLIFileEntryStoresFields() {
         let entry = makeFileEntry(
             name: "readme.md",
