@@ -38,6 +38,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Session Lineage**: Parent-child session relationships
   - `parentSessionId` field in session metadata
   - `getSessionChildren()` API method
+- **Tool Test Harness**: Visual verification of tool message rendering
+  - `ToolTestView.swift` - Test UI for tool rendering verification
+  - `ToolTestMessages.json` - Fixture file with sample tool messages
+  - Loads from bundle and simulates tool use/result messages
+- **Tool Rendering Improvements**: Spec-compliant tool display
+  - `ToolParser.swift` - Centralized tool content parsing and formatting
+  - `ToolContentView.swift` - Dedicated view for tool content display
+  - Improved result row suppression for Edit, Write, Task, MCP, LSP tools
+  - WebFetch/WebSearch header formatting ("Web:", "Search:")
+  - MCP tool header formatting ("server - tool (MCP)")
 
 ### Changed
 
@@ -45,6 +55,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - `SessionRepository` protocol extended with 5 new methods
 - `SessionStore` now tracks search results and counts per project
 - Updated requirements docs to incorporate session management features
+- Removed obsolete session-manager project documentation
 
 ---
 
@@ -584,4 +595,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | 0.6.2   | Compact tool views, UI freeze fix, ChatView cleanup    |
 | 0.6.3   | ChatViewModel extraction, keyboard lag elimination     |
 | 0.6.4   | Cache-first startup, UX fixes                          |
-| 0.6.5   | Session search, archive, count API, bulk operations    |
+| 0.6.5   | Session search, archive, tool test harness             |
+| 0.6.6   | SSH→HTTPS URL conversion for clone operations          |
