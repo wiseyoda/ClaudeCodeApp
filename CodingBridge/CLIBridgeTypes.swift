@@ -2064,10 +2064,16 @@ struct CLIPaginatedMessageContent: Decodable {
     let type: String           // "user", "assistant", "system", "tool_use", "tool_result", "thinking"
     let content: String?       // Text content (for user/assistant/system)
     let name: String?          // Tool name (for tool_use)
+    let tool: String?          // Tool name (for tool_result) - server sends "tool" not "name"
     let input: AnyCodableValue? // Tool input (for tool_use)
     let output: String?        // Tool output (for tool_result)
-    let toolUseId: String?     // Reference to tool_use (for tool_result)
+    let id: String?            // Tool use ID (server sends "id" not "toolUseId")
     let isError: Bool?         // Whether tool result is an error
+
+    /// The effective tool name - handles both tool_use (name) and tool_result (tool)
+    var toolName: String? {
+        name ?? tool
+    }
 
     /// Convert to ChatMessage for UI display
     func toChatMessage(timestamp: Date) -> ChatMessage {
