@@ -153,16 +153,43 @@ struct CloneProjectSheet: View {
         return name.isEmpty ? "project" : name
     }
 
+    /// Convert SSH-style git URLs to HTTPS format for server compatibility.
+    /// The CLI Bridge server uses gh auth git-credential for HTTPS authentication
+    /// but has no SSH keys configured.
+    ///
+    /// Examples:
+    /// - git@github.com:user/repo.git → https://github.com/user/repo.git
+    /// - git@gitlab.com:user/repo.git → https://gitlab.com/user/repo.git
+    /// - https://github.com/user/repo.git → unchanged
+    private func normalizeToHTTPS(_ url: String) -> String {
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Check for SSH format: git@host:path
+        guard trimmed.hasPrefix("git@") else {
+            return trimmed
+        }
+
+        // git@github.com:user/repo.git → https://github.com/user/repo.git
+        var converted = trimmed
+        converted = converted.replacingOccurrences(of: "git@", with: "https://")
+        converted = converted.replacingOccurrences(of: ":", with: "/", options: [], range: converted.range(of: ":"))
+
+        return converted
+    }
+
     private func cloneRepository() async {
         isCloning = true
         error = nil
         progress = "Cloning repository..."
 
+        // Convert SSH URLs to HTTPS for server compatibility
+        let normalizedURL = normalizeToHTTPS(gitURL)
+
         do {
             let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
 
             let response = try await apiClient.cloneProject(
-                url: gitURL,
+                url: normalizedURL,
                 initializeClaude: true
             )
 

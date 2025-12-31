@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.6.6] - 2025-12-31
+
+### Added
+
+- **SSH→HTTPS URL Conversion**: Automatic conversion of SSH git URLs to HTTPS for clone operations
+  - `git@github.com:user/repo.git` → `https://github.com/user/repo.git`
+  - Enables cloning from pasted SSH URLs when server uses HTTPS auth (gh auth)
+  - Supports GitHub, GitLab, Bitbucket SSH URL formats
+
+---
+
 ## [0.6.5] - 2025-12-30
 
 ### Added
