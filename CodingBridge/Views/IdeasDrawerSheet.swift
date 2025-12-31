@@ -3,7 +3,7 @@ import SwiftUI
 /// Main drawer view for managing and browsing ideas
 struct IdeasDrawerSheet: View {
     @Binding var isPresented: Bool
-    @ObservedObject var ideasStore: IdeasStore
+    var ideasStore: IdeasStore  // @Observable classes don't need @ObservedObject
     let projectPath: String
     let onSendIdea: (Idea) -> Void
 
@@ -310,7 +310,7 @@ struct IdeasDrawerSheet: View {
 #Preview("Ideas Drawer") {
     struct PreviewWrapper: View {
         @State private var isPresented = true
-        @StateObject private var ideasStore = IdeasStore(projectPath: "/preview/project")
+        @State private var ideasStore = IdeasStore(projectPath: "/preview/project")
 
         var body: some View {
             Color.gray
@@ -348,7 +348,7 @@ struct IdeasDrawerSheet: View {
 #Preview("Empty State") {
     struct PreviewWrapper: View {
         @State private var isPresented = true
-        @StateObject private var ideasStore = IdeasStore(projectPath: "/empty/project")
+        @State private var ideasStore = IdeasStore(projectPath: "/empty/project")
 
         var body: some View {
             Color.gray

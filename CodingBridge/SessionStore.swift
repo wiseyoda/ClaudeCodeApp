@@ -76,6 +76,21 @@ final class SessionStore: ObservableObject {
         repository != nil
     }
 
+    #if DEBUG
+    /// Reset the store for testing - allows reconfiguration with a new repository
+    func resetForTesting() {
+        repository = nil
+        sessionsByProject.removeAll()
+        metaByProject.removeAll()
+        isLoading.removeAll()
+        errorByProject.removeAll()
+        activeSessionIds.removeAll()
+        countsByProject.removeAll()
+        searchResults.removeAll()
+        isSearching.removeAll()
+    }
+    #endif
+
     // MARK: - Session Loading
 
     /// Load sessions for a project from API
@@ -109,6 +124,9 @@ final class SessionStore: ObservableObject {
             // Store raw sessions - filtering happens at display time
             sessionsByProject[projectPath] = response.sessions
             metaByProject[projectPath] = response.toMeta
+        } catch let error as URLError where error.code == .cancelled {
+            // Request was cancelled (e.g., user navigated away or view refreshed) - ignore
+            log.debug("[SessionStore] Session load cancelled for \(projectPath)")
         } catch {
             log.error("[SessionStore] Failed to load sessions: \(error)")
             errorByProject[projectPath] = error
@@ -141,6 +159,9 @@ final class SessionStore: ObservableObject {
             sessionsByProject[projectPath] = sessions
 
             metaByProject[projectPath] = response.toMeta
+        } catch let error as URLError where error.code == .cancelled {
+            // Request was cancelled - ignore
+            log.debug("[SessionStore] Load more cancelled for \(projectPath)")
         } catch {
             log.error("[SessionStore] Failed to load more sessions: \(error)")
             errorByProject[projectPath] = error
@@ -518,6 +539,9 @@ extension SessionStore {
             let counts = try await repository.getSessionCount(projectName: projectName, source: nil)
             countsByProject[projectPath] = counts
             log.debug("[SessionStore] Loaded counts for \(projectPath): total=\(counts.total), user=\(counts.user ?? 0), agent=\(counts.agent ?? 0)")
+        } catch let error as URLError where error.code == .cancelled {
+            // Request was cancelled (e.g., user navigated away or view refreshed) - ignore
+            log.debug("[SessionStore] Session count request cancelled for \(projectPath)")
         } catch {
             log.error("[SessionStore] Failed to load session counts: \(error)")
         }
@@ -567,6 +591,9 @@ extension SessionStore {
             )
             searchResults[projectPath] = results
             log.debug("[SessionStore] Search '\(query)' found \(results.total) results")
+        } catch let error as URLError where error.code == .cancelled {
+            // Search was cancelled (e.g., user typed more characters) - ignore
+            log.debug("[SessionStore] Search cancelled for '\(query)'")
         } catch {
             log.error("[SessionStore] Search failed: \(error)")
             searchResults[projectPath] = nil

@@ -10,6 +10,9 @@ class ChatViewModel: ObservableObject {
     let initialGitStatus: GitStatus
     var onSessionsChanged: (() -> Void)?
 
+    // MARK: - Combine
+    private var cancellables = Set<AnyCancellable>()
+
     // MARK: - Managers
     let wsManager: CLIBridgeAdapter
     let ideasStore: IdeasStore
@@ -29,6 +32,7 @@ class ChatViewModel: ObservableObject {
     @Published var isUploadingImage = false
     @Published var isLoadingHistory = false
     @Published var scrollToBottomTrigger = false
+    @Published var showScrollToBottom = false
 
     // MARK: - Streaming Message Cache
     @Published var streamingMessageId = UUID()
@@ -80,8 +84,9 @@ class ChatViewModel: ObservableObject {
     var draftDebounceTask: Task<Void, Never>?
 
     // MARK: - Display Messages Cache
-    private var cachedDisplayMessages: [ChatMessage] = []
-    private var cachedGroupedDisplayItems: [DisplayItem] = []
+    // Note: @Published wrapper triggers view re-render when cache is refreshed
+    @Published private var cachedDisplayMessages: [ChatMessage] = []
+    @Published private var cachedGroupedDisplayItems: [DisplayItem] = []
     private var displayMessagesInvalidationKey: Int = 0
 
     // MARK: - Initialization
@@ -95,6 +100,16 @@ class ChatViewModel: ObservableObject {
         // Initialize managers
         self.wsManager = CLIBridgeAdapter()
         self.ideasStore = IdeasStore(projectPath: project.path)
+
+        // Forward objectWillChange from wsManager to trigger view updates
+        // This fixes nested ObservableObject observation issue where SwiftUI
+        // doesn't detect changes to wsManager.agentState, etc.
+        // Note: No receive(on:) needed since ChatViewModel is @MainActor
+        wsManager.objectWillChange
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
     }
 
 #if DEBUG
@@ -111,6 +126,13 @@ class ChatViewModel: ObservableObject {
         self.onSessionsChanged = onSessionsChanged
         self.wsManager = wsManager
         self.ideasStore = IdeasStore(projectPath: project.path)
+
+        // Forward objectWillChange from wsManager to trigger view updates
+        wsManager.objectWillChange
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
     }
 #endif
 
@@ -128,9 +150,8 @@ class ChatViewModel: ObservableObject {
         wsManager.updateSettings(settings)
         setupWebSocketCallbacks()
 
-        // Start health monitoring for status bar
-        HealthMonitorService.shared.configure(serverURL: settings.serverURL)
-        HealthMonitorService.shared.startPolling()
+        // Note: HealthMonitor is now managed at app level (CodingBridgeApp.swift)
+        // to avoid start/stop churn when navigating between views
 
         // Check if we were processing when app closed (for reattachment)
         let wasProcessing = MessageStore.loadProcessingState(for: project.path)
@@ -228,8 +249,7 @@ class ChatViewModel: ObservableObject {
         todoHideTimer?.cancel()
         todoHideTimer = nil
 
-        // Stop health monitoring when leaving chat (reduces background polling)
-        HealthMonitorService.shared.stopPolling()
+        // Note: HealthMonitor is now managed at app level - no need to stop here
 
         // Delay disconnect to handle NavigationSplitView layout recreations
         disconnectTask = Task {
@@ -385,7 +405,9 @@ class ChatViewModel: ObservableObject {
 
     func selectSession(_ session: ProjectSession) {
         selectedSession = session
-        wsManager.sessionId = session.id
+        // Must attach to session (reconnect WebSocket), not just set sessionId property
+        // Otherwise messages go to whatever session the WebSocket was previously connected to
+        wsManager.attachToSession(sessionId: session.id, projectPath: project.path)
         MessageStore.saveSessionId(session.id, for: project.path)
         loadSessionHistory(session)
     }
@@ -398,11 +420,11 @@ class ChatViewModel: ObservableObject {
         Task {
             do {
                 let limit = settings.historyLimit.rawValue
-                log.debug("[ChatViewModel] Loading session history via paginated API for: \(session.id) (limit: \(limit))")
+                log.debug("[ChatViewModel] Loading session history via unified API for: \(session.id) (limit: \(limit))")
 
                 let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
 
-                // Use the new paginated messages endpoint - fetches only what we need
+                // Use the paginated messages endpoint with unified StoredMessage format
                 let response = try await apiClient.fetchInitialMessages(
                     projectPath: project.path,
                     sessionId: session.id,
@@ -411,9 +433,9 @@ class ChatViewModel: ObservableObject {
 
                 await wsManager.refreshTokenUsage(projectPath: project.path, sessionId: session.id)
 
-                // Convert paginated messages to ChatMessages
+                // Convert StoredMessages to ChatMessages using unified helper
                 // Response is in "desc" order (newest first), reverse for chronological display
-                let historyMessages = response.messages.reversed().map { $0.toChatMessage() }
+                let historyMessages = Array(response.toChatMessages().reversed())
 
                 if historyMessages.isEmpty {
                     if let lastMsg = session.lastAssistantMessage {
@@ -421,7 +443,7 @@ class ChatViewModel: ObservableObject {
                     }
                 } else {
                     messages = historyMessages
-                    log.debug("[ChatViewModel] Loaded \(historyMessages.count) messages via paginated API (total: \(response.total), hasMore: \(response.hasMore))")
+                    log.debug("[ChatViewModel] Loaded \(historyMessages.count) messages via unified API (total: \(response.total), hasMore: \(response.hasMore))")
                 }
                 isLoadingHistory = false
                 refreshDisplayMessagesCache()
@@ -429,8 +451,8 @@ class ChatViewModel: ObservableObject {
                     self?.scrollManager.forceScrollToBottom()
                 }
             } catch {
-                log.debug("[ChatViewModel] Failed to load session history via paginated API: \(error)")
-                // Fall back to export API for backwards compatibility
+                log.debug("[ChatViewModel] Failed to load session history: \(error)")
+                // Fall back to export API for backwards compatibility with older cli-bridge
                 await loadSessionHistoryFallback(session)
             }
         }
@@ -539,6 +561,9 @@ class ChatViewModel: ObservableObject {
         )
         messages.append(userMessage)
 
+        // Always scroll to bottom when user sends a message (regardless of auto-scroll setting)
+        scrollToBottomTrigger = true
+
         inputText = ""
         selectedImages = []
         processingStartTime = Date()
@@ -568,8 +593,9 @@ class ChatViewModel: ObservableObject {
     // MARK: - Slash Commands
 
     func handleSlashCommand(_ command: String) -> Bool {
-        let parts = command.lowercased().split(separator: " ", maxSplits: 1)
-        let cmd = String(parts.first ?? "")
+        let parts = command.split(separator: " ", maxSplits: 1)
+        let cmd = String(parts.first ?? "").lowercased()
+        let arg = parts.count > 1 ? String(parts[1]).trimmingCharacters(in: .whitespaces) : nil
 
         switch cmd {
         case "/clear":
@@ -593,8 +619,10 @@ class ChatViewModel: ObservableObject {
             return true
 
         case "/resume":
-            showingSessionPicker = true
-            return true
+            return handleResumeCommand(arg: arg)
+
+        case "/model":
+            return handleModelCommand(arg: arg)
 
         case "/compact":
             addSystemMessage("Sending compact request to server...")
@@ -611,6 +639,93 @@ class ChatViewModel: ObservableObject {
             }
             return false
         }
+    }
+
+    /// Handle /resume command with optional session ID argument
+    /// Usage: /resume [session-id]
+    private func handleResumeCommand(arg: String?) -> Bool {
+        guard let sessionId = arg, !sessionId.isEmpty else {
+            // No argument - show picker
+            showingSessionPicker = true
+            return true
+        }
+
+        // Validate session ID format (should be UUID)
+        let cleanedId = sessionId.trimmingCharacters(in: .whitespaces)
+        guard UUID(uuidString: cleanedId) != nil else {
+            addSystemMessage("Invalid session ID format. Expected UUID (e.g., 550e8400-e29b-41d4-a716-446655440000).")
+            return true
+        }
+
+        // Find session in local list or create ephemeral reference
+        if let existingSession = localSessions.first(where: { $0.id == cleanedId }) {
+            selectSession(existingSession)
+            addSystemMessage("Resumed session: \(existingSession.summary ?? cleanedId.prefix(8).description)...")
+        } else {
+            // Create ephemeral session for the ID
+            let ephemeralSession = ProjectSession(
+                id: cleanedId,
+                summary: nil,
+                lastActivity: nil,
+                messageCount: nil,
+                lastUserMessage: nil,
+                lastAssistantMessage: nil
+            )
+            selectSession(ephemeralSession)
+            addSystemMessage("Resuming session: \(cleanedId.prefix(8))...")
+        }
+        return true
+    }
+
+    /// Handle /model command with model name argument
+    /// Usage: /model <opus|sonnet|haiku|custom-model-id>
+    private func handleModelCommand(arg: String?) -> Bool {
+        guard let modelArg = arg, !modelArg.isEmpty else {
+            // No argument - show current model and usage
+            let current = currentModel ?? settings.defaultModel
+            addSystemMessage("Current model: \(current.displayName)\nUsage: /model <opus|sonnet|haiku|model-id>")
+            return true
+        }
+
+        let cleanedArg = modelArg.lowercased().trimmingCharacters(in: .whitespaces)
+
+        // Check for standard model names
+        switch cleanedArg {
+        case "opus", "opus4.5", "claude-opus":
+            switchToModel(.opus)
+            settings.defaultModel = .opus
+            addSystemMessage("Switched to Opus 4.5")
+            return true
+
+        case "sonnet", "sonnet4.5", "claude-sonnet":
+            switchToModel(.sonnet)
+            settings.defaultModel = .sonnet
+            addSystemMessage("Switched to Sonnet 4.5")
+            return true
+
+        case "haiku", "haiku4.5", "claude-haiku":
+            switchToModel(.haiku)
+            settings.defaultModel = .haiku
+            addSystemMessage("Switched to Haiku 4.5")
+            return true
+
+        default:
+            // Validate custom model ID format (should contain hyphen or be claude-like)
+            // Valid formats: claude-3-opus-20240229, anthropic.claude-v2, etc.
+            let isValidCustomId = cleanedArg.contains("-") ||
+                                  cleanedArg.contains(".") ||
+                                  cleanedArg.hasPrefix("claude")
+
+            if isValidCustomId {
+                switchToModel(.custom, customId: modelArg)  // Use original case
+                settings.defaultModel = .custom
+                settings.customModelId = modelArg
+                addSystemMessage("Switched to custom model: \(modelArg)")
+            } else {
+                addSystemMessage("Invalid model: '\(modelArg)'. Use opus, sonnet, haiku, or a valid model ID.")
+            }
+        }
+        return true
     }
 
     func handleClearCommand() {
@@ -796,6 +911,18 @@ class ChatViewModel: ObservableObject {
             self.processingStartTime = nil
         }
 
+        wsManager.onConnectionError = { [weak self] connectionError in
+            guard let self = self else { return }
+            HapticManager.error()
+
+            // Convert ConnectionError to AppError and post to ErrorStore for user-facing banner
+            let appError = self.mapConnectionError(connectionError)
+            ErrorStore.shared.post(appError) { [weak self] in
+                // Retry action: attempt to reconnect
+                self?.wsManager.connect()
+            }
+        }
+
         wsManager.onSessionCreated = { [weak self] sessionId in
             guard let self = self else { return }
 
@@ -883,6 +1010,19 @@ class ChatViewModel: ObservableObject {
                 }
             }
             log.debug("[ChatViewModel] Loaded \(historyMessages.count) history messages, hasMore: \(payload.hasMore)")
+        }
+
+        wsManager.onSystem = { [weak self] content in
+            guard let self = self else { return }
+            // System messages with subtype "result" are greeting/response messages from Claude
+            // Display them as assistant messages for better UX
+            let systemMsg = ChatMessage(
+                role: .assistant,
+                content: content,
+                timestamp: Date()
+            )
+            self.messages.append(systemMsg)
+            self.refreshDisplayMessagesCache()
         }
     }
 
@@ -1444,5 +1584,31 @@ class ChatViewModel: ObservableObject {
         guard wsManager.connectionState.isConnected else { return }
         log.debug("[ChatViewModel] Model changed from \(oldModel.shortName) to \(newModel.shortName) - calling switchModel")
         wsManager.switchModel(to: newModel)
+    }
+
+    // MARK: - Error Mapping
+
+    /// Convert ConnectionError to AppError for user-facing display via ErrorStore
+    private func mapConnectionError(_ error: ConnectionError) -> AppError {
+        switch error {
+        case .networkUnavailable:
+            return .networkUnavailable
+        case .serverAtCapacity, .queueFull:
+            return .serverUnreachable("Server is at capacity")
+        case .reconnectFailed:
+            return .connectionFailed("Failed to reconnect after multiple attempts")
+        case .invalidServerURL:
+            return .connectionFailed("Invalid server URL")
+        case .agentTimedOut:
+            return .sessionExpired
+        case .connectionReplaced:
+            return .connectionFailed("Session opened on another device")
+        case .sessionNotFound, .sessionInvalid:
+            return .sessionExpired
+        case .rateLimited(let retryAfter):
+            return .connectionFailed("Rate limited, retry in \(retryAfter)s")
+        case .serverError(_, let message, _):
+            return .connectionFailed(message)
+        }
     }
 }

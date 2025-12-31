@@ -41,6 +41,12 @@ class CLIBridgeAdapter: ObservableObject {
     /// Session-level permission mode override (not persisted, lost on disconnect)
     @Published var sessionPermissionMode: PermissionMode?
 
+    /// Current agent state for StatusBubbleView
+    @Published var agentState: CLIAgentState = .idle
+
+    /// Current tool name (when agentState is .executing)
+    @Published var currentTool: String?
+
     // MARK: - Callbacks
 
     var onText: ((String) -> Void)?
@@ -66,6 +72,7 @@ class CLIBridgeAdapter: ObservableObject {
     var onProgress: ((CLIProgressContent) -> Void)?
     var onSessionEvent: ((CLISessionEvent) -> Void)?
     var onHistory: ((CLIHistoryPayload) -> Void)?
+    var onSystem: ((String) -> Void)?  // System messages with subtype "result"
 
     // Connection lifecycle callbacks
     var onConnectionReplaced: (() -> Void)?
@@ -87,6 +94,11 @@ class CLIBridgeAdapter: ObservableObject {
     private var currentProjectPath: String?
     private var cancellables = Set<AnyCancellable>()
 
+    // Connection debounce state - prevents rapid reconnection to same session
+    private var lastConnectedSessionId: String?
+    private var lastConnectionTime: Date?
+    private let connectionReuseWindow: TimeInterval = 5.0
+
     // MARK: - Initialization
 
     init(settings: AppSettings? = nil, manager: CLIBridgeManager? = nil) {
@@ -105,16 +117,40 @@ class CLIBridgeAdapter: ObservableObject {
 
     /// Connect to a project
     func connect(projectPath: String, sessionId: String? = nil) {
+        // Debounce: skip if already connected to this session recently
+        if let sid = sessionId,
+           sid == lastConnectedSessionId,
+           let lastTime = lastConnectionTime,
+           Date().timeIntervalSince(lastTime) < connectionReuseWindow,
+           isConnected {
+            log.debug("[CLIBridgeAdapter] Reusing existing connection to session \(sid.prefix(8))...")
+            return
+        }
+
         currentProjectPath = projectPath
         let modelId = resolveModelId()
         log.debug("[CLIBridgeAdapter] Connecting with model: \(modelId ?? "nil") (settings.defaultModel: \(settings.defaultModel.shortName))")
         Task {
+            // Disconnect previous connection first to avoid CONNECTION_REPLACED
+            if isConnected {
+                log.debug("[CLIBridgeAdapter] Disconnecting previous connection before new connect")
+                manager.disconnect()
+                // Brief delay to ensure cleanup
+                try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
+            }
+
             await manager.connect(
                 projectPath: projectPath,
                 sessionId: sessionId,
                 model: modelId,
                 helper: false
             )
+
+            // Track successful connection for debouncing
+            if let sid = sessionId {
+                lastConnectedSessionId = sid
+                lastConnectionTime = Date()
+            }
         }
     }
 
@@ -134,9 +170,27 @@ class CLIBridgeAdapter: ObservableObject {
 
     /// Attach to an existing active session
     func attachToSession(sessionId: String, projectPath: String) {
+        // Debounce: skip if already connected to this session recently
+        if sessionId == lastConnectedSessionId,
+           let lastTime = lastConnectionTime,
+           Date().timeIntervalSince(lastTime) < connectionReuseWindow,
+           isConnected {
+            log.debug("[CLIBridgeAdapter] Already attached to session \(sessionId.prefix(8))..., skipping")
+            onSessionAttached?()
+            return
+        }
+
         isReattaching = true
         currentProjectPath = projectPath
         Task {
+            // Disconnect previous connection first to avoid CONNECTION_REPLACED
+            if isConnected {
+                log.debug("[CLIBridgeAdapter] Disconnecting previous connection before attaching to \(sessionId.prefix(8))...")
+                manager.disconnect()
+                // Brief delay to ensure cleanup
+                try? await Task.sleep(nanoseconds: 50_000_000) // 50ms
+            }
+
             // Reconnect with the existing session ID
             await manager.connect(
                 projectPath: projectPath,
@@ -144,6 +198,11 @@ class CLIBridgeAdapter: ObservableObject {
                 model: resolveModelId(),
                 helper: false
             )
+
+            // Track successful connection for debouncing
+            lastConnectedSessionId = sessionId
+            lastConnectionTime = Date()
+
             await MainActor.run {
                 isReattaching = false
                 onSessionAttached?()
@@ -630,6 +689,11 @@ class CLIBridgeAdapter: ObservableObject {
             self?.onHistory?(payload)
         }
 
+        // System message callback (for greeting messages with subtype "result")
+        manager.onSystem = { [weak self] content in
+            self?.onSystem?(content)
+        }
+
         // Connection lifecycle callbacks
         manager.onConnectionReplaced = { [weak self] in
             log.warning("[CLIBridgeAdapter] Connection replaced by another client")
@@ -681,11 +745,18 @@ class CLIBridgeAdapter: ObservableObject {
             }
             .store(in: &cancellables)
 
-        // Observe agent state changes
+        // Observe agent state changes (no receive(on:) needed - both classes are @MainActor)
         manager.$agentState
-            .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 self?.isProcessing = state.isProcessing
+                self?.agentState = state
+            }
+            .store(in: &cancellables)
+
+        // Observe current tool changes (for StatusBubbleView)
+        manager.$currentTool
+            .sink { [weak self] tool in
+                self?.currentTool = tool
             }
             .store(in: &cancellables)
 

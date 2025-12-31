@@ -1,5 +1,65 @@
 import XCTest
+import Citadel
+import NIOSSH
 @testable import CodingBridge
+
+private final class MockSSHClient: SSHClientProtocol {
+    var executeResults: [SSHCommandResult] = []
+    var executeError: Error?
+    var executedCommands: [String] = []
+    var disconnectCallCount = 0
+    var isConnected = false
+    private var executeIndex = 0
+
+    func execute(_ command: String) async throws -> SSHCommandResult {
+        executedCommands.append(command)
+        if let error = executeError {
+            throw error
+        }
+        guard executeIndex < executeResults.count else {
+            return SSHCommandResult(output: "", exitCode: 0)
+        }
+        let result = executeResults[executeIndex]
+        executeIndex += 1
+        return result
+    }
+
+    func executeCommandStream(_ command: String) async throws -> AsyncThrowingStream<SSHCommandStreamOutput, Error> {
+        executedCommands.append(command)
+        return AsyncThrowingStream { continuation in
+            continuation.finish()
+        }
+    }
+
+    func disconnect() async throws {
+        disconnectCallCount += 1
+        isConnected = false
+    }
+}
+
+private final class MockSSHClientFactory: SSHClientFactory, @unchecked Sendable {
+    var nextClient: MockSSHClient?
+    var connectError: Error?
+
+    func connect(
+        host: String,
+        port: Int,
+        authenticationMethod: SSHAuthenticationMethod,
+        hostKeyValidator: NIOSSHClientServerAuthenticationDelegate
+    ) async throws -> SSHClientProtocol {
+        if let error = connectError {
+            throw error
+        }
+        if let client = nextClient {
+            client.isConnected = true
+            return client
+        }
+        let client = MockSSHClient()
+        client.isConnected = true
+        nextClient = client
+        return client
+    }
+}
 
 @MainActor
 final class SSHManagerTests: XCTestCase {
@@ -134,17 +194,22 @@ final class SSHManagerTests: XCTestCase {
         XCTAssertEqual(shellEscape("a;b;c"), "'a;b;c'")
     }
 
-    func test_listFiles_parsesDirectoryListing() {
+    func test_listFiles_parsesDirectoryListing() async throws {
         let output = """
         drwxr-xr-x  5 user staff  160 Dec 26 12:34 src/
         -rw-r--r--  1 user staff  12 Dec 26 12:34 README.md
         """
 
-        let entries = parseListOutput(output, basePath: "/repo")
+        let mockClient = MockSSHClient()
+        mockClient.executeResults = [SSHCommandResult(output: output, exitCode: 0)]
+        let manager = SSHManager.makeForTesting(client: mockClient, isConnected: true)
+
+        let entries = try await manager.listFiles("/repo")
 
         XCTAssertEqual(entries.map(\.name), ["src", "README.md"])
         XCTAssertTrue(entries.first?.isDirectory == true)
         XCTAssertEqual(entries.last?.path, "/repo/README.md")
+        XCTAssertEqual(mockClient.executedCommands.first, "ls -laF \(shellEscapePath("/repo")) 2>/dev/null | tail -n +2")
     }
 
     func test_listFiles_handlesEmptyDirectory() {
@@ -191,8 +256,14 @@ final class SSHManagerTests: XCTestCase {
         XCTAssertEqual(entries.first?.name, ".env")
     }
 
-    func test_readFile_returnsContent() async throws {
-        throw XCTSkip("Requires a live SSH connection.")
+    func test_readFile_success_returnsContent() async throws {
+        let mockClient = MockSSHClient()
+        mockClient.executeResults = [SSHCommandResult(output: "Hello, SSH!", exitCode: 0)]
+        let manager = SSHManager.makeForTesting(client: mockClient, isConnected: true)
+
+        let content = try await manager.readFile("/tmp/readme.txt")
+
+        XCTAssertEqual(content, "Hello, SSH!")
     }
 
     func test_readFile_handlesLargeFiles() async throws {
@@ -203,8 +274,52 @@ final class SSHManagerTests: XCTestCase {
         throw XCTSkip("Requires a live SSH connection.")
     }
 
-    func test_readFile_handlesNonExistent() async throws {
-        throw XCTSkip("Requires a live SSH connection.")
+    func test_readFile_notFound_throwsError() async {
+        let mockClient = MockSSHClient()
+        mockClient.executeError = NSError(
+            domain: "SSHManagerTests",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey: "No such file or directory"]
+        )
+        let manager = SSHManager.makeForTesting(client: mockClient, isConnected: true)
+
+        do {
+            _ = try await manager.readFile("/tmp/missing.txt")
+            XCTFail("Expected readFile to throw for missing file.")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, "No such file or directory")
+        }
+    }
+
+    func test_readFile_permissionDenied_throwsError() async {
+        let mockClient = MockSSHClient()
+        mockClient.executeError = NSError(
+            domain: "SSHManagerTests",
+            code: 13,
+            userInfo: [NSLocalizedDescriptionKey: "Permission denied"]
+        )
+        let manager = SSHManager.makeForTesting(client: mockClient, isConnected: true)
+
+        do {
+            _ = try await manager.readFile("/root/secret.txt")
+            XCTFail("Expected readFile to throw for permission denied.")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, "Permission denied")
+        }
+    }
+
+    func test_writeFile_success_writesContent() async throws {
+        let mockClient = MockSSHClient()
+        let manager = SSHManager.makeForTesting(client: mockClient, isConnected: true)
+        let path = "~/.claude/config.txt"
+        let contents = "hello"
+
+        try await manager.writeFile(path, contents: contents)
+
+        XCTAssertEqual(
+            mockClient.executedCommands.first,
+            "printf %s \(shellEscape(contents)) > \(shellEscapePath(path))"
+        )
     }
 
     func test_createDirectory_success() throws {
@@ -219,8 +334,14 @@ final class SSHManagerTests: XCTestCase {
         throw XCTSkip("SSHManager does not expose createDirectory yet.")
     }
 
-    func test_deleteFile_success() throws {
-        throw XCTSkip("SSHManager does not expose deleteFile yet.")
+    func test_deleteFile_success_removesFile() async throws {
+        let mockClient = MockSSHClient()
+        let manager = SSHManager.makeForTesting(client: mockClient, isConnected: true)
+        let path = "/tmp/delete me.txt"
+
+        try await manager.deleteFile(path)
+
+        XCTAssertEqual(mockClient.executedCommands.first, "rm -f \(shellEscapePath(path))")
     }
 
     func test_deleteFile_notFound() throws {
@@ -311,8 +432,85 @@ final class SSHManagerTests: XCTestCase {
         XCTAssertEqual(status, .diverged)
     }
 
-    func test_connect_withPassword() async throws {
-        throw XCTSkip("Requires a live SSH connection.")
+    func test_gitStatus_parsesCleanRepo() async throws {
+        let mockClient = MockSSHClient()
+        mockClient.executeResults = [
+            SSHCommandResult(output: "true\n", exitCode: 0),
+            SSHCommandResult(output: "", exitCode: 0),
+            SSHCommandResult(output: "", exitCode: 0),
+            SSHCommandResult(output: "", exitCode: 0)
+        ]
+        let manager = SSHManager.makeForTesting(client: mockClient, isConnected: true)
+
+        let status = try await manager.checkGitStatus("/repo")
+
+        XCTAssertEqual(status, .clean)
+    }
+
+    func test_gitStatus_parsesModifiedFiles() async throws {
+        let mockClient = MockSSHClient()
+        mockClient.executeResults = [
+            SSHCommandResult(output: "true\n", exitCode: 0),
+            SSHCommandResult(output: " M file.txt\n", exitCode: 0),
+            SSHCommandResult(output: "", exitCode: 0),
+            SSHCommandResult(output: "", exitCode: 0)
+        ]
+        let manager = SSHManager.makeForTesting(client: mockClient, isConnected: true)
+
+        let status = try await manager.checkGitStatus("/repo")
+
+        XCTAssertEqual(status, .dirty)
+    }
+
+    func test_gitStatus_parsesUntrackedFiles() async throws {
+        let mockClient = MockSSHClient()
+        mockClient.executeResults = [
+            SSHCommandResult(output: "true\n", exitCode: 0),
+            SSHCommandResult(output: "?? file.txt\n", exitCode: 0),
+            SSHCommandResult(output: "", exitCode: 0),
+            SSHCommandResult(output: "", exitCode: 0)
+        ]
+        let manager = SSHManager.makeForTesting(client: mockClient, isConnected: true)
+
+        let status = try await manager.checkGitStatus("/repo")
+
+        XCTAssertEqual(status, .dirty)
+    }
+
+    func test_gitPull_success_returnsOutput() async throws {
+        let mockClient = MockSSHClient()
+        mockClient.executeResults = [SSHCommandResult(output: "Already up to date.", exitCode: 0)]
+        let manager = SSHManager.makeForTesting(client: mockClient, isConnected: true)
+
+        let success = try await manager.gitPull("/repo")
+
+        XCTAssertTrue(success)
+    }
+
+    func test_gitDiff_returnsUnifiedDiff() async throws {
+        let mockClient = MockSSHClient()
+        let diffOutput = "diff --git a/file.txt b/file.txt\n+new line\n"
+        mockClient.executeResults = [SSHCommandResult(output: diffOutput, exitCode: 0)]
+        let manager = SSHManager.makeForTesting(client: mockClient, isConnected: true)
+
+        let output = try await manager.getGitDiffSummary("/repo")
+
+        XCTAssertEqual(output, diffOutput)
+    }
+
+    func test_connect_withValidCredentials_setsConnectedState() async throws {
+        let factory = MockSSHClientFactory()
+        let mockClient = MockSSHClient()
+        factory.nextClient = mockClient
+        let manager = SSHManager(clientFactory: factory, loadConfig: false)
+
+        try await manager.connect(host: "example.com", port: 22, username: "dev", password: "secret")
+
+        XCTAssertTrue(manager.isConnected)
+        XCTAssertFalse(manager.isConnecting)
+        XCTAssertNil(manager.lastError)
+        XCTAssertEqual(manager.currentDirectory, "~")
+        XCTAssertTrue(manager.output.contains("Connected!"))
     }
 
     func test_connect_withPrivateKey() async throws {
@@ -323,20 +521,86 @@ final class SSHManagerTests: XCTestCase {
         throw XCTSkip("Requires a live SSH connection.")
     }
 
-    func test_connect_invalidHost() async throws {
-        throw XCTSkip("Requires a live SSH connection.")
+    func test_connect_withInvalidHost_setsErrorMessage() async {
+        let factory = MockSSHClientFactory()
+        factory.connectError = SSHError.connectionFailed("Host resolution failed")
+        let manager = SSHManager(clientFactory: factory, loadConfig: false)
+
+        do {
+            _ = try await manager.connect(host: "bad-host", port: 22, username: "dev", password: "secret")
+            XCTFail("Expected connection to fail for invalid host.")
+        } catch {
+            XCTAssertEqual(
+                manager.lastError,
+                SSHError.connectionFailed("Host resolution failed").localizedDescription
+            )
+            XCTAssertFalse(manager.isConnected)
+        }
     }
 
     func test_connect_invalidPort() async throws {
         throw XCTSkip("Requires a live SSH connection.")
     }
 
-    func test_connect_authFailure() async throws {
-        throw XCTSkip("Requires a live SSH connection.")
+    func test_connect_withWrongPassword_setsAuthError() async {
+        let factory = MockSSHClientFactory()
+        factory.connectError = SSHError.authenticationFailed
+        let manager = SSHManager(clientFactory: factory, loadConfig: false)
+
+        do {
+            _ = try await manager.connect(host: "example.com", port: 22, username: "dev", password: "wrong")
+            XCTFail("Expected connection to fail for wrong password.")
+        } catch {
+            XCTAssertEqual(manager.lastError, SSHError.authenticationFailed.localizedDescription)
+            XCTAssertFalse(manager.isConnected)
+        }
     }
 
-    func test_disconnect_cleansUp() async throws {
-        throw XCTSkip("Requires a live SSH connection.")
+    func test_connect_withInvalidKey_setsKeyError() async {
+        let manager = SSHManager(clientFactory: MockSSHClientFactory(), loadConfig: false)
+
+        do {
+            try await manager.connectWithKeyString(
+                host: "example.com",
+                port: 22,
+                username: "dev",
+                privateKeyString: "not a key"
+            )
+            XCTFail("Expected connection to fail for invalid key.")
+        } catch {
+            XCTAssertEqual(
+                manager.lastError,
+                SSHError.keyParseError("Unrecognized key format").localizedDescription
+            )
+            XCTAssertFalse(manager.isConnected)
+        }
+    }
+
+    func test_connect_timeout_setsTimeoutError() async {
+        let factory = MockSSHClientFactory()
+        factory.connectError = SSHError.timeout
+        let manager = SSHManager(clientFactory: factory, loadConfig: false)
+
+        do {
+            _ = try await manager.connect(host: "example.com", port: 22, username: "dev", password: "secret")
+            XCTFail("Expected connection to fail with timeout.")
+        } catch {
+            XCTAssertEqual(manager.lastError, SSHError.timeout.localizedDescription)
+            XCTAssertFalse(manager.isConnected)
+        }
+    }
+
+    func test_disconnect_clearsStateAndClosesChannel() async {
+        let mockClient = MockSSHClient()
+        mockClient.isConnected = true
+        let manager = SSHManager.makeForTesting(client: mockClient, isConnected: true)
+
+        manager.disconnect()
+        await Task.yield()
+
+        XCTAssertFalse(manager.isConnected)
+        XCTAssertTrue(manager.output.contains("[Disconnected]"))
+        XCTAssertEqual(mockClient.disconnectCallCount, 1)
     }
 
     func test_reconnect_afterDisconnect() async throws {
@@ -347,16 +611,31 @@ final class SSHManagerTests: XCTestCase {
         throw XCTSkip("Requires a live SSH connection.")
     }
 
-    func test_executeCommand_success() async throws {
-        throw XCTSkip("Requires a live SSH connection.")
+    func test_executeCommand_success_returnsOutput() async throws {
+        let mockClient = MockSSHClient()
+        mockClient.executeResults = [SSHCommandResult(output: "ok", exitCode: 0)]
+        let manager = SSHManager.makeForTesting(client: mockClient, isConnected: true)
+
+        let output = try await manager.executeCommand("echo ok")
+
+        XCTAssertEqual(output, "ok")
     }
 
     func test_executeCommand_failure() async throws {
         throw XCTSkip("Requires a live SSH connection.")
     }
 
-    func test_executeCommand_timeout() async throws {
-        throw XCTSkip("Requires a live SSH connection.")
+    func test_executeCommand_timeout_throwsError() async {
+        let mockClient = MockSSHClient()
+        mockClient.executeResults = [SSHCommandResult(output: "[TIMEOUT]", exitCode: 124)]
+        let manager = SSHManager.makeForTesting(client: mockClient, isConnected: true)
+
+        do {
+            _ = try await manager.executeCommandWithTimeout("sleep 10", timeoutSeconds: 1)
+            XCTFail("Expected timeout to throw.")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, SSHError.timeout.localizedDescription)
+        }
     }
 
     func test_executeCommand_largeOutput() async throws {
@@ -367,8 +646,49 @@ final class SSHManagerTests: XCTestCase {
         throw XCTSkip("Requires a live SSH connection.")
     }
 
-    func test_executeCommand_exitCode() async throws {
-        throw XCTSkip("Requires a live SSH connection.")
+    func test_executeCommand_withExitCode_capturesCode() async throws {
+        let mockClient = MockSSHClient()
+        mockClient.executeResults = [SSHCommandResult(output: "oops", exitCode: 2)]
+        let manager = SSHManager.makeForTesting(client: mockClient, isConnected: true)
+
+        let result = try await manager.executeCommandWithExitCode("false")
+
+        XCTAssertEqual(result.output, "oops")
+        XCTAssertEqual(result.exitCode, 2)
+    }
+
+    func test_executeCommand_whileDisconnected_throwsError() async {
+        let mockClient = MockSSHClient()
+        let manager = SSHManager.makeForTesting(client: mockClient, isConnected: false)
+
+        do {
+            _ = try await manager.executeCommand("ls")
+            XCTFail("Expected executeCommand to throw when disconnected.")
+        } catch {
+            XCTAssertEqual(error.localizedDescription, SSHError.notConnected.localizedDescription)
+        }
+    }
+
+    func test_executeCommand_escapesPathsCorrectly() async throws {
+        let mockClient = MockSSHClient()
+        let manager = SSHManager.makeForTesting(client: mockClient, isConnected: true)
+        let path = "/tmp/O'Reilly.txt"
+
+        _ = try await manager.readFile(path)
+
+        XCTAssertEqual(mockClient.executedCommands.first, "cat \(shellEscapePath(path))")
+    }
+
+    func test_executeCommand_usesHomeVariableForTildePaths() async throws {
+        let mockClient = MockSSHClient()
+        let manager = SSHManager.makeForTesting(client: mockClient, isConnected: true)
+        let path = "~/.claude/config.json"
+
+        _ = try await manager.readFile(path)
+
+        let command = try XCTUnwrap(mockClient.executedCommands.first)
+        XCTAssertTrue(command.contains("\"$HOME/"))
+        XCTAssertFalse(command.contains("~/.claude"))
     }
 
     func test_stripANSI_removesColors() {

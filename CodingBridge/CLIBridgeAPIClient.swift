@@ -10,9 +10,9 @@ class CLIBridgeAPIClient: ObservableObject {
     private let serverURL: String
     private let session: URLSession
 
-    init(serverURL: String) {
+    init(serverURL: String, session: URLSession = .shared) {
         self.serverURL = serverURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        self.session = URLSession.shared
+        self.session = session
     }
 
     // MARK: - Projects

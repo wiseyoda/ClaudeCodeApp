@@ -2,6 +2,133 @@ import Foundation
 import ActivityKit
 import UIKit
 
+protocol LiveActivityProviding {
+    var areActivitiesEnabled: Bool { get }
+    func request(
+        attributes: CodingBridgeAttributes,
+        contentState: CodingBridgeAttributes.ContentState,
+        pushType: PushType?
+    ) throws -> String
+    func update(activityId: String, contentState: CodingBridgeAttributes.ContentState) async throws
+    func end(
+        activityId: String,
+        contentState: CodingBridgeAttributes.ContentState?,
+        dismissalPolicy: ActivityUIDismissalPolicy
+    ) async throws
+    func pushTokenUpdates(activityId: String) -> AsyncStream<Data>?
+    func activityReference(activityId: String) -> Activity<CodingBridgeAttributes>?
+}
+
+protocol LiveActivityAPIClient {
+    func registerLiveActivityToken(
+        pushToken: String,
+        pushToStartToken: String?,
+        activityId: String,
+        sessionId: String,
+        environment: String
+    ) async throws -> CLILiveActivityRegisterResponse
+    func invalidatePushToken(
+        tokenType: CLIPushInvalidateRequest.TokenType,
+        token: String
+    ) async throws
+}
+
+extension CLIBridgeAPIClient: LiveActivityAPIClient {}
+
+enum LiveActivityProviderError: Error {
+    case activityNotFound
+    case unsupported
+}
+
+final class RealLiveActivityProvider: LiveActivityProviding {
+    private var activities: [String: Activity<CodingBridgeAttributes>] = [:]
+
+    var areActivitiesEnabled: Bool {
+        if #available(iOS 16.1, *) {
+            return ActivityAuthorizationInfo().areActivitiesEnabled
+        }
+        return false
+    }
+
+    func request(
+        attributes: CodingBridgeAttributes,
+        contentState: CodingBridgeAttributes.ContentState,
+        pushType: PushType?
+    ) throws -> String {
+        guard #available(iOS 16.1, *) else {
+            throw LiveActivityProviderError.unsupported
+        }
+
+        let activity = try Activity.request(
+            attributes: attributes,
+            content: .init(state: contentState, staleDate: nil),
+            pushType: pushType
+        )
+        activities[activity.id] = activity
+        return activity.id
+    }
+
+    func update(activityId: String, contentState: CodingBridgeAttributes.ContentState) async throws {
+        guard #available(iOS 16.1, *) else {
+            throw LiveActivityProviderError.unsupported
+        }
+        guard let activity = activityReference(activityId: activityId) else {
+            throw LiveActivityProviderError.activityNotFound
+        }
+
+        await activity.update(ActivityContent(state: contentState, staleDate: nil))
+    }
+
+    func end(
+        activityId: String,
+        contentState: CodingBridgeAttributes.ContentState?,
+        dismissalPolicy: ActivityUIDismissalPolicy
+    ) async throws {
+        guard #available(iOS 16.1, *) else {
+            throw LiveActivityProviderError.unsupported
+        }
+        guard let activity = activityReference(activityId: activityId) else {
+            throw LiveActivityProviderError.activityNotFound
+        }
+
+        if let contentState {
+            await activity.end(
+                ActivityContent(state: contentState, staleDate: nil),
+                dismissalPolicy: dismissalPolicy
+            )
+        } else {
+            await activity.end(dismissalPolicy: dismissalPolicy)
+        }
+
+        activities[activityId] = nil
+    }
+
+    func pushTokenUpdates(activityId: String) -> AsyncStream<Data>? {
+        guard #available(iOS 16.1, *) else { return nil }
+        guard let activity = activityReference(activityId: activityId) else { return nil }
+        return AsyncStream { continuation in
+            let task = Task {
+                for await token in activity.pushTokenUpdates {
+                    continuation.yield(token)
+                }
+                continuation.finish()
+            }
+            continuation.onTermination = { _ in
+                task.cancel()
+            }
+        }
+    }
+
+    func activityReference(activityId: String) -> Activity<CodingBridgeAttributes>? {
+        if let cached = activities[activityId] {
+            return cached
+        }
+
+        guard #available(iOS 16.1, *) else { return nil }
+        return Activity<CodingBridgeAttributes>.activities.first { $0.id == activityId }
+    }
+}
+
 // MARK: - Live Activity Manager
 // Manages Live Activities for displaying task progress on Lock Screen and Dynamic Island
 // Requires iOS 16.1+ and iPhone 14 Pro+ for Dynamic Island
@@ -18,14 +145,25 @@ final class LiveActivityManager: ObservableObject {
 
     // MARK: - Private State
 
-    private var apiClient: CLIBridgeAPIClient?
+    private var activityProvider: LiveActivityProviding
+    private var apiClient: LiveActivityAPIClient?
     private var elapsedTimer: Timer?
     private var elapsedSeconds: Int = 0
     private var currentSessionId: String?
+    private var currentActivityId: String?
+    private var liveActivityPushToken: String?
+    private var lastRegisteredPushToken: String?
+    private var lastRegisteredActivityId: String?
+    private var pushTokenTask: Task<Void, Never>?
+    private var isSupportOverrideEnabled: Bool = false
+    private var activeActivityId: String? {
+        currentActivityId ?? currentActivity?.id
+    }
 
     // MARK: - Initialization
 
-    private init() {
+    private init(activityProvider: LiveActivityProviding = RealLiveActivityProvider()) {
+        self.activityProvider = activityProvider
         checkSupport()
     }
 
@@ -48,6 +186,7 @@ final class LiveActivityManager: ObservableObject {
             Task {
                 for await enabled in authInfo.activityEnablementUpdates {
                     await MainActor.run {
+                        guard !self.isSupportOverrideEnabled else { return }
                         self.isEnabled = enabled
                     }
                 }
@@ -67,8 +206,17 @@ final class LiveActivityManager: ObservableObject {
             return
         }
 
-        // End any existing activity
-        await endActivity()
+        if activeActivityId != nil, currentSessionId == sessionId {
+            await updateActivity(
+                status: .processing,
+                operation: "Resuming..."
+            )
+            return
+        }
+
+        if activeActivityId != nil {
+            await endActivity()
+        }
 
         let attributes = CodingBridgeAttributes(
             sessionId: sessionId,
@@ -80,20 +228,20 @@ final class LiveActivityManager: ObservableObject {
         let initialState = CodingBridgeAttributes.ContentState.processing()
 
         do {
-            let activity = try Activity.request(
+            let activityId = try activityProvider.request(
                 attributes: attributes,
-                content: .init(state: initialState, staleDate: nil),
+                contentState: initialState,
                 pushType: .token
             )
-
-            currentActivity = activity
+            currentActivityId = activityId
+            currentActivity = activityProvider.activityReference(activityId: activityId)
             currentSessionId = sessionId
             startElapsedTimer()
 
             log.info("[LiveActivity] Started activity for session: \(sessionId)")
 
             // Register push token with backend
-            await registerPushToken(for: activity, sessionId: sessionId)
+            registerPushToken(activityId: activityId, sessionId: sessionId)
 
         } catch {
             log.error("[LiveActivity] Failed to start activity: \(error)")
@@ -110,7 +258,7 @@ final class LiveActivityManager: ObservableObject {
         question: LAQuestionInfo? = nil,
         error: LAErrorInfo? = nil
     ) async {
-        guard let activity = currentActivity else {
+        guard let activityId = activeActivityId else {
             log.warning("[LiveActivity] No active activity to update")
             return
         }
@@ -128,8 +276,12 @@ final class LiveActivityManager: ObservableObject {
         // Include elapsed time
         state.elapsedSeconds = elapsedSeconds
 
-        await activity.update(ActivityContent(state: state, staleDate: nil))
-        log.debug("[LiveActivity] Updated: \(status.displayText)")
+        do {
+            try await activityProvider.update(activityId: activityId, contentState: state)
+            log.debug("[LiveActivity] Updated: \(status.displayText)")
+        } catch {
+            log.error("[LiveActivity] Failed to update activity: \(error)")
+        }
     }
 
     /// Update activity to show approval request
@@ -186,78 +338,141 @@ final class LiveActivityManager: ObservableObject {
 
     /// End the current Live Activity
     func endActivity(immediately: Bool = false) async {
-        guard let activity = currentActivity else { return }
+        guard let activityId = activeActivityId else { return }
 
         stopElapsedTimer()
 
         let finalState = CodingBridgeAttributes.ContentState.complete(elapsedSeconds: elapsedSeconds)
         let dismissalPolicy: ActivityUIDismissalPolicy = immediately ? .immediate : .after(.now + 30)
 
-        await activity.end(
-            ActivityContent(state: finalState, staleDate: nil),
-            dismissalPolicy: dismissalPolicy
-        )
+        do {
+            try await activityProvider.end(
+                activityId: activityId,
+                contentState: finalState,
+                dismissalPolicy: dismissalPolicy
+            )
+        } catch {
+            log.error("[LiveActivity] Failed to end activity: \(error)")
+        }
 
         log.info("[LiveActivity] Ended activity after \(elapsedSeconds) seconds")
 
         currentActivity = nil
+        currentActivityId = nil
         currentSessionId = nil
         elapsedSeconds = 0
+        lastRegisteredPushToken = nil
+        lastRegisteredActivityId = nil
+        liveActivityPushToken = nil
+        pushTokenTask?.cancel()
+        pushTokenTask = nil
     }
 
     /// End activity with error
     func endWithError(_ message: String) async {
-        guard let activity = currentActivity else { return }
+        guard let activityId = activeActivityId else { return }
 
         stopElapsedTimer()
 
         let error = LAErrorInfo(message: message, recoverable: false)
         let finalState = CodingBridgeAttributes.ContentState.error(error)
 
-        await activity.end(
-            ActivityContent(state: finalState, staleDate: nil),
-            dismissalPolicy: .after(.now + 60)  // Keep error visible longer
-        )
+        do {
+            try await activityProvider.end(
+                activityId: activityId,
+                contentState: finalState,
+                dismissalPolicy: .after(.now + 60)
+            )
+        } catch {
+            log.error("[LiveActivity] Failed to end activity with error: \(error)")
+        }
 
         log.info("[LiveActivity] Ended with error: \(message)")
 
         currentActivity = nil
+        currentActivityId = nil
         currentSessionId = nil
+        lastRegisteredPushToken = nil
+        lastRegisteredActivityId = nil
+        liveActivityPushToken = nil
+        pushTokenTask?.cancel()
+        pushTokenTask = nil
     }
 
     // MARK: - Push Token Registration
 
-    private func registerPushToken(for activity: Activity<CodingBridgeAttributes>, sessionId: String) async {
+    private func registerPushToken(activityId: String, sessionId: String) {
+        pushTokenTask?.cancel()
+        pushTokenTask = Task { [weak self] in
+            guard let self else { return }
+            await self.listenForPushTokens(activityId: activityId, sessionId: sessionId)
+        }
+    }
+
+    private func listenForPushTokens(activityId: String, sessionId: String) async {
+        guard let tokenUpdates = activityProvider.pushTokenUpdates(activityId: activityId) else { return }
+
+        for await tokenData in tokenUpdates {
+            if Task.isCancelled { break }
+            await handlePushTokenUpdate(tokenData, activityId: activityId, sessionId: sessionId)
+        }
+    }
+
+    private func handlePushTokenUpdate(_ tokenData: Data, activityId: String, sessionId: String) async {
+        let token = tokenData.map { String(format: "%02x", $0) }.joined()
+        log.info("[LiveActivity] Received push token: \(token.prefix(20))...")
+
+        liveActivityPushToken = token
+
+        if lastRegisteredPushToken == token, lastRegisteredActivityId == activityId {
+            return
+        }
+
         guard let client = apiClient else { return }
 
-        // Get push token from the activity
-        for await tokenData in activity.pushTokenUpdates {
-            let token = tokenData.map { String(format: "%02x", $0) }.joined()
-            log.info("[LiveActivity] Received push token: \(token.prefix(20))...")
-
-            do {
-                let environment = isProductionEnvironment ? "production" : "sandbox"
-                _ = try await client.registerLiveActivityToken(
-                    pushToken: token,
-                    activityId: activity.id,
-                    sessionId: sessionId,
-                    environment: environment
-                )
-                log.info("[LiveActivity] Registered push token with backend")
-            } catch {
-                log.error("[LiveActivity] Failed to register push token: \(error)")
-            }
-
-            // Only need the first token
-            break
+        do {
+            let environment = isProductionEnvironment ? "production" : "sandbox"
+            _ = try await client.registerLiveActivityToken(
+                pushToken: token,
+                pushToStartToken: nil,
+                activityId: activityId,
+                sessionId: sessionId,
+                environment: environment
+            )
+            lastRegisteredPushToken = token
+            lastRegisteredActivityId = activityId
+            log.info("[LiveActivity] Registered push token with backend")
+        } catch {
+            log.error("[LiveActivity] Failed to register push token: \(error)")
         }
+    }
+
+    func invalidatePushToken() async {
+        guard let token = liveActivityPushToken else { return }
+        guard let client = apiClient else {
+            liveActivityPushToken = nil
+            lastRegisteredPushToken = nil
+            lastRegisteredActivityId = nil
+            return
+        }
+
+        do {
+            try await client.invalidatePushToken(tokenType: .liveActivity, token: token)
+            log.info("[LiveActivity] Invalidated push token")
+        } catch {
+            log.error("[LiveActivity] Failed to invalidate push token: \(error)")
+        }
+
+        liveActivityPushToken = nil
+        lastRegisteredPushToken = nil
+        lastRegisteredActivityId = nil
     }
 
     // MARK: - Push Update Handling
 
     /// Handle incoming push update for Live Activity
     func handlePushUpdate(_ userInfo: [AnyHashable: Any]) async {
-        guard currentActivity != nil else {
+        guard activeActivityId != nil else {
             log.warning("[LiveActivity] Received push update but no active activity")
             return
         }
@@ -356,7 +571,7 @@ final class LiveActivityManager: ObservableObject {
 extension LiveActivityManager {
     /// Check if we have an active Live Activity
     var hasActiveActivity: Bool {
-        currentActivity != nil
+        activeActivityId != nil
     }
 
     /// Get the session ID of the current activity
@@ -378,11 +593,17 @@ extension LiveActivityManager {
 
 #if DEBUG
 extension LiveActivityManager {
-    static func makeForTesting() -> LiveActivityManager {
-        LiveActivityManager()
+    static func makeForTesting(
+        provider: LiveActivityProviding = RealLiveActivityProvider(),
+        apiClient: LiveActivityAPIClient? = nil
+    ) -> LiveActivityManager {
+        let manager = LiveActivityManager(activityProvider: provider)
+        manager.apiClient = apiClient
+        return manager
     }
 
     func setSupportForTesting(isSupported: Bool, isEnabled: Bool) {
+        isSupportOverrideEnabled = true
         self.isSupported = isSupported
         self.isEnabled = isEnabled
     }
@@ -395,12 +616,23 @@ extension LiveActivityManager {
         currentSessionId = sessionId
     }
 
+    func liveActivityPushTokenForTesting() -> String? {
+        liveActivityPushToken
+    }
+
     func resetForTesting() {
         currentActivity = nil
+        currentActivityId = nil
         currentSessionId = nil
         elapsedSeconds = 0
         elapsedTimer?.invalidate()
         elapsedTimer = nil
+        liveActivityPushToken = nil
+        lastRegisteredPushToken = nil
+        lastRegisteredActivityId = nil
+        pushTokenTask?.cancel()
+        pushTokenTask = nil
+        isSupportOverrideEnabled = false
     }
 }
 #endif

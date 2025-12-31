@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.6.5] - 2025-12-30
+
+### Added
+
+- **Session Search**: Full-text search across session messages
+  - Debounced search bar in session picker
+  - Server-side search with match snippets
+  - Results display with relevance ranking
+- **Session Archive**: Soft delete with recovery
+  - Swipe left to archive sessions
+  - "Show Archived" toggle in toolbar
+  - Unarchive to restore sessions
+- **Session Count API**: Accurate session counts by source
+  - `CLISessionCountResponse` type with user/agent/helper breakdown
+  - `loadSessionCounts(for:)` in SessionStore
+- **Bulk Session Operations**: Multi-session management
+  - Bulk archive, unarchive, delete, update operations
+  - `CLIBulkOperationResponse` for partial success handling
+- **Session Lineage**: Parent-child session relationships
+  - `parentSessionId` field in session metadata
+  - `getSessionChildren()` API method
+
+### Changed
+
+- `CLISessionMetadata` extended with `archivedAt` and `parentSessionId` fields
+- `SessionRepository` protocol extended with 5 new methods
+- `SessionStore` now tracks search results and counts per project
+- Updated requirements docs to incorporate session management features
+
+---
+
 ## [0.6.4] - 2025-12-30
 
 ### Added
@@ -540,3 +571,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 | 0.6.0   | **cli-bridge migration** - REST API with SSE streaming |
 | 0.6.1   | Session history tool rendering, structured content     |
 | 0.6.2   | Compact tool views, UI freeze fix, ChatView cleanup    |
+| 0.6.3   | ChatViewModel extraction, keyboard lag elimination     |
+| 0.6.4   | Cache-first startup, UX fixes                          |
+| 0.6.5   | Session search, archive, count API, bulk operations    |

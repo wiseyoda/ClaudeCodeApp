@@ -1,0 +1,565 @@
+{
+  "description": "Test fixtures for tool message rendering",
+  "messages": [
+    {
+      "id": "state-thinking",
+      "category": "State Messages",
+      "description": "Thinking state - triggers status bubble",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "state",
+          "state": "thinking"
+        }
+      }
+    },
+    {
+      "id": "state-executing",
+      "category": "State Messages",
+      "description": "Executing state (no tool)",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "state",
+          "state": "executing"
+        }
+      }
+    },
+    {
+      "id": "state-executing-bash",
+      "category": "State Messages",
+      "description": "Executing Bash tool",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "state",
+          "state": "executing",
+          "tool": "Bash"
+        }
+      }
+    },
+    {
+      "id": "state-executing-read",
+      "category": "State Messages",
+      "description": "Executing Read tool",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "state",
+          "state": "executing",
+          "tool": "Read"
+        }
+      }
+    },
+    {
+      "id": "state-idle",
+      "category": "State Messages",
+      "description": "Idle state - hides status bubble",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "state",
+          "state": "idle"
+        }
+      }
+    },
+    {
+      "id": "assistant-complete",
+      "category": "Assistant Messages",
+      "description": "Complete assistant message (delta=false)",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "assistant",
+          "content": "I'll check the last 2 commits in your repository using the git log command.",
+          "delta": false
+        }
+      }
+    },
+    {
+      "id": "assistant-markdown",
+      "category": "Assistant Messages",
+      "description": "Assistant message with markdown",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "assistant",
+          "content": "## Summary\n\nHere's what I found:\n\n1. **First commit**: Added new feature\n2. **Second commit**: Fixed bug\n\n```swift\nlet example = \"code block\"\nprint(example)\n```\n\nLet me know if you need more details!",
+          "delta": false
+        }
+      }
+    },
+    {
+      "id": "tool-use-bash",
+      "category": "Tool Use",
+      "description": "Bash command execution",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "tool_use",
+          "id": "toolu_bash_001",
+          "name": "Bash",
+          "input": {
+            "command": "git log -2 --oneline",
+            "description": "Show the last 2 commits"
+          }
+        }
+      }
+    },
+    {
+      "id": "tool-result-bash",
+      "category": "Tool Result",
+      "description": "Bash result (success)",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "tool_result",
+          "id": "toolu_bash_001",
+          "tool": "Bash",
+          "output": "41f4090 fix: inline StreamMessage types\nd52482b release: v0.2.4 with SSE improvements",
+          "success": true,
+          "isError": false
+        }
+      }
+    },
+    {
+      "id": "tool-use-read",
+      "category": "Tool Use",
+      "description": "Read file",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "tool_use",
+          "id": "toolu_read_001",
+          "name": "Read",
+          "input": {
+            "file_path": "/Users/dev/project/src/main.swift",
+            "limit": 80
+          }
+        }
+      }
+    },
+    {
+      "id": "tool-result-read",
+      "category": "Tool Result",
+      "description": "Read result",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "tool_result",
+          "id": "toolu_read_001",
+          "tool": "Read",
+          "output": "     1\timport Foundation\n     2\t\n     3\t@main\n     4\tstruct MyApp {\n     5\t    static func main() {\n     6\t        print(\"Hello, World!\")\n     7\t    }\n     8\t}",
+          "success": true,
+          "isError": false
+        }
+      }
+    },
+    {
+      "id": "tool-use-grep",
+      "category": "Tool Use",
+      "description": "Grep search",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "tool_use",
+          "id": "toolu_grep_001",
+          "name": "Grep",
+          "input": {
+            "pattern": "func.*async",
+            "path": "/Users/dev/project/src",
+            "output_mode": "files_with_matches"
+          }
+        }
+      }
+    },
+    {
+      "id": "tool-result-grep",
+      "category": "Tool Result",
+      "description": "Grep result",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "tool_result",
+          "id": "toolu_grep_001",
+          "tool": "Grep",
+          "output": "src/NetworkManager.swift\nsrc/APIClient.swift\nsrc/DataLoader.swift",
+          "success": true,
+          "isError": false
+        }
+      }
+    },
+    {
+      "id": "tool-use-glob",
+      "category": "Tool Use",
+      "description": "Glob file search",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "tool_use",
+          "id": "toolu_glob_001",
+          "name": "Glob",
+          "input": {
+            "pattern": "**/*.swift",
+            "path": "/Users/dev/project"
+          }
+        }
+      }
+    },
+    {
+      "id": "tool-result-glob",
+      "category": "Tool Result",
+      "description": "Glob result",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "tool_result",
+          "id": "toolu_glob_001",
+          "tool": "Glob",
+          "output": "src/main.swift\nsrc/Models/User.swift\nsrc/Views/HomeView.swift\nsrc/Views/ProfileView.swift\ntests/UserTests.swift",
+          "success": true,
+          "isError": false
+        }
+      }
+    },
+    {
+      "id": "tool-use-edit",
+      "category": "Tool Use",
+      "description": "Edit file",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "tool_use",
+          "id": "toolu_edit_001",
+          "name": "Edit",
+          "input": {
+            "file_path": "/Users/dev/project/src/main.swift",
+            "old_string": "print(\"Hello, World!\")",
+            "new_string": "print(\"Hello, Swift!\")"
+          }
+        }
+      }
+    },
+    {
+      "id": "tool-result-edit",
+      "category": "Tool Result",
+      "description": "Edit result",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "tool_result",
+          "id": "toolu_edit_001",
+          "tool": "Edit",
+          "output": "Successfully edited /Users/dev/project/src/main.swift",
+          "success": true,
+          "isError": false
+        }
+      }
+    },
+    {
+      "id": "tool-use-write",
+      "category": "Tool Use",
+      "description": "Write new file",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "tool_use",
+          "id": "toolu_write_001",
+          "name": "Write",
+          "input": {
+            "file_path": "/Users/dev/project/src/NewFile.swift",
+            "content": "import Foundation\n\nstruct NewFile {\n    let id: UUID\n    let name: String\n}"
+          }
+        }
+      }
+    },
+    {
+      "id": "tool-result-write",
+      "category": "Tool Result",
+      "description": "Write result",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "tool_result",
+          "id": "toolu_write_001",
+          "tool": "Write",
+          "output": "Successfully wrote 89 bytes to /Users/dev/project/src/NewFile.swift",
+          "success": true,
+          "isError": false
+        }
+      }
+    },
+    {
+      "id": "tool-use-task",
+      "category": "Tool Use",
+      "description": "Task (subagent)",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "tool_use",
+          "id": "toolu_task_001",
+          "name": "Task",
+          "input": {
+            "description": "Review authentication code",
+            "prompt": "Review the authentication implementation for security issues",
+            "subagent_type": "code-reviewer"
+          }
+        }
+      }
+    },
+    {
+      "id": "tool-result-task",
+      "category": "Tool Result",
+      "description": "Task result",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "tool_result",
+          "id": "toolu_task_001",
+          "tool": "Task",
+          "output": "Code review complete. Found 2 potential issues:\n1. Token expiry not validated\n2. Missing rate limiting on login endpoint",
+          "success": true,
+          "isError": false
+        }
+      }
+    },
+    {
+      "id": "tool-use-todowrite",
+      "category": "Tool Use",
+      "description": "TodoWrite",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "tool_use",
+          "id": "toolu_todo_001",
+          "name": "TodoWrite",
+          "input": {
+            "todos": [
+              {"content": "Fix authentication bug", "status": "completed", "activeForm": "Fixing authentication bug"},
+              {"content": "Add unit tests", "status": "in_progress", "activeForm": "Adding unit tests"},
+              {"content": "Update documentation", "status": "pending", "activeForm": "Updating documentation"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "tool-result-todowrite",
+      "category": "Tool Result",
+      "description": "TodoWrite result",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "tool_result",
+          "id": "toolu_todo_001",
+          "tool": "TodoWrite",
+          "output": "Todos have been modified successfully.",
+          "success": true,
+          "isError": false
+        }
+      }
+    },
+    {
+      "id": "tool-use-webfetch",
+      "category": "Tool Use",
+      "description": "WebFetch",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "tool_use",
+          "id": "toolu_web_001",
+          "name": "WebFetch",
+          "input": {
+            "url": "https://platform.claude.com/docs/en/agent-sdk",
+            "prompt": "Extract the main API endpoints"
+          }
+        }
+      }
+    },
+    {
+      "id": "tool-result-webfetch",
+      "category": "Tool Result",
+      "description": "WebFetch result",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "tool_result",
+          "id": "toolu_web_001",
+          "tool": "WebFetch",
+          "output": "Fetched 64.4KB from platform.claude.com (200 OK)\n\nMain API endpoints:\n- POST /agents - Create new agent\n- POST /agents/:id/message - Send message\n- DELETE /agents/:id - Stop agent",
+          "success": true,
+          "isError": false
+        }
+      }
+    },
+    {
+      "id": "tool-use-websearch",
+      "category": "Tool Use",
+      "description": "WebSearch",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "tool_use",
+          "id": "toolu_search_001",
+          "name": "WebSearch",
+          "input": {
+            "query": "SwiftUI iOS 26 new features"
+          }
+        }
+      }
+    },
+    {
+      "id": "tool-result-websearch",
+      "category": "Tool Result",
+      "description": "WebSearch result",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "tool_result",
+          "id": "toolu_search_001",
+          "tool": "WebSearch",
+          "output": "5 results:\n1. Apple Developer - What's new in SwiftUI (developer.apple.com)\n2. iOS 26 SwiftUI Changes - Hacking with Swift (hackingwithswift.com)\n3. New SwiftUI Features 2025 - SwiftLee (swiftlee.com)",
+          "success": true,
+          "isError": false
+        }
+      }
+    },
+    {
+      "id": "tool-use-mcp",
+      "category": "Tool Use",
+      "description": "MCP tool (context7)",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "tool_use",
+          "id": "toolu_mcp_001",
+          "name": "mcp__context7__query-docs",
+          "input": {
+            "libraryId": "/anthropics/claude-agent-sdk",
+            "query": "How to handle streaming responses"
+          }
+        }
+      }
+    },
+    {
+      "id": "tool-result-mcp",
+      "category": "Tool Result",
+      "description": "MCP result",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "tool_result",
+          "id": "toolu_mcp_001",
+          "tool": "mcp__context7__query-docs",
+          "output": "Documentation found:\n\n## Streaming Responses\n\nUse the `stream_events()` method to receive real-time updates...",
+          "success": true,
+          "isError": false
+        }
+      }
+    },
+    {
+      "id": "tool-use-lsp",
+      "category": "Tool Use",
+      "description": "LSP goToDefinition",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "tool_use",
+          "id": "toolu_lsp_001",
+          "name": "LSP",
+          "input": {
+            "operation": "goToDefinition",
+            "filePath": "/Users/dev/project/src/main.swift",
+            "line": 5,
+            "character": 10
+          }
+        }
+      }
+    },
+    {
+      "id": "tool-result-lsp",
+      "category": "Tool Result",
+      "description": "LSP result",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "tool_result",
+          "id": "toolu_lsp_001",
+          "tool": "LSP",
+          "output": "Definition found at /Users/dev/project/src/Utils.swift:42",
+          "success": true,
+          "isError": false
+        }
+      }
+    },
+    {
+      "id": "tool-result-error",
+      "category": "Tool Result",
+      "description": "Tool error",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "tool_result",
+          "id": "toolu_err_001",
+          "tool": "Bash",
+          "output": "error: command not found: xyz",
+          "success": false,
+          "isError": true
+        }
+      }
+    },
+    {
+      "id": "usage",
+      "category": "Usage",
+      "description": "Token usage stats",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "usage",
+          "inputTokens": 14523,
+          "outputTokens": 571,
+          "totalCost": 0.01511175
+        }
+      }
+    },
+    {
+      "id": "system-init",
+      "category": "System Messages",
+      "description": "Session initialized",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "system",
+          "content": "Session initialized with model claude-sonnet-4-5-20250929",
+          "subtype": "init"
+        }
+      }
+    },
+    {
+      "id": "system-result",
+      "category": "System Messages",
+      "description": "Final result",
+      "message": {
+        "type": "stream",
+        "message": {
+          "type": "system",
+          "content": "Task completed successfully.",
+          "subtype": "result"
+        }
+      }
+    },
+    {
+      "id": "connected",
+      "category": "Connection",
+      "description": "WebSocket connected",
+      "message": {
+        "type": "connected",
+        "agentId": "agent_t0bxgx6g",
+        "sessionId": "afb50a84-1206-4074-9784-d7552826ffaf",
+        "model": "sonnet",
+        "version": "0.3.2",
+        "protocolVersion": "1.0"
+      }
+    }
+  ]
+}

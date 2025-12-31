@@ -7,7 +7,7 @@ import UserNotifications
 /// A compact settings sheet for frequently-changed session settings
 struct QuickSettingsSheet: View {
     @EnvironmentObject var settings: AppSettings
-    @ObservedObject var debugStore = DebugLogStore.shared
+    var debugStore = DebugLogStore.shared  // @Observable classes don't need @ObservedObject
     @ObservedObject var notificationManager = NotificationManager.shared
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.dismiss) var dismiss

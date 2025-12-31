@@ -14,9 +14,21 @@ class ProjectCache: ObservableObject {
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var isStale: Bool = true
 
+    /// Timestamp of last recent sessions fetch (for TTL)
+    private var recentSessionsCacheTime: Date?
+
+    /// TTL for recent sessions cache (60 seconds)
+    private static let recentSessionsTTL: TimeInterval = 60
+
     /// Whether we have cached recent sessions
     var hasRecentSessions: Bool {
         !cachedRecentSessions.isEmpty
+    }
+
+    /// Whether recent sessions cache is still valid (within TTL)
+    var isRecentSessionsCacheValid: Bool {
+        guard let cacheTime = recentSessionsCacheTime else { return false }
+        return Date().timeIntervalSince(cacheTime) < Self.recentSessionsTTL
     }
 
     private static let cacheFile: URL = {
@@ -153,6 +165,7 @@ class ProjectCache: ObservableObject {
     /// Update recent sessions cache
     func updateRecentSessions(_ sessions: [CLISessionMetadata]) {
         cachedRecentSessions = sessions
+        recentSessionsCacheTime = Date()
         persistCache()
     }
 

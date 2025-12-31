@@ -10,7 +10,7 @@ struct MainTabView: View {
     @State private var selectedTab: Tab = .home
     @State private var showNewProject = false
     @State private var showCloneProject = false
-    @ObservedObject private var commandStore = CommandStore.shared
+    private var commandStore = CommandStore.shared  // @Observable classes don't need @ObservedObject
 
     enum Tab: Hashable {
         case home
@@ -93,7 +93,7 @@ struct MainTabView: View {
 /// Standalone version of CommandsView for tab embedding
 /// Removes the "Done" button since we're not in a sheet
 struct CommandsTabView: View {
-    @ObservedObject var commandStore: CommandStore
+    var commandStore: CommandStore  // @Observable classes don't need @ObservedObject
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
 

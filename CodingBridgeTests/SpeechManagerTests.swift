@@ -4,6 +4,43 @@ import Speech
 import XCTest
 @testable import CodingBridge
 
+private final class MockSpeechRecognitionTask: SpeechRecognitionTaskProviding {
+    private(set) var cancelCallCount = 0
+
+    func cancel() {
+        cancelCallCount += 1
+    }
+}
+
+private final class MockSpeechRecognizer: SpeechRecognizerProviding {
+    var isAvailable: Bool
+    private(set) var recognitionTaskCallCount = 0
+    var onRecognitionTask: ((SFSpeechRecognitionRequest, @escaping (SFSpeechRecognitionResult?, Error?) -> Void) -> SpeechRecognitionTaskProviding)?
+
+    init(
+        isAvailable: Bool = true,
+        onRecognitionTask: ((SFSpeechRecognitionRequest, @escaping (SFSpeechRecognitionResult?, Error?) -> Void) -> SpeechRecognitionTaskProviding)? = nil
+    ) {
+        self.isAvailable = isAvailable
+        self.onRecognitionTask = onRecognitionTask
+    }
+
+    func startRecognitionTask(
+        with request: SFSpeechRecognitionRequest,
+        resultHandler: @escaping (SFSpeechRecognitionResult?, Error?) -> Void
+    ) -> SpeechRecognitionTaskProviding {
+        recognitionTaskCallCount += 1
+        if let onRecognitionTask = onRecognitionTask {
+            return onRecognitionTask(request, resultHandler)
+        }
+        return MockSpeechRecognitionTask()
+    }
+}
+
+private struct MockRecognitionError: LocalizedError {
+    let errorDescription: String?
+}
+
 @MainActor
 final class SpeechManagerTests: XCTestCase {
     private var cancellables: Set<AnyCancellable> = []
@@ -13,8 +50,14 @@ final class SpeechManagerTests: XCTestCase {
         super.tearDown()
     }
 
-    private func makeManager() -> SpeechManager {
-        SpeechManager(shouldRequestAuthorization: false)
+    private func makeManager(
+        recognizer: SpeechRecognizerProviding? = nil,
+        authorizationStatus: SFSpeechRecognizerAuthorizationStatus = .notDetermined
+    ) -> SpeechManager {
+        SpeechManager.makeForTesting(
+            recognizer: recognizer,
+            authorizationStatus: authorizationStatus
+        )
     }
 
     private func skipIfSpeechPermissionPromptNeeded() throws {
@@ -38,7 +81,7 @@ final class SpeechManagerTests: XCTestCase {
     }
 
     private func recognizerAvailability() -> Bool {
-        SFSpeechRecognizer(locale: Locale(identifier: "en-US"))?.isAvailable ?? false
+        SpeechManager.makeSpeechRecognizer()?.isAvailable ?? false
     }
 
     private func speechRecognizerLocaleIdentifier(from manager: SpeechManager) -> String? {
@@ -75,11 +118,32 @@ final class SpeechManagerTests: XCTestCase {
         XCTAssertFalse(manager.isRecording)
     }
 
+    func test_toggleRecording_startsWhenStopped() throws {
+        try skipIfCannotRecord()
+        let manager = makeManager()
+        manager.authorizationStatus = .authorized
+        defer { manager.stopRecording() }
+
+        manager.toggleRecording()
+
+        if !manager.isRecording {
+            throw XCTSkip("Recording could not start: \(manager.errorMessage ?? "unknown error")")
+        }
+
+        XCTAssertTrue(manager.isRecording)
+    }
+
     func testIsAvailableFalseWhenUnauthorized() {
         let manager = makeManager()
         manager.authorizationStatus = .restricted
 
         XCTAssertFalse(manager.isAvailable)
+    }
+
+    func test_authorizationStatus_initiallyNotDetermined() {
+        let manager = makeManager()
+
+        XCTAssertEqual(manager.authorizationStatus, .notDetermined)
     }
 
     func test_authorization_notDetermined() {
@@ -168,6 +232,22 @@ final class SpeechManagerTests: XCTestCase {
         XCTAssertEqual(manager.transcribedText, "")
     }
 
+    func test_startRecording_clearsErrorMessage() throws {
+        try skipIfCannotRecord()
+        let manager = makeManager()
+        manager.authorizationStatus = .authorized
+        manager.errorMessage = "Existing error"
+        defer { manager.stopRecording() }
+
+        manager.startRecording()
+
+        if !manager.isRecording {
+            throw XCTSkip("Recording could not start: \(manager.errorMessage ?? "unknown error")")
+        }
+
+        XCTAssertNil(manager.errorMessage)
+    }
+
     func test_recording_startWhenNotAuthorized() {
         let manager = makeManager()
         manager.authorizationStatus = .restricted
@@ -176,6 +256,20 @@ final class SpeechManagerTests: XCTestCase {
 
         XCTAssertEqual(manager.errorMessage, "Speech recognition not authorized")
         XCTAssertFalse(manager.isRecording)
+    }
+
+    func test_startRecording_whenRecognizerUnavailable_setsError() {
+        let mockRecognizer = MockSpeechRecognizer(isAvailable: false)
+        let manager = makeManager(
+            recognizer: mockRecognizer,
+            authorizationStatus: .authorized
+        )
+
+        manager.startRecording()
+
+        XCTAssertEqual(manager.errorMessage, "Speech recognizer unavailable")
+        XCTAssertFalse(manager.isRecording)
+        XCTAssertEqual(mockRecognizer.recognitionTaskCallCount, 0)
     }
 
     func test_recording_stopReturnsTranscript() {
@@ -189,7 +283,8 @@ final class SpeechManagerTests: XCTestCase {
         XCTAssertEqual(manager.transcribedText, "Hello world")
     }
 
-    func test_recording_cancelDiscardsAudio() {
+    func test_recording_cancelDiscardsAudio() throws {
+        try XCTSkipIf(!recognizerAvailability(), "Speech recognizer unavailable; can't start recording.")
         let manager = makeManager()
         manager.transcribedText = "Previous transcript"
         manager.authorizationStatus = .authorized
@@ -306,6 +401,51 @@ final class SpeechManagerTests: XCTestCase {
         XCTAssertEqual(session.mode, .measurement)
     }
 
+    func test_recognitionError_setsErrorMessage() {
+        let manager = makeManager()
+        let error = MockRecognitionError(errorDescription: "Test failure")
+
+        manager.handleRecognition(resultText: nil, isFinal: false, error: error)
+
+        XCTAssertEqual(manager.errorMessage, "Speech recognition error: Test failure")
+    }
+
+    func test_recognitionError_stopsRecording() {
+        let manager = makeManager()
+        manager.isRecording = true
+
+        manager.handleRecognition(resultText: nil, isFinal: false, error: MockRecognitionError(errorDescription: "Boom"))
+
+        XCTAssertFalse(manager.isRecording)
+    }
+
+    func test_transcription_updatesTranscribedText() {
+        let manager = makeManager()
+        manager.transcribedText = "Old"
+
+        manager.handleRecognition(resultText: "New transcript", isFinal: false, error: nil)
+
+        XCTAssertEqual(manager.transcribedText, "New transcript")
+    }
+
+    func test_transcription_isFinal_stopsRecording() {
+        let manager = makeManager()
+        manager.isRecording = true
+
+        manager.handleRecognition(resultText: "Done", isFinal: true, error: nil)
+
+        XCTAssertFalse(manager.isRecording)
+    }
+
+    func test_transcription_emptyResult_doesNotUpdate() {
+        let manager = makeManager()
+        manager.transcribedText = "Keep this"
+
+        manager.handleRecognition(resultText: "", isFinal: false, error: nil)
+
+        XCTAssertEqual(manager.transcribedText, "Keep this")
+    }
+
     func test_transcription_partialResults() throws {
         throw XCTSkip("Partial transcription requires live audio input.")
     }
@@ -322,11 +462,31 @@ final class SpeechManagerTests: XCTestCase {
         throw XCTSkip("Empty-audio transcription requires live audio input.")
     }
 
-    func test_transcription_localeSelection() {
+    func test_transcription_localeSelection() throws {
+        try XCTSkipIf(
+            SFSpeechRecognizer(locale: Locale(identifier: "en-US")) == nil,
+            "Preferred locale unavailable; fallback may be used."
+        )
         let manager = makeManager()
         let localeIdentifier = speechRecognizerLocaleIdentifier(from: manager)
 
         XCTAssertEqual(localeIdentifier, "en-US")
+    }
+
+    func test_speechRecognizer_fallbackWhenUnavailable() {
+        var requestedLocales: [Locale] = []
+        let fallbackRecognizer = MockSpeechRecognizer()
+        let recognizer = SpeechManager.makeSpeechRecognizer(
+            preferredLocale: Locale(identifier: "en-US"),
+            fallbackLocale: Locale(identifier: "fr-FR"),
+            factory: { locale in
+                requestedLocales.append(locale)
+                return locale.identifier == "en-US" ? nil : fallbackRecognizer
+            }
+        )
+
+        XCTAssertEqual(requestedLocales.map(\.identifier), ["en-US", "fr-FR"])
+        XCTAssertTrue(recognizer as? MockSpeechRecognizer === fallbackRecognizer)
     }
 
     func test_isRecording_reflectsState() {
@@ -339,6 +499,28 @@ final class SpeechManagerTests: XCTestCase {
 
         manager.isRecording = false
         XCTAssertFalse(manager.isRecording)
+    }
+
+    func test_isRecording_publishesChanges() {
+        let manager = makeManager()
+        let expectation = XCTestExpectation(description: "isRecording publishes changes")
+        var received: [Bool] = []
+
+        manager.$isRecording
+            .dropFirst()
+            .sink { value in
+                received.append(value)
+                if received == [true, false] {
+                    expectation.fulfill()
+                }
+            }
+            .store(in: &cancellables)
+
+        manager.isRecording = true
+        manager.isRecording = false
+
+        wait(for: [expectation], timeout: 1.0)
+        XCTAssertEqual(received, [true, false])
     }
 
     func test_isAvailable_checksMicrophone() throws {
@@ -356,7 +538,7 @@ final class SpeechManagerTests: XCTestCase {
         XCTAssertEqual(manager.isAvailable, recognizerAvailability())
     }
 
-    func test_currentTranscript_updatesLive() {
+    func test_transcribedText_publishesChanges() {
         let manager = makeManager()
         let expectation = XCTestExpectation(description: "transcribedText updates")
 
@@ -372,6 +554,28 @@ final class SpeechManagerTests: XCTestCase {
         manager.transcribedText = "Live update"
 
         wait(for: [expectation], timeout: 1.0)
+    }
+
+    func test_errorMessage_publishesChanges() {
+        let manager = makeManager()
+        let expectation = XCTestExpectation(description: "errorMessage publishes changes")
+        var received: [String?] = []
+
+        manager.$errorMessage
+            .dropFirst()
+            .sink { value in
+                received.append(value)
+                if received.count == 2 {
+                    expectation.fulfill()
+                }
+            }
+            .store(in: &cancellables)
+
+        manager.errorMessage = "First error"
+        manager.errorMessage = nil
+
+        wait(for: [expectation], timeout: 1.0)
+        XCTAssertEqual(received, ["First error", nil])
     }
 
     func test_lastError_capturesErrors() {

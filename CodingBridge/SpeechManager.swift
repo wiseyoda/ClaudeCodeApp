@@ -2,12 +2,35 @@ import Foundation
 import Speech
 import AVFoundation
 
+protocol SpeechRecognitionTaskProviding {
+    func cancel()
+}
+
+extension SFSpeechRecognitionTask: SpeechRecognitionTaskProviding {}
+
+protocol SpeechRecognizerProviding {
+    var isAvailable: Bool { get }
+    func startRecognitionTask(
+        with request: SFSpeechRecognitionRequest,
+        resultHandler: @escaping (SFSpeechRecognitionResult?, Error?) -> Void
+    ) -> SpeechRecognitionTaskProviding
+}
+
+extension SFSpeechRecognizer: SpeechRecognizerProviding {
+    func startRecognitionTask(
+        with request: SFSpeechRecognitionRequest,
+        resultHandler: @escaping (SFSpeechRecognitionResult?, Error?) -> Void
+    ) -> SpeechRecognitionTaskProviding {
+        recognitionTask(with: request, resultHandler: resultHandler)
+    }
+}
+
 @MainActor
 class SpeechManager: ObservableObject {
     private var audioEngine: AVAudioEngine?
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
-    private var recognitionTask: SFSpeechRecognitionTask?
-    private let speechRecognizer = SFSpeechRecognizer(locale: Locale(identifier: "en-US"))
+    private var recognitionTask: SpeechRecognitionTaskProviding?
+    private var speechRecognizer: SpeechRecognizerProviding?
 
     @Published var isRecording = false
     @Published var transcribedText = ""
@@ -15,10 +38,36 @@ class SpeechManager: ObservableObject {
     @Published var errorMessage: String?
 
     init(shouldRequestAuthorization: Bool = true) {
+        speechRecognizer = Self.makeSpeechRecognizer()
         if shouldRequestAuthorization {
             checkAuthorization()
         }
     }
+
+    static func makeSpeechRecognizer(
+        preferredLocale: Locale = Locale(identifier: "en-US"),
+        fallbackLocale: Locale = Locale.current,
+        factory: (Locale) -> SpeechRecognizerProviding? = { SFSpeechRecognizer(locale: $0) }
+    ) -> SpeechRecognizerProviding? {
+        if let recognizer = factory(preferredLocale) {
+            return recognizer
+        }
+        return factory(fallbackLocale)
+    }
+
+#if DEBUG
+    static func makeForTesting(
+        recognizer: SpeechRecognizerProviding? = nil,
+        authorizationStatus: SFSpeechRecognizerAuthorizationStatus = .notDetermined
+    ) -> SpeechManager {
+        let manager = SpeechManager(shouldRequestAuthorization: false)
+        manager.authorizationStatus = authorizationStatus
+        if let recognizer = recognizer {
+            manager.speechRecognizer = recognizer
+        }
+        return manager
+    }
+#endif
 
     deinit {
         // Clean up audio resources to prevent memory leaks
@@ -47,6 +96,10 @@ class SpeechManager: ObservableObject {
         guard !isRecording else { return }
         guard authorizationStatus == .authorized else {
             errorMessage = "Speech recognition not authorized"
+            return
+        }
+        guard let speechRecognizer = speechRecognizer, speechRecognizer.isAvailable else {
+            errorMessage = "Speech recognizer unavailable"
             return
         }
 
@@ -87,17 +140,13 @@ class SpeechManager: ObservableObject {
         }
 
         // Start recognition task
-        recognitionTask = speechRecognizer?.recognitionTask(with: recognitionRequest) { [weak self] result, error in
+        recognitionTask = speechRecognizer.startRecognitionTask(with: recognitionRequest) { [weak self] result, error in
             Task { @MainActor in
-                guard let self = self else { return }
-
-                if let result = result {
-                    self.transcribedText = result.bestTranscription.formattedString
-                }
-
-                if error != nil || result?.isFinal == true {
-                    self.stopRecording()
-                }
+                self?.handleRecognition(
+                    resultText: result?.bestTranscription.formattedString,
+                    isFinal: result?.isFinal == true,
+                    error: error
+                )
             }
         }
 
@@ -109,6 +158,22 @@ class SpeechManager: ObservableObject {
             log.info("Recording started")
         } catch {
             errorMessage = "Audio engine error: \(error.localizedDescription)"
+            stopRecording()
+        }
+    }
+
+    func handleRecognition(resultText: String?, isFinal: Bool, error: Error?) {
+        if let error = error {
+            errorMessage = "Speech recognition error: \(error.localizedDescription)"
+            stopRecording()
+            return
+        }
+
+        if let resultText, !resultText.isEmpty {
+            transcribedText = resultText
+        }
+
+        if isFinal {
             stopRecording()
         }
     }

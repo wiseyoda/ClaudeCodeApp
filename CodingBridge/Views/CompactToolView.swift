@@ -31,6 +31,7 @@ struct ExploredGroup: Identifiable {
         let path: String
         let toolType: CLITheme.ToolType
         let hasError: Bool
+        let isSearchPattern: Bool  // True for Grep patterns (vs file paths)
     }
 }
 
@@ -73,6 +74,23 @@ func groupMessagesForDisplay(_ messages: [ChatMessage]) -> [DisplayItem] {
             continue
         }
 
+        // Check for tools that don't need separate result display
+        // Per spec: Result is redundant or shown inline for these tools
+        let skipResultTools = ["Edit", "Write", "WebFetch", "WebSearch", "Task", "TodoWrite", "LSP"]
+        let shouldSkipResult = message.role == .toolUse && (
+            skipResultTools.contains(where: { message.content.hasPrefix($0) }) ||
+            message.content.hasPrefix("mcp__")  // All MCP tools
+        )
+        if shouldSkipResult {
+            result.append(.single(message))
+            i += 1
+            // Skip the following toolResult if present (redundant)
+            if i < messages.count && messages[i].role == .toolResult {
+                i += 1
+            }
+            continue
+        }
+
         // Regular message - pass through
         result.append(.single(message))
         i += 1
@@ -100,7 +118,8 @@ private func extractExploredGroup(from messages: [ChatMessage], startingAt start
         if msg.role == .toolUse && isExploreToolType(msg.content) {
             if let path = extractFilePath(from: msg.content) {
                 let toolType = CLITheme.ToolType.from(msg.content)
-                files.append(ExploredGroup.ExploredFile(path: path, toolType: toolType, hasError: false))
+                let isPattern = msg.content.hasPrefix("Grep")  // Grep uses search patterns, not file paths
+                files.append(ExploredGroup.ExploredFile(path: path, toolType: toolType, hasError: false, isSearchPattern: isPattern))
             }
             i += 1
 
@@ -120,7 +139,8 @@ private func extractExploredGroup(from messages: [ChatMessage], startingAt start
                         files.append(ExploredGroup.ExploredFile(
                             path: lastFile.path,
                             toolType: lastFile.toolType,
-                            hasError: true
+                            hasError: true,
+                            isSearchPattern: lastFile.isSearchPattern
                         ))
                     }
                 }
@@ -341,44 +361,91 @@ struct ExploredFilesView: View {
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
 
+    // Separate files from search patterns
+    private var fileItems: [ExploredGroup.ExploredFile] {
+        group.files.filter { !$0.isSearchPattern }
+    }
+
+    private var searchPatterns: [ExploredGroup.ExploredFile] {
+        group.files.filter { $0.isSearchPattern }
+    }
+
     var body: some View {
-        HStack(alignment: .top, spacing: 6) {
-            // Folder icon
-            Text("📁")
-                .font(.system(size: 12))
+        VStack(alignment: .leading, spacing: 4) {
+            // File exploration row (Read/Glob)
+            if !fileItems.isEmpty {
+                HStack(alignment: .top, spacing: 6) {
+                    Text("📁")
+                        .font(.system(size: 12))
 
-            // "Explored:" label and file list
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 4) {
-                    Text("Explored:")
-                        .font(settings.scaledFont(.small))
-                        .foregroundColor(mutedColor)
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 4) {
+                            Text("Explored:")
+                                .font(settings.scaledFont(.small))
+                                .foregroundColor(mutedColor)
 
-                    Spacer()
+                            Spacer()
 
-                    // Success/error indicator
-                    Text(group.isSuccess ? "✓" : "✗")
-                        .font(.system(size: 11))
-                        .foregroundColor(group.isSuccess ? successColor : errorColor)
+                            Text("✓")
+                                .font(.system(size: 11))
+                                .foregroundColor(successColor)
+                        }
+
+                        Text(fileNames(for: fileItems))
+                            .font(settings.scaledFont(.small))
+                            .foregroundColor(mutedColor.opacity(0.85))
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
+            }
 
-                // File names - wrap naturally
-                Text(fileNames)
-                    .font(settings.scaledFont(.small))
-                    .foregroundColor(mutedColor.opacity(0.85))
-                    .lineLimit(nil)
-                    .fixedSize(horizontal: false, vertical: true)
+            // Search patterns row (Grep)
+            if !searchPatterns.isEmpty {
+                HStack(alignment: .top, spacing: 6) {
+                    Text("🔍")
+                        .font(.system(size: 12))
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 4) {
+                            Text("Searched:")
+                                .font(settings.scaledFont(.small))
+                                .foregroundColor(mutedColor)
+
+                            Spacer()
+
+                            Text(hasSearchErrors ? "✗" : "✓")
+                                .font(.system(size: 11))
+                                .foregroundColor(hasSearchErrors ? errorColor : successColor)
+                        }
+
+                        Text(patternList)
+                            .font(settings.scaledFont(.small))
+                            .foregroundColor(mutedColor.opacity(0.85))
+                            .lineLimit(nil)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
             }
         }
         .padding(.vertical, 2)
     }
 
-    private var fileNames: String {
-        group.files.map { file in
-            // Just show filename, not full path
+    private func fileNames(for items: [ExploredGroup.ExploredFile]) -> String {
+        items.map { file in
             let filename = (file.path as NSString).lastPathComponent
             return file.hasError ? "\(filename) ✗" : filename
         }.joined(separator: ", ")
+    }
+
+    private var patternList: String {
+        searchPatterns.map { file in
+            file.hasError ? "\"\(file.path)\" ✗" : "\"\(file.path)\""
+        }.joined(separator: ", ")
+    }
+
+    private var hasSearchErrors: Bool {
+        searchPatterns.contains { $0.hasError }
     }
 
     private var mutedColor: Color {
@@ -410,10 +477,10 @@ struct TerminalCommandView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             // Command line with expand toggle
-            HStack(alignment: .top, spacing: 6) {
-                // $ prefix
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                // $ prefix - use same font as command for alignment
                 Text("$")
-                    .font(.system(size: 12, design: .monospaced))
+                    .font(settings.scaledFont(.small).monospaced())
                     .foregroundColor(mutedColor)
 
                 // Command text - word wrap
@@ -556,17 +623,17 @@ struct DisplayItemView: View {
 #Preview("Explored Files") {
     let group = ExploredGroup(
         files: [
-            .init(path: "/path/to/Models.swift", toolType: .read, hasError: false),
-            .init(path: "/path/to/ChatView.swift", toolType: .read, hasError: false),
-            .init(path: "/path/to/CLIMessageView.swift", toolType: .read, hasError: false),
-            .init(path: "/path/to/TodoListView.swift", toolType: .read, hasError: false),
-            .init(path: "/path/to/SessionStore.swift", toolType: .read, hasError: false),
+            .init(path: "/path/to/Models.swift", toolType: .read, hasError: false, isSearchPattern: false),
+            .init(path: "/path/to/ChatView.swift", toolType: .read, hasError: false, isSearchPattern: false),
+            .init(path: "/path/to/CLIMessageView.swift", toolType: .read, hasError: false, isSearchPattern: false),
+            .init(path: "func.*async", toolType: .grep, hasError: false, isSearchPattern: true),
+            .init(path: "**/*.swift", toolType: .glob, hasError: false, isSearchPattern: false),
         ],
         timestamp: Date(),
         isSuccess: true
     )
 
-    return ExploredFilesView(group: group)
+    ExploredFilesView(group: group)
         .padding()
         .environmentObject(AppSettings())
         .preferredColorScheme(.dark)
@@ -584,7 +651,7 @@ struct DisplayItemView: View {
         toolResultId: UUID()
     )
 
-    return TerminalCommandView(group: group)
+    TerminalCommandView(group: group)
         .padding()
         .environmentObject(AppSettings())
         .preferredColorScheme(.dark)

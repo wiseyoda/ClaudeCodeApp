@@ -62,6 +62,9 @@ final class HealthMonitorService: ObservableObject {
     private let networkMonitor = NetworkMonitor.shared
     private var cancellables = Set<AnyCancellable>()
 
+    /// Optional test session for dependency injection (testing only)
+    private var testSession: URLSession?
+
     // MARK: - Initialization
 
     private init() {
@@ -102,6 +105,25 @@ final class HealthMonitorService: ObservableObject {
         pollTimer = nil
         isPolling = false
         log.info("[Health] Stopped polling")
+    }
+
+    /// Pause polling (for background transitions) - can be resumed without full restart
+    func pausePolling() {
+        guard isPolling else { return }
+        pollTimer?.invalidate()
+        pollTimer = nil
+        log.debug("[Health] Paused polling")
+    }
+
+    /// Resume polling after pause
+    func resumePolling() {
+        guard isPolling else { return }
+        // Do immediate check and schedule next
+        Task {
+            await checkHealth()
+        }
+        scheduleNextPoll(interval: basePollInterval)
+        log.debug("[Health] Resumed polling")
     }
 
     /// Force an immediate health check
@@ -155,7 +177,12 @@ final class HealthMonitorService: ObservableObject {
         let startTime = CFAbsoluteTimeGetCurrent()
 
         do {
-            let apiClient = CLIBridgeAPIClient(serverURL: serverURL)
+            let apiClient: CLIBridgeAPIClient
+            if let testSession = testSession {
+                apiClient = CLIBridgeAPIClient(serverURL: serverURL, session: testSession)
+            } else {
+                apiClient = CLIBridgeAPIClient(serverURL: serverURL)
+            }
             let response = try await apiClient.healthCheck()
 
             // Calculate latency
@@ -273,6 +300,8 @@ final class HealthMonitorService: ObservableObject {
 extension HealthMonitorService {
     func resetForTesting() {
         stopPolling()
+        // Cancel all Combine subscriptions to prevent network observer interference
+        cancellables.removeAll()
         serverStatus = .disconnected
         lastCheck = nil
         serverVersion = ""
@@ -283,6 +312,16 @@ extension HealthMonitorService {
         serverURL = ""
         currentBackoffInterval = 5
         consecutiveFailures = 0
+        testSession = nil
+    }
+
+    /// Re-enable network observer after testing
+    func restoreNetworkObserverForTesting() {
+        setupNetworkObserver()
+    }
+
+    func setTestSession(_ session: URLSession?) {
+        testSession = session
     }
 
     var currentBackoffIntervalForTesting: TimeInterval {

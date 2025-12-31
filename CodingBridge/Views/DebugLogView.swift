@@ -4,7 +4,7 @@ import SwiftUI
 
 /// View for displaying and filtering debug logs
 struct DebugLogView: View {
-    @ObservedObject var store = DebugLogStore.shared
+    @Bindable var store = DebugLogStore.shared  // @Bindable enables $store.property bindings
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.dismiss) var dismiss
     @State private var selectedEntry: DebugLogEntry?

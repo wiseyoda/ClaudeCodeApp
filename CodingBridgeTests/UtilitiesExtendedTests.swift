@@ -43,7 +43,7 @@ private typealias NetworkState = (
 )
 
 @MainActor
-private func snapshotNetworkState(_ monitor: NetworkMonitor = .shared) -> NetworkState {
+private func snapshotNetworkState(_ monitor: NetworkMonitor) -> NetworkState {
     (
         isConnected: monitor.isConnected,
         connectionType: monitor.connectionType,
@@ -53,7 +53,7 @@ private func snapshotNetworkState(_ monitor: NetworkMonitor = .shared) -> Networ
 }
 
 @MainActor
-private func restoreNetworkState(_ state: NetworkState, monitor: NetworkMonitor = .shared) {
+private func restoreNetworkState(_ state: NetworkState, monitor: NetworkMonitor) {
     monitor.updateStateForTesting(
         isConnected: state.isConnected,
         connectionType: state.connectionType,
@@ -777,13 +777,22 @@ final class HealthMonitorServiceTests: XCTestCase {
         handler: @escaping (URLRequest) throws -> (HTTPURLResponse, Data),
         perform: () async -> Void
     ) async {
-        URLProtocol.registerClass(MockURLProtocol.self)
-        defer {
-            URLProtocol.unregisterClass(MockURLProtocol.self)
-            MockURLProtocol.requestHandler = nil
-        }
+        // Create a URLSession with the mock protocol for iOS 26+ compatibility
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [MockURLProtocol.self]
+        let mockSession = URLSession(configuration: config)
 
         MockURLProtocol.requestHandler = handler
+
+        // Inject the mock session into the service
+        let service = HealthMonitorService.shared
+        service.setTestSession(mockSession)
+
+        defer {
+            MockURLProtocol.requestHandler = nil
+            service.setTestSession(nil)
+        }
+
         await perform()
     }
 
@@ -810,8 +819,8 @@ final class HealthMonitorServiceTests: XCTestCase {
     }
 
     func testForceCheckSuccessUpdatesMetrics() async {
-        let originalState = snapshotNetworkState()
-        defer { restoreNetworkState(originalState) }
+        let originalState = snapshotNetworkState(NetworkMonitor.shared)
+        defer { restoreNetworkState(originalState, monitor: NetworkMonitor.shared) }
 
         NetworkMonitor.shared.updateStateForTesting(
             isConnected: true,
@@ -873,8 +882,8 @@ final class HealthMonitorServiceTests: XCTestCase {
     }
 
     func testForceCheckFailureSetsError() async {
-        let originalState = snapshotNetworkState()
-        defer { restoreNetworkState(originalState) }
+        let originalState = snapshotNetworkState(NetworkMonitor.shared)
+        defer { restoreNetworkState(originalState, monitor: NetworkMonitor.shared) }
 
         NetworkMonitor.shared.updateStateForTesting(
             isConnected: true,
@@ -919,8 +928,8 @@ final class HealthMonitorServiceTests: XCTestCase {
     }
 
     func testForceCheckWithoutServerConfigured() async {
-        let originalState = snapshotNetworkState()
-        defer { restoreNetworkState(originalState) }
+        let originalState = snapshotNetworkState(NetworkMonitor.shared)
+        defer { restoreNetworkState(originalState, monitor: NetworkMonitor.shared) }
 
         NetworkMonitor.shared.updateStateForTesting(
             isConnected: true,
@@ -941,8 +950,8 @@ final class HealthMonitorServiceTests: XCTestCase {
     func test_healthMonitor_retryIntervals() async {
         let service = HealthMonitorService.shared
         service.resetForTesting()
-        let originalState = snapshotNetworkState()
-        defer { restoreNetworkState(originalState) }
+        let originalState = snapshotNetworkState(NetworkMonitor.shared)
+        defer { restoreNetworkState(originalState, monitor: NetworkMonitor.shared) }
 
         NetworkMonitor.shared.updateStateForTesting(
             isConnected: true,
@@ -964,8 +973,8 @@ final class HealthMonitorServiceTests: XCTestCase {
     func test_healthMonitor_maxRetryAttempts() async {
         let service = HealthMonitorService.shared
         service.resetForTesting()
-        let originalState = snapshotNetworkState()
-        defer { restoreNetworkState(originalState) }
+        let originalState = snapshotNetworkState(NetworkMonitor.shared)
+        defer { restoreNetworkState(originalState, monitor: NetworkMonitor.shared) }
 
         NetworkMonitor.shared.updateStateForTesting(
             isConnected: true,
@@ -990,8 +999,8 @@ final class HealthMonitorServiceTests: XCTestCase {
     func test_healthMonitor_backoffCalculation() async {
         let service = HealthMonitorService.shared
         service.resetForTesting()
-        let originalState = snapshotNetworkState()
-        defer { restoreNetworkState(originalState) }
+        let originalState = snapshotNetworkState(NetworkMonitor.shared)
+        defer { restoreNetworkState(originalState, monitor: NetworkMonitor.shared) }
 
         NetworkMonitor.shared.updateStateForTesting(
             isConnected: true,
@@ -1016,8 +1025,8 @@ final class HealthMonitorServiceTests: XCTestCase {
     func test_healthMonitor_successResetsRetry() async {
         let service = HealthMonitorService.shared
         service.resetForTesting()
-        let originalState = snapshotNetworkState()
-        defer { restoreNetworkState(originalState) }
+        let originalState = snapshotNetworkState(NetworkMonitor.shared)
+        defer { restoreNetworkState(originalState, monitor: NetworkMonitor.shared) }
 
         NetworkMonitor.shared.updateStateForTesting(
             isConnected: true,
@@ -1055,8 +1064,8 @@ final class HealthMonitorServiceTests: XCTestCase {
     func test_healthMonitor_consecutiveFailures() async {
         let service = HealthMonitorService.shared
         service.resetForTesting()
-        let originalState = snapshotNetworkState()
-        defer { restoreNetworkState(originalState) }
+        let originalState = snapshotNetworkState(NetworkMonitor.shared)
+        defer { restoreNetworkState(originalState, monitor: NetworkMonitor.shared) }
 
         NetworkMonitor.shared.updateStateForTesting(
             isConnected: true,
@@ -1079,8 +1088,8 @@ final class HealthMonitorServiceTests: XCTestCase {
     func test_healthMonitor_timerScheduling() {
         let service = HealthMonitorService.shared
         service.resetForTesting()
-        let originalState = snapshotNetworkState()
-        defer { restoreNetworkState(originalState) }
+        let originalState = snapshotNetworkState(NetworkMonitor.shared)
+        defer { restoreNetworkState(originalState, monitor: NetworkMonitor.shared) }
 
         service.configure(serverURL: "")
         service.startPolling()
@@ -1093,8 +1102,8 @@ final class HealthMonitorServiceTests: XCTestCase {
     func test_healthMonitor_timerCancellation() {
         let service = HealthMonitorService.shared
         service.resetForTesting()
-        let originalState = snapshotNetworkState()
-        defer { restoreNetworkState(originalState) }
+        let originalState = snapshotNetworkState(NetworkMonitor.shared)
+        defer { restoreNetworkState(originalState, monitor: NetworkMonitor.shared) }
 
         service.configure(serverURL: "")
         service.startPolling()
@@ -1107,8 +1116,8 @@ final class HealthMonitorServiceTests: XCTestCase {
     func test_healthMonitor_statusCallback() async {
         let service = HealthMonitorService.shared
         service.resetForTesting()
-        let originalState = snapshotNetworkState()
-        defer { restoreNetworkState(originalState) }
+        let originalState = snapshotNetworkState(NetworkMonitor.shared)
+        defer { restoreNetworkState(originalState, monitor: NetworkMonitor.shared) }
 
         NetworkMonitor.shared.updateStateForTesting(
             isConnected: true,
@@ -1150,8 +1159,8 @@ final class HealthMonitorServiceTests: XCTestCase {
     func test_healthMonitor_differentEndpoints() async {
         let service = HealthMonitorService.shared
         service.resetForTesting()
-        let originalState = snapshotNetworkState()
-        defer { restoreNetworkState(originalState) }
+        let originalState = snapshotNetworkState(NetworkMonitor.shared)
+        defer { restoreNetworkState(originalState, monitor: NetworkMonitor.shared) }
 
         NetworkMonitor.shared.updateStateForTesting(
             isConnected: true,

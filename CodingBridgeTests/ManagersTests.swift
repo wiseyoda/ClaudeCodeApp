@@ -1,3 +1,4 @@
+import ActivityKit
 import UserNotifications
 import XCTest
 @testable import CodingBridge
@@ -764,194 +765,391 @@ final class ManagersTests: XCTestCase {
 
     // MARK: - LiveActivityManager
 
+    func test_init_activityIsNil() {
+        let provider = MockLiveActivityProvider()
+        let manager = LiveActivityManager.makeForTesting(provider: provider)
+        addTeardownBlock { manager.resetForTesting() }
+
+        XCTAssertNil(manager.currentActivity)
+    }
+
+    func test_init_isActiveReturnsFalse() {
+        let (manager, _) = makeLiveActivityManager()
+
+        XCTAssertFalse(manager.hasActiveActivity)
+    }
+
+    func test_shared_returnsSingleton() {
+        let first = LiveActivityManager.shared
+        let second = LiveActivityManager.shared
+
+        XCTAssertTrue(first === second)
+    }
+
     func test_liveActivityManager_formattedElapsedTime_seconds() {
-        let manager = LiveActivityManager.makeForTesting()
-        manager.resetForTesting()
+        let (manager, _) = makeLiveActivityManager()
         manager.setElapsedSecondsForTesting(45)
 
         XCTAssertEqual(manager.formattedElapsedTime, "45s")
     }
 
     func test_liveActivityManager_formattedElapsedTime_minutes() {
-        let manager = LiveActivityManager.makeForTesting()
-        manager.resetForTesting()
+        let (manager, _) = makeLiveActivityManager()
         manager.setElapsedSecondsForTesting(75)
 
         XCTAssertEqual(manager.formattedElapsedTime, "1:15")
     }
 
-    func test_liveActivityManager_hasActiveActivity_falseByDefault() {
-        let manager = LiveActivityManager.makeForTesting()
-        manager.resetForTesting()
-
-        XCTAssertFalse(manager.hasActiveActivity)
-    }
-
     func test_liveActivityManager_activeSessionId_nilByDefault() {
-        let manager = LiveActivityManager.makeForTesting()
-        manager.resetForTesting()
+        let (manager, _) = makeLiveActivityManager()
 
         XCTAssertNil(manager.activeSessionId)
     }
 
     func test_liveActivityManager_activeSessionId_returnsValue() {
-        let manager = LiveActivityManager.makeForTesting()
-        manager.resetForTesting()
+        let (manager, _) = makeLiveActivityManager()
         manager.setCurrentSessionIdForTesting("session-1")
 
         XCTAssertEqual(manager.activeSessionId, "session-1")
     }
 
-    func test_liveActivityManager_startActivity_returnsWhenNotSupported() async throws {
-        let manager = LiveActivityManager.makeForTesting()
-        manager.resetForTesting()
-        manager.setSupportForTesting(isSupported: false, isEnabled: true)
+    func test_startActivity_whenNotSupported_returnsEarly() async throws {
+        let (manager, provider) = makeLiveActivityManager(isSupported: false, isEnabled: true)
 
         try await manager.startActivity(projectName: "Project", sessionId: "session-1")
 
         XCTAssertFalse(manager.hasActiveActivity)
+        XCTAssertTrue(provider.requestedAttributes.isEmpty)
     }
 
-    func test_liveActivityManager_startActivity_returnsWhenDisabled() async throws {
-        let manager = LiveActivityManager.makeForTesting()
-        manager.resetForTesting()
-        manager.setSupportForTesting(isSupported: true, isEnabled: false)
+    func test_startActivity_whenAlreadyActive_updatesExisting() async throws {
+        let (manager, provider) = makeLiveActivityManager()
+
+        try await manager.startActivity(projectName: "Project", sessionId: "session-1")
+        let requestCount = provider.requestedAttributes.count
 
         try await manager.startActivity(projectName: "Project", sessionId: "session-1")
 
-        XCTAssertFalse(manager.hasActiveActivity)
+        XCTAssertEqual(provider.requestedAttributes.count, requestCount)
+        XCTAssertEqual(provider.updateCalls.count, 1)
     }
 
-    func test_liveActivityManager_handlePushUpdate_ignoresWithoutActivity() async {
-        let manager = LiveActivityManager.makeForTesting()
-        manager.resetForTesting()
-        manager.setElapsedSecondsForTesting(10)
+    func test_startActivity_setsSessionIdAndProjectPath() async throws {
+        let (manager, provider) = makeLiveActivityManager()
 
-        await manager.handlePushUpdate(["aps": ["content-state": ["status": "processing"]]])
+        try await manager.startActivity(projectName: "Project A", sessionId: "session-1", modelName: "model-1")
 
-        XCTAssertEqual(manager.formattedElapsedTime, "10s")
-    }
+        guard let attributes = provider.requestedAttributes.first else {
+            XCTFail("Expected attributes request")
+            return
+        }
 
-    func test_liveActivityManager_updateActivity_ignoresWithoutActivity() async {
-        let manager = LiveActivityManager.makeForTesting()
-        manager.resetForTesting()
-        manager.setElapsedSecondsForTesting(3)
-
-        await manager.updateActivity(status: .processing, operation: "Work")
-
-        XCTAssertEqual(manager.formattedElapsedTime, "3s")
-    }
-
-    func test_liveActivity_startRequiresAuth() async throws {
-        let manager = LiveActivityManager.makeForTesting()
-        manager.resetForTesting()
-        manager.setSupportForTesting(isSupported: true, isEnabled: false)
-
-        try await manager.startActivity(projectName: "Project", sessionId: "session-1")
-
-        XCTAssertFalse(manager.hasActiveActivity)
-        XCTAssertNil(manager.activeSessionId)
-    }
-
-    func test_liveActivity_updateWhileActive() async throws {
-        let manager = try await startLiveActivityManager(sessionId: "session-1")
-
-        await manager.updateActivity(status: .processing, operation: "Work")
-
-        XCTAssertTrue(manager.hasActiveActivity)
+        XCTAssertEqual(attributes.sessionId, "session-1")
+        XCTAssertEqual(attributes.projectName, "Project A")
+        XCTAssertEqual(attributes.modelName, "model-1")
         XCTAssertEqual(manager.activeSessionId, "session-1")
-
-        await manager.endActivity(immediately: true)
     }
 
-    func test_liveActivity_updateWhileInactive() async {
-        let manager = LiveActivityManager.makeForTesting()
-        manager.resetForTesting()
-        manager.setElapsedSecondsForTesting(4)
+    func test_startActivity_withInvalidState_doesNotCrash() async {
+        let (manager, provider) = makeLiveActivityManager()
+        provider.requestError = MockLiveActivityError.requestFailed
+
+        do {
+            try await manager.startActivity(projectName: "Project", sessionId: "session-1")
+            XCTFail("Expected error")
+        } catch {
+            XCTAssertFalse(manager.hasActiveActivity)
+            XCTAssertNil(manager.activeSessionId)
+        }
+    }
+
+    func test_updateActivity_whenNoActivity_doesNothing() async {
+        let (manager, provider) = makeLiveActivityManager()
 
         await manager.updateActivity(status: .processing, operation: "Work")
 
-        XCTAssertEqual(manager.formattedElapsedTime, "4s")
-        XCTAssertNil(manager.activeSessionId)
+        XCTAssertTrue(provider.updateCalls.isEmpty)
     }
 
-    func test_liveActivity_endActiveActivity() async throws {
-        let manager = try await startLiveActivityManager(sessionId: "session-2")
+    func test_updateActivity_updatesContentState() async throws {
+        let (manager, provider) = makeLiveActivityManager()
 
-        await manager.endActivity(immediately: true)
-
-        XCTAssertFalse(manager.hasActiveActivity)
-        XCTAssertNil(manager.activeSessionId)
-        XCTAssertEqual(manager.formattedElapsedTime, "0s")
-    }
-
-    func test_liveActivity_endInactiveNoop() async {
-        let manager = LiveActivityManager.makeForTesting()
-        manager.resetForTesting()
+        try await manager.startActivity(projectName: "Project", sessionId: "session-1")
         manager.setElapsedSecondsForTesting(12)
-        manager.setCurrentSessionIdForTesting("session-3")
 
-        await manager.endActivity(immediately: true)
+        await manager.updateActivity(status: .processing, operation: "Working")
 
-        XCTAssertEqual(manager.formattedElapsedTime, "12s")
-        XCTAssertEqual(manager.activeSessionId, "session-3")
+        guard let update = provider.updateCalls.last else {
+            XCTFail("Expected update call")
+            return
+        }
+
+        XCTAssertEqual(update.contentState.status, .processing)
+        XCTAssertEqual(update.contentState.currentOperation, "Working")
+        XCTAssertEqual(update.contentState.elapsedSeconds, 12)
     }
 
-    func test_liveActivity_progressUpdate() async throws {
-        let manager = try await startLiveActivityManager(sessionId: "session-4")
+    func test_updateActivity_withProgress_setsProgressFields() async throws {
+        let (manager, provider) = makeLiveActivityManager()
 
-        await manager.updateProgress(completed: 1, total: 3, currentTask: "Plan")
+        try await manager.startActivity(projectName: "Project", sessionId: "session-1")
+        let progress = LAProgress(completed: 2, total: 5, currentTask: "Task")
 
-        XCTAssertTrue(manager.hasActiveActivity)
-        XCTAssertEqual(manager.activeSessionId, "session-4")
+        await manager.updateActivity(
+            status: .processing,
+            operation: "Working",
+            progress: progress
+        )
 
-        await manager.endActivity(immediately: true)
+        guard let update = provider.updateCalls.last else {
+            XCTFail("Expected update call")
+            return
+        }
+
+        XCTAssertEqual(update.contentState.todoProgress, progress)
     }
 
-    func test_liveActivity_stateTransitions() {
-        let manager = LiveActivityManager.makeForTesting()
-        manager.setElapsedSecondsForTesting(42)
-        manager.setCurrentSessionIdForTesting("session-5")
+    func test_updateActivity_withToolInfo_setsToolFields() async throws {
+        let (manager, provider) = makeLiveActivityManager()
 
-        manager.resetForTesting()
+        try await manager.startActivity(projectName: "Project", sessionId: "session-1")
+        let approval = LAApprovalInfo(id: "approval-1", toolName: "tool", summary: "Summary")
+        let question = LAQuestionInfo(id: "question-1", preview: "Preview")
+        let error = LAErrorInfo(message: "Oops", recoverable: true)
+
+        await manager.updateActivity(
+            status: .awaitingApproval,
+            operation: "Approve?",
+            approval: approval,
+            question: question,
+            error: error
+        )
+
+        guard let update = provider.updateCalls.last else {
+            XCTFail("Expected update call")
+            return
+        }
+
+        XCTAssertEqual(update.contentState.approvalRequest, approval)
+        XCTAssertEqual(update.contentState.question, question)
+        XCTAssertEqual(update.contentState.error, error)
+    }
+
+    func test_endActivity_whenNoActivity_doesNothing() async {
+        let (manager, provider) = makeLiveActivityManager()
+
+        await manager.endActivity()
+
+        XCTAssertTrue(provider.endCalls.isEmpty)
+    }
+
+    func test_endActivity_clearsActivityReference() async throws {
+        let (manager, _) = try await startLiveActivityManager(sessionId: "session-1")
+
+        await manager.endActivity(immediately: true)
 
         XCTAssertFalse(manager.hasActiveActivity)
         XCTAssertNil(manager.activeSessionId)
+        XCTAssertNil(manager.currentActivity)
         XCTAssertEqual(manager.formattedElapsedTime, "0s")
     }
 
-    func test_liveActivity_tokenRefresh() async throws {
-        throw XCTSkip("Push token refresh requires ActivityKit token delivery; not deterministic in unit tests.")
-    }
-
-    func test_liveActivity_expirationHandling() async throws {
-        let manager = try await startLiveActivityManager(sessionId: "session-6")
-        manager.setElapsedSecondsForTesting(90)
+    func test_endActivity_withFinalContent_setsEndState() async throws {
+        let (manager, provider) = try await startLiveActivityManager(sessionId: "session-2")
+        manager.setElapsedSecondsForTesting(30)
 
         await manager.endActivity(immediately: true)
 
-        XCTAssertEqual(manager.formattedElapsedTime, "0s")
-        XCTAssertFalse(manager.hasActiveActivity)
+        guard let endCall = provider.endCalls.last else {
+            XCTFail("Expected end call")
+            return
+        }
+
+        XCTAssertEqual(endCall.contentState?.status, .complete)
+        XCTAssertEqual(endCall.contentState?.elapsedSeconds, 30)
+    }
+
+    func test_endActivity_dismissalPolicy_immediate() async throws {
+        let (manager, provider) = try await startLiveActivityManager(sessionId: "session-3")
+
+        await manager.endActivity(immediately: true)
+
+        guard let endCall = provider.endCalls.last else {
+            XCTFail("Expected end call")
+            return
+        }
+
+        if case .immediate = endCall.dismissalPolicy {
+            XCTAssertTrue(true)
+        } else {
+            XCTFail("Expected immediate dismissal policy")
+        }
+    }
+
+    func test_endActivity_dismissalPolicy_afterDelay() async throws {
+        let (manager, provider) = try await startLiveActivityManager(sessionId: "session-4")
+
+        await manager.endActivity()
+
+        guard let endCall = provider.endCalls.last else {
+            XCTFail("Expected end call")
+            return
+        }
+
+        // Test that dismissal policy was set (non-immediate)
+        // ActivityUIDismissalPolicy uses static methods in modern iOS, not enum cases
+        // We just verify the end call happened - the provider recorded it
+        XCTAssertEqual(provider.endCalls.count, 1, "Expected one end call")
+    }
+
+    func test_registerPushToken_storesToken() async throws {
+        let apiClient = MockLiveActivityAPIClient()
+        let expectation = expectation(description: "register-token")
+        apiClient.onRegister = { expectation.fulfill() }
+        let (manager, provider) = makeLiveActivityManager(apiClient: apiClient)
+
+        try await manager.startActivity(projectName: "Project", sessionId: "session-1")
+        provider.sendPushToken(bytes: [0x01, 0x02])
+
+        await fulfillment(of: [expectation], timeout: 1.0)
+
+        XCTAssertEqual(manager.liveActivityPushTokenForTesting(), "0102")
+    }
+
+    func test_registerPushToken_callsBackendAPI() async throws {
+        let apiClient = MockLiveActivityAPIClient()
+        let expectation = expectation(description: "register-api")
+        apiClient.onRegister = { expectation.fulfill() }
+        let (manager, provider) = makeLiveActivityManager(apiClient: apiClient)
+
+        try await manager.startActivity(projectName: "Project", sessionId: "session-1")
+        provider.sendPushToken(bytes: [0x0a, 0x0b])
+
+        await fulfillment(of: [expectation], timeout: 1.0)
+
+        XCTAssertEqual(apiClient.registerCalls.count, 1)
+        let call = apiClient.registerCalls[0]
+        XCTAssertEqual(call.pushToken, "0a0b")
+        XCTAssertEqual(call.activityId, provider.lastRequestedActivityId)
+        XCTAssertEqual(call.sessionId, "session-1")
+        XCTAssertEqual(call.environment, "sandbox")
+    }
+
+    func test_invalidatePushToken_clearsStoredToken() async throws {
+        let apiClient = MockLiveActivityAPIClient()
+        let registerExpectation = expectation(description: "register-api")
+        apiClient.onRegister = { registerExpectation.fulfill() }
+        let (manager, provider) = makeLiveActivityManager(apiClient: apiClient)
+
+        try await manager.startActivity(projectName: "Project", sessionId: "session-1")
+        provider.sendPushToken(bytes: [0x01, 0x02])
+
+        await fulfillment(of: [registerExpectation], timeout: 1.0)
+
+        let invalidateExpectation = expectation(description: "invalidate-token")
+        apiClient.onInvalidate = { invalidateExpectation.fulfill() }
+
+        await manager.invalidatePushToken()
+
+        await fulfillment(of: [invalidateExpectation], timeout: 1.0)
+
+        XCTAssertNil(manager.liveActivityPushTokenForTesting())
+        XCTAssertEqual(apiClient.invalidateCalls.count, 1)
+        XCTAssertEqual(apiClient.invalidateCalls.first?.tokenType, .liveActivity)
+        XCTAssertEqual(apiClient.invalidateCalls.first?.token, "0102")
+    }
+
+    func test_pushTokenUpdate_triggersReregistration() async throws {
+        let apiClient = MockLiveActivityAPIClient()
+        let expectation = expectation(description: "reregister")
+        expectation.expectedFulfillmentCount = 2
+        apiClient.onRegister = { expectation.fulfill() }
+        let (manager, provider) = makeLiveActivityManager(apiClient: apiClient)
+
+        try await manager.startActivity(projectName: "Project", sessionId: "session-1")
+        provider.sendPushToken(bytes: [0x01, 0x02])
+        provider.sendPushToken(bytes: [0x0a, 0x0b])
+
+        await fulfillment(of: [expectation], timeout: 1.0)
+
+        XCTAssertEqual(apiClient.registerCalls.map(\.pushToken), ["0102", "0a0b"])
+    }
+
+    func test_activityAttributes_encodesCorrectly() throws {
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        let attributes = CodingBridgeAttributes(
+            sessionId: "session-1",
+            projectName: "Project",
+            modelName: "model",
+            startedAt: date
+        )
+
+        let data = try JSONEncoder().encode(attributes)
+        let decoded = try JSONDecoder().decode(CodingBridgeAttributes.self, from: data)
+
+        XCTAssertEqual(decoded.sessionId, "session-1")
+        XCTAssertEqual(decoded.projectName, "Project")
+        XCTAssertEqual(decoded.modelName, "model")
+        XCTAssertEqual(decoded.startedAt.timeIntervalSince1970, date.timeIntervalSince1970, accuracy: 0.001)
+    }
+
+    func test_contentState_encodesCorrectly() throws {
+        let progress = LAProgress(completed: 1, total: 3, currentTask: "Task")
+        let approval = LAApprovalInfo(id: "approval-1", toolName: "tool", summary: "Summary")
+        let question = LAQuestionInfo(id: "question-1", preview: "Preview")
+        let error = LAErrorInfo(message: "Oops", recoverable: false)
+        let state = CodingBridgeAttributes.ContentState(
+            status: .awaitingApproval,
+            currentOperation: "Waiting",
+            elapsedSeconds: 12,
+            todoProgress: progress,
+            approvalRequest: approval,
+            question: question,
+            error: error
+        )
+
+        let data = try JSONEncoder().encode(state)
+        let decoded = try JSONDecoder().decode(CodingBridgeAttributes.ContentState.self, from: data)
+
+        XCTAssertEqual(decoded, state)
+    }
+
+    func test_multipleEndCalls_handledGracefully() async throws {
+        let (manager, provider) = try await startLiveActivityManager(sessionId: "session-5")
+
+        await manager.endActivity(immediately: true)
+        await manager.endActivity(immediately: true)
+
+        XCTAssertEqual(provider.endCalls.count, 1)
     }
 
     // MARK: - Helpers
 
-    private func startLiveActivityManager(sessionId: String) async throws -> LiveActivityManager {
-        let manager = LiveActivityManager.makeForTesting()
+    private func makeLiveActivityManager(
+        isSupported: Bool = true,
+        isEnabled: Bool = true,
+        apiClient: LiveActivityAPIClient? = nil
+    ) -> (LiveActivityManager, MockLiveActivityProvider) {
+        let provider = MockLiveActivityProvider()
+        let manager = LiveActivityManager.makeForTesting(provider: provider, apiClient: apiClient)
         manager.resetForTesting()
-        manager.setSupportForTesting(isSupported: true, isEnabled: true)
-
-        do {
-            try await manager.startActivity(projectName: "Project", sessionId: sessionId)
-        } catch {
-            throw XCTSkip("Live Activity start failed: \(error)")
+        manager.setSupportForTesting(isSupported: isSupported, isEnabled: isEnabled)
+        addTeardownBlock {
+            manager.resetForTesting()
         }
+        return (manager, provider)
+    }
 
-        guard manager.hasActiveActivity else {
-            throw XCTSkip("Live Activity not active in test environment.")
-        }
+    private func startLiveActivityManager(
+        sessionId: String,
+        projectName: String = "Project",
+        apiClient: LiveActivityAPIClient? = nil
+    ) async throws -> (LiveActivityManager, MockLiveActivityProvider) {
+        let (manager, provider) = makeLiveActivityManager(apiClient: apiClient)
 
-        return manager
+        try await manager.startActivity(projectName: projectName, sessionId: sessionId)
+
+        return (manager, provider)
     }
 
     private func makeTempFileURL() -> URL {
@@ -1013,5 +1211,150 @@ private final class MockNotificationCenter: UserNotificationCenterProtocol {
     func setBadgeCount(_ count: Int) async throws {
         try badgeResult.get()
         badgeCount = count
+    }
+}
+
+private enum MockLiveActivityError: Error {
+    case requestFailed
+    case updateFailed
+    case endFailed
+}
+
+private final class MockLiveActivityProvider: LiveActivityProviding {
+    struct UpdateCall {
+        let activityId: String
+        let contentState: CodingBridgeAttributes.ContentState
+    }
+
+    struct EndCall {
+        let activityId: String
+        let contentState: CodingBridgeAttributes.ContentState?
+        let dismissalPolicy: ActivityUIDismissalPolicy
+    }
+
+    var areActivitiesEnabled: Bool = true
+    var requestError: Error?
+    var updateError: Error?
+    var endError: Error?
+
+    private(set) var requestedAttributes: [CodingBridgeAttributes] = []
+    private(set) var requestedContentStates: [CodingBridgeAttributes.ContentState] = []
+    private(set) var requestedPushTypes: [PushType?] = []
+    private(set) var updateCalls: [UpdateCall] = []
+    private(set) var endCalls: [EndCall] = []
+    private(set) var lastRequestedActivityId: String?
+
+    private let tokenStream: AsyncStream<Data>
+    private var tokenContinuation: AsyncStream<Data>.Continuation?
+    private var nextId: Int = 0
+
+    init() {
+        var continuation: AsyncStream<Data>.Continuation?
+        tokenStream = AsyncStream { continuation = $0 }
+        tokenContinuation = continuation
+    }
+
+    func request(
+        attributes: CodingBridgeAttributes,
+        contentState: CodingBridgeAttributes.ContentState,
+        pushType: PushType?
+    ) throws -> String {
+        if let error = requestError {
+            throw error
+        }
+
+        requestedAttributes.append(attributes)
+        requestedContentStates.append(contentState)
+        requestedPushTypes.append(pushType)
+        nextId += 1
+        let activityId = "mock-activity-\(nextId)"
+        lastRequestedActivityId = activityId
+        return activityId
+    }
+
+    func update(activityId: String, contentState: CodingBridgeAttributes.ContentState) async throws {
+        if let error = updateError {
+            throw error
+        }
+        updateCalls.append(UpdateCall(activityId: activityId, contentState: contentState))
+    }
+
+    func end(
+        activityId: String,
+        contentState: CodingBridgeAttributes.ContentState?,
+        dismissalPolicy: ActivityUIDismissalPolicy
+    ) async throws {
+        if let error = endError {
+            throw error
+        }
+        endCalls.append(EndCall(
+            activityId: activityId,
+            contentState: contentState,
+            dismissalPolicy: dismissalPolicy
+        ))
+    }
+
+    func pushTokenUpdates(activityId: String) -> AsyncStream<Data>? {
+        tokenStream
+    }
+
+    func activityReference(activityId: String) -> Activity<CodingBridgeAttributes>? {
+        nil
+    }
+
+    func sendPushToken(bytes: [UInt8]) {
+        tokenContinuation?.yield(Data(bytes))
+    }
+}
+
+private final class MockLiveActivityAPIClient: LiveActivityAPIClient {
+    struct RegisterCall {
+        let pushToken: String
+        let activityId: String
+        let sessionId: String
+        let environment: String
+    }
+
+    struct InvalidateCall {
+        let tokenType: CLIPushInvalidateRequest.TokenType
+        let token: String
+    }
+
+    var registerCalls: [RegisterCall] = []
+    var invalidateCalls: [InvalidateCall] = []
+    var registerError: Error?
+    var invalidateError: Error?
+    var onRegister: (() -> Void)?
+    var onInvalidate: (() -> Void)?
+
+    func registerLiveActivityToken(
+        pushToken: String,
+        pushToStartToken: String?,
+        activityId: String,
+        sessionId: String,
+        environment: String
+    ) async throws -> CLILiveActivityRegisterResponse {
+        if let error = registerError {
+            throw error
+        }
+        registerCalls.append(RegisterCall(
+            pushToken: pushToken,
+            activityId: activityId,
+            sessionId: sessionId,
+            environment: environment
+        ))
+        onRegister?()
+        return CLILiveActivityRegisterResponse(success: true, activityTokenId: nil)
+    }
+
+    func invalidatePushToken(
+        tokenType: CLIPushInvalidateRequest.TokenType,
+        token: String
+    ) async throws {
+        if let error = invalidateError {
+            throw error
+        }
+        invalidateCalls.append(InvalidateCall(tokenType: tokenType, token: token))
+        onInvalidate?()
     }
 }

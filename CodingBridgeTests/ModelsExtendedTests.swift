@@ -541,7 +541,15 @@ final class ModelsExtendedTests: XCTestCase {
         waitForFileOperations(delay: 0.3)
 
         let loaded = await MessageStore.loadMessages(for: testProjectPath)
-        XCTAssertEqual(loaded.first?.imageData, imageData)
+        // MessageStore uses lazy loading - imagePath is set instead of imageData
+        XCTAssertNotNil(loaded.first?.imagePath, "Image path should be set for lazy loading")
+        // Verify the file exists and contains the correct data
+        guard let path = loaded.first?.imagePath else {
+            XCTFail("Image path should not be nil")
+            return
+        }
+        let loadedImageData = try? Data(contentsOf: URL(fileURLWithPath: path))
+        XCTAssertEqual(loadedImageData, imageData)
     }
 
     func test_messageStore_clearMessages_removesProjectDirectory() async {

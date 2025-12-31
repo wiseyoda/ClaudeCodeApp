@@ -24,6 +24,36 @@ private func escapeCommandForBash(_ command: String) -> String {
     return command.replacingOccurrences(of: "'", with: "'\\''")
 }
 
+private func normalizeHomePath(_ path: String) -> String {
+    if path == "~" {
+        return "$HOME"
+    }
+    if path.hasPrefix("~/") {
+        return "$HOME" + String(path.dropFirst())
+    }
+    return path
+}
+
+private func escapeForDoubleQuotes(_ value: String) -> String {
+    let placeholder = "__HOME_PLACEHOLDER__"
+    var escaped = value.replacingOccurrences(of: "$HOME", with: placeholder)
+    escaped = escaped.replacingOccurrences(of: "\\", with: "\\\\")
+    escaped = escaped.replacingOccurrences(of: "\"", with: "\\\"")
+    escaped = escaped.replacingOccurrences(of: "`", with: "\\`")
+    escaped = escaped.replacingOccurrences(of: "$", with: "\\$")
+    escaped = escaped.replacingOccurrences(of: placeholder, with: "$HOME")
+    return escaped
+}
+
+/// Escape a path for safe use in shell commands, expanding ~ to $HOME with double quotes.
+func shellEscapePath(_ path: String) -> String {
+    let normalized = normalizeHomePath(path)
+    if normalized.contains("$HOME") {
+        return "\"\(escapeForDoubleQuotes(normalized))\""
+    }
+    return shellEscape(normalized)
+}
+
 
 // MARK: - SSH Error
 
@@ -74,6 +104,87 @@ struct SSHConfigEntry {
     var identityFile: String?
 }
 
+struct SSHCommandResult: Equatable {
+    let output: String
+    let exitCode: Int32
+}
+
+enum SSHCommandStreamOutput {
+    case stdout(ByteBuffer)
+    case stderr(ByteBuffer)
+}
+
+protocol SSHClientProtocol: AnyObject {
+    func execute(_ command: String) async throws -> SSHCommandResult
+    func executeCommandStream(_ command: String) async throws -> AsyncThrowingStream<SSHCommandStreamOutput, Error>
+    func disconnect() async throws
+}
+
+protocol SSHClientFactory {
+    func connect(
+        host: String,
+        port: Int,
+        authenticationMethod: SSHAuthenticationMethod,
+        hostKeyValidator: NIOSSHClientServerAuthenticationDelegate
+    ) async throws -> SSHClientProtocol
+}
+
+final class CitadelSSHClientAdapter: SSHClientProtocol {
+    private let client: SSHClient
+
+    init(client: SSHClient) {
+        self.client = client
+    }
+
+    func execute(_ command: String) async throws -> SSHCommandResult {
+        let result = try await client.executeCommand(command)
+        return SSHCommandResult(output: String(buffer: result), exitCode: 0)
+    }
+
+    func executeCommandStream(_ command: String) async throws -> AsyncThrowingStream<SSHCommandStreamOutput, Error> {
+        let stream = try await client.executeCommandStream(command)
+        return AsyncThrowingStream { continuation in
+            Task {
+                do {
+                    for try await output in stream {
+                        switch output {
+                        case .stdout(let buffer):
+                            continuation.yield(.stdout(buffer))
+                        case .stderr(let buffer):
+                            continuation.yield(.stderr(buffer))
+                        }
+                    }
+                    continuation.finish()
+                } catch {
+                    continuation.finish(throwing: error)
+                }
+            }
+        }
+    }
+
+    func disconnect() async throws {
+        try await client.close()
+    }
+}
+
+struct CitadelSSHClientFactory: SSHClientFactory {
+    func connect(
+        host: String,
+        port: Int,
+        authenticationMethod: SSHAuthenticationMethod,
+        hostKeyValidator: NIOSSHClientServerAuthenticationDelegate
+    ) async throws -> SSHClientProtocol {
+        let client = try await SSHClient.connect(
+            host: host,
+            port: port,
+            authenticationMethod: authenticationMethod,
+            hostKeyValidator: SSHHostKeyValidator.custom(hostKeyValidator),
+            reconnect: .never
+        )
+        return CitadelSSHClientAdapter(client: client)
+    }
+}
+
 @MainActor
 class SSHManager: ObservableObject {
     /// Shared singleton instance - use this instead of creating new instances
@@ -85,7 +196,8 @@ class SSHManager: ObservableObject {
     @Published var lastError: String?
     @Published var availableHosts: [SSHConfigEntry] = []
 
-    private var client: SSHClient?
+    private let clientFactory: SSHClientFactory
+    private var client: SSHClientProtocol?
     private var disconnectTask: Task<Void, Never>?
 
     var host: String = ""
@@ -93,9 +205,21 @@ class SSHManager: ObservableObject {
     var username: String = ""
     var currentDirectory: String = "~"  // Track working directory
 
-    init() {
-        loadSSHConfig()
+    init(clientFactory: SSHClientFactory = CitadelSSHClientFactory(), loadConfig: Bool = true) {
+        self.clientFactory = clientFactory
+        if loadConfig {
+            loadSSHConfig()
+        }
     }
+
+#if DEBUG
+    static func makeForTesting(client: SSHClientProtocol, isConnected: Bool = true) -> SSHManager {
+        let manager = SSHManager(clientFactory: CitadelSSHClientFactory(), loadConfig: false)
+        manager.client = client
+        manager.isConnected = isConnected
+        return manager
+    }
+#endif
 
     deinit {
         // Cancel any pending disconnect task
@@ -105,7 +229,7 @@ class SSHManager: ObservableObject {
         // We need to capture client before it's deallocated and close it in a detached task
         if let clientToClose = client {
             Task.detached {
-                try? await clientToClose.close()
+                try? await clientToClose.disconnect()
             }
         }
     }
@@ -372,12 +496,11 @@ class SSHManager: ObservableObject {
             let tofuValidator = TOFUHostKeyValidator(host: host, port: port)
             let connectStart = CFAbsoluteTimeGetCurrent()
             log.info("[SSH] Starting SSHClient.connect()...")
-            let client = try await SSHClient.connect(
+            let client = try await clientFactory.connect(
                 host: host,
                 port: port,
                 authenticationMethod: authMethod,
-                hostKeyValidator: tofuValidator.validator(),
-                reconnect: .never
+                hostKeyValidator: tofuValidator
             )
             log.info("[SSH] SSHClient.connect() took \(String(format: "%.2f", (CFAbsoluteTimeGetCurrent() - connectStart) * 1000))ms")
 
@@ -416,12 +539,11 @@ class SSHManager: ObservableObject {
         do {
             // Connect with password authentication using TOFU host key validation
             let tofuValidator = TOFUHostKeyValidator(host: host, port: port)
-            let client = try await SSHClient.connect(
+            let client = try await clientFactory.connect(
                 host: host,
                 port: port,
                 authenticationMethod: .passwordBased(username: username, password: password),
-                hostKeyValidator: tofuValidator.validator(),
-                reconnect: .never
+                hostKeyValidator: tofuValidator
             )
 
             self.client = client
@@ -430,6 +552,12 @@ class SSHManager: ObservableObject {
             currentDirectory = "~"  // Reset to home on new connection
             output += "Connected! Type commands below.\n\n"
 
+        } catch let error as SSHError {
+            isConnecting = false
+            isConnected = false
+            lastError = error.localizedDescription
+            output += "Error: \(error.localizedDescription)\n"
+            throw error
         } catch {
             isConnecting = false
             isConnected = false
@@ -446,7 +574,7 @@ class SSHManager: ObservableObject {
         // Store the task to prevent it from becoming dangling
         let clientToClose = client
         disconnectTask = Task {
-            try? await clientToClose?.close()
+            try? await clientToClose?.disconnect()
         }
 
         client = nil
@@ -467,7 +595,7 @@ class SSHManager: ObservableObject {
                 // Execute command and get streaming output
                 let stream = try await client.executeCommandStream(actualCommand)
 
-                // Process the stream - ExecCommandOutput has stdout/stderr ByteBuffers
+                // Process the stream output - stdout/stderr ByteBuffers
                 for try await output in stream {
                     let text: String
                     switch output {
@@ -546,7 +674,7 @@ class SSHManager: ObservableObject {
         let escapedRemotePathB64 = shellEscape("\(remotePath).b64")
 
         // Ensure the directory exists
-        _ = try? await client.executeCommand("mkdir -p \(escapedRemoteDir)")
+        _ = try? await client.execute("mkdir -p \(escapedRemoteDir)")
 
         // Convert image to base64 (no line wrapping)
         let base64String = imageData.base64EncodedString()
@@ -569,7 +697,7 @@ class SSHManager: ObservableObject {
             let redirect = isFirst ? ">" : ">>"
             let cmd = "printf '%s' '\(chunk)' \(redirect) \(escapedRemotePathB64)"
 
-            _ = try await client.executeCommand(cmd)
+            _ = try await client.execute(cmd)
             offset = endOffset
             isFirst = false
         }
@@ -577,11 +705,11 @@ class SSHManager: ObservableObject {
         // Decode the base64 file to the actual image
         // Use -d for standard base64 decode
         let decodeCmd = "base64 -d \(escapedRemotePathB64) > \(escapedRemotePath) && rm \(escapedRemotePathB64)"
-        _ = try await client.executeCommand(decodeCmd)
+        _ = try await client.execute(decodeCmd)
 
         // Verify the file was created and has content
         let verifyCmd = "stat -c '%s' \(escapedRemotePath) 2>/dev/null || stat -f '%z' \(escapedRemotePath) 2>/dev/null"
-        _ = try await client.executeCommand(verifyCmd)
+        _ = try await client.execute(verifyCmd)
 
         return remotePath
     }
@@ -592,22 +720,27 @@ class SSHManager: ObservableObject {
     /// - Parameter command: The command to execute
     /// - Returns: The command output as a string
     func executeCommand(_ command: String) async throws -> String {
+        let result = try await executeCommandWithExitCode(command)
+        return result.output
+    }
+
+    /// Execute a command and return output plus exit code
+    func executeCommandWithExitCode(_ command: String) async throws -> SSHCommandResult {
         guard let client = client, isConnected else {
             throw SSHError.notConnected
         }
 
-        let result = try await client.executeCommand(command)
-        return String(buffer: result)
+        return try await client.execute(command)
     }
 
     /// Execute a command with a timeout
     /// - Parameters:
     ///   - command: The command to execute
     ///   - timeoutSeconds: Maximum time to wait for completion
-    /// - Returns: The command output as a string, or nil if timed out
-    func executeCommandWithTimeout(_ command: String, timeoutSeconds: Int) async -> String? {
+    /// - Returns: The command output as a string
+    func executeCommandWithTimeout(_ command: String, timeoutSeconds: Int) async throws -> String {
         guard let client = client, isConnected else {
-            return nil
+            throw SSHError.notConnected
         }
 
         // Escape the command for safe execution within bash -c
@@ -616,16 +749,11 @@ class SSHManager: ObservableObject {
         // Use 'timeout' command if available, otherwise use shell background trick
         let wrappedCommand = "timeout \(timeoutSeconds)s bash -c '\(escapedCommand)' 2>&1 || echo '[TIMEOUT]'"
 
-        do {
-            let result = try await client.executeCommand(wrappedCommand)
-            let output = String(buffer: result)
-            if output.contains("[TIMEOUT]") {
-                return nil
-            }
-            return output
-        } catch {
-            return nil
+        let result = try await client.execute(wrappedCommand)
+        if result.output.contains("[TIMEOUT]") {
+            throw SSHError.timeout
         }
+        return result.output
     }
 
     /// Execute a command with auto-connect
@@ -756,9 +884,9 @@ class SSHManager: ObservableObject {
 
         // Use ls -la with specific format for parsing
         // -A shows hidden files except . and ..
-        let cmd = "ls -laF \(shellEscape(path)) 2>/dev/null | tail -n +2"
-        let result = try await client.executeCommand(cmd)
-        let output = String(buffer: result)
+        let cmd = "ls -laF \(shellEscapePath(path)) 2>/dev/null | tail -n +2"
+        let result = try await client.execute(cmd)
+        let output = result.output
 
         var entries: [FileEntry] = []
         for line in output.components(separatedBy: "\n") {
@@ -785,9 +913,9 @@ class SSHManager: ObservableObject {
             throw SSHError.notConnected
         }
 
-        let cmd = "cd \(shellEscape(path)) && git rev-parse --is-inside-work-tree 2>/dev/null"
-        let result = try await client.executeCommand(cmd)
-        let output = String(buffer: result).trimmingCharacters(in: .whitespacesAndNewlines)
+        let cmd = "cd \(shellEscapePath(path)) && git rev-parse --is-inside-work-tree 2>/dev/null"
+        let result = try await client.execute(cmd)
+        let output = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
         return output == "true"
     }
 
@@ -840,25 +968,25 @@ class SSHManager: ObservableObject {
 
         // First check if it's a git repo
         // Use `|| echo "false"` to ensure command succeeds even if not a git repo
-        let escapedPath = shellEscape(path)
+        let escapedPath = shellEscapePath(path)
         let isGitCmd = "cd \(escapedPath) && git rev-parse --is-inside-work-tree 2>/dev/null || echo 'false'"
-        let isGitResult = try await client.executeCommand(isGitCmd)
-        let isGitOutput = String(buffer: isGitResult)
+        let isGitResult = try await client.execute(isGitCmd)
+        let isGitOutput = isGitResult.output
 
         // Check for uncommitted changes (including untracked files)
         // Use `|| true` to ensure command succeeds even on git errors
         let statusCmd = "cd \(escapedPath) && git status --porcelain 2>/dev/null || true"
-        let statusResult = try await client.executeCommand(statusCmd)
-        let statusOutput = String(buffer: statusResult)
+        let statusResult = try await client.execute(statusCmd)
+        let statusOutput = statusResult.output
 
         // Fetch remote to get accurate ahead/behind (non-blocking, with timeout)
-        _ = try? await client.executeCommand("cd \(escapedPath) && timeout 5s git fetch --quiet 2>/dev/null || true")
+        _ = try? await client.execute("cd \(escapedPath) && timeout 5s git fetch --quiet 2>/dev/null || true")
 
         // Check ahead/behind status relative to upstream
         // Use `|| echo ""` to handle repos without upstream configured (returns empty string)
         let revListCmd = "cd \(escapedPath) && git rev-list --left-right --count HEAD...@{upstream} 2>/dev/null || echo ''"
-        let revListResult = try await client.executeCommand(revListCmd)
-        let revListOutput = String(buffer: revListResult)
+        let revListResult = try await client.execute(revListCmd)
+        let revListOutput = revListResult.output
 
         return Self.parseGitStatus(
             isGitResult: isGitOutput,
@@ -900,9 +1028,9 @@ class SSHManager: ObservableObject {
             throw SSHError.notConnected
         }
 
-        let cmd = "cd \(shellEscape(path)) && git pull --ff-only 2>&1"
-        let result = try await client.executeCommand(cmd)
-        let output = String(buffer: result).trimmingCharacters(in: .whitespacesAndNewlines)
+        let cmd = "cd \(shellEscapePath(path)) && git pull --ff-only 2>&1"
+        let result = try await client.execute(cmd)
+        let output = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
 
         // Check for success indicators
         if output.contains("Already up to date") || output.contains("Fast-forward") {
@@ -939,7 +1067,7 @@ class SSHManager: ObservableObject {
         }
 
         // Get a summary of changes: modified files, untracked files, staged changes
-        let escapedPath = shellEscape(path)
+        let escapedPath = shellEscapePath(path)
         let cmd = """
         cd \(escapedPath) && echo "=== Git Status ===" && git status --short && \
         echo "" && echo "=== Recent Commits (unpushed) ===" && \
@@ -947,8 +1075,8 @@ class SSHManager: ObservableObject {
         echo "" && echo "=== Diff Stats ===" && git diff --stat 2>/dev/null
         """
 
-        let result = try await client.executeCommand(cmd)
-        return String(buffer: result)
+        let result = try await client.execute(cmd)
+        return result.output
     }
 
     // MARK: - Multi-Repo Discovery
@@ -964,7 +1092,7 @@ class SSHManager: ObservableObject {
             throw SSHError.notConnected
         }
 
-        let escapedPath = shellEscape(basePath)
+        let escapedPath = shellEscapePath(basePath)
 
         // Use find to locate .git entries, then extract parent paths
         // -mindepth 2 excludes the root .git folder (depth 1 would be ./.git)
@@ -978,8 +1106,8 @@ class SSHManager: ObservableObject {
         sort
         """
 
-        let result = try await client.executeCommand(cmd)
-        let output = String(buffer: result).trimmingCharacters(in: .whitespacesAndNewlines)
+        let result = try await client.execute(cmd)
+        let output = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !output.isEmpty else {
             return []
@@ -1084,6 +1212,31 @@ class SSHManager: ObservableObject {
         return try await listFiles(path)
     }
 
+    // MARK: - File Writing
+
+    /// Write content to a remote file
+    func writeFile(_ path: String, contents: String) async throws {
+        guard let client = client, isConnected else {
+            throw SSHError.notConnected
+        }
+
+        let escapedPath = shellEscapePath(path)
+        let escapedContents = shellEscape(contents)
+        let cmd = "printf %s \(escapedContents) > \(escapedPath)"
+        _ = try await client.execute(cmd)
+    }
+
+    /// Delete a remote file
+    func deleteFile(_ path: String) async throws {
+        guard let client = client, isConnected else {
+            throw SSHError.notConnected
+        }
+
+        let escapedPath = shellEscapePath(path)
+        let cmd = "rm -f \(escapedPath)"
+        _ = try await client.execute(cmd)
+    }
+
     // MARK: - File Reading
 
     /// Read a remote file and return its contents as a string
@@ -1095,9 +1248,9 @@ class SSHManager: ObservableObject {
         }
 
         // Use cat to read the file
-        let cmd = "cat \(shellEscape(path))"
-        let result = try await client.executeCommand(cmd)
-        return String(buffer: result)
+        let cmd = "cat \(shellEscapePath(path))"
+        let result = try await client.execute(cmd)
+        return result.output
     }
 
     /// Read a remote file and return its contents, connecting first if needed

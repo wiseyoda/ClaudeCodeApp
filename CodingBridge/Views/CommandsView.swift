@@ -4,7 +4,7 @@ import SwiftUI
 
 /// Main view showing all command categories
 struct CommandsView: View {
-    @ObservedObject var commandStore: CommandStore
+    var commandStore: CommandStore  // @Observable classes don't need @ObservedObject
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.dismiss) var dismiss
@@ -182,7 +182,7 @@ struct CategoryRow: View {
 
 struct CommandListView: View {
     let category: String
-    @ObservedObject var commandStore: CommandStore
+    var commandStore: CommandStore  // @Observable classes don't need @ObservedObject
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
 
@@ -303,7 +303,7 @@ struct CommandRow: View {
 // MARK: - Command Editor Sheet
 
 struct CommandEditorSheet: View {
-    @ObservedObject var commandStore: CommandStore
+    var commandStore: CommandStore  // @Observable classes don't need @ObservedObject
     var editingCommand: SavedCommand?
     var initialCategory: String?
 

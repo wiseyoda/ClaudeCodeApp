@@ -66,6 +66,8 @@ struct ProjectCard: View {
             }
             .padding(12)
             .frame(maxWidth: .infinity, minHeight: 100, alignment: .topLeading)
+            // Ensure entire card area responds to taps (not just the text)
+            .contentShape(Rectangle())
         }
         .buttonStyle(ProjectCardButtonStyle())
         .glassBackground(cornerRadius: 16, isInteractive: true)

@@ -4,7 +4,7 @@ import SwiftUI
 
 /// A sheet for selecting saved commands to insert into chat
 struct CommandPickerSheet: View {
-    @ObservedObject var commandStore: CommandStore
+    var commandStore: CommandStore  // @Observable classes don't need @ObservedObject
     let onSelect: (SavedCommand) -> Void
 
     @Environment(\.dismiss) var dismiss

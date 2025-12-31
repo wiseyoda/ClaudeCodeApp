@@ -13,12 +13,34 @@
 | 1 | Security Hardening | Critical | Complete |
 | 2 | Data Correctness | High | Complete |
 | 3 | Stability & Thread Safety | High | Complete |
-| 4 | Architecture Refactoring | Medium | In Progress |
-| 5 | Performance & Polish | Medium | Partial |
-| 6 | iOS 26 Adoption | Medium | Pending |
-| 7 | Test Coverage | Ongoing | Pending |
+| 4 | Architecture Refactoring | Medium | Complete |
+| 5 | Performance & Polish | Medium | Complete |
+| 6 | iOS 26 Adoption | Medium | Complete |
+| 7 | Test Coverage | Ongoing | In Progress |
 
 ---
+
+## Completed: v0.6.5 Session Management Enhancements
+
+- Session search with debounced full-text search and match snippets
+- Session archive/unarchive with soft delete and recovery
+- Session count API with user/agent/helper breakdown
+- Bulk session operations (archive, unarchive, delete, update)
+- Session lineage tracking (parent-child relationships)
+- Extended `CLISessionMetadata` with `archivedAt` and `parentSessionId`
+- `SessionRepository` protocol extended with 5 new methods
+
+## Completed: v0.6.4 Cache-First Startup
+
+- Extended `ProjectCache` with session counts and recent sessions caching
+- UI renders from cache in <1ms, background tasks refresh data without blocking
+- Fixed project card title priority, context menu animation, and settings decoder
+
+## Completed: v0.6.3 ChatViewModel Extraction
+
+- `ChatView.swift` reduced from 2288 to 695 lines (70% reduction)
+- Comprehensive keyboard lag elimination
+- Static shared formatters, optimized message onChange
 
 ## Completed: v0.6.0 cli-bridge Migration
 
@@ -91,7 +113,7 @@ Connection state handled via `ConnectionState` enum with clear transitions.
 
 ## Phase 4: Architecture Refactoring
 
-> **Priority**: Medium
+> **Priority**: Medium | **Status**: Complete
 
 ### 4.1 ChatView Decomposition
 ~~ChatView has 25+ @State properties and ~1968 lines.~~
@@ -99,16 +121,16 @@ Connection state handled via `ConnectionState` enum with clear transitions.
 | Task | Files | Status |
 |------|-------|--------|
 | Extract ChatViewModel | `ChatViewModel.swift` | Complete - 2288→695 lines (70% reduction) |
-| Extract ChatSearchView | `ChatView.swift` | Pending - search UI in ChatView |
-| Extract ChatToolbar | `ChatView.swift` | Pending - toolbar in ChatView |
-| Extract GitStatusCoordinator | `ChatViewModel.swift` | Complete - git logic in ViewModel |
+| Extract ChatSearchView | `SearchFilterViews.swift` | Complete - ChatSearchBar, FilterChip, SearchResultCount |
+| Extract ChatToolbar | `ChatToolbar.swift` | Complete - ChatTitleView, ChatToolbarActions |
+| Extract GitStatusCoordinator | `GitStatusCoordinator.swift` | Complete - git status coordination |
 
 ### 4.2 Large File Splits
 
-| Task | File | Lines | Extract To |
-|------|------|-------|------------|
-| Split CLIMessageView | `CLIMessageView.swift` | 692 | ToolUseView, ToolResultView, MessageActionBar |
-| Split ContentView | `ContentView.swift` | ~1000 | ProjectListView, SearchCoordinator |
+| Task | File | Lines | Extract To | Status |
+|------|------|-------|------------|--------|
+| Split CLIMessageView | `CLIMessageView.swift` | 1174→654 | ToolParser.swift, ToolContentView.swift | Complete (44% reduction) |
+| Split ContentView | `ContentView.swift` | ~1080→591 | GitStatusCoordinator.swift, ProjectSidebarContent.swift | Complete (45% reduction) |
 
 ### 4.3 Error Handling Standardization
 
@@ -118,18 +140,26 @@ Connection state handled via `ConnectionState` enum with clear transitions.
 | `throws` | Recoverable errors for callers |
 | `log.error()` | Debug/diagnostic only |
 
+| Task | File | Status |
+|------|------|--------|
+| ErrorStore + ErrorBanner infrastructure | `ErrorStore.swift`, `ErrorBanner.swift` | Complete |
+| AppError enum with icons/recovery | `AppError.swift` | Complete |
+| ConnectionError → AppError mapping | `ChatViewModel.swift` | Complete - `mapConnectionError()` |
+| Post connection errors to ErrorStore | `ChatViewModel.swift` | Complete - `onConnectionError` handler |
+| SSH errors follow throws pattern | `SSHManager.swift` | Complete - Errors thrown to callers |
+
 ---
 
 ## Phase 5: Performance & Polish
 
-> **Priority**: Medium | **Status**: Partially Complete
+> **Priority**: Medium | **Status**: Complete
 
 ### 5.1 Remaining Performance Items
 
 | Task | File | Status |
 |------|------|--------|
-| Async message loading | `Models.swift` | Pending |
-| Lazy image loading | `Models.swift` | Pending |
+| Async message loading | `Models.swift` | Complete - Uses `withCheckedContinuation` on fileQueue |
+| Lazy image loading | `Models.swift`, `CLIMessageView.swift` | Complete - `LazyMessageImage` loads on scroll |
 | Message array pruning | `ChatViewModel.swift` | Complete - Prunes during streaming to historyLimit |
 | Display cache optimization | `ChatViewModel.swift` | Complete - Cached groupedDisplayItems |
 | Avoid nested ObservableObject | `ChatViewModel.swift` | Complete - WebSocket state accessors |
@@ -147,7 +177,7 @@ Connection state handled via `ConnectionState` enum with clear transitions.
 
 | Task | Location | Status |
 |------|----------|--------|
-| Validate slash commands | ChatView | Pending - Sanitize /resume, /model input |
+| Validate slash commands | ChatViewModel | Complete - `/model` validates model names, `/resume` validates UUID format |
 | Validate session IDs | API sends | Complete - UUID validation |
 
 ### 5.3 Accessibility
@@ -166,16 +196,16 @@ Connection state handled via `ConnectionState` enum with clear transitions.
 
 ---
 
-## Phase 6: iOS 26 Adoption
+## Completed: v0.6.6 iOS 26 Adoption
 
-> **Priority**: Medium | **Environment**: Xcode 26.2 / iOS 26.2
+iOS 26 SwiftUI features adopted for improved performance and modern design:
 
-| Task | Files | Action |
-|------|-------|--------|
-| @IncrementalState | ChatView, CommandStore, IdeasStore, DebugLogStore | Replace @State arrays for list performance |
-| .incrementalID() | List item views | Add to ForEach items |
-| ToolbarSpacer | Various | Adopt new spacing API |
-| TextEditor + AttributedString | CLIInputView | Rich text editing |
+- Migrated CommandStore, IdeasStore, DebugLogStore to `@Observable` with `@IncrementalState`
+- Added `.incrementalID()` to ForEach views for fine-grained list updates
+- Adopted `ToolbarSpacer` for Liquid Glass toolbar design in ContentView (iPad)
+- Implemented rich text input with `TextEditor` + `AttributedString` in CLIInputView
+  - Syntax highlighting for @file references, inline code, and slash commands
+  - Bidirectional sync between AttributedString and plain text binding
 
 ---
 
@@ -210,9 +240,9 @@ xcodebuild test -project CodingBridge.xcodeproj \
 |------|--------|------------------|
 | `CLIMessageView.swift` | 0 | Size (700+ lines) - extension labels complete |
 | `CLIBridgeAPIClient.swift` | 0 | URL encoding complete, retry loop complete |
-| `ChatView.swift` | 1 | @State sprawl, size - accessibility complete |
+| `ChatView.swift` | 0 | @State sprawl addressed via ChatViewModel extraction |
 | `CLIBridgeManager.swift` | 0 | Clean state management |
-| `Models.swift` | 0 | @MainActor complete |
+| `Models.swift` | 0 | @MainActor complete, lazy image loading |
 
 ### Implementation Order
 
@@ -220,12 +250,12 @@ xcodebuild test -project CodingBridge.xcodeproj \
 Phase 1 (Security)          COMPLETE
 Phase 2 (Data)              COMPLETE
 Phase 3 (Stability)         COMPLETE
-Phase 4 (Architecture)           --------->
-Phase 5 (Polish)                      --------->
-Phase 6 (iOS 26)                           --------->
+Phase 4 (Architecture)      COMPLETE
+Phase 5 (Polish)            COMPLETE
+Phase 6 (iOS 26)            COMPLETE
 Phase 7 (Tests)        =========================================>
 ```
 
 ---
 
-_Last updated: December 30, 2025_
+_Last updated: December 30, 2025 - Phase 6 iOS 26 Adoption complete_

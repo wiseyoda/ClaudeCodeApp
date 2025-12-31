@@ -377,8 +377,11 @@ final class CLIBridgeTypesTests: XCTestCase {
     }
 
     func test_cliServerMessage_decodesStream() throws {
+        // Stream messages now include id and timestamp (unified format v0.3.5+)
         let message = try decodeServerMessage(from: [
             "type": "stream",
+            "id": "msg-123",
+            "timestamp": "2024-01-01T12:00:00.000Z",
             "message": [
                 "type": "assistant",
                 "content": "Hello",
@@ -390,6 +393,8 @@ final class CLIBridgeTypesTests: XCTestCase {
             XCTFail("Expected stream message")
             return
         }
+        XCTAssertEqual(payload.id, "msg-123")
+        XCTAssertEqual(payload.timestamp, "2024-01-01T12:00:00.000Z")
         switch payload.message {
         case .assistant(let content):
             XCTAssertEqual(content.content, "Hello")
@@ -398,6 +403,131 @@ final class CLIBridgeTypesTests: XCTestCase {
         default:
             XCTFail("Expected assistant content")
         }
+    }
+
+    func test_cliStreamMessage_toStoredMessage() throws {
+        // Test conversion from stream message to stored message format
+        let streamMessage = try decodeServerMessage(from: [
+            "type": "stream",
+            "id": "msg-456",
+            "timestamp": "2024-06-15T10:30:00.000Z",
+            "message": [
+                "type": "user",
+                "content": "Hello Claude"
+            ]
+        ])
+
+        guard case .stream(let payload) = streamMessage else {
+            XCTFail("Expected stream message")
+            return
+        }
+
+        let stored = payload.toStoredMessage()
+        XCTAssertEqual(stored.id, "msg-456")
+        XCTAssertEqual(stored.timestamp, "2024-06-15T10:30:00.000Z")
+
+        // Verify the message content is preserved
+        if case .user(let content) = stored.message {
+            XCTAssertEqual(content.content, "Hello Claude")
+        } else {
+            XCTFail("Expected user content")
+        }
+    }
+
+    func test_storedMessage_toChatMessage_user() throws {
+        let streamMessage = try decodeServerMessage(from: [
+            "type": "stream",
+            "id": "msg-789",
+            "timestamp": "2024-06-15T10:30:00.000Z",
+            "message": [
+                "type": "user",
+                "content": "Test user message"
+            ]
+        ])
+
+        guard case .stream(let payload) = streamMessage else {
+            XCTFail("Expected stream message")
+            return
+        }
+
+        let stored = payload.toStoredMessage()
+        let chatMessage = stored.toChatMessage()
+
+        XCTAssertNotNil(chatMessage)
+        XCTAssertEqual(chatMessage?.role, .user)
+        XCTAssertEqual(chatMessage?.content, "Test user message")
+    }
+
+    func test_storedMessage_toChatMessage_assistantFinal() throws {
+        let streamMessage = try decodeServerMessage(from: [
+            "type": "stream",
+            "id": "msg-final",
+            "timestamp": "2024-06-15T10:31:00.000Z",
+            "message": [
+                "type": "assistant",
+                "content": "Final assistant response"
+                // delta is not set, so this is final
+            ]
+        ])
+
+        guard case .stream(let payload) = streamMessage else {
+            XCTFail("Expected stream message")
+            return
+        }
+
+        let stored = payload.toStoredMessage()
+        let chatMessage = stored.toChatMessage()
+
+        XCTAssertNotNil(chatMessage)
+        XCTAssertEqual(chatMessage?.role, .assistant)
+        XCTAssertEqual(chatMessage?.content, "Final assistant response")
+    }
+
+    func test_storedMessage_toChatMessage_assistantDelta_returnsNil() throws {
+        // Streaming deltas should not convert to ChatMessage (ephemeral)
+        let streamMessage = try decodeServerMessage(from: [
+            "type": "stream",
+            "id": "msg-delta",
+            "timestamp": "2024-06-15T10:31:00.000Z",
+            "message": [
+                "type": "assistant",
+                "content": "Streaming...",
+                "delta": true
+            ]
+        ])
+
+        guard case .stream(let payload) = streamMessage else {
+            XCTFail("Expected stream message")
+            return
+        }
+
+        let stored = payload.toStoredMessage()
+        XCTAssertNil(stored.toChatMessage(), "Streaming deltas should return nil")
+        XCTAssertTrue(stored.isEphemeral, "Streaming deltas should be ephemeral")
+    }
+
+    func test_storedMessage_isEphemeral() throws {
+        // Test progress message is ephemeral
+        let progressMessage = try decodeServerMessage(from: [
+            "type": "stream",
+            "id": "msg-progress",
+            "timestamp": "2024-06-15T10:32:00.000Z",
+            "message": [
+                "type": "progress",
+                "id": "tool-1",
+                "tool": "Bash",
+                "elapsed": 5.0
+            ]
+        ])
+
+        guard case .stream(let payload) = progressMessage else {
+            XCTFail("Expected stream message")
+            return
+        }
+
+        let stored = payload.toStoredMessage()
+        XCTAssertTrue(stored.isEphemeral, "Progress messages should be ephemeral")
+        XCTAssertNil(stored.toChatMessage(), "Progress messages should not convert to ChatMessage")
     }
 
     func test_cliServerMessage_decodesPermission() throws {
@@ -871,7 +1001,7 @@ final class CLIBridgeTypesTests: XCTestCase {
 
     private func encodeAnyCodableValueToObject(_ value: AnyCodableValue) throws -> Any {
         let data = try JSONEncoder().encode(value)
-        return try JSONSerialization.jsonObject(with: data, options: [])
+        return try JSONSerialization.jsonObject(with: data, options: .fragmentsAllowed)
     }
 
     private func encodeClientMessage(_ message: CLIClientMessage) throws -> [String: Any] {

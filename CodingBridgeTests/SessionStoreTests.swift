@@ -9,8 +9,14 @@ final class SessionStoreTests: XCTestCase {
     override func setUp() {
         super.setUp()
         store = SessionStore.shared
+        store.resetForTesting()  // Clear previous state so we can reconfigure
         mockRepo = MockSessionRepository()
         store.configure(with: mockRepo)
+    }
+
+    override func tearDown() {
+        store.resetForTesting()
+        super.tearDown()
     }
 
     private func makeProjectPath() -> String {

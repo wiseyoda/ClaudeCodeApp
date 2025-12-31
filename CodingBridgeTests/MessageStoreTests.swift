@@ -187,7 +187,11 @@ final class MessageStoreTests: XCTestCase {
         let loaded = await MessageStore.loadMessages(for: testProjectPath)
 
         XCTAssertEqual(loaded.count, 1)
-        XCTAssertEqual(loaded[0].imageData, imageData)
+        // MessageStore uses lazy loading - imagePath is set instead of imageData
+        XCTAssertNotNil(loaded[0].imagePath, "Image path should be set for lazy loading")
+        // Verify the file exists and contains the correct data
+        let loadedImageData = try? Data(contentsOf: URL(fileURLWithPath: loaded[0].imagePath!))
+        XCTAssertEqual(loadedImageData, imageData)
     }
 
     func test_saveMessages_cleansUpOrphanedImages() {

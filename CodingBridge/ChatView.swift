@@ -22,6 +22,16 @@ struct ChatView: View {
     // MARK: - Focus State (must stay in View for @FocusState)
     @FocusState private var isInputFocused: Bool
 
+    // MARK: - Computed Properties
+
+    /// Display name for project - uses custom name from ProjectNamesStore if set, otherwise server title
+    private var displayName: String {
+        if let customName = ProjectNamesStore.shared.getName(for: project.path) {
+            return customName
+        }
+        return project.title
+    }
+
     init(project: Project, initialGitStatus: GitStatus = .unknown, onSessionsChanged: (() -> Void)? = nil) {
         self.project = project
         self.initialGitStatus = initialGitStatus
@@ -61,30 +71,20 @@ struct ChatView: View {
         .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
-            // Custom title with git status
             ToolbarItem(placement: .principal) {
-                HStack(spacing: 6) {
-                    Text(project.title)
-                        .font(.headline)
-                        .foregroundColor(CLITheme.primaryText(for: colorScheme))
-
-                    // Tappable git status indicator
-                    Button {
-                        viewModel.refreshGitStatus()
-                    } label: {
-                        GitStatusIndicator(status: viewModel.gitStatus)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Git status")
-                    .accessibilityHint("Tap to refresh git status")
-                    .accessibilityValue(viewModel.gitStatus.accessibilityLabel)
-                }
+                ChatTitleView(
+                    displayName: displayName,
+                    gitStatus: viewModel.gitStatus,
+                    onRefreshGitStatus: viewModel.refreshGitStatus
+                )
             }
 
             ToolbarItem(placement: .navigationBarTrailing) {
-                HStack(spacing: 12) {
-                    // Search button
-                    Button {
+                ChatToolbarActions(
+                    isSearching: viewModel.isSearching,
+                    ideasCount: viewModel.ideasStore.ideas.count,
+                    isProcessing: viewModel.isProcessing,
+                    onToggleSearch: {
                         withAnimation {
                             viewModel.isSearching.toggle()
                             if !viewModel.isSearching {
@@ -92,68 +92,13 @@ struct ChatView: View {
                                 viewModel.messageFilter = .all
                             }
                         }
-                    } label: {
-                        Image(systemName: viewModel.isSearching ? "magnifyingglass.circle.fill" : "magnifyingglass")
-                            .foregroundColor(viewModel.isSearching ? CLITheme.blue(for: colorScheme) : CLITheme.secondaryText(for: colorScheme))
-                    }
-                    .accessibilityLabel(viewModel.isSearching ? "Close search" : "Search messages")
-
-                    // Ideas button
-                    ZStack(alignment: .topTrailing) {
-                        Image(systemName: "lightbulb")
-                            .foregroundColor(CLITheme.secondaryText(for: colorScheme))
-                        // Badge for idea count
-                        if viewModel.ideasStore.ideas.count > 0 {
-                            Text(viewModel.ideasStore.ideas.count > 99 ? "99+" : "\(viewModel.ideasStore.ideas.count)")
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 4)
-                                .padding(.vertical, 1)
-                                .background(CLITheme.red(for: colorScheme))
-                                .clipShape(Capsule())
-                                .offset(x: 8, y: -8)
-                        }
-                    }
-                    .onTapGesture {
-                        viewModel.showIdeasDrawer = true
-                    }
-                    .onLongPressGesture(minimumDuration: 0.4) {
-                        let generator = UIImpactFeedbackGenerator(style: .medium)
-                        generator.impactOccurred()
-                        viewModel.showQuickCapture = true
-                    }
-                    .accessibilityLabel("Ideas")
-                    .accessibilityHint("Tap to open ideas drawer, hold to quick capture")
-                    .accessibilityValue(viewModel.ideasStore.ideas.count > 0 ? "\(viewModel.ideasStore.ideas.count) ideas" : "No ideas")
-
-                    // More options menu
-                    Menu {
-                        Button {
-                            viewModel.startNewSession()
-                        } label: {
-                            Label("New Chat", systemImage: "plus")
-                        }
-
-                        Button {
-                            viewModel.showingBookmarks = true
-                        } label: {
-                            Label("Bookmarks", systemImage: "bookmark")
-                        }
-
-                        if viewModel.isProcessing {
-                            Button(role: .destructive) {
-                                viewModel.abortSession()
-                            } label: {
-                                Label("Abort", systemImage: "stop.circle")
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .foregroundColor(CLITheme.secondaryText(for: colorScheme))
-                    }
-                    .accessibilityLabel("Chat options")
-                    .accessibilityHint("Open menu with new chat, bookmarks, and abort options")
-                }
+                    },
+                    onShowIdeas: { viewModel.showIdeasDrawer = true },
+                    onQuickCapture: { viewModel.showQuickCapture = true },
+                    onNewChat: viewModel.startNewSession,
+                    onShowBookmarks: { viewModel.showingBookmarks = true },
+                    onAbort: viewModel.abortSession
+                )
             }
         }
         .onAppear {
@@ -404,108 +349,100 @@ struct ChatView: View {
 
     private var messagesScrollView: some View {
         ScrollViewReader { proxy in
-            GeometryReader { outerGeometry in
-                ZStack(alignment: .bottom) {
-                    ScrollView {
-                        messagesListView
-                            .background(
-                                GeometryReader { contentGeometry in
-                                    Color.clear
-                                        .preference(
-                                            key: ContentSizePreferenceKey.self,
-                                            value: contentGeometry.size
-                                        )
-                                        .preference(
-                                            key: ScrollOffsetPreferenceKey.self,
-                                            value: contentGeometry.frame(in: .named("chatScroll")).minY
-                                        )
-                                }
-                            )
-                    }
-                    .coordinateSpace(name: "chatScroll")
-                    .scrollDismissesKeyboard(.interactively)
-                    .background(CLITheme.background(for: colorScheme))
-                    .refreshable {
-                        await viewModel.refreshChatContent()
-                    }
-                    .onPreferenceChange(ScrollOffsetPreferenceKey.self) { offset in
-                        viewModel.scrollManager.handleScrollOffset(offset)
-                    }
-                    .onPreferenceChange(ContentSizePreferenceKey.self) { contentSize in
-                        viewModel.scrollManager.updateScrollDimensions(
-                            contentHeight: contentSize.height,
-                            viewportHeight: outerGeometry.size.height
-                        )
-                        if contentSize.height > outerGeometry.size.height && settings.autoScrollEnabled {
-                            viewModel.scrollManager.requestScrollToBottom()
-                        }
-                    }
-                    .simultaneousGesture(
-                        DragGesture(minimumDistance: 5)
-                            .onChanged { _ in
-                                viewModel.scrollManager.recordUserScrollGesture()
-                                isInputFocused = false
+            ZStack(alignment: .bottom) {
+                ScrollView {
+                    messagesListView
+                        .background(
+                            // Track when bottom anchor is visible
+                            GeometryReader { geo in
+                                Color.clear
+                                    .preference(
+                                        key: BottomVisiblePreferenceKey.self,
+                                        value: geo.frame(in: .named("scrollArea")).maxY
+                                    )
                             }
-                    )
+                        )
+                }
+                .coordinateSpace(name: "scrollArea")
+                .scrollDismissesKeyboard(.interactively)
+                .background(CLITheme.background(for: colorScheme))
+                .refreshable {
+                    await viewModel.refreshChatContent()
+                }
+                .onPreferenceChange(BottomVisiblePreferenceKey.self) { maxY in
+                    // If content bottom is near or below the scroll view bottom, we're at bottom
+                    // Hide the scroll button when at bottom
+                    if maxY < UIScreen.main.bounds.height + 100 {
+                        if viewModel.showScrollToBottom {
+                            viewModel.showScrollToBottom = false
+                        }
+                    }
+                }
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 20)
+                        .onChanged { _ in
+                            isInputFocused = false
+                            // Only show button if not already at bottom
+                            viewModel.showScrollToBottom = true
+                        }
+                )
 
-                    // Scroll to bottom button
-                    if !viewModel.scrollManager.isAutoScrollEnabled {
-                        Button {
-                            viewModel.scrollManager.forceScrollToBottom()
-                        } label: {
-                            Image(systemName: "chevron.compact.down")
-                                .font(.system(size: 28, weight: .medium))
-                                .foregroundStyle(CLITheme.primaryText(for: colorScheme).opacity(0.6))
+                // Manual scroll to bottom button
+                if viewModel.showScrollToBottom {
+                    Button {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                            withAnimation(.easeOut(duration: 0.2)) {
+                                proxy.scrollTo("bottomAnchor")
+                            }
                         }
-                        .padding(.bottom, 16)
-                        .transition(.opacity)
-                        .animation(.easeInOut(duration: 0.15), value: viewModel.scrollManager.isAutoScrollEnabled)
+                        viewModel.showScrollToBottom = false
+                    } label: {
+                        Image(systemName: "chevron.compact.down")
+                            .font(.system(size: 28, weight: .medium))
+                            .foregroundStyle(CLITheme.primaryText(for: colorScheme).opacity(0.6))
+                            .frame(width: 60, height: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.bottom, 16)
+                    .transition(.opacity)
+                }
+            }
+            // Auto-scroll when new messages arrive (if enabled)
+            .onChange(of: viewModel.messages.count) { _, _ in
+                if settings.autoScrollEnabled && !viewModel.showScrollToBottom {
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        proxy.scrollTo("bottomAnchor")
                     }
                 }
-                .onChange(of: viewModel.scrollManager.shouldScroll) { _, shouldScroll in
-                    if shouldScroll {
+            }
+            // Explicit scroll trigger (used when sending messages - always scrolls)
+            .onChange(of: viewModel.scrollToBottomTrigger) { _, shouldScroll in
+                if shouldScroll {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                         withAnimation(.easeOut(duration: 0.15)) {
-                            proxy.scrollTo("bottomAnchor", anchor: .bottom)
+                            proxy.scrollTo("bottomAnchor")
                         }
                     }
+                    viewModel.scrollToBottomTrigger = false
+                    viewModel.showScrollToBottom = false
                 }
-                .onChange(of: viewModel.messages.count) { _, _ in
-                    guard settings.autoScrollEnabled else { return }
-                    viewModel.scrollManager.requestScrollToBottom()
+            }
+            .onAppear {
+                guard !viewModel.isLoadingHistory else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    proxy.scrollTo("bottomAnchor")
                 }
-                .onChange(of: viewModel.isProcessing) { _, isProcessing in
-                    guard settings.autoScrollEnabled else { return }
-                    viewModel.scrollManager.requestScrollToBottom()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .backgroundRecoveryNeeded)) { notification in
+                guard let userInfo = notification.userInfo,
+                      let sessionId = userInfo["sessionId"] as? String,
+                      let projectPath = userInfo["projectPath"] as? String,
+                      projectPath == project.path else {
+                    return
                 }
-                .onChange(of: viewModel.scrollToBottomTrigger) { _, shouldScroll in
-                    if shouldScroll {
-                        viewModel.scrollManager.forceScrollToBottom()
-                        viewModel.scrollToBottomTrigger = false
-                    }
-                }
-                .onAppear {
-                    guard !viewModel.isLoadingHistory else { return }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                        viewModel.scrollManager.forceScrollToBottom()
-                    }
-                }
-                .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
-                    if viewModel.scrollManager.isAutoScrollEnabled {
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                            viewModel.scrollManager.forceScrollToBottom()
-                        }
-                    }
-                }
-                .onReceive(NotificationCenter.default.publisher(for: .backgroundRecoveryNeeded)) { notification in
-                    guard let userInfo = notification.userInfo,
-                          let sessionId = userInfo["sessionId"] as? String,
-                          let projectPath = userInfo["projectPath"] as? String,
-                          projectPath == project.path else {
-                        return
-                    }
-                    log.info("Background recovery requested for session: \(sessionId.prefix(8))...")
-                    viewModel.wsManager.recoverFromBackground(sessionId: sessionId, projectPath: projectPath)
-                }
+                log.info("Background recovery requested for session: \(sessionId.prefix(8))...")
+                viewModel.wsManager.recoverFromBackground(sessionId: sessionId, projectPath: projectPath)
             }
         }
     }
@@ -532,12 +469,14 @@ struct ChatView: View {
             }
 
             // Bottom anchor for scrollTo target
+            // Extra space ensures last message appears above status bar when scrolled to bottom
             Spacer()
                 .frame(height: 1)
                 .id("bottomAnchor")
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.top, 8)
+        .padding(.bottom, viewModel.wsManager.agentState.isWorking ? 65 : 25)  // Extra space when status bubble showing
     }
 
     @ViewBuilder
@@ -570,16 +509,9 @@ struct ChatView: View {
             .padding(.vertical, 4)
             .id("reattaching")
         } else if viewModel.currentStreamingText.isEmpty {
-            HStack(spacing: 6) {
-                Text("+")
-                    .foregroundColor(CLITheme.yellow(for: colorScheme))
-                Text("...")
-                    .foregroundColor(CLITheme.mutedText(for: colorScheme))
-                Spacer()
-            }
-            .font(settings.scaledFont(.body))
-            .padding(.vertical, 4)
-            .id("streaming")
+            // StatusBubbleView now rendered in statusAndInputView (fixed position)
+            EmptyView()
+                .id("statusBubble")
         } else {
             CLIMessageView(
                 message: ChatMessage(
@@ -648,6 +580,14 @@ struct ChatView: View {
                 ToolProgressBanner(progress: progress) {
                     viewModel.clearToolProgress()
                 }
+            }
+
+            // Status bubble (fixed position, shows when agent is working)
+            if viewModel.wsManager.agentState.isWorking {
+                StatusBubbleView(
+                    state: viewModel.wsManager.agentState,
+                    tool: viewModel.wsManager.currentTool
+                )
             }
 
             // Unified status bar

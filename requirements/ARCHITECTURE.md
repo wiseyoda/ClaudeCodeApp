@@ -106,19 +106,27 @@ Singleton source of truth accessed via `SessionStore.shared`.
 |----------|------|---------|
 | `sessionsByProject` | `[String: [ProjectSession]]` | Raw sessions per project path |
 | `metaByProject` | `[String: ProjectSessionMeta]` | Pagination metadata (hasMore, total) |
+| `countsByProject` | `[String: CLISessionCountResponse]` | Session counts by source |
+| `searchResults` | `[String: CLISessionSearchResponse]` | Search results by project |
 | `isLoading` | `[String: Bool]` | Loading state per project |
-| `errorByProject` | `[String: Error]` | Error state per project |
 | `activeSessionIds` | `[String: String]` | Active session per project |
+| `showArchivedSessions` | `Bool` | Toggle archived visibility |
 
-**Key Methods:**
+**Core Methods:**
 | Method | Purpose |
 |--------|---------|
-| `configure(with:)` | Inject repository dependency |
-| `loadSessions(for:forceRefresh:)` | Fetch sessions from API |
+| `loadSessions(for:)` | Fetch sessions from API |
 | `loadMore(for:)` | Pagination - fetch next page |
 | `deleteSession(_:for:)` | Optimistic delete with rollback |
-| `addSession(_:for:)` | Add newly created session |
 | `displaySessions(for:)` | Filtered/sorted sessions for UI |
+
+**Search & Archive Methods:**
+| Method | Purpose |
+|--------|---------|
+| `searchSessions(for:query:)` | Full-text search |
+| `archiveSession(_:for:)` | Soft delete with optimistic update |
+| `unarchiveSession(_:for:)` | Restore archived session |
+| `loadSessionCounts(for:)` | Get count breakdown by source |
 
 ### SessionRepository (Data Layer)
 
@@ -128,11 +136,16 @@ Protocol-based abstraction for testability:
 protocol SessionRepository {
     func fetchSessions(projectName: String, limit: Int, offset: Int) async throws -> SessionsResponse
     func deleteSession(projectName: String, sessionId: String) async throws
+    func getSessionCount(projectName: String, source: SessionSource?) async throws -> CLISessionCountResponse
+    func searchSessions(projectName: String, query: String, limit: Int, offset: Int) async throws -> CLISessionSearchResponse
+    func archiveSession(projectName: String, sessionId: String) async throws -> CLISessionMetadata
+    func unarchiveSession(projectName: String, sessionId: String) async throws -> CLISessionMetadata
+    func bulkOperation(projectName: String, sessionIds: [String], action: String, customTitle: String?) async throws -> CLIBulkOperationResponse
 }
 ```
 
 **Implementations:**
-- `APISessionRepository` - Production HTTP client
+- `CLIBridgeSessionRepository` - Production HTTP client
 - `MockSessionRepository` - Unit testing (DEBUG only)
 
 ### Data Flow

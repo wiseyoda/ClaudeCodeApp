@@ -111,6 +111,16 @@
 		SV000001 /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SV000002 /* SettingsView.swift */; };
 		TD000001 /* TodoProgressDrawer.swift in Sources */ = {isa = PBXBuildFile; fileRef = TD000002 /* TodoProgressDrawer.swift */; };
 		TS000001 /* TaskState.swift in Sources */ = {isa = PBXBuildFile; fileRef = TS000002 /* TaskState.swift */; };
+		3FDE3B257C7D48B797DE0D7C /* ChatToolbar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95E143B92E0E4FFCBD9DAA65 /* ChatToolbar.swift */; };
+		B73E02C9756E41E3A27FAC77 /* ToolContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0B17D9B7D0D46B5B0FBE775 /* ToolContentView.swift */; };
+		47FF42530E4D403EB73E003E /* ToolParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C36624C0A5642C79AAF2B9A /* ToolParser.swift */; };
+		F5CFC259774D4313BF6F79F9 /* GitStatusCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 827EBA521F03429DBDE05368 /* GitStatusCoordinator.swift */; };
+		PSC00001 /* ProjectSidebarContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = PSC00002 /* ProjectSidebarContent.swift */; };
+		SBV00001 /* StatusBubbleView.swift in Sources */ = {isa = PBXBuildFile; fileRef = SBV00002 /* StatusBubbleView.swift */; };
+		SMS00001 /* StatusMessageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = SMS00002 /* StatusMessageStore.swift */; };
+		SMO00001 /* StatusMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = SMO00002 /* StatusMessage.swift */; };
+		TTV00001 /* ToolTestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = TTV00002 /* ToolTestView.swift */; };
+		TTJ00001 /* ToolTestMessages.json in Resources */ = {isa = PBXBuildFile; fileRef = TTJ00002 /* ToolTestMessages.json */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -229,6 +239,9 @@
 		SC000002 /* SlashCommandHelpSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SlashCommandHelpSheet.swift; sourceTree = "<group>"; };
 		SD000002 /* SSHKeyDetection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHKeyDetection.swift; sourceTree = "<group>"; };
 		SK000002 /* SkeletonView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SkeletonView.swift; sourceTree = "<group>"; };
+		SBV00002 /* StatusBubbleView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBubbleView.swift; sourceTree = "<group>"; };
+		SMS00002 /* StatusMessageStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusMessageStore.swift; sourceTree = "<group>"; };
+		SMO00002 /* StatusMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusMessage.swift; sourceTree = "<group>"; };
 		SK100002 /* SSHKeyImportSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHKeyImportSheet.swift; sourceTree = "<group>"; };
 		SR000051 /* SessionRepository.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionRepository.swift; sourceTree = "<group>"; };
 		SS000049 /* ScrollStateManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScrollStateManager.swift; sourceTree = "<group>"; };
@@ -236,6 +249,13 @@
 		SV000002 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		TD000002 /* TodoProgressDrawer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TodoProgressDrawer.swift; sourceTree = "<group>"; };
 		TS000002 /* TaskState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TaskState.swift; sourceTree = "<group>"; };
+		95E143B92E0E4FFCBD9DAA65 /* ChatToolbar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatToolbar.swift; sourceTree = "<group>"; };
+		F0B17D9B7D0D46B5B0FBE775 /* ToolContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolContentView.swift; sourceTree = "<group>"; };
+		7C36624C0A5642C79AAF2B9A /* ToolParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolParser.swift; sourceTree = "<group>"; };
+		827EBA521F03429DBDE05368 /* GitStatusCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GitStatusCoordinator.swift; sourceTree = "<group>"; };
+		PSC00002 /* ProjectSidebarContent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSidebarContent.swift; sourceTree = "<group>"; };
+		TTV00002 /* ToolTestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolTestView.swift; sourceTree = "<group>"; };
+		TTJ00002 /* ToolTestMessages.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = ToolTestMessages.json; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -312,6 +332,7 @@
 				GPER0001 /* Persistence */,
 				GMOD0001 /* Models */,
 				GVMO0001 /* ViewModels */,
+				GTFX0001 /* TestFixtures */,
 				A2000007 /* Assets.xcassets */,
 				7280E348A6154DEB85D30D3D /* ToolErrorClassification.swift */,
 				603895DCE0554062BCEC87F7 /* ErrorAnalyticsStore.swift */,
@@ -360,6 +381,10 @@
 		A5000006 /* Views */ = {
 			isa = PBXGroup;
 			children = (
+				PSC00002 /* ProjectSidebarContent.swift */,
+				7C36624C0A5642C79AAF2B9A /* ToolParser.swift */,
+				F0B17D9B7D0D46B5B0FBE775 /* ToolContentView.swift */,
+				95E143B92E0E4FFCBD9DAA65 /* ChatToolbar.swift */,
 				HM00006C /* DiagnosticsView.swift */,
 				HM00006A /* MetricsDashboardView.swift */,
 				HM000068 /* ServerHealthView.swift */,
@@ -411,6 +436,8 @@
 				EB000053 /* ErrorBanner.swift */,
 				F2CB9D357C2E4C4791DA828F /* ErrorInsightsView.swift */,
 				SK000002 /* SkeletonView.swift */,
+				SBV00002 /* StatusBubbleView.swift */,
+				TTV00002 /* ToolTestView.swift */,
 			);
 			path = Views;
 			sourceTree = "<group>";
@@ -418,11 +445,13 @@
 		GMAN0001 /* Managers */ = {
 			isa = PBXGroup;
 			children = (
+				827EBA521F03429DBDE05368 /* GitStatusCoordinator.swift */,
 				BG000002 /* BackgroundManager.swift */,
 				LA000002 /* LiveActivityManager.swift */,
 				NM000002 /* NotificationManager.swift */,
 				OQ000002 /* OfflineActionQueue.swift */,
 				PN000002 /* PushNotificationManager.swift */,
+				SMS00002 /* StatusMessageStore.swift */,
 			);
 			path = Managers;
 			sourceTree = "<group>";
@@ -434,6 +463,7 @@
 				IA000002 /* ImageAttachment.swift */,
 				LAT00002 /* LiveActivityAttributes.swift */,
 				TS000002 /* TaskState.swift */,
+				SMO00002 /* StatusMessage.swift */,
 			);
 			path = Models;
 			sourceTree = "<group>";
@@ -453,6 +483,14 @@
 				CVMF0001 /* ChatViewModel.swift */,
 			);
 			path = ViewModels;
+			sourceTree = "<group>";
+		};
+		GTFX0001 /* TestFixtures */ = {
+			isa = PBXGroup;
+			children = (
+				TTJ00002 /* ToolTestMessages.json */,
+			);
+			path = TestFixtures;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -585,6 +623,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A1000007 /* Assets.xcassets in Resources */,
+				TTJ00001 /* ToolTestMessages.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -609,6 +648,11 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				PSC00001 /* ProjectSidebarContent.swift in Sources */,
+				F5CFC259774D4313BF6F79F9 /* GitStatusCoordinator.swift in Sources */,
+				47FF42530E4D403EB73E003E /* ToolParser.swift in Sources */,
+				B73E02C9756E41E3A27FAC77 /* ToolContentView.swift in Sources */,
+				3FDE3B257C7D48B797DE0D7C /* ChatToolbar.swift in Sources */,
 				HM000065 /* HealthMonitorService.swift in Sources */,
 				HM000067 /* SearchHistoryStore.swift in Sources */,
 				HM000069 /* ServerHealthView.swift in Sources */,
@@ -692,6 +736,9 @@
 				EB000052 /* ErrorBanner.swift in Sources */,
 				PC000001 /* ProjectCache.swift in Sources */,
 				SK000001 /* SkeletonView.swift in Sources */,
+				SBV00001 /* StatusBubbleView.swift in Sources */,
+				SMS00001 /* StatusMessageStore.swift in Sources */,
+				SMO00001 /* StatusMessage.swift in Sources */,
 				B9000002 /* PermissionApprovalTestHarnessView.swift in Sources */,
 				BG000001 /* BackgroundManager.swift in Sources */,
 				NM000001 /* NotificationManager.swift in Sources */,
@@ -710,6 +757,7 @@
 				PN000001 /* PushNotificationManager.swift in Sources */,
 				LA000001 /* LiveActivityManager.swift in Sources */,
 				LAT00001 /* LiveActivityAttributes.swift in Sources */,
+				TTV00001 /* ToolTestView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

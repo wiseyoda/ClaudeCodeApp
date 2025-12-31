@@ -141,7 +141,14 @@ struct HomeView: View {
                         ))
                     }
                 }
-                .animation(.easeOut(duration: 0.3), value: activeProjects.count)
+                // Note: Animation on grid count changes can block tap recognition during animation
+                // Use transaction modifier instead for more predictable behavior
+                .transaction { transaction in
+                    // Only animate for actual add/remove, not initial load
+                    if activeProjects.count > 0 {
+                        transaction.animation = .easeOut(duration: 0.2)
+                    }
+                }
             }
         }
     }
@@ -226,6 +233,17 @@ struct RecentActivitySection: View {
 
     private func loadRecentSessions() async {
         guard !isLoading else { return }
+
+        // Skip API call if cache is still valid (within 60s TTL)
+        if projectCache.isRecentSessionsCacheValid {
+            if recentSessions.isEmpty && projectCache.hasRecentSessions {
+                recentSessions = projectCache.cachedRecentSessions
+                hasLoaded = true
+            }
+            log.debug("[HomeView] Using cached recent sessions (TTL valid)")
+            return
+        }
+
         isLoading = true
 
         do {

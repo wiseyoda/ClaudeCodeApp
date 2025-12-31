@@ -1,8 +1,11 @@
+import Combine
 import XCTest
 @testable import CodingBridge
 
 @MainActor
 final class CLIBridgeManagerTests: XCTestCase {
+    private var cancellables: Set<AnyCancellable> = []
+
     private final class MockURLSessionWebSocketTask: WebSocketTasking {
         private let stream: AsyncThrowingStream<URLSessionWebSocketTask.Message, Error>
         private let continuation: AsyncThrowingStream<URLSessionWebSocketTask.Message, Error>.Continuation
@@ -81,6 +84,11 @@ final class CLIBridgeManagerTests: XCTestCase {
         return (manager, session, task)
     }
 
+    override func tearDown() {
+        cancellables.removeAll()
+        super.tearDown()
+    }
+
     private func jsonObject(from message: URLSessionWebSocketTask.Message, file: StaticString = #filePath, line: UInt = #line) -> [String: Any] {
         guard case .string(let text) = message else {
             XCTFail("Expected string message", file: file, line: line)
@@ -120,6 +128,52 @@ final class CLIBridgeManagerTests: XCTestCase {
         }
         let data = try! JSONSerialization.data(withJSONObject: payload)
         return try! JSONDecoder().decode(CLIStreamContent.self, from: data)
+    }
+
+    /// Helper to create a StoredMessage from CLIStreamContent for test_handleStreamMessage
+    private func storedMessage(from content: CLIStreamContent, id: String = UUID().uuidString, timestamp: String = "2024-01-01T00:00:00.000Z") -> StoredMessage {
+        StoredMessage(id: id, timestamp: timestamp, message: content)
+    }
+
+    private func messageString(from object: [String: Any], file: StaticString = #filePath, line: UInt = #line) -> URLSessionWebSocketTask.Message {
+        do {
+            let data = try JSONSerialization.data(withJSONObject: object, options: [])
+            guard let text = String(data: data, encoding: .utf8) else {
+                XCTFail("Failed to encode JSON string", file: file, line: line)
+                return .string("{}")
+            }
+            return .string(text)
+        } catch {
+            XCTFail("Failed to encode JSON: \(error)", file: file, line: line)
+            return .string("{}")
+        }
+    }
+
+    private func connectedMessage(
+        agentId: String = "agent-1",
+        sessionId: String = "session-1"
+    ) -> URLSessionWebSocketTask.Message {
+        messageString(from: [
+            "type": "connected",
+            "agentId": agentId,
+            "sessionId": sessionId,
+            "model": "claude",
+            "version": "1",
+            "protocolVersion": "1"
+        ])
+    }
+
+    private func assistantStreamMessage(content: String, delta: Bool, id: String = "msg-\(UUID().uuidString)", timestamp: String = "2024-01-01T00:00:00.000Z") -> URLSessionWebSocketTask.Message {
+        messageString(from: [
+            "type": "stream",
+            "id": id,
+            "timestamp": timestamp,
+            "message": [
+                "type": "assistant",
+                "content": content,
+                "delta": delta
+            ]
+        ])
     }
 
     func test_connectionState_disconnectedIsNotConnected() {
@@ -305,7 +359,7 @@ final class CLIBridgeManagerTests: XCTestCase {
         let (manager, _, _) = makeManager()
         let content = assistantStreamContent(text: "Hello", delta: true)
 
-        manager.test_handleStreamMessage(content)
+        manager.test_handleStreamMessage(storedMessage(from: content))
 
         XCTAssertEqual(manager.currentText, "")
         XCTAssertEqual(manager.test_textBuffer, "Hello")
@@ -315,7 +369,7 @@ final class CLIBridgeManagerTests: XCTestCase {
         let (manager, _, _) = makeManager()
         let content = assistantStreamContent(text: "Complete", delta: false)
 
-        manager.test_handleStreamMessage(content)
+        manager.test_handleStreamMessage(storedMessage(from: content))
 
         XCTAssertEqual(manager.currentText, "Complete")
         XCTAssertEqual(manager.test_textBuffer, "")
@@ -329,7 +383,7 @@ final class CLIBridgeManagerTests: XCTestCase {
             expectation.fulfill()
         }
 
-        manager.test_handleStreamMessage(.thinking(CLIThinkingContent(content: "Thinking...")))
+        manager.test_handleStreamMessage(storedMessage(from: .thinking(CLIThinkingContent(content: "Thinking..."))))
 
         await fulfillment(of: [expectation], timeout: 1)
     }
@@ -349,7 +403,7 @@ final class CLIBridgeManagerTests: XCTestCase {
             name: "Bash",
             input: ["command": AnyCodableValue("ls")]
         )
-        manager.test_handleStreamMessage(.toolUse(toolContent))
+        manager.test_handleStreamMessage(storedMessage(from: .toolUse(toolContent)))
 
         XCTAssertEqual(manager.agentState, .executing)
         XCTAssertNil(manager.toolProgress)
@@ -374,7 +428,7 @@ final class CLIBridgeManagerTests: XCTestCase {
             success: true,
             isError: nil
         )
-        manager.test_handleStreamMessage(.toolResult(resultContent))
+        manager.test_handleStreamMessage(storedMessage(from: .toolResult(resultContent)))
 
         XCTAssertEqual(manager.agentState, .thinking)
         XCTAssertNil(manager.toolProgress)
@@ -386,7 +440,7 @@ final class CLIBridgeManagerTests: XCTestCase {
         manager.agentState = .executing
         let progress = CLIProgressContent(id: "tool-1", tool: "Bash", elapsed: 2, progress: 50, detail: "Half")
 
-        manager.test_handleStreamMessage(.progress(progress))
+        manager.test_handleStreamMessage(storedMessage(from: .progress(progress)))
 
         XCTAssertEqual(manager.toolProgress?.id, "tool-1")
         XCTAssertEqual(manager.toolProgress?.progress, 50)
@@ -404,7 +458,7 @@ final class CLIBridgeManagerTests: XCTestCase {
             contextLimit: nil
         )
 
-        manager.test_handleStreamMessage(.usage(usage))
+        manager.test_handleStreamMessage(storedMessage(from: .usage(usage)))
 
         XCTAssertEqual(manager.tokenUsage?.inputTokens, 10)
         XCTAssertEqual(manager.tokenUsage?.outputTokens, 5)
@@ -414,7 +468,7 @@ final class CLIBridgeManagerTests: XCTestCase {
         let (manager, _, _) = makeManager()
         let state = CLIStateContent(state: .executing, tool: "Bash")
 
-        manager.test_handleStreamMessage(.state(state))
+        manager.test_handleStreamMessage(storedMessage(from: .state(state)))
 
         XCTAssertEqual(manager.agentState, .executing)
     }
@@ -428,7 +482,7 @@ final class CLIBridgeManagerTests: XCTestCase {
             options: ["allow", "deny", "always"]
         )
 
-        manager.test_handleStreamMessage(.permission(request))
+        manager.test_handleStreamMessage(storedMessage(from: .permission(request)))
 
         XCTAssertEqual(manager.pendingPermission?.id, "perm-1")
         XCTAssertEqual(manager.agentState, .waitingPermission)
@@ -449,7 +503,7 @@ final class CLIBridgeManagerTests: XCTestCase {
             ]
         )
 
-        manager.test_handleStreamMessage(.question(question))
+        manager.test_handleStreamMessage(storedMessage(from: .question(question)))
 
         XCTAssertEqual(manager.pendingQuestion?.id, "question-1")
         XCTAssertEqual(manager.agentState, .waitingInput)
@@ -502,7 +556,7 @@ final class CLIBridgeManagerTests: XCTestCase {
         }
 
         let subagent = CLISubagentStartContent(id: "sub-1", description: "Helper", agentType: "helper")
-        manager.test_handleStreamMessage(.subagentStart(subagent))
+        manager.test_handleStreamMessage(storedMessage(from: .subagentStart(subagent)))
 
         XCTAssertEqual(manager.activeSubagent?.id, "sub-1")
         await fulfillment(of: [expectation], timeout: 1)
@@ -518,7 +572,7 @@ final class CLIBridgeManagerTests: XCTestCase {
         }
 
         let complete = CLISubagentCompleteContent(id: "sub-1", summary: "Done")
-        manager.test_handleStreamMessage(.subagentComplete(complete))
+        manager.test_handleStreamMessage(storedMessage(from: .subagentComplete(complete)))
 
         XCTAssertNil(manager.activeSubagent)
         await fulfillment(of: [expectation], timeout: 1)
@@ -804,7 +858,7 @@ final class CLIBridgeManagerTests: XCTestCase {
         let (manager, _, _) = makeManager()
         let content = assistantStreamContent(text: "Hello", delta: true)
 
-        manager.test_handleStreamMessage(content)
+        manager.test_handleStreamMessage(storedMessage(from: content))
 
         XCTAssertEqual(manager.currentText, "")
         XCTAssertEqual(manager.test_textBuffer, "Hello")
@@ -814,7 +868,7 @@ final class CLIBridgeManagerTests: XCTestCase {
         let (manager, _, _) = makeManager()
         let content = assistantStreamContent(text: "Hello", delta: true)
 
-        manager.test_handleStreamMessage(content)
+        manager.test_handleStreamMessage(storedMessage(from: content))
         try? await Task.sleep(nanoseconds: 80_000_000)
 
         XCTAssertEqual(manager.currentText, "Hello")
@@ -825,7 +879,7 @@ final class CLIBridgeManagerTests: XCTestCase {
         let (manager, _, _) = makeManager()
         let content = assistantStreamContent(text: "Hello", delta: true)
 
-        manager.test_handleStreamMessage(content)
+        manager.test_handleStreamMessage(storedMessage(from: content))
         manager.clearCurrentText()
 
         XCTAssertEqual(manager.currentText, "")
@@ -841,7 +895,7 @@ final class CLIBridgeManagerTests: XCTestCase {
             expectation.fulfill()
         }
 
-        manager.test_handleStreamMessage(assistantStreamContent(text: "Hi", delta: true))
+        manager.test_handleStreamMessage(storedMessage(from: assistantStreamContent(text: "Hi", delta: true)))
 
         await fulfillment(of: [expectation], timeout: 1)
     }
@@ -854,7 +908,7 @@ final class CLIBridgeManagerTests: XCTestCase {
             expectation.fulfill()
         }
 
-        manager.test_handleStreamMessage(.thinking(CLIThinkingContent(content: "Reasoning")))
+        manager.test_handleStreamMessage(storedMessage(from: .thinking(CLIThinkingContent(content: "Reasoning"))))
 
         await fulfillment(of: [expectation], timeout: 1)
     }
@@ -874,7 +928,7 @@ final class CLIBridgeManagerTests: XCTestCase {
             name: "Bash",
             input: ["command": AnyCodableValue("ls")]
         )
-        manager.test_handleStreamMessage(.toolUse(toolContent))
+        manager.test_handleStreamMessage(storedMessage(from: .toolUse(toolContent)))
 
         await fulfillment(of: [expectation], timeout: 1)
     }
@@ -897,7 +951,7 @@ final class CLIBridgeManagerTests: XCTestCase {
             success: true,
             isError: nil
         )
-        manager.test_handleStreamMessage(.toolResult(resultContent))
+        manager.test_handleStreamMessage(storedMessage(from: .toolResult(resultContent)))
 
         await fulfillment(of: [expectation], timeout: 1)
     }
@@ -968,5 +1022,371 @@ final class CLIBridgeManagerTests: XCTestCase {
         await manager.test_processServerMessage(.modelChanged(payload))
 
         await fulfillment(of: [expectation], timeout: 1)
+    }
+
+    func test_connect_whileAlreadyConnecting_doesNotStartSecondConnection() async throws {
+        let (manager, session, task) = makeManager()
+        manager.test_setNetworkAvailable(true)
+
+        await manager.connect(projectPath: "/tmp/project-1")
+        await manager.connect(projectPath: "/tmp/project-2")
+
+        XCTAssertEqual(session.createdURLs.count, 1)
+        XCTAssertEqual(task.sentMessages.count, 1)
+        let json = firstSentJSON(from: task)
+        XCTAssertEqual(json["projectPath"] as? String, "/tmp/project-1")
+        manager.disconnect()
+    }
+
+    func test_connect_withInvalidURL_setsErrorState() async throws {
+        let (manager, session, _) = makeManager(serverURL: "http://bad url")
+        manager.test_setNetworkAvailable(true)
+        let expectation = expectation(description: "invalid url")
+        manager.onConnectionError = { error in
+            XCTAssertEqual(error, .invalidServerURL)
+            expectation.fulfill()
+        }
+
+        await manager.connect(projectPath: "/tmp/project")
+
+        XCTAssertEqual(manager.connectionState, .disconnected)
+        XCTAssertEqual(manager.agentState, .stopped)
+        XCTAssertEqual(manager.lastError, "Invalid server URL")
+        XCTAssertTrue(session.createdURLs.isEmpty)
+        await fulfillment(of: [expectation], timeout: 1)
+    }
+
+    func test_connect_timeout_retriesWithBackoff() async throws {
+        let (manager, _, _) = makeManager()
+        manager.connectionState = .connecting
+        manager.agentState = .starting
+        manager.sessionId = "session-1"
+        manager.test_setNetworkAvailable(true)
+        manager.test_reconnectAttempt = 0
+        let expectation = expectation(description: "reconnecting")
+        var capturedDelay: TimeInterval = 0
+        var capturedAttempt = 0
+        manager.onReconnecting = { attempt, delay in
+            capturedAttempt = attempt
+            capturedDelay = delay
+            expectation.fulfill()
+        }
+
+        await manager.test_handleDisconnect(error: MockError())
+
+        XCTAssertEqual(manager.connectionState, .reconnecting(attempt: 1))
+        XCTAssertEqual(manager.agentState, .recovering)
+        await fulfillment(of: [expectation], timeout: 1)
+        XCTAssertEqual(capturedAttempt, 1)
+        XCTAssertGreaterThanOrEqual(capturedDelay, 1.0)
+        XCTAssertLessThanOrEqual(capturedDelay, 1.5)
+        manager.disconnect()
+    }
+
+    func test_connect_networkUnreachable_setsDisconnectedState() async throws {
+        let (manager, session, _) = makeManager()
+        manager.test_setNetworkAvailable(false)
+        let expectation = expectation(description: "network unavailable")
+        manager.onConnectionError = { error in
+            XCTAssertEqual(error, .networkUnavailable)
+            expectation.fulfill()
+        }
+
+        await manager.connect(projectPath: "/tmp/project")
+
+        XCTAssertEqual(manager.connectionState, .disconnected)
+        XCTAssertEqual(manager.agentState, .idle)
+        XCTAssertEqual(manager.lastError, "No network connection")
+        XCTAssertTrue(session.createdURLs.isEmpty)
+        await fulfillment(of: [expectation], timeout: 1)
+    }
+
+    func test_disconnect_whileProcessing_abortsFirst() {
+        let (manager, _, task) = makeManager()
+        manager.test_setWebSocket(task)
+        manager.connectionState = .connected(agentId: "agent-1")
+        manager.agentState = .thinking
+        manager.sessionId = "session-1"
+        manager.currentText = "Working"
+        manager.pendingPermission = CLIPermissionRequest(
+            id: "perm-1",
+            tool: "Bash",
+            input: ["command": AnyCodableValue("ls")],
+            options: ["allow"]
+        )
+        manager.pendingQuestion = CLIQuestionRequest(
+            id: "question-1",
+            questions: [
+                CLIQuestionItem(
+                    question: "Proceed?",
+                    header: "Confirm",
+                    options: [CLIQuestionOption(label: "Yes", description: nil)],
+                    multiSelect: false
+                )
+            ]
+        )
+        manager.isInputQueued = true
+        manager.queuePosition = 2
+        manager.activeSubagent = CLISubagentStartContent(id: "sub-1", description: "Helper", agentType: "helper")
+        manager.toolProgress = CLIProgressContent(id: "tool-1", tool: "Bash", elapsed: 1, progress: 20, detail: "Start")
+
+        manager.disconnect()
+
+        XCTAssertEqual(manager.connectionState, .disconnected)
+        XCTAssertEqual(manager.agentState, .stopped)
+        XCTAssertNil(manager.sessionId)
+        XCTAssertEqual(manager.currentText, "")
+        XCTAssertNil(manager.pendingPermission)
+        XCTAssertNil(manager.pendingQuestion)
+        XCTAssertFalse(manager.isInputQueued)
+        XCTAssertNil(manager.activeSubagent)
+        XCTAssertNil(manager.toolProgress)
+        XCTAssertEqual(task.cancelCount, 1)
+    }
+
+    func test_disconnect_duringReconnect_cancelsReconnect() async throws {
+        let (manager, session, task) = makeManager()
+        manager.test_setNetworkAvailable(true)
+        manager.sessionId = "session-1"
+        manager.test_setPendingConnection(projectPath: "/tmp/project", sessionId: "session-1", model: nil, helper: false)
+        let reconnectExpectation = expectation(description: "reconnecting")
+        var delay: TimeInterval = 0
+        manager.onReconnecting = { _, capturedDelay in
+            delay = capturedDelay
+            reconnectExpectation.fulfill()
+        }
+
+        await manager.test_attemptReconnect()
+
+        await fulfillment(of: [reconnectExpectation], timeout: 1)
+        manager.disconnect()
+
+        let waitNanos = UInt64((delay + 0.2) * 1_000_000_000)
+        try? await Task.sleep(nanoseconds: waitNanos)
+
+        XCTAssertTrue(session.createdURLs.isEmpty)
+        XCTAssertTrue(task.sentMessages.isEmpty)
+        XCTAssertEqual(manager.connectionState, .disconnected)
+    }
+
+    func test_disconnect_preserveSession_maintainsSessionId() {
+        let (manager, _, _) = makeManager()
+        manager.sessionId = "session-1"
+
+        manager.disconnect(preserveSession: true)
+
+        XCTAssertEqual(manager.sessionId, "session-1")
+    }
+
+    func test_reconnect_afterNetworkRestore_resumesSession() async throws {
+        let (manager, _, task) = makeManager()
+        manager.test_setNetworkAvailable(true)
+        manager.sessionId = "session-1"
+        manager.test_setPendingConnection(projectPath: "/tmp/project", sessionId: "session-1", model: "claude", helper: false)
+        let expectation = expectation(description: "reconnect send")
+        task.onSend = { _ in
+            expectation.fulfill()
+        }
+
+        manager.test_handleNetworkRestored()
+
+        await fulfillment(of: [expectation], timeout: 1)
+        let json = firstSentJSON(from: task)
+        XCTAssertEqual(json["sessionId"] as? String, "session-1")
+        manager.disconnect()
+    }
+
+    func test_stream_partialEvent_buffersUntilComplete() async throws {
+        let (manager, _, _) = makeManager()
+
+        await manager.test_handleMessage(.string("{\"type\":\"connected\""))
+
+        XCTAssertEqual(manager.connectionState, .disconnected)
+        XCTAssertNil(manager.sessionId)
+
+        await manager.test_handleMessage(connectedMessage())
+
+        XCTAssertEqual(manager.connectionState, .connected(agentId: "agent-1"))
+        XCTAssertEqual(manager.sessionId, "session-1")
+    }
+
+    func test_stream_malformedJSON_logsErrorContinues() async throws {
+        let (manager, _, _) = makeManager()
+
+        await manager.test_handleMessage(.string("not json"))
+
+        XCTAssertEqual(manager.currentText, "")
+        XCTAssertEqual(manager.test_textBuffer, "")
+
+        await manager.test_handleMessage(assistantStreamMessage(content: "Hi", delta: true))
+
+        XCTAssertEqual(manager.currentText + manager.test_textBuffer, "Hi")
+    }
+
+    func test_stream_unexpectedEventType_ignoresGracefully() async throws {
+        let (manager, _, _) = makeManager()
+        let message = messageString(from: [
+            "type": "stream",
+            "message": [
+                "type": "mystery"
+            ]
+        ])
+
+        await manager.test_handleMessage(message)
+
+        XCTAssertEqual(manager.connectionState, .disconnected)
+        XCTAssertNil(manager.pendingPermission)
+        XCTAssertNil(manager.pendingQuestion)
+    }
+
+    func test_stream_connectionReset_triggersReconnect() async throws {
+        let (manager, _, _) = makeManager()
+        manager.connectionState = .connected(agentId: "agent-1")
+        manager.agentState = .executing
+        manager.sessionId = "session-1"
+        manager.test_setPendingConnection(projectPath: "/tmp/project", sessionId: "session-1", model: nil, helper: false)
+        manager.test_setNetworkAvailable(true)
+        let expectation = expectation(description: "reconnecting")
+        manager.onReconnecting = { _, _ in
+            expectation.fulfill()
+        }
+
+        await manager.test_handleDisconnect(error: URLError(.networkConnectionLost))
+
+        XCTAssertEqual(manager.connectionState, .reconnecting(attempt: 1))
+        XCTAssertEqual(manager.agentState, .recovering)
+        await fulfillment(of: [expectation], timeout: 1)
+        manager.disconnect()
+    }
+
+    func test_sendInput_serverError500_propagatesError() async throws {
+        let (manager, _, _) = makeManager()
+        let expectation = expectation(description: "server error")
+        manager.onConnectionError = { error in
+            XCTAssertEqual(
+                error,
+                .serverError(code: "AGENT_ERROR", message: "Server error", recoverable: false)
+            )
+            expectation.fulfill()
+        }
+
+        let payload = CLIErrorPayload(
+            code: "AGENT_ERROR",
+            message: "Server error",
+            recoverable: false,
+            retryable: nil,
+            retryAfter: nil
+        )
+        await manager.test_processServerMessage(.error(payload))
+
+        XCTAssertEqual(manager.lastError, "Server error")
+        await fulfillment(of: [expectation], timeout: 1)
+    }
+
+    func test_sendInput_unauthorized401_clearsSessionAndNotifies() async throws {
+        let (manager, _, _) = makeManager()
+        manager.sessionId = "session-1"
+        manager.test_setPendingConnection(projectPath: "/tmp/project", sessionId: "session-1", model: nil, helper: false)
+        manager.agentState = .executing
+        let expectation = expectation(description: "session invalid")
+        manager.onConnectionError = { error in
+            XCTAssertEqual(error, .sessionInvalid)
+            expectation.fulfill()
+        }
+
+        let payload = CLIErrorPayload(
+            code: "SESSION_INVALID",
+            message: "Unauthorized",
+            recoverable: false,
+            retryable: nil,
+            retryAfter: nil
+        )
+        await manager.test_processServerMessage(.error(payload))
+
+        XCTAssertNil(manager.sessionId)
+        XCTAssertEqual(manager.agentState, .stopped)
+        await fulfillment(of: [expectation], timeout: 1)
+    }
+
+    func test_sendInput_rateLimited429_queuesForRetry() async throws {
+        let (manager, _, task) = makeManager()
+        manager.test_setNetworkAvailable(true)
+        manager.sessionId = "session-1"
+        manager.test_setPendingConnection(projectPath: "/tmp/project", sessionId: "session-1", model: nil, helper: false)
+        let errorExpectation = expectation(description: "rate limited")
+        manager.onConnectionError = { error in
+            XCTAssertEqual(error, .rateLimited(retryAfter: 0))
+            errorExpectation.fulfill()
+        }
+        let sendExpectation = expectation(description: "retry connect")
+        task.onSend = { _ in
+            sendExpectation.fulfill()
+        }
+
+        let payload = CLIErrorPayload(
+            code: "RATE_LIMITED",
+            message: "Too many",
+            recoverable: true,
+            retryable: true,
+            retryAfter: 0
+        )
+        await manager.test_processServerMessage(.error(payload))
+
+        await fulfillment(of: [errorExpectation, sendExpectation], timeout: 1)
+        let json = firstSentJSON(from: task)
+        XCTAssertEqual(json["type"] as? String, "start")
+        manager.disconnect()
+    }
+
+    func test_agentState_transitionsCorrectly_throughLifecycle() async throws {
+        let (manager, _, _) = makeManager()
+        manager.test_setNetworkAvailable(true)
+
+        var observedStates: [CLIAgentState] = []
+        let expectation = expectation(description: "agent state sequence")
+        manager.$agentState.dropFirst().sink { state in
+            observedStates.append(state)
+            if observedStates.count == 6 {
+                expectation.fulfill()
+            }
+        }.store(in: &cancellables)
+
+        await manager.connect(projectPath: "/tmp/project")
+
+        let connectedPayload = CLIConnectedPayload(
+            agentId: "agent-1",
+            sessionId: "session-1",
+            model: "claude",
+            version: "1",
+            protocolVersion: "1"
+        )
+        await manager.test_processServerMessage(.connected(connectedPayload))
+
+        try await manager.sendInput("Hello")
+
+        let toolUse = CLIToolUseContent(
+            id: "tool-1",
+            name: "Bash",
+            input: ["command": AnyCodableValue("ls")]
+        )
+        manager.test_handleStreamMessage(storedMessage(from: .toolUse(toolUse)))
+
+        let toolResult = CLIToolResultContent(
+            id: "tool-1",
+            tool: "Bash",
+            output: "done",
+            success: true,
+            isError: nil
+        )
+        manager.test_handleStreamMessage(storedMessage(from: .toolResult(toolResult)))
+
+        await manager.test_processServerMessage(.stopped(CLIStoppedPayload(reason: "done")))
+
+        await fulfillment(of: [expectation], timeout: 1)
+        XCTAssertEqual(
+            observedStates,
+            [.starting, .idle, .thinking, .executing, .thinking, .idle]
+        )
+        manager.disconnect()
     }
 }

@@ -817,4 +817,9 @@ final class TestCLIBridgeAdapter: CLIBridgeAdapter {
     override func switchModel(to model: ClaudeModel) {
         switchModelCalls.append(model)
     }
+
+    override func attachToSession(sessionId: String, projectPath: String) {
+        // Synchronously set sessionId for testing (real implementation is async)
+        self.sessionId = sessionId
+    }
 }

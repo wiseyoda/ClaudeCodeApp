@@ -124,6 +124,14 @@ struct CodingBridgeApp: App {
         Task { @MainActor in
             NetworkMonitor.shared.start()
         }
+
+        // Start health monitoring at app level (not per-view)
+        // This prevents start/stop churn when navigating between views
+        Task { @MainActor in
+            let serverURL = UserDefaults.standard.string(forKey: "serverURL") ?? "http://localhost:3100"
+            HealthMonitorService.shared.configure(serverURL: serverURL)
+            HealthMonitorService.shared.startPolling()
+        }
     }
 
     var body: some Scene {
@@ -185,6 +193,9 @@ struct CodingBridgeApp: App {
     private func handleEnterBackground() async {
         log.info("[Background] Entering background - saving state")
 
+        // Pause health monitoring to avoid background network activity
+        HealthMonitorService.shared.pausePolling()
+
         // Save draft input
         DraftInputPersistence.shared.save()
 
@@ -220,6 +231,9 @@ struct CodingBridgeApp: App {
 
     private func handleReturnToForeground() async {
         log.info("[Background] Returning to foreground")
+
+        // Resume health monitoring
+        HealthMonitorService.shared.resumePolling()
 
         // End any legacy background tasks
         BackgroundManager.shared.endBackgroundTask()

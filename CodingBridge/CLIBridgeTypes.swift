@@ -725,20 +725,126 @@ enum ConnectionError: Error, LocalizedError, Equatable {
     }
 }
 
+// MARK: - Unified Message Format (v0.3.5+)
+// cli-bridge now sends all messages in a unified StoredMessage format.
+// Same structure for WebSocket streaming AND REST API history.
+
+/// Unified message container - used by both WebSocket and REST API
+/// This is the canonical format for all messages from cli-bridge
+struct StoredMessage: Codable, Identifiable, Equatable {
+    let id: String           // UUID for deduplication
+    let timestamp: String    // ISO-8601 for ordering
+    let message: CLIStreamContent
+
+    /// Parse timestamp as Date
+    var date: Date? {
+        Self.isoFormatter.date(from: timestamp) ?? Self.isoFormatterNoFrac.date(from: timestamp)
+    }
+
+    // Shared ISO formatters
+    private static let isoFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static let isoFormatterNoFrac: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    /// Convert to ChatMessage for UI display
+    func toChatMessage() -> ChatMessage? {
+        let timestamp = date ?? Date()
+
+        switch message {
+        case .assistant(let content):
+            // Skip streaming deltas - only render complete messages
+            if content.delta == true { return nil }
+            return ChatMessage(role: .assistant, content: content.content, timestamp: timestamp)
+
+        case .user(let content):
+            return ChatMessage(role: .user, content: content.content, timestamp: timestamp)
+
+        case .system(let content):
+            // Only show "result" subtype messages
+            if content.subtype == "result" {
+                return ChatMessage(role: .system, content: content.content, timestamp: timestamp)
+            }
+            return nil
+
+        case .thinking(let content):
+            return ChatMessage(role: .thinking, content: content.content, timestamp: timestamp)
+
+        case .toolUse(let content):
+            let inputString: String
+            if let data = try? JSONSerialization.data(withJSONObject: content.input.mapValues { $0.value }),
+               let str = String(data: data, encoding: .utf8) {
+                inputString = str
+            } else {
+                inputString = ""
+            }
+            let displayContent = inputString.isEmpty ? content.name : "\(content.name)(\(inputString))"
+            return ChatMessage(role: .toolUse, content: displayContent, timestamp: timestamp)
+
+        case .toolResult(let content):
+            let role: ChatMessage.Role = content.isError == true || !content.success ? .error : .toolResult
+            return ChatMessage(role: role, content: content.output, timestamp: timestamp)
+
+        case .usage(let content):
+            // Usage messages don't create chat messages, but we track them separately
+            return nil
+
+        case .progress, .state, .subagentStart, .subagentComplete:
+            // Ephemeral messages - don't persist to chat
+            return nil
+
+        case .question, .permission:
+            // These trigger UI modals, not chat messages
+            return nil
+        }
+    }
+
+    /// Whether this is an ephemeral message (UI state only, don't persist)
+    var isEphemeral: Bool {
+        switch message {
+        case .assistant(let content) where content.delta == true:
+            return true
+        case .progress, .state, .subagentStart, .subagentComplete:
+            return true
+        default:
+            return false
+        }
+    }
+
+    // MARK: - Equatable
+    static func == (lhs: StoredMessage, rhs: StoredMessage) -> Bool {
+        lhs.id == rhs.id && lhs.timestamp == rhs.timestamp
+    }
+}
+
 // MARK: - Stream Message Types
 
-/// Stream message wrapper - contains the actual message content
+/// Stream message wrapper from WebSocket - now includes id and timestamp (v0.3.5+)
 struct CLIStreamMessage: Decodable {
+    let id: String           // UUID for deduplication
+    let timestamp: String    // ISO-8601 timestamp
     let message: CLIStreamContent
 
     private enum CodingKeys: String, CodingKey {
-        case message
+        case id, timestamp, message
+    }
+
+    /// Convert to unified StoredMessage format
+    func toStoredMessage() -> StoredMessage {
+        StoredMessage(id: id, timestamp: timestamp, message: message)
     }
 }
 
 /// The content inside a stream message
 /// Maps to cli-bridge StreamMessage types
-enum CLIStreamContent: Decodable {
+enum CLIStreamContent: Codable, Equatable {
     case assistant(CLIAssistantContent)  // Text from Claude
     case user(CLIUserContent)            // User message echo
     case system(CLISystemContent)        // System messages
@@ -797,12 +903,30 @@ enum CLIStreamContent: Decodable {
             )
         }
     }
+
+    func encode(to encoder: Encoder) throws {
+        switch self {
+        case .assistant(let content): try content.encode(to: encoder)
+        case .user(let content): try content.encode(to: encoder)
+        case .system(let content): try content.encode(to: encoder)
+        case .thinking(let content): try content.encode(to: encoder)
+        case .toolUse(let content): try content.encode(to: encoder)
+        case .toolResult(let content): try content.encode(to: encoder)
+        case .progress(let content): try content.encode(to: encoder)
+        case .usage(let content): try content.encode(to: encoder)
+        case .state(let content): try content.encode(to: encoder)
+        case .subagentStart(let content): try content.encode(to: encoder)
+        case .subagentComplete(let content): try content.encode(to: encoder)
+        case .question(let content): try content.encode(to: encoder)
+        case .permission(let content): try content.encode(to: encoder)
+        }
+    }
 }
 
 // MARK: - Stream Content Types
 
 /// Assistant message content (streaming text from Claude)
-struct CLIAssistantContent: Decodable {
+struct CLIAssistantContent: Codable, Equatable {
     let content: String
     let delta: Bool?  // True for streaming chunks, nil/false for complete
 
@@ -813,47 +937,47 @@ struct CLIAssistantContent: Decodable {
         !(delta ?? false)
     }
 
-    // Custom decoding to capture the raw delta value for debugging
     private enum CodingKeys: String, CodingKey {
-        case content
-        case delta
+        case content, delta
+    }
+
+    init(content: String, delta: Bool? = nil) {
+        self.content = content
+        self.delta = delta
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         content = try container.decode(String.self, forKey: .content)
         delta = try container.decodeIfPresent(Bool.self, forKey: .delta)
-        // DEBUG: Log raw delta value
-        // print("[CLIAssistantContent] Decoded: delta=\(String(describing: delta)), content.count=\(content.count)")
     }
 }
 
 /// User message echo (sent back by server)
-struct CLIUserContent: Decodable {
+struct CLIUserContent: Codable, Equatable {
     let content: String
 }
 
 /// System message content
-struct CLISystemContent: Decodable {
+struct CLISystemContent: Codable, Equatable {
     let content: String
     let subtype: String?  // "init" | "result" | "progress"
 }
 
 /// Thinking/reasoning block content
-struct CLIThinkingContent: Decodable {
+struct CLIThinkingContent: Codable, Equatable {
     let content: String
-    // Note: cli-bridge doesn't send 'id' for thinking blocks
 }
 
 /// Tool use message - when a tool starts executing
-struct CLIToolUseContent: Decodable {
+struct CLIToolUseContent: Codable, Equatable {
     let id: String
     let name: String  // Tool name (e.g., "Bash", "Read", "Edit")
     let input: [String: AnyCodableValue]
 }
 
 /// Tool result message - when a tool completes
-struct CLIToolResultContent: Decodable {
+struct CLIToolResultContent: Codable, Equatable {
     let id: String
     let tool: String
     let output: String
@@ -862,14 +986,13 @@ struct CLIToolResultContent: Decodable {
 }
 
 /// Progress message for long-running tools
-struct CLIProgressContent: Decodable {
+struct CLIProgressContent: Codable, Equatable {
     let id: String        // Correlates to tool_use.id
     let tool: String
-    let elapsed: Double   // Seconds since start (changed to Double for precision)
+    let elapsed: Double   // Seconds since start
     let progress: Int?    // 0-100 percentage (optional)
     let detail: String?   // Human-readable status
 
-    // Manual initializer for previews and testing
     init(id: String = "", tool: String, elapsed: Double = 0, progress: Int? = nil, detail: String? = nil) {
         self.id = id
         self.tool = tool
@@ -885,15 +1008,14 @@ struct CLIProgressContent: Decodable {
 }
 
 /// Token usage information
-struct CLIUsageContent: Decodable {
-    // Note: cli-bridge doesn't send 'id' for usage messages
+struct CLIUsageContent: Codable, Equatable {
     let inputTokens: Int
     let outputTokens: Int
     let cacheReadTokens: Int?
     let cacheCreateTokens: Int?
     let totalCost: Double?
-    let contextUsed: Int?   // Made optional - may not always be present
-    let contextLimit: Int?  // Made optional - may not always be present
+    let contextUsed: Int?
+    let contextLimit: Int?
 
     /// Total tokens used (input + output)
     var totalTokens: Int {
@@ -908,40 +1030,36 @@ struct CLIUsageContent: Decodable {
 }
 
 /// Agent state change message
-struct CLIStateContent: Decodable {
+struct CLIStateContent: Codable, Equatable {
     let state: CLIAgentState
     let tool: String?  // Tool name if state is "executing"
 }
 
-struct CLISubagentStartContent: Decodable {
+struct CLISubagentStartContent: Codable, Equatable {
     let id: String
     let description: String
-    let agentType: String?  // Optional - agent type (e.g., "code-reviewer")
+    let agentType: String?
 
-    // Manual initializer for previews and testing
     init(id: String = "", description: String, agentType: String? = nil) {
         self.id = id
         self.description = description
         self.agentType = agentType
     }
 
-    // Display-friendly agent type
     var displayAgentType: String {
         agentType ?? "Task"
     }
 }
 
-struct CLISubagentCompleteContent: Decodable {
+struct CLISubagentCompleteContent: Codable, Equatable {
     let id: String
-    let summary: String?  // Made optional: cli-bridge may not send summary
+    let summary: String?
 
-    // Manual initializer for previews and testing
     init(id: String = "", summary: String? = nil) {
         self.id = id
         self.summary = summary
     }
 
-    /// Display-friendly summary with fallback
     var displaySummary: String {
         summary ?? "Task completed"
     }
@@ -951,7 +1069,7 @@ struct CLISubagentCompleteContent: Decodable {
 
 /// Agent state values from cli-bridge
 /// Maps to: "starting" | "thinking" | "executing" | "waiting_input" | "waiting_permission" | "idle" | "recovering" | "stopped"
-enum CLIAgentState: String, Decodable, Equatable {
+enum CLIAgentState: String, Codable, Equatable {
     case starting           // Agent initializing
     case thinking           // Processing, generating response
     case executing          // Executing a tool
@@ -977,6 +1095,16 @@ enum CLIAgentState: String, Decodable, Equatable {
     var isProcessing: Bool {
         switch self {
         case .thinking, .executing:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// True when agent is actively working (show status bubble)
+    var isWorking: Bool {
+        switch self {
+        case .thinking, .executing, .starting, .recovering:
             return true
         default:
             return false
@@ -1019,7 +1147,7 @@ enum CLIAgentState: String, Decodable, Equatable {
 
 // MARK: - Permission Request
 
-struct CLIPermissionRequest: Decodable {
+struct CLIPermissionRequest: Codable, Equatable {
     let id: String
     let tool: String
     let input: [String: AnyCodableValue]
@@ -1027,7 +1155,6 @@ struct CLIPermissionRequest: Decodable {
 
     /// Get a human-readable description of what's being requested
     var description: String {
-        // Extract common fields for description
         if let command = input["command"]?.stringValue {
             return "Run command: \(command)"
         }
@@ -1040,19 +1167,19 @@ struct CLIPermissionRequest: Decodable {
 
 // MARK: - Question Request (AskUserQuestion)
 
-struct CLIQuestionRequest: Decodable {
+struct CLIQuestionRequest: Codable, Equatable {
     let id: String
     let questions: [CLIQuestionItem]
 }
 
-struct CLIQuestionItem: Decodable {
+struct CLIQuestionItem: Codable, Equatable {
     let question: String
     let header: String
     let options: [CLIQuestionOption]
     let multiSelect: Bool
 }
 
-struct CLIQuestionOption: Decodable {
+struct CLIQuestionOption: Codable, Equatable {
     let label: String
     let description: String?
 }
@@ -2129,16 +2256,23 @@ struct CLIPaginationInfo: Decodable {
     let prevCursor: String?    // Message ID for "after" parameter to get newer messages
 }
 
-/// Response from paginated messages endpoint
+/// Response from paginated messages endpoint (unified format v0.3.5+)
 /// GET /projects/:path/sessions/:id/messages
+/// Uses same StoredMessage format as WebSocket streaming
 struct CLIPaginatedMessagesResponse: Decodable {
-    let messages: [CLIPaginatedMessageEntry]
+    let messages: [StoredMessage]
     let pagination: CLIPaginationInfo
 
-    // Convenience accessors for backwards compatibility
+    // Convenience accessors
     var total: Int { pagination.total }
     var hasMore: Bool { pagination.hasMore }
     var nextCursor: String? { pagination.nextCursor }
+
+    /// Convert all messages to ChatMessages for UI display
+    /// Filters out ephemeral messages and nil conversions
+    func toChatMessages() -> [ChatMessage] {
+        messages.compactMap { $0.toChatMessage() }
+    }
 }
 
 // MARK: - Bulk Operation Types

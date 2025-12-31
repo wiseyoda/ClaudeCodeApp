@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import UIKit
 
 // MARK: - Debug Log Types
@@ -70,34 +71,28 @@ struct DebugLogEntry: Identifiable {
 
 /// Singleton store for debug logs, used to capture WebSocket traffic
 ///
-/// ## iOS 26+ Migration: @IncrementalState
-/// This store manages 500+ entries and is a prime candidate for @IncrementalState.
-/// When Xcode 26 is available, migrate `entries` to use @IncrementalState for
-/// better performance in List views with large datasets.
-///
-/// Migration steps:
-/// 1. Change `@Published var entries` to `@IncrementalState var entries`
-/// 2. Add `.incrementalID()` modifier to list items using `entry.id`
-/// 3. Use incremental update methods instead of full array replacement
+/// Uses @Observable (iOS 17+) for fine-grained view updates.
+/// Only affected log entries trigger re-renders, making 500+ entry lists smooth.
 @MainActor
-class DebugLogStore: ObservableObject {
+@Observable
+class DebugLogStore {
     static let shared = DebugLogStore()
 
-    /// All captured log entries
-    /// iOS 26+: Migrate to @IncrementalState for better List performance
-    @Published var entries: [DebugLogEntry] = []
+    /// Observable array - views only re-render for entries they display
+    /// Use with .incrementalID(entry.id) on ForEach items for best performance
+    var entries: [DebugLogEntry] = []
 
     /// Whether debug logging is enabled (controlled by AppSettings)
-    @Published var isEnabled: Bool = false
+    var isEnabled: Bool = false
 
     /// Maximum number of entries to keep (prevents memory issues)
     let maxEntries = 500
 
     /// Filter for log types
-    @Published var typeFilter: Set<DebugLogType> = Set(DebugLogType.allCases)
+    var typeFilter: Set<DebugLogType> = Set(DebugLogType.allCases)
 
     /// Search text filter
-    @Published var searchText: String = ""
+    var searchText: String = ""
 
     private init() {}
 

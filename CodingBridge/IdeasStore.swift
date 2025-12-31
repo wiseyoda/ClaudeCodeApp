@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 
 /// An idea captured during a Claude session
 struct Idea: Identifiable, Codable, Equatable {
@@ -71,18 +72,14 @@ struct Idea: Identifiable, Codable, Equatable {
 
 /// Manages persistent storage of ideas per project
 ///
-/// ## iOS 26+ Migration: @IncrementalState
-/// This store manages per-project ideas and is a candidate for @IncrementalState.
-/// The migration will improve List performance when users have many ideas.
-///
-/// Migration steps:
-/// 1. Change `@Published var ideas` to `@IncrementalState var ideas`
-/// 2. Add `.incrementalID()` modifier to IdeaRow views using `idea.id`
-/// 3. Use incremental update methods for add/update/delete/archive operations
+/// Uses @Observable (iOS 17+) for fine-grained view updates.
+/// Only affected rows update when ideas are added/modified/deleted/archived.
 @MainActor
-class IdeasStore: ObservableObject {
-    /// iOS 26+: Consider migrating to @IncrementalState for better List performance
-    @Published var ideas: [Idea] = []
+@Observable
+class IdeasStore {
+    /// Observable array - views only re-render when ideas they display change
+    /// Use with .incrementalID(idea.id) on ForEach items for best performance
+    var ideas: [Idea] = []
 
     private let projectPath: String
     private let ideasDirectory = "ideas"

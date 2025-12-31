@@ -25,16 +25,6 @@ When reporting a bug, include:
 - **Location**: `CLIBridgeAdapter.swift`, token display UI
 - **Priority**: Medium - affects user's ability to monitor usage
 
-### #32: ClaudeHelper AI Suggestions Not Working
-- **What happened**: Auto-suggestions feature not triggering after Claude responses
-- **Expected**: AI should suggest next actions based on response context
-- **Investigation needed**:
-  - Verify ClaudeHelper is receiving response content
-  - Check if suggestion prompts are being sent to API
-  - Confirm UI is displaying suggestions when received
-- **Location**: `ClaudeHelper.swift`, `ChatView.swift`
-- **Priority**: Medium - affects usability enhancement feature
-
 ### #35: Git Refresh Error on Pull-to-Refresh
 - **What happened**: Pull-to-refresh on home screen shows git status errors
 - **Expected**: Git status should refresh cleanly or fail gracefully
@@ -72,6 +62,20 @@ When reporting a bug, include:
   - Run git status in each subrepo directory
   - Aggregate results for display (e.g., "3/5 repos have changes")
 
+### #36: [cli-bridge] Batch session counts API (Medium Priority)
+- **What**: Request batch endpoint to fetch session counts for multiple projects at once
+- **Why**: Currently requires N API calls for N projects, each taking 300-400ms
+- **Impact**: Significant latency on HomeView load with many projects
+- **Proposed Endpoint**:
+  ```
+  POST /projects/sessions/counts
+  Body: { "paths": ["/path/to/project1", "/path/to/project2", ...] }
+  Response: { "counts": { "/path/to/project1": 5, "/path/to/project2": 3, ... } }
+  ```
+- **Workaround**: App currently caches session counts in `ProjectCache.swift`
+- **Location**: cli-bridge backend (not iOS app)
+- **Status**: Feature request - awaiting cli-bridge team feedback
+
 ---
 
 ## Resolved Issues
@@ -80,6 +84,7 @@ See [CHANGELOG.md](CHANGELOG.md) for details on resolved issues.
 
 | # | Issue | Version |
 |---|-------|---------|
+| 32 | ClaudeHelper AI Suggestions (feature removed - ClaudeHelper.swift deleted) | 0.6.4 |
 | 29 | BGTaskScheduler simulator error (works on device, simulator limitation) | 0.6.1 |
 | 28 | xcodebuild test bundle issue (run tests separately as workaround) | 0.6.1 |
 | 25 | Voice transcription text contrast (fixed text color) | 0.6.1 |

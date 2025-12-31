@@ -2,11 +2,11 @@ import SwiftUI
 import PhotosUI
 
 // MARK: - CLI Input View
-// iOS 26+: TextEditor supports AttributedString for rich text
-// Consider migrating to TextEditor with AttributedString binding for:
-// - Syntax highlighting of code blocks
-// - Styled @mentions and file references
-// - Rich formatting in prompts
+// iOS 26+: TextEditor with AttributedString for rich text input
+// Features:
+// - Syntax highlighting via AttributedString styles
+// - Automatic Markdown detection and styling
+// - Native rich text formatting keyboard shortcuts
 
 struct CLIInputView: View {
     @Binding var text: String
@@ -32,6 +32,13 @@ struct CLIInputView: View {
     @State private var showCommandPicker = false
     @State private var showPhotoPicker = false
     @State private var selectedItems: [PhotosPickerItem] = []
+
+    /// Rich text content using iOS 26's AttributedString support
+    /// Synced bidirectionally with the plain text binding for compatibility
+    @State private var richText: AttributedString = AttributedString()
+
+    /// Selection state for AttributedString text editing (iOS 26+)
+    @State private var textSelection = AttributedTextSelection()
 
     init(
         text: Binding<String>,
@@ -74,29 +81,44 @@ struct CLIInputView: View {
             }
 
             // Main input row
-            HStack(alignment: .bottom, spacing: 8) {
+            HStack(alignment: .center, spacing: 8) {
                 // [+] Attachment menu button
                 if !isProcessing {
                     attachmentMenuButton
                 }
 
-                // Multi-line text input with iOS 26+ glass-ready styling
-                TextField("Type a message...", text: $text, axis: .vertical)
+                // iOS 26+ Rich text input with AttributedString support
+                // Enables Markdown-style formatting, code highlighting, and @mentions
+                TextEditor(text: $richText, selection: $textSelection)
                     .font(settings.scaledFont(.body))
-                    .foregroundColor(CLITheme.primaryText(for: colorScheme))
+                    .foregroundStyle(CLITheme.primaryText(for: colorScheme))
                     .focused($isFocused)
                     .disabled(isProcessing)
-                    .lineLimit(1...8)
-                    .textFieldStyle(.plain)
-                    .submitLabel(.send)
-                    .onSubmit {
-                        if !isProcessing && (!text.isEmpty || !selectedImages.isEmpty) {
-                            onSend()
+                    .scrollContentBackground(.hidden)
+                    .contentMargins(.vertical, 0, for: .scrollContent)
+                    .frame(minHeight: 36, maxHeight: 200)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .glassBackground(cornerRadius: 20)
+                    .onAppear {
+                        // Initialize rich text from plain text binding
+                        richText = styleInputText(text)
+                    }
+                    .onChange(of: text) { _, newText in
+                        // Sync from parent: update rich text when plain text changes externally
+                        let newRichText = styleInputText(newText)
+                        if String(richText.characters) != newText {
+                            richText = newRichText
                         }
                     }
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .glassBackground(cornerRadius: 20)
+                    .onChange(of: richText) { _, newRichText in
+                        // Sync to parent: update plain text when rich text changes
+                        let plainText = String(newRichText.characters)
+                        if text != plainText {
+                            text = plainText
+                        }
+                    }
 
                 // Send button
                 sendButton
@@ -387,5 +409,58 @@ struct CLIInputView: View {
     private func insertCommandContent(_ content: String) {
         // Replace entire text with command content
         text = content
+    }
+
+    // MARK: - Rich Text Styling (iOS 26+)
+
+    /// Apply syntax highlighting styles to input text
+    /// - Styles @file references in cyan
+    /// - Styles inline code (backticks) in monospace with background
+    /// - Styles slash commands in yellow
+    private func styleInputText(_ plainText: String) -> AttributedString {
+        guard !plainText.isEmpty else {
+            return AttributedString()
+        }
+
+        var attributedString = AttributedString(plainText)
+
+        // Style @file references (e.g., @src/file.swift)
+        let filePattern = try? NSRegularExpression(pattern: "@[\\w/.\\-]+", options: [])
+        if let matches = filePattern?.matches(in: plainText, range: NSRange(plainText.startIndex..., in: plainText)) {
+            for match in matches {
+                if let range = Range(match.range, in: plainText),
+                   let attrRange = Range(range, in: attributedString) {
+                    attributedString[attrRange].foregroundColor = CLITheme.cyan(for: colorScheme)
+                    attributedString[attrRange].font = settings.scaledFont(.body).monospaced()
+                }
+            }
+        }
+
+        // Style inline code with backticks (e.g., `code`)
+        let codePattern = try? NSRegularExpression(pattern: "`[^`]+`", options: [])
+        if let matches = codePattern?.matches(in: plainText, range: NSRange(plainText.startIndex..., in: plainText)) {
+            for match in matches {
+                if let range = Range(match.range, in: plainText),
+                   let attrRange = Range(range, in: attributedString) {
+                    attributedString[attrRange].foregroundColor = CLITheme.green(for: colorScheme)
+                    attributedString[attrRange].font = settings.scaledFont(.body).monospaced()
+                    attributedString[attrRange].backgroundColor = CLITheme.secondaryBackground(for: colorScheme)
+                }
+            }
+        }
+
+        // Style slash commands (e.g., /help, /model)
+        let slashPattern = try? NSRegularExpression(pattern: "^/[a-z]+", options: [.anchorsMatchLines])
+        if let matches = slashPattern?.matches(in: plainText, range: NSRange(plainText.startIndex..., in: plainText)) {
+            for match in matches {
+                if let range = Range(match.range, in: plainText),
+                   let attrRange = Range(range, in: attributedString) {
+                    attributedString[attrRange].foregroundColor = CLITheme.yellow(for: colorScheme)
+                    attributedString[attrRange].font = settings.scaledFont(.body).bold()
+                }
+            }
+        }
+
+        return attributedString
     }
 }

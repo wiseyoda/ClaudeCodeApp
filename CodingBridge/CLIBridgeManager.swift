@@ -66,6 +66,7 @@ class CLIBridgeManager: ObservableObject {
 
     @Published var connectionState: CLIConnectionState = .disconnected
     @Published var agentState: CLIAgentState = .idle
+    @Published var currentTool: String?  // Tool name when agentState is .executing
     @Published var sessionId: String?
     @Published var currentModel: String?
     @Published var protocolVersion: String?
@@ -141,6 +142,9 @@ class CLIBridgeManager: ObservableObject {
 
     /// Called when subagent completes
     var onSubagentComplete: ((CLISubagentCompleteContent) -> Void)?
+
+    /// Called when system message arrives (subtype: "result")
+    var onSystem: ((String) -> Void)?
 
     // MARK: - Private State
 
@@ -720,7 +724,10 @@ class CLIBridgeManager: ObservableObject {
             handleConnected(payload)
 
         case .stream(let streamMessage):
-            handleStreamMessage(streamMessage.message)
+            // Convert to unified StoredMessage format and track ID
+            let stored = streamMessage.toStoredMessage()
+            lastMessageId = stored.id
+            handleStreamMessage(stored)
 
         case .permission(let request):
             handlePermissionRequest(request)
@@ -786,19 +793,21 @@ class CLIBridgeManager: ObservableObject {
         log.info("Connected to cli-bridge: agent=\(payload.agentId), session=\(payload.sessionId), model=\(payload.model)")
     }
 
-    private func handleStreamMessage(_ content: CLIStreamContent) {
-        switch content {
+    private func handleStreamMessage(_ stored: StoredMessage) {
+        switch stored.message {
         case .assistant(let assistantContent):
-            // Note: assistant messages don't have 'id' in cli-bridge
             appendText(assistantContent.content, isFinal: assistantContent.isFinal)
 
         case .user:
             // User message echo - ignore (we already have it locally)
             break
 
-        case .system:
-            // System messages - could log or display as system info
-            break
+        case .system(let systemContent):
+            // System messages with subtype "result" are displayable (e.g., greeting messages)
+            if systemContent.subtype == "result" {
+                onSystem?(systemContent.content)
+            }
+            // "init" and "progress" subtypes are internal status updates - ignore
 
         case .thinking(let thinkingContent):
             onThinking?(thinkingContent.content)
@@ -828,6 +837,7 @@ class CLIBridgeManager: ObservableObject {
 
         case .state(let stateContent):
             agentState = stateContent.state
+            currentTool = stateContent.tool  // Track tool name for StatusBubbleView
 
         case .subagentStart(let subagentContent):
             activeSubagent = subagentContent
@@ -1046,8 +1056,8 @@ extension CLIBridgeManager {
         await processServerMessage(message)
     }
 
-    func test_handleStreamMessage(_ content: CLIStreamContent) {
-        handleStreamMessage(content)
+    func test_handleStreamMessage(_ stored: StoredMessage) {
+        handleStreamMessage(stored)
     }
 
     func test_handleDisconnect(error: Error) async {
@@ -1060,6 +1070,10 @@ extension CLIBridgeManager {
 
     func test_reconnectWithExistingSession() {
         reconnectWithExistingSession()
+    }
+
+    func test_handleNetworkRestored() {
+        handleNetworkRestored()
     }
 
     func test_setNetworkAvailable(_ available: Bool) {
