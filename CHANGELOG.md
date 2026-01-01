@@ -6,6 +6,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.6.7] - 2026-01-01
+
+### Added
+
+- **History Hardening iOS Implementation**: 7 robustness improvements for message history
+  - `lastMessageId` reconnect - Resume from last known message on reconnection
+  - Error types - Distinct `CLIBridgeError` cases for different failure modes
+  - Message deduplication - Prevent duplicate messages via ID tracking
+  - REST API format - Proper structured content parsing from export fallback
+  - Rate limiting awareness - Handle 429 responses with Retry-After support
+  - Message validation - Validate message structure before processing
+  - Cursor persistence - Track session position across app restarts
+
+### Fixed
+
+- **Chat Scroll Performance**: Migrated from ScrollView to List for cell recycling
+  - Fixed UICollectionView crash by delaying scroll after List renders
+  - Use stable IDs for status messages to fix collection counts mismatch
+- **Message Deduplication**: Fixed duplicate messages in export API fallback path
+- **Compiler Warnings**: Fixed 4 compiler warnings identified during codebase audit
+  - CLIBridgeTypes unused variable warning
+  - ChatViewModel unused self warning
+  - LiveActivityManager deprecated API warning
+  - CodingBridgeApp Sendable warning
+- **Debug Print Statements**: Converted SSHKeyDetection print() calls to Logger
+
+### Changed
+
+- **Codebase Audit Improvements** (2026-01-01)
+  - Replaced duplicate `AnyCodable` struct with `typealias AnyCodable = AnyCodableValue`
+  - Created shared `CLIDateFormatter` enum replacing 9 duplicate formatter declarations
+  - Added explicit request timeouts to `CLIBridgeAPIClient` (30s request, 120s resource)
+  - Extended retry logic with exponential backoff for rate limiting and server errors
+  - Replaced force unwraps in multipart form data with safe `Data(string.utf8)`
+
+---
+
 ## [0.6.6] - 2025-12-31
 
 ### Added
@@ -580,6 +617,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Highlights                                             |
 | ------- | ------------------------------------------------------ |
+| 0.6.7   | History hardening, List scroll performance, audit fixes|
 | 0.1.0   | Initial app: WebSocket chat, SSH terminal, voice input |
 | 0.2.0   | Slash commands, TodoWrite, images, settings overhaul   |
 | 0.2.5   | Code hardening, tests, better error handling           |

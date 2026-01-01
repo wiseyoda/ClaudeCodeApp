@@ -146,6 +146,17 @@ class CLIBridgeManager: ObservableObject {
     /// Called when system message arrives (subtype: "result")
     var onSystem: ((String) -> Void)?
 
+    // MARK: - History Hardening Callbacks
+
+    /// Called when cursor is evicted from server memory (fall back to REST API)
+    var onCursorEvicted: ((CLICursorEvictedPayload) -> Void)?
+
+    /// Called when cursor ID is invalid
+    var onCursorInvalid: ((CLICursorInvalidPayload) -> Void)?
+
+    /// Called when reconnect completes with missed message info
+    var onReconnectComplete: ((CLIReconnectCompletePayload) -> Void)?
+
     // MARK: - Private State
 
     private var webSocket: WebSocketTasking?
@@ -168,6 +179,16 @@ class CLIBridgeManager: ObservableObject {
     private var pendingSessionId: String?
     private var pendingModel: String?
     private var pendingHelper: Bool = false
+
+    // MARK: - History Hardening: Message Deduplication
+
+    /// Set of received message IDs for deduplication (prevents duplicate processing on reconnect)
+    /// Cap at 1000 entries to limit memory usage, evicting oldest on overflow
+    private var receivedMessageIds: Set<String> = []
+    private let maxDeduplicationEntries = 1000
+
+    /// UserDefaults key prefix for lastMessageId persistence
+    private static let lastMessageIdPrefix = "cli_bridge_last_message_"
 
     // MARK: - Lifecycle State
 
@@ -437,7 +458,8 @@ class CLIBridgeManager: ObservableObject {
         }
     }
 
-    /// Reconnect to an existing agent
+    /// Reconnect to an existing agent with history recovery
+    /// Sends lastMessageId so server can replay any missed messages
     func reconnect(agentId: String, lastMessageId: String? = nil) async {
         guard !connectionState.isConnected else {
             log.debug("Already connected")
@@ -459,8 +481,19 @@ class CLIBridgeManager: ObservableObject {
         self.connectionId = currentConnectionId
         startReceiveLoop(connectionId: currentConnectionId)
 
-        // TODO: Send reconnect message when cli-bridge supports it
-        // For now, we'll need to start a new session
+        // Send reconnect message with lastMessageId for history recovery
+        // Server will replay any messages missed since lastMessageId
+        let messageId = lastMessageId ?? self.lastMessageId
+        let reconnectPayload = CLIReconnectPayload(agentId: agentId, lastMessageId: messageId)
+
+        do {
+            try await send(.reconnect(reconnectPayload))
+            log.info("[CLIBridge] Reconnecting to agent \(agentId) with lastMessageId: \(messageId ?? "none")")
+        } catch {
+            log.error("Failed to send reconnect message: \(error)")
+            lastError = error.localizedDescription
+            connectionState = .disconnected
+        }
     }
 
     /// Disconnect from the server
@@ -513,10 +546,15 @@ class CLIBridgeManager: ObservableObject {
         onHistory = nil
         onSubagentStart = nil
         onSubagentComplete = nil
+        onSystem = nil
         onConnectionReplaced = nil
         onReconnecting = nil
         onConnectionError = nil
         onNetworkStatusChanged = nil
+        // History hardening callbacks
+        onCursorEvicted = nil
+        onCursorInvalid = nil
+        onReconnectComplete = nil
     }
 
     /// Disconnect but preserve session for later reconnection
@@ -766,6 +804,20 @@ class CLIBridgeManager: ObservableObject {
             activeSubagent = nil  // Clear in case subagent_complete wasn't received
             toolProgress = nil
             onStopped?("interrupted")
+
+        // History hardening: cursor/reconnect messages
+        case .cursorEvicted(let payload):
+            log.warning("[CLIBridge] Cursor evicted for session \(payload.sessionId): \(payload.reason ?? "memory_limit")")
+            onCursorEvicted?(payload)
+
+        case .cursorInvalid(let payload):
+            log.warning("[CLIBridge] Invalid cursor \(payload.cursorId) for session \(payload.sessionId ?? "unknown")")
+            onCursorInvalid?(payload)
+
+        case .reconnectComplete(let payload):
+            log.info("[CLIBridge] Reconnect complete: \(payload.missedCount) messages replayed, hasGap=\(payload.hasGap)")
+            reconnectAttempt = 0  // Reset on successful reconnect
+            onReconnectComplete?(payload)
         }
     }
 
@@ -777,11 +829,70 @@ class CLIBridgeManager: ObservableObject {
         connectionState = .connected(agentId: payload.agentId)
         agentState = .idle
 
+        // History hardening: Load persisted lastMessageId for this session
+        lastMessageId = loadLastMessageId(for: payload.sessionId)
+        if lastMessageId != nil {
+            log.debug("[CLIBridge] Loaded lastMessageId: \(lastMessageId!)")
+        }
+
         onSessionConnected?(payload.sessionId)
         log.info("Connected to cli-bridge: agent=\(payload.agentId), session=\(payload.sessionId), model=\(payload.model)")
     }
 
+    // MARK: - History Hardening: LastMessageId Persistence
+
+    /// Persist lastMessageId to UserDefaults for reconnection
+    private func persistLastMessageId(_ id: String) {
+        guard let session = sessionId else { return }
+        let key = Self.lastMessageIdPrefix + session
+        UserDefaults.standard.set(id, forKey: key)
+        lastMessageId = id
+    }
+
+    /// Load lastMessageId from UserDefaults
+    private func loadLastMessageId(for session: String) -> String? {
+        let key = Self.lastMessageIdPrefix + session
+        return UserDefaults.standard.string(forKey: key)
+    }
+
+    /// Clear persisted lastMessageId for a session
+    func clearLastMessageId(for session: String? = nil) {
+        let sessionToUse = session ?? sessionId
+        guard let session = sessionToUse else { return }
+        let key = Self.lastMessageIdPrefix + session
+        UserDefaults.standard.removeObject(forKey: key)
+        if session == sessionId {
+            lastMessageId = nil
+        }
+    }
+
+    /// Clear deduplication cache (call when starting new session)
+    func clearDeduplicationCache() {
+        receivedMessageIds.removeAll()
+    }
+
     private func handleStreamMessage(_ stored: StoredMessage) {
+        // History hardening: Validate incoming message
+        stored.validateAndLog()
+
+        // History hardening: Deduplication - skip if we've already processed this message
+        if receivedMessageIds.contains(stored.id) {
+            log.debug("[CLIBridge] Skipping duplicate message: \(stored.id)")
+            return
+        }
+
+        // Add to deduplication set (with size limit)
+        if receivedMessageIds.count >= maxDeduplicationEntries {
+            // Remove oldest entry (simple eviction - Set doesn't preserve order, so just remove one)
+            if let first = receivedMessageIds.first {
+                receivedMessageIds.remove(first)
+            }
+        }
+        receivedMessageIds.insert(stored.id)
+
+        // Persist lastMessageId for reconnection
+        persistLastMessageId(stored.id)
+
         switch stored.message {
         case .assistant(let assistantContent):
             appendText(assistantContent.content, isFinal: assistantContent.isFinal)

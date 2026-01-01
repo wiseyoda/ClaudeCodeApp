@@ -10,9 +10,25 @@ class CLIBridgeAPIClient: ObservableObject {
     private let serverURL: String
     private let session: URLSession
 
-    init(serverURL: String, session: URLSession = .shared) {
+    // MARK: - Timeout Configuration
+
+    /// Default timeout waiting for server to begin responding (seconds)
+    static let defaultRequestTimeout: TimeInterval = 30
+
+    /// Default total time for the entire resource transfer (seconds)
+    static let defaultResourceTimeout: TimeInterval = 120
+
+    /// Shared URLSession with configured timeouts for API requests
+    private static let configuredSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = defaultRequestTimeout
+        config.timeoutIntervalForResource = defaultResourceTimeout
+        return URLSession(configuration: config)
+    }()
+
+    init(serverURL: String, session: URLSession? = nil) {
         self.serverURL = serverURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        self.session = session
+        self.session = session ?? Self.configuredSession
     }
 
     // MARK: - Projects
@@ -446,12 +462,13 @@ class CLIBridgeAPIClient: ObservableObject {
         var body = Data()
 
         // Add image data
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"image\"; filename=\"image\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
+        // Note: These ASCII strings always encode successfully to UTF-8
+        body.append(Data("--\(boundary)\r\n".utf8))
+        body.append(Data("Content-Disposition: form-data; name=\"image\"; filename=\"image\"\r\n".utf8))
+        body.append(Data("Content-Type: \(mimeType)\r\n\r\n".utf8))
         body.append(imageData)
-        body.append("\r\n".data(using: .utf8)!)
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        body.append(Data("\r\n".utf8))
+        body.append(Data("--\(boundary)--\r\n".utf8))
 
         request.httpBody = body
 
@@ -516,14 +533,11 @@ class CLIBridgeAPIClient: ObservableObject {
         fcmToken: String,
         environment: String
     ) async throws -> CLIPushRegisterResponse {
-        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
-        let osVersion = UIDevice.current.systemVersion
-
         let request = CLIPushRegisterRequest(
             fcmToken: fcmToken,
             environment: environment,
-            appVersion: appVersion,
-            osVersion: osVersion
+            appVersion: AppVersion.version,
+            osVersion: UIDevice.current.systemVersion
         )
         return try await postWithBody("/api/push/register", body: request)
     }
@@ -753,12 +767,161 @@ class CLIBridgeAPIClient: ObservableObject {
         case 404:
             throw CLIBridgeAPIError.notFound
         case 429:
-            throw CLIBridgeAPIError.rateLimited
+            // Extract rate limit info from headers
+            let rateLimitInfo = RateLimitInfo.from(httpResponse)
+            throw CLIBridgeAPIError.rateLimitedWithRetry(rateLimitInfo)
         case 500...599:
             throw CLIBridgeAPIError.serverError(httpResponse.statusCode)
         default:
             throw CLIBridgeAPIError.unexpectedStatus(httpResponse.statusCode)
         }
+    }
+
+    // MARK: - Retry Logic with Exponential Backoff
+
+    /// Execute a request with automatic retry on transient errors
+    /// Retries on: rate limiting (429), server errors (5xx), network errors
+    /// Uses exponential backoff with jitter for retries
+    func withRetry<T>(
+        maxRetries: Int = 3,
+        operation: @escaping () async throws -> T
+    ) async throws -> T {
+        var lastError: Error?
+        var attempt = 0
+
+        while attempt < maxRetries {
+            do {
+                return try await operation()
+            } catch {
+                // Check if error is retryable
+                guard let (isRetryable, baseDelay, reason) = retryInfo(for: error) else {
+                    throw error
+                }
+
+                if !isRetryable {
+                    throw error
+                }
+
+                attempt += 1
+
+                if attempt >= maxRetries {
+                    log.error("[API] \(reason): max retries (\(maxRetries)) exceeded")
+                    throw error
+                }
+
+                // Calculate delay with exponential backoff + jitter
+                let exponentialDelay = baseDelay ?? pow(2.0, Double(attempt))
+                let jitter = Double.random(in: 0...0.5)
+                let delay = min(exponentialDelay + jitter, 60.0)  // Cap at 60 seconds
+
+                log.warning("[API] \(reason), retrying in \(String(format: "%.1f", delay))s (attempt \(attempt)/\(maxRetries))")
+
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                lastError = error
+                continue
+            }
+        }
+
+        throw lastError ?? CLIBridgeAPIError.serverError(500)
+    }
+
+    /// Legacy alias for backwards compatibility
+    func withRateLimitRetry<T>(
+        maxRetries: Int = 3,
+        operation: @escaping () async throws -> T
+    ) async throws -> T {
+        try await withRetry(maxRetries: maxRetries, operation: operation)
+    }
+
+    /// Check if an error is retryable and return retry info
+    /// - Returns: (isRetryable, suggestedDelay, reason) or nil if not our error type
+    private func retryInfo(for error: Error) -> (Bool, Double?, String)? {
+        // Handle CLI Bridge API errors
+        if let apiError = error as? CLIBridgeAPIError {
+            switch apiError {
+            case .rateLimitedWithRetry(let info):
+                return (true, info?.retryAfter, "Rate limited")
+            case .rateLimited:
+                return (true, nil, "Rate limited")
+            case .serverError(let code):
+                // 5xx errors are retryable
+                return (true, nil, "Server error (\(code))")
+            default:
+                // 4xx errors (badRequest, unauthorized, forbidden, notFound) are not retryable
+                return (false, nil, "")
+            }
+        }
+
+        // Handle URLSession network errors
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .timedOut,
+                 .cannotFindHost,
+                 .cannotConnectToHost,
+                 .networkConnectionLost,
+                 .notConnectedToInternet,
+                 .dnsLookupFailed,
+                 .secureConnectionFailed:
+                return (true, nil, "Network error: \(urlError.localizedDescription)")
+            default:
+                // Other URL errors (cancelled, bad URL, etc.) are not retryable
+                return (false, nil, "")
+            }
+        }
+
+        // Unknown error type - don't retry
+        return nil
+    }
+}
+
+// MARK: - History Hardening: Rate Limit Info
+
+/// Rate limit information extracted from HTTP response headers
+struct RateLimitInfo {
+    let limit: Int?           // X-RateLimit-Limit: max requests per window
+    let remaining: Int?       // X-RateLimit-Remaining: requests left in window
+    let resetTime: Date?      // X-RateLimit-Reset: when window resets (Unix timestamp)
+    let retryAfter: Double?   // Retry-After: seconds to wait before retrying
+
+    /// Parse rate limit info from HTTP response headers
+    static func from(_ response: HTTPURLResponse) -> RateLimitInfo {
+        let limit = response.value(forHTTPHeaderField: "X-RateLimit-Limit").flatMap { Int($0) }
+        let remaining = response.value(forHTTPHeaderField: "X-RateLimit-Remaining").flatMap { Int($0) }
+
+        var resetTime: Date?
+        if let resetString = response.value(forHTTPHeaderField: "X-RateLimit-Reset"),
+           let resetTimestamp = Double(resetString) {
+            resetTime = Date(timeIntervalSince1970: resetTimestamp)
+        }
+
+        var retryAfter: Double?
+        if let retryString = response.value(forHTTPHeaderField: "Retry-After") {
+            retryAfter = Double(retryString)
+        }
+
+        return RateLimitInfo(
+            limit: limit,
+            remaining: remaining,
+            resetTime: resetTime,
+            retryAfter: retryAfter
+        )
+    }
+
+    /// Calculate how long to wait before retrying
+    var recommendedWait: TimeInterval {
+        // If Retry-After is set, use that
+        if let retry = retryAfter {
+            return retry
+        }
+
+        // If reset time is set, calculate wait from that
+        if let reset = resetTime {
+            let wait = reset.timeIntervalSinceNow
+            return max(1, wait)  // At least 1 second
+        }
+
+        // Default fallback
+        return 5.0
     }
 }
 
@@ -796,64 +959,6 @@ struct CLIRenameSessionRequest: Encodable {
 struct CLIBulkDeleteResponse: Decodable {
     let deleted: Int
     let sessionIds: [String]?  // Made optional: cli-bridge may only send { deleted: count }
-}
-
-struct CLISessionMessagesResponse: Decodable {
-    let messages: [CLISessionMessage]
-}
-
-struct CLISessionMessage: Decodable {
-    let role: String
-    let content: String
-    let timestamp: String?
-    let toolName: String?
-    let toolInput: String?
-    let toolResult: String?
-    let thinking: String?
-
-    /// Convert to ChatMessage for UI display
-    func toChatMessage() -> ChatMessage? {
-        // Parse timestamp
-        var date = Date()
-        if let ts = timestamp {
-            let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            if let parsedDate = formatter.date(from: ts) {
-                date = parsedDate
-            } else {
-                formatter.formatOptions = [.withInternetDateTime]
-                date = formatter.date(from: ts) ?? Date()
-            }
-        }
-
-        // Map role
-        let msgRole: ChatMessage.Role
-        switch role.lowercased() {
-        case "user":
-            msgRole = .user
-        case "assistant":
-            msgRole = .assistant
-        case "system":
-            msgRole = .system
-        default:
-            msgRole = .assistant
-        }
-
-        // Build content
-        var fullContent = content
-
-        // Add thinking if present
-        if let thinkingContent = thinking, !thinkingContent.isEmpty {
-            fullContent = "<thinking>\n\(thinkingContent)\n</thinking>\n\n" + fullContent
-        }
-
-        // Add tool result if present
-        if let toolResult = toolResult, !toolResult.isEmpty {
-            fullContent += "\n\n<tool_result>\n\(toolResult)\n</tool_result>"
-        }
-
-        return ChatMessage(role: msgRole, content: fullContent, timestamp: date)
-    }
 }
 
 struct CLIImageUploadResponse: Decodable {
@@ -987,6 +1092,7 @@ enum CLIBridgeAPIError: LocalizedError {
     case forbidden
     case notFound
     case rateLimited
+    case rateLimitedWithRetry(RateLimitInfo?)  // History hardening: rate limit with retry info
     case serverError(Int)
     case unexpectedStatus(Int)
     case decodingError(Error)
@@ -1007,6 +1113,11 @@ enum CLIBridgeAPIError: LocalizedError {
         case .notFound:
             return "Resource not found"
         case .rateLimited:
+            return "Rate limited - please wait"
+        case .rateLimitedWithRetry(let info):
+            if let wait = info?.retryAfter {
+                return "Rate limited - retry after \(Int(wait))s"
+            }
             return "Rate limited - please wait"
         case .serverError(let code):
             return "Server error (\(code))"

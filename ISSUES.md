@@ -14,25 +14,38 @@ When reporting a bug, include:
 
 ## Open Issues
 
-### #24: Investigate New Token Calculation in cli-bridge
-- **What happened**: Token counts displayed in the app may not reflect actual usage accurately
-- **Expected**: Token usage should match what Claude Code CLI reports
-- **Investigation needed**:
-  - Check what token fields cli-bridge API returns in SSE events
-  - Compare with Claude Code CLI token reporting
-  - Determine if iOS app is parsing/displaying tokens correctly
-  - Consider adding token breakdown (input/output/cache) if available
-- **Location**: `CLIBridgeAdapter.swift`, token display UI
-- **Priority**: Medium - affects user's ability to monitor usage
+*No open issues at this time.*
 
-### #35: Git Refresh Error on Pull-to-Refresh
-- **What happened**: Pull-to-refresh on home screen shows git status errors
-- **Expected**: Git status should refresh cleanly or fail gracefully
-- **Investigation needed**:
-  - Check if API endpoint is returning errors
-  - Verify error handling in refresh flow
-- **Location**: `HomeView.swift`, `ContentView.swift`
-- **Priority**: Medium - affects UX
+---
+
+## Code Quality & Refactoring Opportunities
+
+*Identified during codebase audit on 2026-01-01*
+
+### File Size & Organization (Low Priority - Tech Debt)
+
+Large files that would benefit from being split into smaller, focused modules:
+
+| File | Lines | Suggested Split |
+|------|-------|-----------------|
+| `CLIBridgeTypes.swift` | ~1700 | Split into `CLIBridgeModels/`, `CLIBridgeEnums/`, `AnyCodable.swift` |
+| `ChatViewModel.swift` | ~1600 | Extract: `ChatSessionLogic.swift`, `ChatMessageHandling.swift`, `ChatGitIntegration.swift` |
+| `Models.swift` | ~1300 | Extract: `ChatMessage.swift`, `MessageStore.swift`, `BookmarkStore.swift`, `CommandStore.swift` |
+| `SSHManager.swift` | ~1100 | Extract: `SSHKeyManagement.swift`, `SSHFileOperations.swift`, `SSHGitOperations.swift` |
+| `CLIBridgeManager.swift` | ~900 | Consider splitting SSE handling into `CLIBridgeSSEHandler.swift` |
+
+### Audit Verification Summary (2026-01-01)
+
+| Pattern | Finding |
+|---------|---------|
+| `@MainActor` on ObservableObjects | All 25+ `ObservableObject` classes have `@MainActor` annotation |
+| SSH path escaping | All SSH commands use `shellEscapePath()` for proper escaping |
+| Keychain security | Uses `kSecAttrAccessibleWhenUnlockedThisDeviceOnly` for all credentials |
+| Force unwraps | Only safe patterns found (guarded by nil checks in same expression) |
+| Force casts (`as!`) | Only in BGTaskScheduler callbacks where type is guaranteed by registration |
+| `[weak self]` usage | Correct in file observers, timers, and long-running operations |
+| DispatchQueue.main | Appropriate uses: UI timing delays, Combine schedulers (no threading issues) |
+| TODO comments | Only one minor enhancement: image retry support in ChatViewModel:646 |
 
 ---
 
@@ -84,6 +97,16 @@ See [CHANGELOG.md](CHANGELOG.md) for details on resolved issues.
 
 | # | Issue | Version |
 |---|-------|---------|
+| 44 | Retry logic for transient errors | 0.6.7 |
+| 43 | Request timeout configuration | 0.6.7 |
+| 42 | Weak self in Task closures (verified correct) | 0.6.7 |
+| 41 | Mixed callback and Combine patterns (verified intentional) | 0.6.7 |
+| 40 | stringifyAnyValue() complexity (documented as intentional) | 0.6.7 |
+| 39 | cleanAnyCodableWrappers() string manipulation (migration code) | 0.6.7 |
+| 38 | DateFormatter instances (created shared CLIDateFormatter) | 0.6.7 |
+| 37 | AnyCodable duplication (replaced with typealias) | 0.6.7 |
+| 35 | Git refresh error on pull-to-refresh | 0.6.7 |
+| 24 | Token calculation in cli-bridge (verified correct) | 0.6.7 |
 | 32 | ClaudeHelper AI Suggestions (feature removed - ClaudeHelper.swift deleted) | 0.6.4 |
 | 29 | BGTaskScheduler simulator error (works on device, simulator limitation) | 0.6.1 |
 | 28 | xcodebuild test bundle issue (run tests separately as workaround) | 0.6.1 |

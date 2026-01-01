@@ -267,27 +267,9 @@ struct SessionPickerSheet: View {
         }
     }
 
-    // MARK: - Static Formatters (expensive to create, so shared)
-
-    private static let isoFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
-
-    private static let isoFormatterNoFrac: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter
-    }()
-
     private func parseDate(_ isoString: String?) -> Date {
         guard let isoString = isoString else { return .distantPast }
-        // Use static formatters to avoid allocation on each call
-        if let date = Self.isoFormatter.date(from: isoString) {
-            return date
-        }
-        return Self.isoFormatterNoFrac.date(from: isoString) ?? .distantPast
+        return CLIDateFormatter.parseDate(isoString) ?? .distantPast
     }
 
     // MARK: - Search Bar View
@@ -981,18 +963,6 @@ struct SessionRow: View {
         return formatter
     }()
 
-    private static let isoFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
-
-    private static let isoFormatterNoFrac: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter
-    }()
-
     private var displayName: String {
         if let customName = SessionNamesStore.shared.getName(for: session.id) {
             return customName
@@ -1100,13 +1070,9 @@ struct SessionRow: View {
     }
 
     private func formatRelativeTime(_ isoString: String) -> String {
-        // Try parsing with fractional seconds first, then without
-        if let date = Self.isoFormatter.date(from: isoString) {
-            return Self.relativeFormatter.localizedString(for: date, relativeTo: Date())
+        guard let date = CLIDateFormatter.parseDate(isoString) else {
+            return isoString
         }
-        if let date = Self.isoFormatterNoFrac.date(from: isoString) {
-            return Self.relativeFormatter.localizedString(for: date, relativeTo: Date())
-        }
-        return isoString
+        return Self.relativeFormatter.localizedString(for: date, relativeTo: Date())
     }
 }

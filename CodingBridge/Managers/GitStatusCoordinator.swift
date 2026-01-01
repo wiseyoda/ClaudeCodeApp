@@ -57,6 +57,9 @@ class GitStatusCoordinator: ObservableObject {
 
         isCheckingGitStatus = true
 
+        // Save previous statuses to restore on error
+        let previousStatuses = gitStatuses
+
         // Mark all as checking
         for project in projects {
             gitStatuses[project.path] = .checking
@@ -78,15 +81,48 @@ class GitStatusCoordinator: ObservableObject {
             }
         } catch {
             log.error("[Git] Failed to fetch git statuses from API: \(error)")
-            gitRefreshError = "Failed to refresh git status: \(error.localizedDescription)"
-            showGitRefreshError = true
+
+            // Restore previous statuses instead of leaving in .checking state
+            for (path, status) in previousStatuses {
+                gitStatuses[path] = status
+            }
+
+            // Only show error alert for non-network issues (network issues are logged but not shown)
+            // This prevents alert spam on transient network hiccups during pull-to-refresh
+            if !isNetworkError(error) {
+                gitRefreshError = "Failed to refresh git status: \(error.localizedDescription)"
+                showGitRefreshError = true
+            }
         }
 
         isCheckingGitStatus = false
     }
 
+    /// Check if an error is a transient network error (connection lost, timeout, etc.)
+    private func isNetworkError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+
+        // URLError codes for transient network issues
+        if nsError.domain == NSURLErrorDomain {
+            switch nsError.code {
+            case NSURLErrorTimedOut,
+                 NSURLErrorCannotFindHost,
+                 NSURLErrorCannotConnectToHost,
+                 NSURLErrorNetworkConnectionLost,
+                 NSURLErrorNotConnectedToInternet,
+                 NSURLErrorDNSLookupFailed:
+                return true
+            default:
+                return false
+            }
+        }
+        return false
+    }
+
     /// Refresh git status for a single project via cli-bridge API
     func refreshGitStatus(for project: Project, serverURL: String) async {
+        // Save previous status to restore on network error
+        let previousStatus = gitStatuses[project.path]
         gitStatuses[project.path] = .checking
 
         do {
@@ -105,7 +141,12 @@ class GitStatusCoordinator: ObservableObject {
             }
         } catch {
             log.error("[Git] Failed to refresh git status for \(project.path): \(error)")
-            gitStatuses[project.path] = .error(error.localizedDescription)
+            // On network errors, restore previous status instead of showing error
+            if isNetworkError(error) {
+                gitStatuses[project.path] = previousStatus ?? .unknown
+            } else {
+                gitStatuses[project.path] = .error(error.localizedDescription)
+            }
         }
     }
 

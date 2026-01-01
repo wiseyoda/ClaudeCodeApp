@@ -3,6 +3,8 @@
 > Implementation plan for the iOS Claude Code client.
 >
 > **Related docs**: [CHANGELOG.md](CHANGELOG.md) | [ISSUES.md](ISSUES.md) | [FUTURE-IDEAS.md](FUTURE-IDEAS.md)
+>
+> **Active Projects**: [requirements/projects/](requirements/projects/) - In-progress feature implementations
 
 ---
 
@@ -17,6 +19,34 @@
 | 5 | Performance & Polish | Medium | Complete |
 | 6 | iOS 26 Adoption | Medium | Complete |
 | 7 | Test Coverage | Ongoing | In Progress |
+
+---
+
+## Completed: v0.6.7 History Hardening & Codebase Audit
+
+### History Hardening iOS Implementation
+- `lastMessageId` reconnect - Resume from last known message on reconnection
+- Error types - Distinct `CLIBridgeError` cases for different failure modes
+- Message deduplication - Prevent duplicate messages via ID tracking
+- REST API format - Proper structured content parsing from export fallback
+- Rate limiting awareness - Handle 429 responses with Retry-After support
+- Message validation - Validate message structure before processing
+- Cursor persistence - Track session position across app restarts
+
+### Chat Scroll Performance
+- Migrated from ScrollView to List for cell recycling
+- Fixed UICollectionView crash by delaying scroll after List renders
+- Use stable IDs for status messages to fix collection counts mismatch
+- Fixed duplicate messages in export API fallback path
+
+### Codebase Audit Fixes
+- Replaced duplicate `AnyCodable` struct with `typealias AnyCodable = AnyCodableValue`
+- Created shared `CLIDateFormatter` enum replacing 9 duplicate formatter declarations
+- Added explicit request timeouts to `CLIBridgeAPIClient` (30s request, 120s resource)
+- Extended retry logic with exponential backoff for rate limiting and server errors
+- Replaced force unwraps in multipart form data with safe `Data(string.utf8)`
+- Converted SSHKeyDetection print() statements to Logger
+- Fixed 4 compiler warnings (CLIBridgeTypes, ChatViewModel, LiveActivityManager, CodingBridgeApp)
 
 ---
 
@@ -258,4 +288,4 @@ Phase 7 (Tests)        =========================================>
 
 ---
 
-_Last updated: December 30, 2025 - Phase 6 iOS 26 Adoption complete_
+_Last updated: January 1, 2026 - v0.6.7 History Hardening & Codebase Audit complete_

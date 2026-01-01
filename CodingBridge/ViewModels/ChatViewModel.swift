@@ -505,68 +505,18 @@ class ChatViewModel: ObservableObject {
                     self?.scrollManager.forceScrollToBottom()
                 }
             } catch {
-                // Check if cancelled before falling back
+                // Check if cancelled before showing error
                 guard !Task.isCancelled else { return }
                 log.debug("[ChatViewModel] Failed to load session history: \(error)")
-                // Fall back to export API for backwards compatibility with older cli-bridge
-                await loadSessionHistoryFallback(session, targetSessionId: targetSessionId)
-            }
-        }
-    }
-
-    /// Fallback to export API if paginated endpoint fails (backwards compatibility)
-    private func loadSessionHistoryFallback(_ session: ProjectSession, targetSessionId: String) async {
-        do {
-            log.debug("[ChatViewModel] Falling back to export API for: \(session.id)")
-
-            let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
-            let exportResponse = try await apiClient.exportSession(
-                projectPath: project.path,
-                sessionId: session.id,
-                format: .json,
-                includeStructuredContent: true
-            )
-
-            // Check if task was cancelled or session changed while loading
-            guard !Task.isCancelled, selectedSession?.id == targetSessionId else {
-                log.debug("[ChatViewModel] Fallback history load cancelled or session changed, discarding results")
-                return
-            }
-
-            let historyMessages = parseJSONLToMessages(exportResponse.content)
-
-            if historyMessages.isEmpty {
                 if let lastMsg = session.lastAssistantMessage {
                     messages.append(ChatMessage(role: .assistant, content: lastMsg, timestamp: Date()))
                 }
-            } else {
-                // Apply history limit when loading to avoid memory bloat from large sessions
-                let limit = settings.historyLimit.rawValue
-                if historyMessages.count > limit {
-                    messages = Array(historyMessages.suffix(limit))
-                    log.debug("[ChatViewModel] Fallback: Loaded \(historyMessages.count) messages, pruned to \(limit)")
-                } else {
-                    messages = historyMessages
-                    log.debug("[ChatViewModel] Fallback: Loaded \(historyMessages.count) messages from session export")
+                messages.append(ChatMessage(role: .system, content: "Could not load history: \(error.localizedDescription)", timestamp: Date()))
+                isLoadingHistory = false
+                refreshDisplayMessagesCache()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                    self?.scrollManager.forceScrollToBottom()
                 }
-            }
-            isLoadingHistory = false
-            refreshDisplayMessagesCache()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-                self?.scrollManager.forceScrollToBottom()
-            }
-        } catch {
-            // Check if cancelled before showing error
-            guard !Task.isCancelled else { return }
-            log.debug("[ChatViewModel] Fallback also failed: \(error)")
-            if let lastMsg = session.lastAssistantMessage {
-                messages.append(ChatMessage(role: .assistant, content: lastMsg, timestamp: Date()))
-            }
-            messages.append(ChatMessage(role: .system, content: "Could not load history: \(error.localizedDescription)", timestamp: Date()))
-            isLoadingHistory = false
-            refreshDisplayMessagesCache()
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-                self?.scrollManager.forceScrollToBottom()
             }
         }
     }
@@ -928,7 +878,7 @@ class ChatViewModel: ObservableObject {
     // MARK: - WebSocket Callbacks
 
     func setupWebSocketCallbacks() {
-        wsManager.onText = { [weak self] text in
+        wsManager.onText = { _ in
             // Text is accumulated in wsManager.currentText
         }
 
@@ -1175,7 +1125,8 @@ class ChatViewModel: ObservableObject {
 
         wsManager.onHistory = { [weak self] payload in
             guard let self = self else { return }
-            let historyMessages = payload.messages.map { $0.toChatMessage() }
+            // Use unified toChatMessages() which handles denormalized tool_use and filters ephemeral
+            let historyMessages = payload.toChatMessages()
             if !historyMessages.isEmpty {
                 self.messages.insert(contentsOf: historyMessages, at: 0)
                 // Prune after inserting history to stay within limit
@@ -1382,14 +1333,16 @@ class ChatViewModel: ObservableObject {
         if let sessionId = wsManager.sessionId {
             do {
                 let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
-                let exportResponse = try await apiClient.exportSession(
+                let response = try await apiClient.fetchInitialMessages(
                     projectPath: project.path,
                     sessionId: sessionId,
-                    format: .json
+                    limit: settings.historyLimit.rawValue
                 )
-                let historyMessages = parseJSONLToMessages(exportResponse.content)
+                // Convert using unified format, reverse from desc to chronological
+                let historyMessages = Array(response.toChatMessages().reversed())
                 if !historyMessages.isEmpty {
                     messages = historyMessages
+                    refreshDisplayMessagesCache()
                 }
             } catch {
                 log.debug("[ChatViewModel] Failed to refresh session history: \(error)")
@@ -1579,180 +1532,6 @@ class ChatViewModel: ObservableObject {
 
     var effectivePermissionMode: String {
         effectivePermissionModeValue.rawValue
-    }
-
-    // MARK: - History Parsing
-
-    func parseJSONLToMessages(_ jsonContent: String) -> [ChatMessage] {
-        guard let data = jsonContent.data(using: .utf8) else {
-            log.debug("[ChatViewModel] Failed to convert export content to data")
-            return []
-        }
-
-        do {
-            if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-               let messagesArray = json["messages"] as? [[String: Any]] {
-                log.debug("[ChatViewModel] Found \(messagesArray.count) messages in export")
-
-                // Parse all messages and dedupe (server sometimes sends duplicates)
-                var result: [ChatMessage] = []
-                var seenContent: Set<String> = []
-
-                for msgDict in messagesArray {
-                    for msg in parseExportMessage(msgDict) {
-                        // Only dedupe text messages (assistant/user), not tools
-                        let shouldDedupe = msg.role == .assistant || msg.role == .user
-                        if shouldDedupe {
-                            let contentKey = "\(msg.role):\(msg.content.prefix(200))"
-                            if seenContent.contains(contentKey) {
-                                continue
-                            }
-                            seenContent.insert(contentKey)
-                        }
-                        result.append(msg)
-                    }
-                }
-                return result
-            }
-        } catch {
-            log.debug("[ChatViewModel] Failed to parse export JSON: \(error)")
-        }
-
-        return []
-    }
-
-    func parseExportMessage(_ json: [String: Any]) -> [ChatMessage] {
-        guard let type = json["type"] as? String else { return [] }
-
-        var timestamp = Date()
-        if let ts = json["timestamp"] as? String {
-            let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            if let date = formatter.date(from: ts) {
-                timestamp = date
-            } else {
-                formatter.formatOptions = [.withInternetDateTime]
-                timestamp = formatter.date(from: ts) ?? Date()
-            }
-        }
-
-        switch type {
-        case "tool_use":
-            if let name = json["name"] as? String {
-                var toolContent = name
-                if let inputDict = json["input"] as? [String: Any],
-                   let data = try? JSONSerialization.data(withJSONObject: inputDict),
-                   let inputStr = String(data: data, encoding: .utf8) {
-                    toolContent = "\(name)(\(inputStr))"
-                }
-                return [ChatMessage(role: .toolUse, content: toolContent, timestamp: timestamp)]
-            }
-            return []
-
-        case "tool_result":
-            let output = json["output"] as? String ?? json["content"] as? String ?? ""
-            let isError = json["is_error"] as? Bool ?? !(json["success"] as? Bool ?? true)
-            let role: ChatMessage.Role = isError ? .error : .toolResult
-            return [ChatMessage(role: role, content: output, timestamp: timestamp)]
-
-        case "thinking":
-            if let thinking = json["content"] as? String, !thinking.isEmpty {
-                return [ChatMessage(role: .thinking, content: thinking, timestamp: timestamp)]
-            }
-            return []
-
-        case "user", "assistant", "system":
-            if json["isMeta"] as? Bool == true {
-                return []
-            }
-
-            if let content = json["content"] as? String, !content.isEmpty {
-                if content.hasPrefix("Caveat: The messages below were generated") {
-                    return []
-                }
-
-                if let localCommand = parseLocalCommandXML(content) {
-                    return [localCommand.toChatMessage(timestamp: timestamp)]
-                }
-
-                let role: ChatMessage.Role
-                switch type {
-                case "user": role = .user
-                case "assistant": role = .assistant
-                default: role = .system
-                }
-                return [ChatMessage(role: role, content: content, timestamp: timestamp)]
-            }
-            if let contentArray = json["content"] as? [[String: Any]] {
-                return parseStructuredContent(contentArray, messageType: type, timestamp: timestamp)
-            }
-            return []
-
-        default:
-            log.debug("[ChatViewModel] Unknown message type: \(type)")
-            return []
-        }
-    }
-
-    func parseStructuredContent(_ blocks: [[String: Any]], messageType: String, timestamp: Date) -> [ChatMessage] {
-        var messages: [ChatMessage] = []
-
-        for block in blocks {
-            guard let blockType = block["type"] as? String else { continue }
-
-            switch blockType {
-            case "text":
-                if let text = block["text"] as? String, !text.isEmpty {
-                    let role: ChatMessage.Role = messageType == "user" ? .user : .assistant
-                    messages.append(ChatMessage(role: role, content: text, timestamp: timestamp))
-                }
-            default:
-                log.debug("[ChatViewModel] Unexpected nested block type '\(blockType)' - cli-bridge should flatten this")
-            }
-        }
-
-        return messages
-    }
-
-    struct LocalCommand {
-        let name: String
-        let args: String
-        let stdout: String
-
-        func toChatMessage(timestamp: Date) -> ChatMessage {
-            var content = name
-            if !args.isEmpty {
-                content += " \(args)"
-            }
-            if !stdout.isEmpty {
-                content += "\n└ \(stdout)"
-            }
-            return ChatMessage(role: .system, content: content, timestamp: timestamp)
-        }
-    }
-
-    func parseLocalCommandXML(_ content: String) -> LocalCommand? {
-        guard content.contains("<command-name>") else { return nil }
-
-        guard let nameStart = content.range(of: "<command-name>"),
-              let nameEnd = content.range(of: "</command-name>") else {
-            return nil
-        }
-        let name = String(content[nameStart.upperBound..<nameEnd.lowerBound])
-
-        var args = ""
-        if let argsStart = content.range(of: "<command-args>"),
-           let argsEnd = content.range(of: "</command-args>") {
-            args = String(content[argsStart.upperBound..<argsEnd.lowerBound])
-        }
-
-        var stdout = ""
-        if let stdoutStart = content.range(of: "<local-command-stdout>"),
-           let stdoutEnd = content.range(of: "</local-command-stdout>") {
-            stdout = String(content[stdoutStart.upperBound..<stdoutEnd.lowerBound])
-        }
-
-        return LocalCommand(name: name, args: args, stdout: stdout)
     }
 
     // MARK: - Change Handlers

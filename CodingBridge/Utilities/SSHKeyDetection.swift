@@ -67,11 +67,11 @@ enum SSHKeyDetection {
 
     /// Detect the type of a private key from its string content
     static func detectPrivateKeyType(from content: String) throws -> SSHKeyType {
-        print("[KeyDetect] Input content length: \(content.count)")
+        log.debug("[KeyDetect] Input content length: \(content.count)")
         let normalized = normalizeKeyContent(content)
-        print("[KeyDetect] Normalized content length: \(normalized.count)")
+        log.debug("[KeyDetect] Normalized content length: \(normalized.count)")
         let trimmed = normalized.trimmingCharacters(in: .whitespacesAndNewlines)
-        print("[KeyDetect] Trimmed content length: \(trimmed.count)")
+        log.debug("[KeyDetect] Trimmed content length: \(trimmed.count)")
 
         // OpenSSH format (newer)
         if trimmed.hasPrefix("-----BEGIN OPENSSH PRIVATE KEY-----") {
@@ -103,65 +103,65 @@ enum SSHKeyDetection {
 
     /// Detect key type from OpenSSH format by parsing the key data
     private static func detectOpenSSHKeyType(from content: String) throws -> SSHKeyType {
-        print("[KeyDetect] Content length: \(content.count)")
+        log.debug("[KeyDetect] Content length: \(content.count)")
 
         // Extract base64 content between header and footer
         guard let headerRange = content.range(of: "-----BEGIN OPENSSH PRIVATE KEY-----") else {
-            print("[KeyDetect] ERROR: Header '-----BEGIN OPENSSH PRIVATE KEY-----' not found!")
-            print("[KeyDetect] First 200 chars: \(content.prefix(200))")
+            log.error("[KeyDetect] Header '-----BEGIN OPENSSH PRIVATE KEY-----' not found!")
+            log.debug("[KeyDetect] First 200 chars: \(content.prefix(200))")
             throw SSHError.keyParseError("Missing key header")
         }
 
         guard let footerRange = content.range(of: "-----END OPENSSH PRIVATE KEY-----") else {
-            print("[KeyDetect] ERROR: Footer '-----END OPENSSH PRIVATE KEY-----' not found!")
-            print("[KeyDetect] Last 200 chars: \(content.suffix(200))")
+            log.error("[KeyDetect] Footer '-----END OPENSSH PRIVATE KEY-----' not found!")
+            log.debug("[KeyDetect] Last 200 chars: \(content.suffix(200))")
             throw SSHError.keyParseError("Missing key footer")
         }
 
         let base64Section = String(content[headerRange.upperBound..<footerRange.lowerBound])
-        print("[KeyDetect] Base64 section length: \(base64Section.count)")
+        log.debug("[KeyDetect] Base64 section length: \(base64Section.count)")
 
         // Strip ALL non-base64 characters (handles iOS hyphenation, whitespace, line breaks, etc.)
         let validBase64Chars = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=")
         let base64String = String(base64Section.unicodeScalars.filter { validBase64Chars.contains($0) })
-        print("[KeyDetect] Filtered base64 length: \(base64String.count), mod4=\(base64String.count % 4)")
+        log.debug("[KeyDetect] Filtered base64 length: \(base64String.count), mod4=\(base64String.count % 4)")
 
         // Try to decode, adding padding if needed (base64 must be multiple of 4)
         var paddedBase64 = base64String
         let remainder = paddedBase64.count % 4
         if remainder != 0 {
-            print("[KeyDetect] Adding \(4 - remainder) padding chars to fix mod4")
+            log.debug("[KeyDetect] Adding \(4 - remainder) padding chars to fix mod4")
             paddedBase64 += String(repeating: "=", count: 4 - remainder)
         }
 
         guard var data = Data(base64Encoded: paddedBase64) else {
-            print("[KeyDetect] ERROR: Base64 decode failed even with padding!")
-            print("[KeyDetect] First 100 of base64: \(base64String.prefix(100))")
-            print("[KeyDetect] Last 100 of base64: \(base64String.suffix(100))")
+            log.error("[KeyDetect] Base64 decode failed even with padding!")
+            log.debug("[KeyDetect] First 100 of base64: \(base64String.prefix(100))")
+            log.debug("[KeyDetect] Last 100 of base64: \(base64String.suffix(100))")
             throw SSHError.keyParseError("Invalid base64 encoding")
         }
-        print("[KeyDetect] Decoded \(data.count) bytes successfully")
+        log.debug("[KeyDetect] Decoded \(data.count) bytes successfully")
 
         // OpenSSH keys should start with "openssh-key-v1\0" magic bytes
         // If magic bytes are wrong and base64 was mod4=3, the first char may have been truncated
         // (This happens when iOS TextEditor drops the first character during paste)
         let magicBytes = "openssh-key-v1"
         let dataPrefix = String(data: data.prefix(14), encoding: .utf8) ?? ""
-        print("[KeyDetect] Data prefix: '\(dataPrefix)'")
+        log.debug("[KeyDetect] Data prefix: '\(dataPrefix)'")
 
         if dataPrefix != magicBytes && remainder == 3 {
-            print("[KeyDetect] Magic bytes mismatch with mod4=3, trying truncation recovery...")
+            log.debug("[KeyDetect] Magic bytes mismatch with mod4=3, trying truncation recovery...")
 
             // Try prepending 'b' - OpenSSH keys start with "b3Bl..." which is "openssh..."
             let recoveredBase64 = "b" + base64String
-            print("[KeyDetect] Trying with prepended 'b': length=\(recoveredBase64.count), mod4=\(recoveredBase64.count % 4)")
+            log.debug("[KeyDetect] Trying with prepended 'b': length=\(recoveredBase64.count), mod4=\(recoveredBase64.count % 4)")
 
             if let recoveredData = Data(base64Encoded: recoveredBase64) {
                 let recoveredPrefix = String(data: recoveredData.prefix(14), encoding: .utf8) ?? ""
-                print("[KeyDetect] Recovered data prefix: '\(recoveredPrefix)'")
+                log.debug("[KeyDetect] Recovered data prefix: '\(recoveredPrefix)'")
 
                 if recoveredPrefix == magicBytes {
-                    print("[KeyDetect] SUCCESS: Truncation recovery worked!")
+                    log.info("[KeyDetect] Truncation recovery worked!")
                     data = recoveredData
                 }
                 // If recovery didn't work, continue with original data - might still find key type
@@ -242,7 +242,7 @@ enum SSHKeyDetection {
                         let recoveredPrefix = String(data: recoveredData.prefix(14), encoding: .utf8) ?? ""
                         if recoveredPrefix == "openssh-key-v1" {
                             // Truncation detected! Rebuild the key with the fixed base64
-                            print("[KeyNormalize] Truncation recovery applied - prepending missing 'b'")
+                            log.info("[KeyNormalize] Truncation recovery applied - prepending missing 'b'")
                             let formattedBase64 = formatBase64(recoveredBase64)
                             return "-----BEGIN OPENSSH PRIVATE KEY-----\n\(formattedBase64)\n-----END OPENSSH PRIVATE KEY-----"
                         }

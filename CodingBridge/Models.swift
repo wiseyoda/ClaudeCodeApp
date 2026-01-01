@@ -5,6 +5,15 @@ import SwiftUI
 
 /// Convert Any value to a display string, handling nested types properly.
 /// This avoids showing type wrappers like "AnyCodable(value: ...)" in the UI.
+///
+/// **Note**: This function uses explicit type checks rather than Mirror reflection
+/// because it's more performant and handles the specific types we care about:
+/// - String: Return as-is
+/// - NSNumber: Use stringValue
+/// - AnyCodableValue: Use stringValue property
+/// - Dictionary: Extract "stdout" for bash results, or serialize to JSON
+/// - Array: Serialize to JSON
+/// - Fallback: Strip wrapper patterns from String(describing:)
 func stringifyAnyValue(_ value: Any) -> String {
     // Handle String directly
     if let str = value as? String {
@@ -363,6 +372,11 @@ private struct ChatMessageDTO: Codable {
     }
 
     /// Clean AnyCodableValue wrappers from cached content (migration fix)
+    ///
+    /// **Legacy Migration Code**
+    /// This cleans up cached messages saved before AnyCodableValue.stringValue was properly implemented.
+    /// With the #37 fix (AnyCodable consolidation), new messages won't have wrapper patterns.
+    /// This function can be removed in v1.0+ after users have migrated.
     private static func cleanAnyCodableWrappers(_ text: String) -> String {
         var result = text
 
@@ -853,152 +867,6 @@ struct BookmarkedMessage: Identifiable, Codable {
         self.projectPath = projectPath
         self.projectTitle = projectTitle
         self.bookmarkedAt = bookmarkedAt
-    }
-}
-
-// MARK: - Session History Loader
-
-/// Loads full session history from JSONL files on the server via SSH
-class SessionHistoryLoader {
-
-    /// Parse a session JSONL file content into ChatMessages
-    static func parseSessionHistory(_ jsonlContent: String) -> [ChatMessage] {
-        var messages: [ChatMessage] = []
-        let lines = jsonlContent.components(separatedBy: .newlines)
-
-        for line in lines {
-            guard !line.isEmpty else { continue }
-            guard let data = line.data(using: .utf8) else { continue }
-
-            do {
-                if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                    if let chatMessage = parseJSONLLine(json) {
-                        messages.append(chatMessage)
-                    }
-                }
-            } catch {
-                print("[SessionHistoryLoader] Failed to parse line: \(error)")
-            }
-        }
-
-        return messages
-    }
-
-    private static func parseJSONLLine(_ json: [String: Any]) -> ChatMessage? {
-        guard let type = json["type"] as? String else { return nil }
-        guard let timestamp = parseTimestamp(json["timestamp"]) else { return nil }
-
-        switch type {
-        case "user":
-            return parseUserMessage(json, timestamp: timestamp)
-        case "assistant":
-            return parseAssistantMessage(json, timestamp: timestamp)
-        default:
-            // Skip queue-operation, system, etc.
-            return nil
-        }
-    }
-
-    /// Convert Any value to string - delegates to global stringifyAnyValue
-    private static func stringifyValue(_ value: Any) -> String {
-        // Handle AnyCodableValue wrapper (specific to this context)
-        if let codable = value as? AnyCodableValue {
-            return codable.stringValue
-        }
-        // Use global helper for everything else
-        return stringifyAnyValue(value)
-    }
-
-    private static func parseTimestamp(_ value: Any?) -> Date? {
-        guard let timestampStr = value as? String else { return nil }
-
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
-        if let date = formatter.date(from: timestampStr) {
-            return date
-        }
-
-        // Try without fractional seconds
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: timestampStr)
-    }
-
-    private static func parseUserMessage(_ json: [String: Any], timestamp: Date) -> ChatMessage? {
-        guard let message = json["message"] as? [String: Any],
-              let content = message["content"] as? [[String: Any]] else {
-            return nil
-        }
-
-        // Check for tool_result (skip it, we'll get it from toolUseResult)
-        if let firstItem = content.first, firstItem["type"] as? String == "tool_result" {
-            // This is a tool result wrapped in user message - get from toolUseResult
-            // Store full result - truncation is handled in display
-            if let toolResult = json["toolUseResult"] as? String {
-                return ChatMessage(role: .toolResult, content: toolResult, timestamp: timestamp)
-            } else if let toolResultDict = json["toolUseResult"] as? [String: Any],
-                      let stdout = toolResultDict["stdout"] as? String {
-                return ChatMessage(role: .toolResult, content: stdout, timestamp: timestamp)
-            }
-            return nil
-        }
-
-        // Regular user text message
-        if let firstItem = content.first, let text = firstItem["text"] as? String {
-            return ChatMessage(role: .user, content: text, timestamp: timestamp)
-        }
-
-        return nil
-    }
-
-    private static func parseAssistantMessage(_ json: [String: Any], timestamp: Date) -> ChatMessage? {
-        guard let message = json["message"] as? [String: Any],
-              let content = message["content"] as? [[String: Any]] else {
-            return nil
-        }
-
-        // Look for text content or tool_use
-        for item in content {
-            if let itemType = item["type"] as? String {
-                switch itemType {
-                case "text":
-                    if let text = item["text"] as? String, !text.isEmpty {
-                        return ChatMessage(role: .assistant, content: text, timestamp: timestamp)
-                    }
-                case "thinking":
-                    if let thinking = item["thinking"] as? String, !thinking.isEmpty {
-                        return ChatMessage(role: .thinking, content: thinking, timestamp: timestamp)
-                    }
-                case "tool_use":
-                    if let name = item["name"] as? String {
-                        var toolContent = name
-                        if let input = item["input"] as? [String: Any] {
-                            let inputStr = input.map { "\($0.key): \(stringifyValue($0.value))" }.joined(separator: ", ")
-                            toolContent = "\(name)(\(inputStr))"
-                        }
-                        return ChatMessage(role: .toolUse, content: toolContent, timestamp: timestamp)
-                    }
-                default:
-                    break
-                }
-            }
-        }
-
-        return nil
-    }
-
-    /// Get the path to session file on remote server
-    static func sessionFilePath(projectPath: String, sessionId: String) -> String {
-        // Convert project path to Claude's format (e.g., /home/dev/workspace -> -home-dev-workspace)
-        // Note: The encoded path STARTS with a dash (slashes become dashes)
-        let encodedPath = projectPath.replacingOccurrences(of: "/", with: "-")
-        // Only trim trailing dashes if any
-        let trimmedPath = encodedPath.hasSuffix("-")
-            ? String(encodedPath.dropLast())
-            : encodedPath
-
-        // Use $HOME for consistent shell expansion (~ doesn't expand in all contexts)
-        return "$HOME/.claude/projects/\(trimmedPath)/\(sessionId).jsonl"
     }
 }
 

@@ -17,6 +17,31 @@ xcodebuild test -project CodingBridge.xcodeproj -scheme CodingBridge -destinatio
 open CodingBridge.xcodeproj
 ```
 
+## Slash Commands
+
+| Command | Description |
+|---------|-------------|
+| `/bump [major\|minor\|patch]` | Full release workflow: update changelog, bump version, run tests, push to main |
+
+## Versioning
+
+Version is defined in a single location: `Config/Version.xcconfig`
+
+```bash
+# To bump version manually:
+# 1. Edit Config/Version.xcconfig (MARKETING_VERSION)
+# 2. Update CHANGELOG.md
+# 3. Commit and tag
+
+# Or use the /bump command for automated workflow
+```
+
+The `AppVersion` utility (`Utilities/AppVersion.swift`) provides runtime access:
+- `AppVersion.version` - Marketing version (e.g., "0.6.7")
+- `AppVersion.build` - Build number
+- `AppVersion.fullVersion` - "0.6.7 (1)"
+- `AppVersion.userAgent` - "CodingBridge/0.6.7"
+
 ## Key Files
 
 | File | Purpose |

@@ -233,14 +233,14 @@ struct SettingsView: View {
                     HStack {
                         Text("Version")
                         Spacer()
-                        Text(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown")
+                        Text(AppVersion.version)
                             .foregroundStyle(.secondary)
                     }
 
                     HStack {
                         Text("Build")
                         Spacer()
-                        Text(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "Unknown")
+                        Text(AppVersion.build)
                             .foregroundStyle(.secondary)
                     }
                 }

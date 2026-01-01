@@ -97,7 +97,11 @@ final class RealLiveActivityProvider: LiveActivityProviding {
                 dismissalPolicy: dismissalPolicy
             )
         } else {
-            await activity.end(dismissalPolicy: dismissalPolicy)
+            // Use complete state for ending without specific final state
+            await activity.end(
+                ActivityContent(state: .complete(elapsedSeconds: 0), staleDate: nil),
+                dismissalPolicy: dismissalPolicy
+            )
         }
 
         activities[activityId] = nil

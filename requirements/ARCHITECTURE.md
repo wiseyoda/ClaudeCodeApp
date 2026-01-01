@@ -13,10 +13,10 @@
 |  |  |   (Projects)     |  |   (Messages)     |  |   (SSE Streaming)      | |  |
 |  |  +------------------+  +------------------+  +------------------------+ |  |
 |  |         |                     |                      |                  |  |
-|  |         |              +------+------+        +------+------+          |  |
-|  |         |              |SpeechManager|        |ClaudeHelper |          |  |
-|  |         |              |(Voice Input)|        |(AI Suggest) |          |  |
-|  |         |              +-------------+        +-------------+          |  |
+|  |         |              +------+------+                                 |  |
+|  |         |              |SpeechManager|                                 |  |
+|  |         |              |(Voice Input)|                                 |  |
+|  |         |              +-------------+                                 |  |
 |  |         |                                                               |  |
 |  |  +------+------+  +-------------+  +-------------+  +--------------+   |  |
 |  |  |TerminalView |--|  SSHManager |  |MessageStore |  | BookmarkStore|   |  |
@@ -349,13 +349,6 @@ Key computed properties:
 - Archive/restore functionality
 - Search and filter by tag
 
-#### ClaudeHelper.swift
-- Haiku-powered meta-AI service
-- `SuggestedAction` model (label, prompt, icon)
-- Generate 3 suggestions based on conversation
-- Suggested files in file picker
-- Separate API call with 15-second timeout
-
 #### Theme.swift
 - `CLITheme` with colorScheme-aware colors
 - Light and dark mode variants
@@ -510,8 +503,7 @@ Core chat UI with responsibilities:
    - onThinking: reasoning block display
 8. result event signals end
 9. MessageStore saves history to file
-10. AI suggestions generated via ClaudeHelper
-11. Local notification sent (if backgrounded)
+10. Local notification sent (if backgrounded)
 ```
 
 ### Session Management
@@ -542,12 +534,11 @@ Core chat UI with responsibilities:
 ```
 1. User taps @ button (in [+] menu)
 2. FilePickerSheet opens
-3. ClaudeHelper suggests relevant files (AI-powered)
-4. SSHManager.listFiles() fetches directory
-5. User navigates/searches files
-6. User selects file
-7. @path/to/file inserted into input
-8. User sends message with reference
+3. SSHManager.listFiles() fetches directory
+4. User navigates/searches files
+5. User selects file
+6. @path/to/file inserted into input
+7. User sends message with reference
 ```
 
 ### Command Library Flow

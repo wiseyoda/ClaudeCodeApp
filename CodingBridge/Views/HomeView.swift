@@ -321,19 +321,7 @@ struct RecentActivitySection: View {
         }
     }
 
-    // MARK: - Static Formatters (expensive to create, so shared)
-
-    private static let isoFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
-
-    private static let isoFormatterNoFrac: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter
-    }()
+    // MARK: - Static Formatters
 
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -343,9 +331,7 @@ struct RecentActivitySection: View {
 
     /// Convert ISO8601 timestamp to relative time string
     private func relativeTime(from isoString: String) -> String {
-        // Try with fractional seconds first, then without
-        let date = Self.isoFormatter.date(from: isoString) ?? Self.isoFormatterNoFrac.date(from: isoString)
-        guard let date = date else {
+        guard let date = CLIDateFormatter.parseDate(isoString) else {
             return ""
         }
 

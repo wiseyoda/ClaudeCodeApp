@@ -4,6 +4,39 @@ import Foundation
 // WebSocket and REST message types for cli-bridge server
 // See: requirements/projects/cli-bridge-migration/PROTOCOL-MAPPING.md
 
+// MARK: - Shared Date Formatting
+
+/// Shared ISO8601 date formatters to avoid creating multiple instances
+/// Used by all Codable types in this file that need date parsing
+enum CLIDateFormatter {
+    /// Formatter with fractional seconds (e.g., "2024-01-15T10:30:00.123Z")
+    static let iso8601WithFractionalSeconds: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    /// Formatter without fractional seconds (e.g., "2024-01-15T10:30:00Z")
+    static let iso8601: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    /// Parse a date string, trying fractional seconds first, then without
+    static func parseDate(_ dateString: String) -> Date? {
+        if let date = iso8601WithFractionalSeconds.date(from: dateString) {
+            return date
+        }
+        return iso8601.date(from: dateString)
+    }
+
+    /// Format a date to ISO8601 string with fractional seconds
+    static func string(from date: Date) -> String {
+        iso8601WithFractionalSeconds.string(from: date)
+    }
+}
+
 // MARK: - Connection State
 
 /// WebSocket connection state
@@ -210,6 +243,7 @@ struct AnyCodableValue: Codable, Equatable {
 /// All message types the client can send to cli-bridge
 enum CLIClientMessage: Encodable {
     case start(CLIStartPayload)
+    case reconnect(CLIReconnectPayload)  // History hardening: reconnect with lastMessageId
     case input(CLIInputPayload)
     case permissionResponse(CLIPermissionResponsePayload)
     case questionResponse(CLIQuestionResponsePayload)
@@ -232,6 +266,10 @@ enum CLIClientMessage: Encodable {
         switch self {
         case .start(let payload):
             try container.encode("start", forKey: .type)
+            try payload.encode(to: encoder)
+
+        case .reconnect(let payload):
+            try container.encode("reconnect", forKey: .type)
             try payload.encode(to: encoder)
 
         case .input(let payload):
@@ -371,6 +409,13 @@ struct CLIRetryPayload: Encodable {
     let messageId: String
 }
 
+/// Payload for reconnecting to an existing agent with history recovery
+/// Server will replay any messages sent since lastMessageId
+struct CLIReconnectPayload: Encodable {
+    let agentId: String
+    let lastMessageId: String?  // Last message ID received by client (for replay)
+}
+
 // MARK: - Server → Client Messages
 
 /// All message types the server can send to clients
@@ -390,6 +435,10 @@ enum CLIServerMessage: Decodable {
     // Top-level control messages (not inside stream)
     case stopped(CLIStoppedPayload)
     case interrupted
+    // History hardening: Cursor/reconnect messages (Phase 2-3)
+    case cursorEvicted(CLICursorEvictedPayload)   // Cursor evicted from memory
+    case cursorInvalid(CLICursorInvalidPayload)   // Cursor ID doesn't exist
+    case reconnectComplete(CLIReconnectCompletePayload) // Reconnection finished
 
     private enum CodingKeys: String, CodingKey {
         case type
@@ -428,6 +477,13 @@ enum CLIServerMessage: Decodable {
             self = .stopped(try CLIStoppedPayload(from: decoder))
         case "interrupted":
             self = .interrupted
+        // History hardening: Cursor/reconnect messages (Phase 2-3)
+        case "cursor_evicted":
+            self = .cursorEvicted(try CLICursorEvictedPayload(from: decoder))
+        case "cursor_invalid":
+            self = .cursorInvalid(try CLICursorInvalidPayload(from: decoder))
+        case "reconnect_complete":
+            self = .reconnectComplete(try CLIReconnectCompletePayload(from: decoder))
         default:
             throw DecodingError.dataCorruptedError(
                 forKey: .type,
@@ -472,118 +528,83 @@ struct CLIQueuedPayload: Decodable {
     let position: Int
 }
 
+// MARK: - History Hardening Payloads (Phase 2-3)
+
+/// Cursor evicted from server memory - client should fall back to REST API
+/// Occurs when session buffer exceeds memory limits (10MB per session, 100MB total)
+struct CLICursorEvictedPayload: Decodable {
+    let sessionId: String        // Which session's cursor was evicted
+    let oldestAvailable: String? // ID of oldest message still in memory (if any)
+    let reason: String?          // Human-readable explanation (e.g., "memory_limit")
+}
+
+/// Cursor ID doesn't exist on server
+/// Either never existed or session no longer active
+struct CLICursorInvalidPayload: Decodable {
+    let cursorId: String        // The invalid cursor ID that was requested
+    let sessionId: String?      // Session ID if known
+}
+
+/// Reconnection completed - server has replayed missed messages
+struct CLIReconnectCompletePayload: Decodable {
+    let missedCount: Int        // Number of messages replayed
+    let hasGap: Bool            // True if some messages couldn't be recovered
+    let oldestReplayedId: String?  // First message ID in replay (for client reference)
+    let newestReplayedId: String?  // Last message ID in replay (should match current cursor)
+}
+
 // MARK: - History Replay (for session resume)
 
 /// Payload for history replay when resuming a session
+/// Uses unified StoredMessage format - same as REST API and WebSocket streaming
 struct CLIHistoryPayload: Decodable {
-    let messages: [CLIHistoryMessage]
+    let messages: [StoredMessage]
     let hasMore: Bool
     let cursor: String?  // For pagination if hasMore=true
-}
 
-/// Individual message in history replay
-struct CLIHistoryMessage: Decodable {
-    let type: String  // "user", "assistant", etc.
-    let id: String?
-    let content: String?
-    let timestamp: String?
-    let thinking: String?
-    let toolUse: [CLIHistoryToolUse]?
+    /// Convert all messages to ChatMessages for UI display
+    /// Filters ephemeral messages and handles denormalized tool_use with embedded results
+    func toChatMessages() -> [ChatMessage] {
+        var result: [ChatMessage] = []
 
-    /// Convert to ChatMessage for UI display
-    func toChatMessage() -> ChatMessage {
-        let role: ChatMessage.Role
-        switch type.lowercased() {
-        case "user":
-            role = .user
-        case "assistant":
-            role = .assistant
-        case "system":
-            role = .system
-        default:
-            role = .assistant
-        }
+        for storedMsg in messages {
+            // Handle denormalized tool_use with embedded result
+            if case .toolUse(let content) = storedMsg.message {
+                let timestamp = storedMsg.date ?? Date()
 
-        // Parse timestamp
-        var date = Date()
-        if let ts = timestamp {
-            let formatter = ISO8601DateFormatter()
-            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-            if let parsedDate = formatter.date(from: ts) {
-                date = parsedDate
-            } else {
-                formatter.formatOptions = [.withInternetDateTime]
-                date = formatter.date(from: ts) ?? Date()
+                // Add the tool_use message
+                let inputString: String
+                if let data = try? JSONSerialization.data(withJSONObject: content.input.mapValues { $0.value }),
+                   let str = String(data: data, encoding: .utf8) {
+                    inputString = str
+                } else {
+                    inputString = ""
+                }
+                let displayContent = inputString.isEmpty ? content.name : "\(content.name)(\(inputString))"
+                result.append(ChatMessage(role: .toolUse, content: displayContent, timestamp: timestamp))
+
+                // If there's an embedded result, add it as a separate ChatMessage
+                if let embedded = content.result {
+                    let role: ChatMessage.Role = embedded.isError == true || !embedded.success ? .error : .toolResult
+                    result.append(ChatMessage(role: role, content: embedded.output, timestamp: timestamp))
+                }
+                continue
+            }
+
+            // Normal message conversion (filters ephemeral)
+            if let msg = storedMsg.toChatMessage() {
+                result.append(msg)
             }
         }
-
-        // Build content with thinking and tool results
-        var fullContent = content ?? ""
-        if let thinkingContent = thinking, !thinkingContent.isEmpty {
-            fullContent = "<thinking>\n\(thinkingContent)\n</thinking>\n\n" + fullContent
-        }
-
-        return ChatMessage(role: role, content: fullContent, timestamp: date)
+        return result
     }
 }
 
-/// Tool use information in history
-struct CLIHistoryToolUse: Decodable {
-    let tool: String
-    let input: AnyCodable?
-    let result: String?
-}
-
-/// Type-erased Codable for arbitrary JSON values
-struct AnyCodable: Decodable {
-    let value: Any
-
-    init(from decoder: Decoder) throws {
-        let container = try decoder.singleValueContainer()
-
-        if container.decodeNil() {
-            value = NSNull()
-        } else if let bool = try? container.decode(Bool.self) {
-            value = bool
-        } else if let int = try? container.decode(Int.self) {
-            value = int
-        } else if let double = try? container.decode(Double.self) {
-            value = double
-        } else if let string = try? container.decode(String.self) {
-            value = string
-        } else if let array = try? container.decode([AnyCodable].self) {
-            value = array.map { $0.value }
-        } else if let dict = try? container.decode([String: AnyCodable].self) {
-            value = dict.mapValues { $0.value }
-        } else {
-            throw DecodingError.typeMismatch(
-                AnyCodable.self,
-                DecodingError.Context(codingPath: decoder.codingPath, debugDescription: "Unsupported type")
-            )
-        }
-    }
-
-    /// Get value as String (for display) - converts any type to string
-    var stringValue: String {
-        if let s = value as? String { return s }
-        if let dict = value as? [String: Any] {
-            // Extract stdout if present (for tool results)
-            if let stdout = dict["stdout"] as? String {
-                return stdout
-            }
-            if let data = try? JSONSerialization.data(withJSONObject: dict),
-               let str = String(data: data, encoding: .utf8) {
-                return str
-            }
-        }
-        return String(describing: value)
-    }
-
-    /// Get value as Dictionary
-    var dictValue: [String: Any]? {
-        value as? [String: Any]
-    }
-}
+/// Backward-compatible typealias for AnyCodableValue
+/// `AnyCodable` was previously a separate type with duplicate decoding logic.
+/// Now consolidated to use `AnyCodableValue` which provides the same functionality
+/// plus Encodable and Equatable conformance.
+typealias AnyCodable = AnyCodableValue
 
 struct CLIErrorPayload: Decodable {
     let code: String
@@ -729,6 +750,122 @@ enum ConnectionError: Error, LocalizedError, Equatable {
 // cli-bridge now sends all messages in a unified StoredMessage format.
 // Same structure for WebSocket streaming AND REST API history.
 
+// MARK: - History Hardening: Cursor Persistence for Scroll Position
+
+/// Persists scroll position info (cursor + first visible message) for session resumption
+/// Allows users to return to the same scroll position when re-opening a session
+@MainActor
+final class CursorPersistenceManager {
+    static let shared = CursorPersistenceManager()
+
+    private let defaults = UserDefaults.standard
+    private let cursorKeyPrefix = "session_cursor_"
+    private let scrollPositionKeyPrefix = "session_scroll_position_"
+
+    private init() {}
+
+    /// Data structure for persisted scroll state
+    struct ScrollState: Codable {
+        let cursor: String?           // Pagination cursor from server
+        let firstVisibleMessageId: String?  // ID of first visible message
+        let scrollOffset: CGFloat?    // Scroll offset for precise restoration
+        let timestamp: Date           // When this state was saved
+    }
+
+    /// Generate a key for a project+session combination
+    private func key(for projectPath: String, sessionId: String) -> String {
+        let encoded = projectPath.replacingOccurrences(of: "/", with: "-")
+        return "\(encoded)_\(sessionId)"
+    }
+
+    /// Save cursor for a session
+    func saveCursor(_ cursor: String?, for projectPath: String, sessionId: String) {
+        let compositeKey = key(for: projectPath, sessionId: sessionId)
+        if let cursor = cursor {
+            defaults.set(cursor, forKey: cursorKeyPrefix + compositeKey)
+            log.debug("[CursorPersistence] Saved cursor for \(sessionId)")
+        } else {
+            defaults.removeObject(forKey: cursorKeyPrefix + compositeKey)
+        }
+    }
+
+    /// Load cursor for a session
+    func loadCursor(for projectPath: String, sessionId: String) -> String? {
+        let compositeKey = key(for: projectPath, sessionId: sessionId)
+        return defaults.string(forKey: cursorKeyPrefix + compositeKey)
+    }
+
+    /// Save complete scroll state for a session
+    func saveScrollState(_ state: ScrollState, for projectPath: String, sessionId: String) {
+        let compositeKey = key(for: projectPath, sessionId: sessionId)
+        if let data = try? JSONEncoder().encode(state) {
+            defaults.set(data, forKey: scrollPositionKeyPrefix + compositeKey)
+            log.debug("[CursorPersistence] Saved scroll state for \(sessionId)")
+        }
+    }
+
+    /// Load scroll state for a session
+    func loadScrollState(for projectPath: String, sessionId: String) -> ScrollState? {
+        let compositeKey = key(for: projectPath, sessionId: sessionId)
+        guard let data = defaults.data(forKey: scrollPositionKeyPrefix + compositeKey) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(ScrollState.self, from: data)
+    }
+
+    /// Clear persisted state for a session (e.g., when session is deleted)
+    func clearState(for projectPath: String, sessionId: String) {
+        let compositeKey = key(for: projectPath, sessionId: sessionId)
+        defaults.removeObject(forKey: cursorKeyPrefix + compositeKey)
+        defaults.removeObject(forKey: scrollPositionKeyPrefix + compositeKey)
+        log.debug("[CursorPersistence] Cleared state for \(sessionId)")
+    }
+
+    /// Clear all persisted cursor data (e.g., on logout or app reset)
+    func clearAllState() {
+        let allKeys = defaults.dictionaryRepresentation().keys
+        for key in allKeys {
+            if key.hasPrefix(cursorKeyPrefix) || key.hasPrefix(scrollPositionKeyPrefix) {
+                defaults.removeObject(forKey: key)
+            }
+        }
+        log.info("[CursorPersistence] Cleared all cursor state")
+    }
+
+    /// Check if scroll state is still valid (not too old)
+    /// Returns false if the state is older than 24 hours
+    func isScrollStateValid(_ state: ScrollState) -> Bool {
+        let maxAge: TimeInterval = 24 * 60 * 60  // 24 hours
+        return Date().timeIntervalSince(state.timestamp) < maxAge
+    }
+}
+
+// MARK: - Message Validation
+
+/// Validation errors for incoming messages
+enum MessageValidationError: Error, LocalizedError {
+    case invalidMessageId(String)
+    case invalidTimestamp(String)
+    case unknownMessageType(String)
+    case timestampInFuture(Date)
+    case timestampTooOld(Date)
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidMessageId(let id):
+            return "Invalid message ID format: \(id)"
+        case .invalidTimestamp(let ts):
+            return "Invalid timestamp format: \(ts)"
+        case .unknownMessageType(let type):
+            return "Unknown message type: \(type)"
+        case .timestampInFuture(let date):
+            return "Timestamp is in the future: \(date)"
+        case .timestampTooOld(let date):
+            return "Timestamp is too old: \(date)"
+        }
+    }
+}
+
 /// Unified message container - used by both WebSocket and REST API
 /// This is the canonical format for all messages from cli-bridge
 struct StoredMessage: Codable, Identifiable, Equatable {
@@ -738,21 +875,54 @@ struct StoredMessage: Codable, Identifiable, Equatable {
 
     /// Parse timestamp as Date
     var date: Date? {
-        Self.isoFormatter.date(from: timestamp) ?? Self.isoFormatterNoFrac.date(from: timestamp)
+        CLIDateFormatter.parseDate(timestamp)
     }
 
-    // Shared ISO formatters
-    private static let isoFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
+    // MARK: - Validation
+
+    /// Minimum valid date for timestamps (2024-01-01)
+    private static let minValidDate: Date = {
+        var components = DateComponents()
+        components.year = 2024
+        components.month = 1
+        components.day = 1
+        return Calendar.current.date(from: components) ?? Date.distantPast
     }()
 
-    private static let isoFormatterNoFrac: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter
-    }()
+    /// Validate the message format and contents
+    /// Returns nil if valid, or an error describing the issue
+    func validate() -> MessageValidationError? {
+        // Validate ID is UUID format
+        guard UUID(uuidString: id) != nil else {
+            return .invalidMessageId(id)
+        }
+
+        // Validate timestamp can be parsed
+        guard let parsedDate = date else {
+            return .invalidTimestamp(timestamp)
+        }
+
+        // Validate timestamp is reasonable (not too far in future, not before 2024)
+        let now = Date()
+        let futureThreshold = now.addingTimeInterval(60) // Allow 1 minute drift
+
+        if parsedDate > futureThreshold {
+            return .timestampInFuture(parsedDate)
+        }
+
+        if parsedDate < Self.minValidDate {
+            return .timestampTooOld(parsedDate)
+        }
+
+        return nil
+    }
+
+    /// Validate and log any issues (non-fatal - message may still be usable)
+    func validateAndLog() {
+        if let error = validate() {
+            log.warning("[Message] Validation failed for \(id): \(error.localizedDescription)")
+        }
+    }
 
     /// Convert to ChatMessage for UI display
     func toChatMessage() -> ChatMessage? {
@@ -795,7 +965,7 @@ struct StoredMessage: Codable, Identifiable, Equatable {
             let role: ChatMessage.Role = content.isError == true || !content.success ? .error : .toolResult
             return ChatMessage(role: role, content: content.output, timestamp: timestamp)
 
-        case .usage(let content):
+        case .usage:
             // Usage messages don't create chat messages, but we track them separately
             return nil
 
@@ -1255,34 +1425,20 @@ struct CLISessionMetadata: Codable {
         archivedAt != nil
     }
 
-    // Shared formatters to avoid allocation on each property access
-    // Two formatters needed: backend may return timestamps with or without fractional seconds
-    private static let isoFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
-
-    private static let isoFormatterNoFrac: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter
-    }()
-
-    /// Parse createdAt as Date (tries both ISO formats)
+    /// Parse createdAt as Date
     var createdDate: Date? {
-        Self.isoFormatter.date(from: createdAt) ?? Self.isoFormatterNoFrac.date(from: createdAt)
+        CLIDateFormatter.parseDate(createdAt)
     }
 
-    /// Parse lastActivityAt as Date (tries both ISO formats)
+    /// Parse lastActivityAt as Date
     var lastActivityDate: Date? {
-        Self.isoFormatter.date(from: lastActivityAt) ?? Self.isoFormatterNoFrac.date(from: lastActivityAt)
+        CLIDateFormatter.parseDate(lastActivityAt)
     }
 
-    /// Parse archivedAt as Date (tries both ISO formats)
+    /// Parse archivedAt as Date
     var archivedDate: Date? {
         guard let archivedAt = archivedAt else { return nil }
-        return Self.isoFormatter.date(from: archivedAt) ?? Self.isoFormatterNoFrac.date(from: archivedAt)
+        return CLIDateFormatter.parseDate(archivedAt)
     }
 
     /// Display title - prefers customTitle over auto-generated title
@@ -1651,23 +1807,9 @@ struct CLIFileEntry: Decodable, Identifiable {
         type == "directory"
     }
 
-    // Shared formatters to avoid allocation on each property access
-    // Two formatters needed: backend may return timestamps with or without fractional seconds
-    private static let isoFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
-
-    private static let isoFormatterNoFrac: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter
-    }()
-
     var modifiedDate: Date? {
         guard let modified = modified else { return nil }
-        return Self.isoFormatter.date(from: modified) ?? Self.isoFormatterNoFrac.date(from: modified)
+        return CLIDateFormatter.parseDate(modified)
     }
 
     /// SF Symbol icon for this file type
@@ -1743,20 +1885,6 @@ struct CLIFileContentResponse: Decodable {
     let language: String?        // Detected language for syntax highlighting
     let lineCount: Int?
 
-    // Shared formatters to avoid allocation on each property access
-    // Two ISO formatters needed: backend may return timestamps with or without fractional seconds
-    private static let isoFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
-
-    private static let isoFormatterNoFrac: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter
-    }()
-
     private static let byteFormatter: ByteCountFormatter = {
         let formatter = ByteCountFormatter()
         formatter.countStyle = .file
@@ -1774,10 +1902,10 @@ struct CLIFileContentResponse: Decodable {
         return Self.byteFormatter.string(fromByteCount: Int64(size))
     }
 
-    /// Modified date (tries both ISO formats)
+    /// Modified date
     var modifiedDate: Date? {
         guard let modified = modified else { return nil }
-        return Self.isoFormatter.date(from: modified) ?? Self.isoFormatterNoFrac.date(from: modified)
+        return CLIDateFormatter.parseDate(modified)
     }
 }
 
@@ -1835,8 +1963,6 @@ struct CLISearchResult: Codable, Identifiable, Equatable {
 
     var id: String { sessionId }
 
-    // Shared formatters (expensive to create)
-    private static let isoFormatter = ISO8601DateFormatter()
     private static let relativeFormatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
@@ -1845,7 +1971,7 @@ struct CLISearchResult: Codable, Identifiable, Equatable {
 
     /// Parsed timestamp as Date
     var date: Date? {
-        Self.isoFormatter.date(from: timestamp)
+        CLIDateFormatter.parseDate(timestamp)
     }
 
     /// Project name extracted from path
@@ -2187,89 +2313,6 @@ struct CLIPaginatedMessagesRequest {
     }
 }
 
-/// Wrapper for a paginated message entry (contains id, timestamp, and nested message)
-struct CLIPaginatedMessageEntry: Decodable, Identifiable {
-    let id: String
-    let timestamp: String
-    let message: CLIPaginatedMessageContent
-
-    /// Convert to ChatMessage for UI display
-    func toChatMessage() -> ChatMessage {
-        // Parse timestamp
-        var date = Date()
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let parsedDate = formatter.date(from: timestamp) {
-            date = parsedDate
-        } else {
-            formatter.formatOptions = [.withInternetDateTime]
-            date = formatter.date(from: timestamp) ?? Date()
-        }
-
-        return message.toChatMessage(timestamp: date)
-    }
-}
-
-/// The actual message content inside a paginated message entry
-struct CLIPaginatedMessageContent: Decodable {
-    let type: String           // "user", "assistant", "system", "tool_use", "tool_result", "thinking"
-    let content: String?       // Text content (for user/assistant/system)
-    let name: String?          // Tool name (for tool_use)
-    let tool: String?          // Tool name (for tool_result) - server sends "tool" not "name"
-    let input: AnyCodableValue? // Tool input (for tool_use)
-    let output: String?        // Tool output (for tool_result)
-    let id: String?            // Tool use ID (server sends "id" not "toolUseId")
-    let isError: Bool?         // Whether tool result is an error
-
-    /// The effective tool name - handles both tool_use (name) and tool_result (tool)
-    var toolName: String? {
-        name ?? tool
-    }
-
-    /// Convert to ChatMessage for UI display
-    func toChatMessage(timestamp: Date) -> ChatMessage {
-        // Map type to role
-        let role: ChatMessage.Role
-        switch type {
-        case "user":
-            role = .user
-        case "assistant":
-            role = .assistant
-        case "system":
-            role = .system
-        case "tool_use":
-            role = .toolUse
-        case "tool_result":
-            role = isError == true ? .error : .toolResult
-        case "thinking":
-            role = .thinking
-        default:
-            role = .system
-        }
-
-        // Build content based on type
-        let messageContent: String
-        switch type {
-        case "tool_use":
-            if let toolName = name {
-                if let toolInput = input?.stringValue {
-                    messageContent = "\(toolName)(\(toolInput))"
-                } else {
-                    messageContent = toolName
-                }
-            } else {
-                messageContent = content ?? ""
-            }
-        case "tool_result":
-            messageContent = output ?? content ?? ""
-        default:
-            messageContent = content ?? ""
-        }
-
-        return ChatMessage(role: role, content: messageContent, timestamp: timestamp)
-    }
-}
-
 /// Pagination info from paginated messages endpoint
 struct CLIPaginationInfo: Decodable {
     let total: Int
@@ -2280,6 +2323,27 @@ struct CLIPaginationInfo: Decodable {
     let prevCursor: String?    // Message ID for "after" parameter to get newer messages
 }
 
+// MARK: - History Hardening: Integrity Validation
+
+/// Response integrity information for validating message consistency
+/// Server includes this to help detect data corruption or missing messages
+struct CLIIntegrity: Decodable {
+    let hash: String           // SHA-256 hash of message content
+    let messageCount: Int      // Number of messages in this response
+    let lastTimestamp: String  // ISO-8601 timestamp of last message
+
+    /// Validate that the response matches expected integrity
+    func validate(responseMessageCount: Int) -> Bool {
+        return messageCount == responseMessageCount
+    }
+}
+
+/// Pagination error returned by REST API when cursor is invalid
+enum CLIPaginationError: String, Decodable {
+    case cursorEvicted = "cursor_evicted"  // Cursor removed from memory
+    case cursorInvalid = "cursor_invalid"  // Cursor ID doesn't exist
+}
+
 /// Response from paginated messages endpoint (unified format v0.3.5+)
 /// GET /projects/:path/sessions/:id/messages
 /// Uses same StoredMessage format as WebSocket streaming
@@ -2287,10 +2351,21 @@ struct CLIPaginatedMessagesResponse: Decodable {
     let messages: [StoredMessage]
     let pagination: CLIPaginationInfo
 
+    // History hardening: API versioning and integrity
+    let apiVersion: String?        // API version (e.g., "1.0", "1.1")
+    let integrity: CLIIntegrity?   // Optional integrity info for validation
+    let error: CLIPaginationError? // Pagination-specific error
+
     // Convenience accessors
     var total: Int { pagination.total }
     var hasMore: Bool { pagination.hasMore }
     var nextCursor: String? { pagination.nextCursor }
+
+    /// Validate response integrity if available
+    func validateIntegrity() -> Bool {
+        guard let integrity = integrity else { return true }
+        return integrity.validate(responseMessageCount: messages.count)
+    }
 
     /// Convert all messages to ChatMessages for UI display
     /// Filters out ephemeral messages, nil conversions, and duplicates.

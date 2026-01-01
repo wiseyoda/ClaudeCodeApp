@@ -263,11 +263,11 @@ struct DiagnosticsView: View {
     // MARK: - App Info Helpers
 
     private var appVersion: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
+        AppVersion.version
     }
 
     private var buildNumber: String {
-        Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "Unknown"
+        AppVersion.build
     }
 
     private var iosVersion: String {

@@ -596,14 +596,17 @@ final class CLIBridgeTypesTests: XCTestCase {
     }
 
     func test_cliServerMessage_decodesHistory() throws {
+        // History uses unified StoredMessage format (same as REST API and WebSocket streaming)
         let message = try decodeServerMessage(from: [
             "type": "history",
             "messages": [
                 [
-                    "type": "user",
                     "id": "msg-1",
-                    "content": "Hi",
-                    "timestamp": "2024-01-01T00:00:00Z"
+                    "timestamp": "2024-01-01T00:00:00Z",
+                    "message": [
+                        "type": "user",
+                        "content": "Hi"
+                    ]
                 ]
             ],
             "hasMore": true,
@@ -614,8 +617,13 @@ final class CLIBridgeTypesTests: XCTestCase {
             XCTFail("Expected history message")
             return
         }
-        XCTAssertEqual(payload.messages.first?.type, "user")
-        XCTAssertEqual(payload.messages.first?.content, "Hi")
+        XCTAssertEqual(payload.messages.count, 1)
+        XCTAssertEqual(payload.messages.first?.id, "msg-1")
+        if case .user(let content) = payload.messages.first?.message {
+            XCTAssertEqual(content.content, "Hi")
+        } else {
+            XCTFail("Expected user message")
+        }
         XCTAssertEqual(payload.hasMore, true)
         XCTAssertEqual(payload.cursor, "cursor-1")
     }

@@ -40,8 +40,10 @@ class AppDelegate: NSObject, UIApplicationDelegate {
 
     // MARK: - Background Push Handling
 
-    // Note: Swift 6 preview warns about [AnyHashable: Any] not being Sendable.
-    // This is a known UIKit limitation - the protocol requires this type.
+    // Note: Swift 6 will require Sendable compliance for [AnyHashable: Any].
+    // This is a known UIKit limitation - the protocol requires this non-Sendable type.
+    // Suppressing with @preconcurrency until Apple updates the UIApplicationDelegate protocol.
+    @preconcurrency
     func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any]) async -> UIBackgroundFetchResult {
         log.info("[Push] Received remote notification in background")
 

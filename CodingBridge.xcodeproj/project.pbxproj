@@ -39,6 +39,7 @@
 		A1000024 /* CLIMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000023 /* CLIMessageView.swift */; };
 		A1000025 /* Logger.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000024 /* Logger.swift */; };
 		A1000026 /* AppError.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000025 /* AppError.swift */; };
+		AV000002 /* AppVersion.swift in Sources */ = {isa = PBXBuildFile; fileRef = AV000001 /* AppVersion.swift */; };
 		A1000027 /* FilePickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000026 /* FilePickerSheet.swift */; };
 		A1000028 /* CloneProjectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000027 /* CloneProjectSheet.swift */; };
 		A1000029 /* NewProjectSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000028 /* NewProjectSheet.swift */; };
@@ -175,6 +176,7 @@
 		A2000023 /* CLIMessageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIMessageView.swift; sourceTree = "<group>"; };
 		A2000024 /* Logger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Logger.swift; sourceTree = "<group>"; };
 		A2000025 /* AppError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppError.swift; sourceTree = "<group>"; };
+		AV000001 /* AppVersion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppVersion.swift; sourceTree = "<group>"; };
 		A2000026 /* FilePickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FilePickerSheet.swift; sourceTree = "<group>"; };
 		A2000027 /* CloneProjectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloneProjectSheet.swift; sourceTree = "<group>"; };
 		A2000028 /* NewProjectSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NewProjectSheet.swift; sourceTree = "<group>"; };
@@ -198,6 +200,7 @@
 		CB000004 /* CLIBridgeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIBridgeManager.swift; sourceTree = "<group>"; };
 		CB000006 /* CLIBridgeAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIBridgeAPIClient.swift; sourceTree = "<group>"; };
 		CB000008 /* CLIBridgeAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIBridgeAdapter.swift; sourceTree = "<group>"; };
+		CFG00001 /* Version.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Version.xcconfig; sourceTree = "<group>"; };
 		CE000002 /* ChatViewExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewExtensions.swift; sourceTree = "<group>"; };
 		CM000002 /* CustomModelPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomModelPickerSheet.swift; sourceTree = "<group>"; };
 		CT000002 /* CompactToolView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompactToolView.swift; sourceTree = "<group>"; };
@@ -297,11 +300,20 @@
 		A5000001 = {
 			isa = PBXGroup;
 			children = (
+				CFG00002 /* Config */,
 				A5000002 /* CodingBridge */,
 				2509F4FC2EFF976200EAFBFE /* CodingBridgeTests */,
 				B9000004 /* CodingBridgeUITests */,
 				A5000003 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		CFG00002 /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				CFG00001 /* Version.xcconfig */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 		A5000002 /* CodingBridge */ = {
@@ -360,6 +372,7 @@
 		A5000004 /* Utilities */ = {
 			isa = PBXGroup;
 			children = (
+				AV000001 /* AppVersion.swift */,
 				HM000066 /* SearchHistoryStore.swift */,
 				HM000064 /* HealthMonitorService.swift */,
 				A2000014 /* ImageUtilities.swift */,
@@ -707,6 +720,7 @@
 				A1000024 /* CLIMessageView.swift in Sources */,
 				A1000025 /* Logger.swift in Sources */,
 				A1000026 /* AppError.swift in Sources */,
+				AV000002 /* AppVersion.swift in Sources */,
 				SS000048 /* ScrollStateManager.swift in Sources */,
 				A1000027 /* FilePickerSheet.swift in Sources */,
 				A1000028 /* CloneProjectSheet.swift in Sources */,
@@ -797,10 +811,10 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = "$(inherited)";
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 0.6.6;
+				MARKETING_VERSION = "$(inherited)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.level.CodingBridgeTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -818,10 +832,10 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = "$(inherited)";
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 0.6.6;
+				MARKETING_VERSION = "$(inherited)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.level.CodingBridgeTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -836,6 +850,7 @@
 		};
 		A9000001 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = CFG00001 /* Version.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -901,6 +916,7 @@
 		};
 		A9000002 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = CFG00001 /* Version.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -963,7 +979,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = "$(inherited)";
 				DEVELOPMENT_TEAM = VPLAUT6646;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -984,7 +1000,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.6.6;
+				MARKETING_VERSION = "$(inherited)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.level.CodingBridge;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -999,7 +1015,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = "$(inherited)";
 				DEVELOPMENT_TEAM = VPLAUT6646;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1020,7 +1036,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 0.6.6;
+				MARKETING_VERSION = "$(inherited)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.level.CodingBridge;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -1033,10 +1049,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = "$(inherited)";
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 0.6.6;
+				MARKETING_VERSION = "$(inherited)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.level.CodingBridgeUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
@@ -1053,10 +1069,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = "$(inherited)";
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
-				MARKETING_VERSION = 0.6.6;
+				MARKETING_VERSION = "$(inherited)";
 				PRODUCT_BUNDLE_IDENTIFIER = com.level.CodingBridgeUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
