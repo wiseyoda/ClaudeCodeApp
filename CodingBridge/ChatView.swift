@@ -434,17 +434,22 @@ struct ChatView: View {
                 }
             }
             // Auto-scroll when new messages arrive (if enabled)
-            .onChange(of: viewModel.messages.count) { _, _ in
+            // PERF: Delay scroll to let List's UICollectionView finish updating
+            .onChange(of: viewModel.messages.count) { oldCount, newCount in
                 if settings.autoScrollEnabled && !viewModel.showScrollToBottom {
-                    withAnimation(.easeOut(duration: 0.15)) {
-                        proxy.scrollTo("bottomAnchor")
+                    // Longer delay when loading many messages (history load)
+                    let delay = (newCount - oldCount) > 5 ? 0.3 : 0.1
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            proxy.scrollTo("bottomAnchor")
+                        }
                     }
                 }
             }
             // Explicit scroll trigger (used when sending messages - always scrolls)
             .onChange(of: viewModel.scrollToBottomTrigger) { _, shouldScroll in
                 if shouldScroll {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                         withAnimation(.easeOut(duration: 0.15)) {
                             proxy.scrollTo("bottomAnchor")
                         }
@@ -455,7 +460,7 @@ struct ChatView: View {
             }
             .onAppear {
                 guard !viewModel.isLoadingHistory else { return }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                     proxy.scrollTo("bottomAnchor")
                 }
             }
