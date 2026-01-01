@@ -97,16 +97,19 @@ See [CHANGELOG.md](CHANGELOG.md) for details on resolved issues.
 
 | # | Issue | Version |
 |---|-------|---------|
-| 44 | Retry logic for transient errors | 0.6.7 |
-| 43 | Request timeout configuration | 0.6.7 |
-| 42 | Weak self in Task closures (verified correct) | 0.6.7 |
-| 41 | Mixed callback and Combine patterns (verified intentional) | 0.6.7 |
-| 40 | stringifyAnyValue() complexity (documented as intentional) | 0.6.7 |
-| 39 | cleanAnyCodableWrappers() string manipulation (migration code) | 0.6.7 |
-| 38 | DateFormatter instances (created shared CLIDateFormatter) | 0.6.7 |
-| 37 | AnyCodable duplication (replaced with typealias) | 0.6.7 |
-| 35 | Git refresh error on pull-to-refresh | 0.6.7 |
-| 24 | Token calculation in cli-bridge (verified correct) | 0.6.7 |
+| 47 | UICollectionView crash on scroll (delayed scroll after List renders) | 0.6.8 |
+| 46 | Duplicate messages in export API fallback path | 0.6.8 |
+| 45 | Chat scroll performance (migrated to List for cell recycling) | 0.6.8 |
+| 44 | Retry logic for transient errors | 0.6.8 |
+| 43 | Request timeout configuration | 0.6.8 |
+| 42 | Weak self in Task closures (verified correct) | 0.6.8 |
+| 41 | Mixed callback and Combine patterns (verified intentional) | 0.6.8 |
+| 40 | stringifyAnyValue() complexity (documented as intentional) | 0.6.8 |
+| 39 | cleanAnyCodableWrappers() string manipulation (migration code) | 0.6.8 |
+| 38 | DateFormatter instances (created shared CLIDateFormatter) | 0.6.8 |
+| 37 | AnyCodable duplication (replaced with typealias) | 0.6.8 |
+| 35 | Git refresh error on pull-to-refresh | 0.6.8 |
+| 24 | Token calculation in cli-bridge (verified correct) | 0.6.8 |
 | 32 | ClaudeHelper AI Suggestions (feature removed - ClaudeHelper.swift deleted) | 0.6.4 |
 | 29 | BGTaskScheduler simulator error (works on device, simulator limitation) | 0.6.1 |
 | 28 | xcodebuild test bundle issue (run tests separately as workaround) | 0.6.1 |

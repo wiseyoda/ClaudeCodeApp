@@ -138,8 +138,8 @@ See `requirements/ARCHITECTURE.md` for full structure and data flows.
 Connects to [cli-bridge](~/dev/cli-bridge) via REST API with SSE streaming.
 
 **IMPORTANT - API Documentation:**
-- **OpenAPI Spec (JSON):** `http://10.0.3.2:3100/openapi.json` - Check this first before implementing API calls
-- **Interactive Docs:** `http://10.0.3.2:3100/docs` - Swagger UI for testing endpoints
+- **OpenAPI Spec (JSON):** `http://172.20.0.2:3100/openapi.json` - Check this first before implementing API calls
+- **Interactive Docs:** `http://172.20.0.2:3100/docs` - Swagger UI for testing endpoints
 - Always verify endpoint signatures against the live OpenAPI spec
 
 **Local Development:**

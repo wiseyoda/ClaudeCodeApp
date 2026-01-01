@@ -22,7 +22,7 @@
 
 ---
 
-## Completed: v0.6.7 History Hardening & Codebase Audit
+## Completed: v0.6.8 History Hardening & Codebase Audit
 
 ### History Hardening iOS Implementation
 - `lastMessageId` reconnect - Resume from last known message on reconnection
@@ -288,4 +288,4 @@ Phase 7 (Tests)        =========================================>
 
 ---
 
-_Last updated: January 1, 2026 - v0.6.7 History Hardening & Codebase Audit complete_
+_Last updated: January 1, 2026 - v0.6.8 History Hardening & Codebase Audit complete_

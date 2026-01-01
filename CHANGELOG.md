@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [0.6.7] - 2026-01-01
+## [0.6.8] - 2026-01-01
 
 ### Added
 
@@ -617,7 +617,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Highlights                                             |
 | ------- | ------------------------------------------------------ |
-| 0.6.7   | History hardening, List scroll performance, audit fixes|
+| 0.6.8   | History hardening, List scroll performance, audit fixes|
 | 0.1.0   | Initial app: WebSocket chat, SSH terminal, voice input |
 | 0.2.0   | Slash commands, TodoWrite, images, settings overhaul   |
 | 0.2.5   | Code hardening, tests, better error handling           |

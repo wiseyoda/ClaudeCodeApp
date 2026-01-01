@@ -237,7 +237,7 @@ struct WriteLineView: View {
          *
          * Run with: deno run --allow-net tests/integration/git-status-debug.ts
          */
-        const SERVER_URL = "http://10.0.3.2:3100";
+        const SERVER_URL = "http://172.20.0.2:3100";
 
         interface GitStatus {
             branch: string;
