@@ -1593,7 +1593,26 @@ class ChatViewModel: ObservableObject {
             if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                let messagesArray = json["messages"] as? [[String: Any]] {
                 log.debug("[ChatViewModel] Found \(messagesArray.count) messages in export")
-                return messagesArray.flatMap { parseExportMessage($0) }
+
+                // Parse all messages and dedupe (server sometimes sends duplicates)
+                var result: [ChatMessage] = []
+                var seenContent: Set<String> = []
+
+                for msgDict in messagesArray {
+                    for msg in parseExportMessage(msgDict) {
+                        // Only dedupe text messages (assistant/user), not tools
+                        let shouldDedupe = msg.role == .assistant || msg.role == .user
+                        if shouldDedupe {
+                            let contentKey = "\(msg.role):\(msg.content.prefix(200))"
+                            if seenContent.contains(contentKey) {
+                                continue
+                            }
+                            seenContent.insert(contentKey)
+                        }
+                        result.append(msg)
+                    }
+                }
+                return result
             }
         } catch {
             log.debug("[ChatViewModel] Failed to parse export JSON: \(error)")
