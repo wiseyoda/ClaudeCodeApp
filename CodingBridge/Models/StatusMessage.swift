@@ -23,7 +23,7 @@ struct StatusMessage: Codable, Identifiable, Equatable {
     var seen: Bool = false
 
     init(
-        id: String = UUID().uuidString,
+        id: String? = nil,
         text: String,
         emoji: String,
         rarity: Rarity = .common,
@@ -31,13 +31,31 @@ struct StatusMessage: Codable, Identifiable, Equatable {
         timeOfDay: TimeOfDay? = nil,
         seasonal: Season? = nil
     ) {
-        self.id = id
+        // Generate stable ID from content so it persists across app launches
+        // This ensures seenMessageIds can match messages after restart
+        self.id = id ?? Self.stableId(text: text, category: category, timeOfDay: timeOfDay, seasonal: seasonal)
         self.text = text
         self.emoji = emoji
         self.rarity = rarity
         self.category = category
         self.timeOfDay = timeOfDay
         self.seasonal = seasonal
+    }
+
+    /// Generate a stable ID from message content (survives app restarts)
+    private static func stableId(text: String, category: Category, timeOfDay: TimeOfDay?, seasonal: Season?) -> String {
+        // Create deterministic ID from content hash
+        var components = [text, category.rawValue]
+        if let time = timeOfDay { components.append(time.rawValue) }
+        if let season = seasonal { components.append(season.rawValue) }
+        let combined = components.joined(separator: "|")
+
+        // Simple hash - take first 16 chars of SHA-like hash
+        var hash: UInt64 = 5381
+        for char in combined.utf8 {
+            hash = ((hash << 5) &+ hash) &+ UInt64(char)
+        }
+        return String(format: "%016llx", hash)
     }
 
     // MARK: - Rarity
