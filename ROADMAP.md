@@ -22,6 +22,14 @@
 
 ---
 
+## Completed: v0.6.9 Firebase & Type Updates
+
+- Added Firebase files to .gitignore to prevent credential leakage
+- Updated CLIIntegrity types to match server's JSONL validation fields (totalLines, validLines, corruptedLines, corruptedSamples)
+- Added documentation note about using curl for local/Tailscale endpoints in CLAUDE.md
+
+---
+
 ## Completed: v0.6.8 History Hardening & Codebase Audit
 
 ### History Hardening iOS Implementation
@@ -288,4 +296,4 @@ Phase 7 (Tests)        =========================================>
 
 ---
 
-_Last updated: January 1, 2026 - v0.6.8 History Hardening & Codebase Audit complete_
+_Last updated: January 1, 2026 - v0.6.9 Firebase & Type Updates complete_

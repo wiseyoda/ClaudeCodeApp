@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.6.9] - 2026-01-01
+
+### Changed
+
+- **Firebase Integration**: Added Firebase files to .gitignore to prevent credential leakage
+- **CLIIntegrity Types**: Updated to match server's JSONL validation fields (totalLines, validLines, corruptedLines, corruptedSamples)
+- **Documentation**: Added note about using curl for local/Tailscale endpoints in CLAUDE.md
+
+---
+
 ## [0.6.8] - 2026-01-01
 
 ### Added
@@ -617,21 +627,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Highlights                                             |
 | ------- | ------------------------------------------------------ |
+| 0.6.9   | Firebase gitignore, CLIIntegrity types update          |
 | 0.6.8   | History hardening, List scroll performance, audit fixes|
-| 0.1.0   | Initial app: WebSocket chat, SSH terminal, voice input |
-| 0.2.0   | Slash commands, TodoWrite, images, settings overhaul   |
-| 0.2.5   | Code hardening, tests, better error handling           |
-| 0.3.0   | Project/session management, git sync, model selection  |
-| 0.3.1   | iPad support, SSH keys, connection indicator           |
-| 0.3.2   | Search, thinking mode, command library, UI redesign    |
-| 0.3.3   | Ideas Drawer, task abort                               |
-| 0.4.0   | Message action bar, critical bug fixes, test suite     |
-| 0.5.0   | Session API migration, permission approval, iOS 26 UI  |
-| 0.5.1   | Message queuing docs, haptics, scroll UX, bug fixes    |
-| 0.6.0   | **cli-bridge migration** - REST API with SSE streaming |
-| 0.6.1   | Session history tool rendering, structured content     |
-| 0.6.2   | Compact tool views, UI freeze fix, ChatView cleanup    |
-| 0.6.3   | ChatViewModel extraction, keyboard lag elimination     |
-| 0.6.4   | Cache-first startup, UX fixes                          |
+| 0.6.6   | SSH to HTTPS URL conversion for clone operations       |
 | 0.6.5   | Session search, archive, tool test harness             |
-| 0.6.6   | SSH→HTTPS URL conversion for clone operations          |
+| 0.6.4   | Cache-first startup, UX fixes                          |
+| 0.6.3   | ChatViewModel extraction, keyboard lag elimination     |
+| 0.6.2   | Compact tool views, UI freeze fix, ChatView cleanup    |
+| 0.6.1   | Session history tool rendering, structured content     |
+| 0.6.0   | **cli-bridge migration** - REST API with SSE streaming |
+| 0.5.1   | Message queuing docs, haptics, scroll UX, bug fixes    |
+| 0.5.0   | Session API migration, permission approval, iOS 26 UI  |
+| 0.4.0   | Message action bar, critical bug fixes, test suite     |
+| 0.3.3   | Ideas Drawer, task abort                               |
+| 0.3.2   | Search, thinking mode, command library, UI redesign    |
+| 0.3.1   | iPad support, SSH keys, connection indicator           |
+| 0.3.0   | Project/session management, git sync, model selection  |
+| 0.2.5   | Code hardening, tests, better error handling           |
+| 0.2.0   | Slash commands, TodoWrite, images, settings overhaul   |
+| 0.1.0   | Initial app: WebSocket chat, SSH terminal, voice input |
