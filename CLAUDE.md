@@ -141,6 +141,7 @@ Connects to [cli-bridge](~/dev/cli-bridge) via REST API with SSE streaming.
 - **OpenAPI Spec (JSON):** `http://172.20.0.2:3100/openapi.json` - Check this first before implementing API calls
 - **Interactive Docs:** `http://172.20.0.2:3100/docs` - Swagger UI for testing endpoints
 - Always verify endpoint signatures against the live OpenAPI spec
+- **Use `curl` via Bash** for local/Tailscale endpoints (WebFetch can't access 172.20.0.2 or localhost)
 
 **Local Development:**
 ```bash

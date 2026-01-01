@@ -2325,16 +2325,20 @@ struct CLIPaginationInfo: Decodable {
 
 // MARK: - History Hardening: Integrity Validation
 
-/// Response integrity information for validating message consistency
-/// Server includes this to help detect data corruption or missing messages
+/// Response integrity information for validating JSONL file consistency
+/// Server includes this to help detect data corruption in session files
 struct CLIIntegrity: Decodable {
-    let hash: String           // SHA-256 hash of message content
-    let messageCount: Int      // Number of messages in this response
-    let lastTimestamp: String  // ISO-8601 timestamp of last message
+    let totalLines: Int        // Total lines in JSONL file
+    let validLines: Int        // Lines that parsed successfully
+    let corruptedLines: Int    // Lines that failed to parse
+    let corruptedSamples: [String]  // Sample of corrupted line content (for debugging)
 
-    /// Validate that the response matches expected integrity
+    /// Check if the session file has any corruption
+    var hasCorruption: Bool { corruptedLines > 0 }
+
+    /// Validate that response message count matches valid lines
     func validate(responseMessageCount: Int) -> Bool {
-        return messageCount == responseMessageCount
+        return validLines >= responseMessageCount
     }
 }
 

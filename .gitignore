@@ -40,3 +40,9 @@ fastlane/test_output
 # IDE
 .idea/
 *.sublime-*
+
+# Firebase
+# IMPORTANT: GoogleService-Info.plist contains API keys - never commit!
+GoogleService-Info.plist
+# Firebase debug logs
+firebase-debug.log
