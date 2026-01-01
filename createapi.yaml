@@ -1,0 +1,22 @@
+# CreateAPI configuration for cli-bridge API
+# Docs: https://github.com/CreateAPI/CreateAPI
+
+# Generate only entities (Codable structs), not full client
+generate:
+  - entities
+
+# Output settings
+entities:
+  # Use structs for simple types
+  defaultType: struct
+  # Make all properties with defaults optional
+  isGeneratingInitWithDefaultValues: true
+  # Generate Codable
+  protocols: [Codable, Sendable]
+  # Use Swift naming conventions
+  isGeneratingSwiftDocComments: true
+
+# Naming
+rename:
+  entities:
+    # Map API names to Swift-friendly names if needed
