@@ -24,11 +24,11 @@ protocol LiveActivityAPIClient {
         pushToken: String,
         pushToStartToken: String?,
         activityId: String,
-        sessionId: String,
-        environment: String
+        sessionId: UUID,
+        environment: PushEnvironment?
     ) async throws -> CLILiveActivityRegisterResponse
     func invalidatePushToken(
-        tokenType: CLIPushInvalidateRequest.TokenType,
+        tokenType: TokenType,
         token: String
     ) async throws
 }
@@ -432,15 +432,16 @@ final class LiveActivityManager: ObservableObject {
             return
         }
 
-        guard let client = apiClient else { return }
+        guard let client = apiClient,
+              let sessionUUID = UUID(uuidString: sessionId) else { return }
 
         do {
-            let environment = isProductionEnvironment ? "production" : "sandbox"
+            let environment: PushEnvironment = isProductionEnvironment ? .production : .sandbox
             _ = try await client.registerLiveActivityToken(
                 pushToken: token,
                 pushToStartToken: nil,
                 activityId: activityId,
-                sessionId: sessionId,
+                sessionId: sessionUUID,
                 environment: environment
             )
             lastRegisteredPushToken = token

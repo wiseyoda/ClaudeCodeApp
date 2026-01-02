@@ -9,13 +9,10 @@ import Foundation
 
 public struct PermissionSuccessResponse: Sendable, Codable, Hashable {
 
-    public enum Success: Bool, Sendable, Codable, CaseIterable {
-        case _true = true
-    }
     /** Operation success indicator */
-    public var success: Success
+    public var success: Bool
 
-    public init(success: Success) {
+    public init(success: Bool) {
         self.success = success
     }
 

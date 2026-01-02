@@ -300,7 +300,6 @@ struct ShareSheet: UIViewControllerRepresentable {
     FileContentViewer(
         fileContent: CLIFileContentResponse(
             path: "/src/utils/auth.ts",
-            name: "auth.ts",
             content: """
             import { jwt } from 'jsonwebtoken';
 
@@ -315,9 +314,7 @@ struct ShareSheet: UIViewControllerRepresentable {
             """,
             size: 256,
             modified: "2024-12-29T09:00:00Z",
-            mimeType: "text/typescript",
-            language: "typescript",
-            lineCount: 12
+            mimeType: "text/typescript"
         ),
         projectPath: "/Users/dev/myapp"
     )

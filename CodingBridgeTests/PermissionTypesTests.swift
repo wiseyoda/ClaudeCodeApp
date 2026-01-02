@@ -129,10 +129,10 @@ final class PermissionTypesTests: XCTestCase {
     }
 
     func test_permissionMode_initFromCLIPermissionMode_mapsCases() {
-        let cases: [(CLISetPermissionModePayload.CLIPermissionMode, PermissionMode)] = [
-            (.default, .default),
-            (.acceptEdits, .acceptEdits),
-            (.bypassPermissions, .bypassPermissions)
+        let cases: [(CLIPermissionMode, PermissionMode)] = [
+            (._default, .default),
+            (.acceptedits, .acceptEdits),
+            (.bypasspermissions, .bypassPermissions)
         ]
 
         for (cliMode, expected) in cases {

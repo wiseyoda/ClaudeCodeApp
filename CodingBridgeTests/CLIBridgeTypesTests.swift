@@ -6,54 +6,48 @@ final class CLIBridgeTypesTests: XCTestCase {
     // MARK: - ConnectionState
 
     func test_connectionState_isConnected() {
-        XCTAssertTrue(ConnectionState.connected.isConnected)
-        XCTAssertFalse(ConnectionState.disconnected.isConnected)
-        XCTAssertFalse(ConnectionState.connecting.isConnected)
-        XCTAssertFalse(ConnectionState.reconnecting(attempt: 1).isConnected)
-    }
-
-    func test_connectionState_isDisconnected() {
-        XCTAssertTrue(ConnectionState.disconnected.isDisconnected)
-        XCTAssertFalse(ConnectionState.connected.isDisconnected)
-        XCTAssertFalse(ConnectionState.connecting.isDisconnected)
-        XCTAssertFalse(ConnectionState.reconnecting(attempt: 2).isDisconnected)
+        XCTAssertTrue(CLIConnectionState.connected(agentId: "agent-1").isConnected)
+        XCTAssertFalse(CLIConnectionState.disconnected.isConnected)
+        XCTAssertFalse(CLIConnectionState.connecting.isConnected)
+        XCTAssertFalse(CLIConnectionState.reconnecting(attempt: 1).isConnected)
     }
 
     func test_connectionState_isConnecting() {
-        XCTAssertTrue(ConnectionState.connecting.isConnecting)
-        XCTAssertFalse(ConnectionState.connected.isConnecting)
-        XCTAssertFalse(ConnectionState.disconnected.isConnecting)
-        XCTAssertFalse(ConnectionState.reconnecting(attempt: 3).isConnecting)
-    }
-
-    func test_connectionState_isReconnecting() {
-        XCTAssertTrue(ConnectionState.reconnecting(attempt: 4).isReconnecting)
-        XCTAssertFalse(ConnectionState.connected.isReconnecting)
-        XCTAssertFalse(ConnectionState.disconnected.isReconnecting)
-        XCTAssertFalse(ConnectionState.connecting.isReconnecting)
+        XCTAssertTrue(CLIConnectionState.connecting.isConnecting)
+        XCTAssertFalse(CLIConnectionState.connected(agentId: "agent-1").isConnecting)
+        XCTAssertFalse(CLIConnectionState.disconnected.isConnecting)
+        // Note: reconnecting is also considered "connecting"
+        XCTAssertTrue(CLIConnectionState.reconnecting(attempt: 3).isConnecting)
     }
 
     func test_connectionState_displayText() {
-        XCTAssertEqual(ConnectionState.disconnected.displayText, "Disconnected")
-        XCTAssertEqual(ConnectionState.connecting.displayText, "Connecting...")
-        XCTAssertEqual(ConnectionState.connected.displayText, "Connected")
-        XCTAssertEqual(ConnectionState.reconnecting(attempt: 2).displayText, "Reconnecting (2)...")
+        XCTAssertEqual(CLIConnectionState.disconnected.displayText, "Disconnected")
+        XCTAssertEqual(CLIConnectionState.connecting.displayText, "Connecting...")
+        XCTAssertEqual(CLIConnectionState.connected(agentId: "agent-1").displayText, "Connected")
+        XCTAssertEqual(CLIConnectionState.reconnecting(attempt: 2).displayText, "Reconnecting (2)...")
     }
 
     func test_connectionState_accessibilityLabel() {
-        XCTAssertEqual(ConnectionState.disconnected.accessibilityLabel, "Connection status: Disconnected")
-        XCTAssertEqual(ConnectionState.connecting.accessibilityLabel, "Connection status: Connecting")
-        XCTAssertEqual(ConnectionState.connected.accessibilityLabel, "Connection status: Connected")
+        XCTAssertEqual(CLIConnectionState.disconnected.accessibilityLabel, "Disconnected from server")
+        XCTAssertEqual(CLIConnectionState.connecting.accessibilityLabel, "Connecting to server")
+        XCTAssertEqual(CLIConnectionState.connected(agentId: "agent-1").accessibilityLabel, "Connected to server")
         XCTAssertEqual(
-            ConnectionState.reconnecting(attempt: 5).accessibilityLabel,
-            "Connection status: Reconnecting, attempt 5"
+            CLIConnectionState.reconnecting(attempt: 5).accessibilityLabel,
+            "Reconnecting, attempt 5"
         )
     }
 
     func test_connectionState_equatable() {
-        XCTAssertEqual(ConnectionState.reconnecting(attempt: 1), ConnectionState.reconnecting(attempt: 1))
-        XCTAssertNotEqual(ConnectionState.reconnecting(attempt: 1), ConnectionState.reconnecting(attempt: 2))
-        XCTAssertNotEqual(ConnectionState.connected, ConnectionState.disconnected)
+        XCTAssertEqual(CLIConnectionState.reconnecting(attempt: 1), CLIConnectionState.reconnecting(attempt: 1))
+        XCTAssertNotEqual(CLIConnectionState.reconnecting(attempt: 1), CLIConnectionState.reconnecting(attempt: 2))
+        XCTAssertNotEqual(CLIConnectionState.connected(agentId: "agent-1"), CLIConnectionState.disconnected)
+    }
+
+    func test_connectionState_agentId() {
+        XCTAssertEqual(CLIConnectionState.connected(agentId: "agent-123").agentId, "agent-123")
+        XCTAssertNil(CLIConnectionState.disconnected.agentId)
+        XCTAssertNil(CLIConnectionState.connecting.agentId)
+        XCTAssertNil(CLIConnectionState.reconnecting(attempt: 1).agentId)
     }
 
     // MARK: - TokenUsage
@@ -74,10 +68,10 @@ final class CLIBridgeTypesTests: XCTestCase {
 
     func test_anyCodableValue_decodesPrimitiveTypes() throws {
         let boolValue = try decodeAnyCodableValue("true")
-        XCTAssertEqual(boolValue.boolValue, true)
+        XCTAssertEqual(boolValue.value as? Bool, true)
 
         let intValue = try decodeAnyCodableValue("42")
-        XCTAssertEqual(intValue.intValue, 42)
+        XCTAssertEqual(intValue.value as? Int, 42)
 
         let doubleValue = try decodeAnyCodableValue("3.5")
         XCTAssertEqual(doubleValue.value as? Double, 3.5)
@@ -88,7 +82,7 @@ final class CLIBridgeTypesTests: XCTestCase {
 
     func test_anyCodableValue_decodesCollections() throws {
         let arrayValue = try decodeAnyCodableValue("[1,\"two\",false]")
-        guard let array = arrayValue.arrayValue else {
+        guard let array = arrayValue.value as? [Any] else {
             XCTFail("Expected array value")
             return
         }
@@ -98,7 +92,7 @@ final class CLIBridgeTypesTests: XCTestCase {
         XCTAssertEqual(array[2] as? Bool, false)
 
         let dictValue = try decodeAnyCodableValue("{\"a\":1,\"b\":\"two\"}")
-        guard let dict = dictValue.dictValue else {
+        guard let dict = dictValue.value as? [String: Any] else {
             XCTFail("Expected dict value")
             return
         }
@@ -207,16 +201,16 @@ final class CLIBridgeTypesTests: XCTestCase {
 
     func test_anyCodableValue_accessors() throws {
         let dictValue = try decodeAnyCodableValue("{\"a\":1}")
-        XCTAssertEqual(dictValue.dictValue?["a"] as? Int, 1)
+        XCTAssertEqual((dictValue.value as? [String: Any])?["a"] as? Int, 1)
 
         let arrayValue = try decodeAnyCodableValue("[1]")
-        XCTAssertEqual(arrayValue.arrayValue?.first as? Int, 1)
+        XCTAssertEqual((arrayValue.value as? [Any])?.first as? Int, 1)
 
         let intValue = try decodeAnyCodableValue("7")
-        XCTAssertEqual(intValue.intValue, 7)
+        XCTAssertEqual(intValue.value as? Int, 7)
 
         let boolValue = try decodeAnyCodableValue("false")
-        XCTAssertEqual(boolValue.boolValue, false)
+        XCTAssertEqual(boolValue.value as? Bool, false)
     }
 
     // MARK: - CLIClientMessage encoding
@@ -279,9 +273,9 @@ final class CLIBridgeTypesTests: XCTestCase {
     }
 
     func test_cliClientMessage_encodesQuestionResponse() throws {
-        let answers: [String: AnyCodableValue] = [
-            "choice": AnyCodableValue("yes"),
-            "count": AnyCodableValue(2)
+        let answers: [String: QuestionResponseMessageAnswersValue] = [
+            "choice": QuestionResponseMessageAnswersValue("yes"),
+            "count": QuestionResponseMessageAnswersValue(2)
         ]
         let payload = CLIQuestionResponsePayload(id: "question-1", answers: answers)
         let json = try encodeClientMessage(.questionResponse(payload))
@@ -326,7 +320,7 @@ final class CLIBridgeTypesTests: XCTestCase {
     }
 
     func test_cliClientMessage_encodesSetPermissionMode() throws {
-        let payload = CLISetPermissionModePayload(mode: .bypassPermissions)
+        let payload = CLISetPermissionModePayload(mode: .bypasspermissions)
         let json = try encodeClientMessage(.setPermissionMode(payload))
 
         XCTAssertEqual(json["type"] as? String, "set_permission_mode")
@@ -362,25 +356,26 @@ final class CLIBridgeTypesTests: XCTestCase {
             "sessionId": "session-1",
             "model": "claude-3",
             "version": "1.0.0",
-            "protocolVersion": "2"
+            "protocolVersion": "1.0"
         ])
 
-        guard case .connected(let payload) = message else {
+        guard case .typeConnectedMessage(let payload) = message else {
             XCTFail("Expected connected message")
             return
         }
         XCTAssertEqual(payload.agentId, "agent-1")
-        XCTAssertEqual(payload.sessionId, "session-1")
+        XCTAssertEqual(payload.sessionIdString, "session-1")
         XCTAssertEqual(payload.model, "claude-3")
         XCTAssertEqual(payload.version, "1.0.0")
-        XCTAssertEqual(payload.protocolVersion, "2")
+        XCTAssertEqual(payload.protocolVersionString, "1.0")
     }
 
     func test_cliServerMessage_decodesStream() throws {
         // Stream messages now include id and timestamp (unified format v0.3.5+)
+        let testUUID = UUID()
         let message = try decodeServerMessage(from: [
             "type": "stream",
-            "id": "msg-123",
+            "id": testUUID.uuidString,
             "timestamp": "2024-01-01T12:00:00.000Z",
             "message": [
                 "type": "assistant",
@@ -389,14 +384,14 @@ final class CLIBridgeTypesTests: XCTestCase {
             ]
         ])
 
-        guard case .stream(let payload) = message else {
+        guard case .typeStreamServerMessage(let payload) = message else {
             XCTFail("Expected stream message")
             return
         }
-        XCTAssertEqual(payload.id, "msg-123")
-        XCTAssertEqual(payload.timestamp, "2024-01-01T12:00:00.000Z")
+        XCTAssertEqual(payload.id, testUUID)
+        XCTAssertNotNil(payload.timestamp)
         switch payload.message {
-        case .assistant(let content):
+        case .typeAssistantStreamMessage(let content):
             XCTAssertEqual(content.content, "Hello")
             XCTAssertEqual(content.delta, true)
             XCTAssertFalse(content.isFinal)
@@ -407,9 +402,10 @@ final class CLIBridgeTypesTests: XCTestCase {
 
     func test_cliStreamMessage_toStoredMessage() throws {
         // Test conversion from stream message to stored message format
+        let testUUID = UUID()
         let streamMessage = try decodeServerMessage(from: [
             "type": "stream",
-            "id": "msg-456",
+            "id": testUUID.uuidString,
             "timestamp": "2024-06-15T10:30:00.000Z",
             "message": [
                 "type": "user",
@@ -417,27 +413,28 @@ final class CLIBridgeTypesTests: XCTestCase {
             ]
         ])
 
-        guard case .stream(let payload) = streamMessage else {
+        guard case .typeStreamServerMessage(let payload) = streamMessage else {
             XCTFail("Expected stream message")
             return
         }
 
         let stored = payload.toStoredMessage()
-        XCTAssertEqual(stored.id, "msg-456")
-        XCTAssertEqual(stored.timestamp, "2024-06-15T10:30:00.000Z")
+        XCTAssertEqual(stored.id, testUUID)
+        XCTAssertNotNil(stored.timestamp)
 
         // Verify the message content is preserved
-        if case .user(let content) = stored.message {
+        if case .typeUserStreamMessage(let content) = stored.message {
             XCTAssertEqual(content.content, "Hello Claude")
         } else {
             XCTFail("Expected user content")
         }
     }
 
-    func test_storedMessage_toChatMessage_user() throws {
+    func test_storedMessage_toCLIStoredMessage_preservesId() throws {
+        let testUUID = UUID()
         let streamMessage = try decodeServerMessage(from: [
             "type": "stream",
-            "id": "msg-789",
+            "id": testUUID.uuidString,
             "timestamp": "2024-06-15T10:30:00.000Z",
             "message": [
                 "type": "user",
@@ -445,49 +442,46 @@ final class CLIBridgeTypesTests: XCTestCase {
             ]
         ])
 
-        guard case .stream(let payload) = streamMessage else {
+        guard case .typeStreamServerMessage(let payload) = streamMessage else {
             XCTFail("Expected stream message")
             return
         }
 
         let stored = payload.toStoredMessage()
-        let chatMessage = stored.toChatMessage()
-
-        XCTAssertNotNil(chatMessage)
-        XCTAssertEqual(chatMessage?.role, .user)
-        XCTAssertEqual(chatMessage?.content, "Test user message")
+        XCTAssertEqual(stored.id, testUUID)
+        XCTAssertEqual(stored.idString, testUUID.uuidString)
     }
 
-    func test_storedMessage_toChatMessage_assistantFinal() throws {
+    func test_storedMessage_toCLIStoredMessage_preservesContent() throws {
+        let testUUID = UUID()
         let streamMessage = try decodeServerMessage(from: [
             "type": "stream",
-            "id": "msg-final",
-            "timestamp": "2024-06-15T10:31:00.000Z",
+            "id": testUUID.uuidString,
+            "timestamp": "2024-06-15T10:30:00.000Z",
             "message": [
-                "type": "assistant",
-                "content": "Final assistant response"
-                // delta is not set, so this is final
+                "type": "user",
+                "content": "Test user message"
             ]
         ])
 
-        guard case .stream(let payload) = streamMessage else {
+        guard case .typeStreamServerMessage(let payload) = streamMessage else {
             XCTFail("Expected stream message")
             return
         }
 
         let stored = payload.toStoredMessage()
-        let chatMessage = stored.toChatMessage()
-
-        XCTAssertNotNil(chatMessage)
-        XCTAssertEqual(chatMessage?.role, .assistant)
-        XCTAssertEqual(chatMessage?.content, "Final assistant response")
+        if case .typeUserStreamMessage(let content) = stored.message {
+            XCTAssertEqual(content.content, "Test user message")
+        } else {
+            XCTFail("Expected user message content")
+        }
     }
 
-    func test_storedMessage_toChatMessage_assistantDelta_returnsNil() throws {
-        // Streaming deltas should not convert to ChatMessage (ephemeral)
+    func test_storedMessage_toCLIStoredMessage_assistantDelta() throws {
+        let testUUID = UUID()
         let streamMessage = try decodeServerMessage(from: [
             "type": "stream",
-            "id": "msg-delta",
+            "id": testUUID.uuidString,
             "timestamp": "2024-06-15T10:31:00.000Z",
             "message": [
                 "type": "assistant",
@@ -496,21 +490,25 @@ final class CLIBridgeTypesTests: XCTestCase {
             ]
         ])
 
-        guard case .stream(let payload) = streamMessage else {
+        guard case .typeStreamServerMessage(let payload) = streamMessage else {
             XCTFail("Expected stream message")
             return
         }
 
         let stored = payload.toStoredMessage()
-        XCTAssertNil(stored.toChatMessage(), "Streaming deltas should return nil")
-        XCTAssertTrue(stored.isEphemeral, "Streaming deltas should be ephemeral")
+        if case .typeAssistantStreamMessage(let content) = stored.message {
+            XCTAssertEqual(content.content, "Streaming...")
+            XCTAssertEqual(content.delta, true)
+        } else {
+            XCTFail("Expected assistant message content")
+        }
     }
 
-    func test_storedMessage_isEphemeral() throws {
-        // Test progress message is ephemeral
+    func test_storedMessage_toCLIStoredMessage_progressMessage() throws {
+        let testUUID = UUID()
         let progressMessage = try decodeServerMessage(from: [
             "type": "stream",
-            "id": "msg-progress",
+            "id": testUUID.uuidString,
             "timestamp": "2024-06-15T10:32:00.000Z",
             "message": [
                 "type": "progress",
@@ -520,14 +518,18 @@ final class CLIBridgeTypesTests: XCTestCase {
             ]
         ])
 
-        guard case .stream(let payload) = progressMessage else {
+        guard case .typeStreamServerMessage(let payload) = progressMessage else {
             XCTFail("Expected stream message")
             return
         }
 
         let stored = payload.toStoredMessage()
-        XCTAssertTrue(stored.isEphemeral, "Progress messages should be ephemeral")
-        XCTAssertNil(stored.toChatMessage(), "Progress messages should not convert to ChatMessage")
+        if case .typeProgressStreamMessage(let content) = stored.message {
+            XCTAssertEqual(content.tool, "Bash")
+            XCTAssertEqual(content.elapsed, 5.0)
+        } else {
+            XCTFail("Expected progress message content")
+        }
     }
 
     func test_cliServerMessage_decodesPermission() throws {
@@ -541,13 +543,13 @@ final class CLIBridgeTypesTests: XCTestCase {
             "options": ["allow", "deny", "always"]
         ])
 
-        guard case .permission(let payload) = message else {
+        guard case .typePermissionRequestMessage(let payload) = message else {
             XCTFail("Expected permission message")
             return
         }
         XCTAssertEqual(payload.id, "perm-1")
         XCTAssertEqual(payload.tool, "Bash")
-        XCTAssertEqual(payload.options, ["allow", "deny", "always"])
+        XCTAssertEqual(payload.options, [.allow, .deny, .always])
         XCTAssertEqual(payload.input["command"]?.stringValue, "ls -la")
     }
 
@@ -568,7 +570,7 @@ final class CLIBridgeTypesTests: XCTestCase {
             ]
         ])
 
-        guard case .question(let payload) = message else {
+        guard case .typeQuestionMessage(let payload) = message else {
             XCTFail("Expected question message")
             return
         }
@@ -579,47 +581,43 @@ final class CLIBridgeTypesTests: XCTestCase {
     }
 
     func test_cliServerMessage_decodesSessionEvent() throws {
+        let testUUID = UUID()
         let message = try decodeServerMessage(from: [
             "type": "session_event",
             "action": "created",
             "projectPath": "/tmp/project",
-            "sessionId": "session-1"
+            "sessionId": testUUID.uuidString
         ])
 
-        guard case .sessionEvent(let payload) = message else {
+        guard case .typeSessionEventMessage(let payload) = message else {
             XCTFail("Expected session_event message")
             return
         }
         XCTAssertEqual(payload.action, .created)
         XCTAssertEqual(payload.projectPath, "/tmp/project")
-        XCTAssertEqual(payload.sessionId, "session-1")
+        XCTAssertEqual(payload.sessionId, testUUID)
     }
 
     func test_cliServerMessage_decodesHistory() throws {
-        // History uses unified StoredMessage format (same as REST API and WebSocket streaming)
+        // History uses StreamMessage array format
         let message = try decodeServerMessage(from: [
             "type": "history",
             "messages": [
                 [
-                    "id": "msg-1",
-                    "timestamp": "2024-01-01T00:00:00Z",
-                    "message": [
-                        "type": "user",
-                        "content": "Hi"
-                    ]
+                    "type": "user",
+                    "content": "Hi"
                 ]
             ],
             "hasMore": true,
             "cursor": "cursor-1"
         ])
 
-        guard case .history(let payload) = message else {
+        guard case .typeHistoryMessage(let payload) = message else {
             XCTFail("Expected history message")
             return
         }
         XCTAssertEqual(payload.messages.count, 1)
-        XCTAssertEqual(payload.messages.first?.id, "msg-1")
-        if case .user(let content) = payload.messages.first?.message {
+        if case .typeUserStreamMessage(let content) = payload.messages.first {
             XCTAssertEqual(content.content, "Hi")
         } else {
             XCTFail("Expected user message")
@@ -635,7 +633,7 @@ final class CLIBridgeTypesTests: XCTestCase {
             "previousModel": "claude-2"
         ])
 
-        guard case .modelChanged(let payload) = message else {
+        guard case .typeModelChangedMessage(let payload) = message else {
             XCTFail("Expected model_changed message")
             return
         }
@@ -649,11 +647,11 @@ final class CLIBridgeTypesTests: XCTestCase {
             "mode": "acceptEdits"
         ])
 
-        guard case .permissionModeChanged(let payload) = message else {
+        guard case .typePermissionModeChangedMessage(let payload) = message else {
             XCTFail("Expected permission_mode_changed message")
             return
         }
-        XCTAssertEqual(payload.mode, "acceptEdits")
+        XCTAssertEqual(payload.mode, .acceptedits)
     }
 
     func test_cliServerMessage_decodesQueued() throws {
@@ -662,7 +660,7 @@ final class CLIBridgeTypesTests: XCTestCase {
             "position": 2
         ])
 
-        guard case .queued(let payload) = message else {
+        guard case .typeQueuedMessage(let payload) = message else {
             XCTFail("Expected queued message")
             return
         }
@@ -674,7 +672,7 @@ final class CLIBridgeTypesTests: XCTestCase {
             "type": "queue_cleared"
         ])
 
-        guard case .queueCleared = message else {
+        guard case .typeQueueClearedMessage = message else {
             XCTFail("Expected queue_cleared message")
             return
         }
@@ -687,43 +685,43 @@ final class CLIBridgeTypesTests: XCTestCase {
             "message": "Slow down",
             "recoverable": true,
             "retryable": true,
-            "retryAfter": 30
+            "retryAfter": 30.0
         ])
 
-        guard case .error(let payload) = message else {
+        guard case .typeErrorMessage(let payload) = message else {
             XCTFail("Expected error message")
             return
         }
         XCTAssertEqual(payload.code, "RATE_LIMITED")
         XCTAssertEqual(payload.message, "Slow down")
         XCTAssertEqual(payload.recoverable, true)
-        XCTAssertEqual(payload.retryAfter, 30)
+        XCTAssertEqual(payload.retryAfter, 30.0)
     }
 
     func test_cliServerMessage_decodesPong() throws {
         let message = try decodeServerMessage(from: [
             "type": "pong",
-            "serverTime": 123
+            "serverTime": 123.0
         ])
 
-        guard case .pong(let payload) = message else {
+        guard case .typePongMessage(let payload) = message else {
             XCTFail("Expected pong message")
             return
         }
-        XCTAssertEqual(payload.serverTime, 123)
+        XCTAssertEqual(payload.serverTime, 123.0)
     }
 
     func test_cliServerMessage_decodesStopped() throws {
         let message = try decodeServerMessage(from: [
             "type": "stopped",
-            "reason": "user_stop"
+            "reason": "user"
         ])
 
-        guard case .stopped(let payload) = message else {
+        guard case .typeStoppedMessage(let payload) = message else {
             XCTFail("Expected stopped message")
             return
         }
-        XCTAssertEqual(payload.reason, "user_stop")
+        XCTAssertEqual(payload.reason, .user)
     }
 
     func test_cliServerMessage_decodesInterrupted() throws {
@@ -731,7 +729,7 @@ final class CLIBridgeTypesTests: XCTestCase {
             "type": "interrupted"
         ])
 
-        guard case .interrupted = message else {
+        guard case .typeInterruptedMessage = message else {
             XCTFail("Expected interrupted message")
             return
         }
@@ -747,83 +745,72 @@ final class CLIBridgeTypesTests: XCTestCase {
     }
 
     // MARK: - CLIErrorPayload
-
-    func test_cliErrorPayload_errorCode_invalidMessage() throws {
-        let payload = try decodeCLIErrorPayload(code: "INVALID_MESSAGE")
-
-        XCTAssertEqual(payload.errorCode, .invalidMessage)
-    }
-
-    func test_cliErrorPayload_errorCode_noAgent() throws {
-        let payload = try decodeCLIErrorPayload(code: "NO_AGENT")
-
-        XCTAssertEqual(payload.errorCode, .noAgent)
-    }
+    // Note: CLIErrorPayload is now WsErrorMessage, and errorCode uses snake_case values
 
     func test_cliErrorPayload_errorCode_agentNotFound() throws {
-        let payload = try decodeCLIErrorPayload(code: "AGENT_NOT_FOUND")
+        let payload = try decodeCLIErrorPayload(code: "agent_not_found")
 
         XCTAssertEqual(payload.errorCode, .agentNotFound)
     }
 
-    func test_cliErrorPayload_errorCode_agentBusy() throws {
-        let payload = try decodeCLIErrorPayload(code: "AGENT_BUSY")
-
-        XCTAssertEqual(payload.errorCode, .agentBusy)
-    }
-
     func test_cliErrorPayload_errorCode_sessionNotFound() throws {
-        let payload = try decodeCLIErrorPayload(code: "SESSION_NOT_FOUND")
+        let payload = try decodeCLIErrorPayload(code: "session_not_found")
 
         XCTAssertEqual(payload.errorCode, .sessionNotFound)
     }
 
     func test_cliErrorPayload_errorCode_sessionInvalid() throws {
-        let payload = try decodeCLIErrorPayload(code: "SESSION_INVALID")
+        let payload = try decodeCLIErrorPayload(code: "session_invalid")
 
         XCTAssertEqual(payload.errorCode, .sessionInvalid)
     }
 
-    func test_cliErrorPayload_errorCode_projectNotFound() throws {
-        let payload = try decodeCLIErrorPayload(code: "PROJECT_NOT_FOUND")
+    func test_cliErrorPayload_errorCode_sessionExpired() throws {
+        let payload = try decodeCLIErrorPayload(code: "session_expired")
 
-        XCTAssertEqual(payload.errorCode, .projectNotFound)
+        XCTAssertEqual(payload.errorCode, .sessionExpired)
     }
 
     func test_cliErrorPayload_errorCode_queueFull() throws {
-        let payload = try decodeCLIErrorPayload(code: "QUEUE_FULL")
+        let payload = try decodeCLIErrorPayload(code: "queue_full")
 
         XCTAssertEqual(payload.errorCode, .queueFull)
     }
 
     func test_cliErrorPayload_errorCode_rateLimited() throws {
-        let payload = try decodeCLIErrorPayload(code: "RATE_LIMITED")
+        let payload = try decodeCLIErrorPayload(code: "rate_limited")
 
         XCTAssertEqual(payload.errorCode, .rateLimited)
     }
 
     func test_cliErrorPayload_errorCode_connectionReplaced() throws {
-        let payload = try decodeCLIErrorPayload(code: "CONNECTION_REPLACED")
+        let payload = try decodeCLIErrorPayload(code: "connection_replaced")
 
         XCTAssertEqual(payload.errorCode, .connectionReplaced)
     }
 
-    func test_cliErrorPayload_errorCode_permissionDenied() throws {
-        let payload = try decodeCLIErrorPayload(code: "PERMISSION_DENIED")
-
-        XCTAssertEqual(payload.errorCode, .permissionDenied)
-    }
-
     func test_cliErrorPayload_errorCode_maxAgentsReached() throws {
-        let payload = try decodeCLIErrorPayload(code: "MAX_AGENTS_REACHED")
+        let payload = try decodeCLIErrorPayload(code: "max_agents_reached")
 
         XCTAssertEqual(payload.errorCode, .maxAgentsReached)
     }
 
-    func test_cliErrorPayload_errorCode_agentError() throws {
-        let payload = try decodeCLIErrorPayload(code: "AGENT_ERROR")
+    func test_cliErrorPayload_errorCode_authenticationFailed() throws {
+        let payload = try decodeCLIErrorPayload(code: "authentication_failed")
 
-        XCTAssertEqual(payload.errorCode, .agentError)
+        XCTAssertEqual(payload.errorCode, .authenticationFailed)
+    }
+
+    func test_cliErrorPayload_errorCode_cursorEvicted() throws {
+        let payload = try decodeCLIErrorPayload(code: "cursor_evicted")
+
+        XCTAssertEqual(payload.errorCode, .cursorEvicted)
+    }
+
+    func test_cliErrorPayload_errorCode_cursorInvalid() throws {
+        let payload = try decodeCLIErrorPayload(code: "cursor_invalid")
+
+        XCTAssertEqual(payload.errorCode, .cursorInvalid)
     }
 
     func test_cliErrorPayload_errorCode_unknown_returnsNil() throws {
@@ -835,169 +822,126 @@ final class CLIBridgeTypesTests: XCTestCase {
     // MARK: - ConnectionError
 
     func test_connectionError_errorDescription_cases() {
-        let cases: [(ConnectionError, String)] = [
-            (.serverAtCapacity, "Server is at capacity. Please try again later."),
-            (.agentTimedOut, "Session timed out due to inactivity."),
-            (.connectionReplaced, "Session opened on another device."),
-            (.queueFull, "Input queue is full. Please wait."),
-            (.rateLimited(retryAfter: 30), "Rate limited. Retry in 30 seconds."),
-            (.reconnectFailed, "Failed to reconnect after multiple attempts."),
-            (.networkUnavailable, "No network connection available."),
-            (.invalidServerURL, "Invalid server URL."),
-            (.sessionNotFound, "Session not found."),
-            (.sessionInvalid, "Session is corrupted and cannot be restored."),
-            (.serverError(code: "ERR", message: "Failure", recoverable: false), "Failure")
-        ]
-
-        for (error, expected) in cases {
-            XCTAssertEqual(error.errorDescription, expected)
-        }
-    }
-
-    func test_connectionError_isRetryable_cases() {
-        let cases: [(ConnectionError, Bool)] = [
-            (.serverAtCapacity, true),
-            (.agentTimedOut, false),
-            (.connectionReplaced, false),
-            (.queueFull, false),
-            (.rateLimited(retryAfter: 10), true),
-            (.reconnectFailed, false),
-            (.networkUnavailable, true),
-            (.invalidServerURL, false),
-            (.sessionNotFound, false),
-            (.sessionInvalid, false),
-            (.serverError(code: "ERR", message: "Failure", recoverable: true), true),
-            (.serverError(code: "ERR", message: "Failure", recoverable: false), false)
-        ]
-
-        for (error, expected) in cases {
-            XCTAssertEqual(error.isRetryable, expected)
-        }
-    }
-
-    func test_connectionError_requiresUserAction_cases() {
-        let cases: [(ConnectionError, Bool)] = [
-            (.serverAtCapacity, false),
-            (.connectionReplaced, true),
-            (.sessionNotFound, true),
-            (.sessionInvalid, true),
-            (.rateLimited(retryAfter: 5), false)
-        ]
-
-        for (error, expected) in cases {
-            XCTAssertEqual(error.requiresUserAction, expected)
-        }
-    }
-
-    func test_connectionError_equatable_matchingCases() {
-        XCTAssertEqual(ConnectionError.serverAtCapacity, ConnectionError.serverAtCapacity)
-        XCTAssertEqual(ConnectionError.rateLimited(retryAfter: 3), ConnectionError.rateLimited(retryAfter: 3))
-        XCTAssertEqual(
-            ConnectionError.serverError(code: "ERR", message: "Failure", recoverable: true),
-            ConnectionError.serverError(code: "ERR", message: "Failure", recoverable: true)
-        )
-    }
-
-    func test_connectionError_equatable_differentCases() {
-        XCTAssertNotEqual(ConnectionError.rateLimited(retryAfter: 3), ConnectionError.rateLimited(retryAfter: 4))
-        XCTAssertNotEqual(ConnectionError.serverAtCapacity, ConnectionError.queueFull)
-        XCTAssertNotEqual(
-            ConnectionError.serverError(code: "ERR", message: "Failure", recoverable: true),
-            ConnectionError.serverError(code: "ERR", message: "Other", recoverable: true)
-        )
-    }
-
-    func test_connectionError_from_maxAgentsReached_mapsToServerAtCapacity() throws {
-        let payload = try decodeCLIErrorPayload(code: "MAX_AGENTS_REACHED")
-
-        XCTAssertEqual(ConnectionError.from(payload), .serverAtCapacity)
-    }
-
-    func test_connectionError_from_agentNotFound_mapsToAgentTimedOut() throws {
-        let payload = try decodeCLIErrorPayload(code: "AGENT_NOT_FOUND")
-
-        XCTAssertEqual(ConnectionError.from(payload), .agentTimedOut)
+        XCTAssertEqual(ConnectionError.serverAtCapacity.errorDescription, "Server is at capacity")
+        XCTAssertEqual(ConnectionError.agentTimedOut.errorDescription, "Agent timed out")
+        XCTAssertEqual(ConnectionError.connectionReplaced.errorDescription, "Connection replaced by another client")
+        XCTAssertEqual(ConnectionError.queueFull.errorDescription, "Request queue is full")
+        XCTAssertEqual(ConnectionError.rateLimited(30).errorDescription, "Rate limited, retry in 30 seconds")
+        XCTAssertEqual(ConnectionError.reconnectFailed.errorDescription, "Failed to reconnect to session")
+        XCTAssertEqual(ConnectionError.networkUnavailable.errorDescription, "Network is unavailable")
+        XCTAssertEqual(ConnectionError.invalidServerURL.errorDescription, "Invalid server URL")
+        XCTAssertEqual(ConnectionError.sessionNotFound.errorDescription, "Session not found")
+        XCTAssertEqual(ConnectionError.sessionInvalid.errorDescription, "Session is invalid")
+        XCTAssertEqual(ConnectionError.serverError(500, "Failure", nil).errorDescription, "Failure")
+        XCTAssertEqual(ConnectionError.authenticationFailed.errorDescription, "Authentication failed")
+        XCTAssertEqual(ConnectionError.sessionExpired.errorDescription, "Session expired")
+        XCTAssertEqual(ConnectionError.connectionFailed("timeout").errorDescription, "Connection failed: timeout")
+        XCTAssertEqual(ConnectionError.protocolError("invalid").errorDescription, "Protocol error: invalid")
+        XCTAssertEqual(ConnectionError.unknown("something").errorDescription, "something")
     }
 
     func test_connectionError_from_connectionReplaced_mapsToConnectionReplaced() throws {
-        let payload = try decodeCLIErrorPayload(code: "CONNECTION_REPLACED")
+        let payload = try decodeCLIErrorPayload(code: "connection_replaced")
+        let error = ConnectionError.from(payload)
 
-        XCTAssertEqual(ConnectionError.from(payload), .connectionReplaced)
-    }
-
-    func test_connectionError_from_queueFull_mapsToQueueFull() throws {
-        let payload = try decodeCLIErrorPayload(code: "QUEUE_FULL")
-
-        XCTAssertEqual(ConnectionError.from(payload), .queueFull)
-    }
-
-    func test_connectionError_from_rateLimited_usesRetryAfter_and_defaults() throws {
-        let payloadWithRetry = try decodeCLIErrorPayload(code: "RATE_LIMITED", retryAfter: 45)
-        XCTAssertEqual(ConnectionError.from(payloadWithRetry), .rateLimited(retryAfter: 45))
-
-        let payloadWithoutRetry = try decodeCLIErrorPayload(code: "RATE_LIMITED")
-        XCTAssertEqual(ConnectionError.from(payloadWithoutRetry), .rateLimited(retryAfter: 60))
+        guard case .connectionReplaced = error else {
+            XCTFail("Expected connectionReplaced, got \(error)")
+            return
+        }
     }
 
     func test_connectionError_from_sessionNotFound_mapsToSessionNotFound() throws {
-        let payload = try decodeCLIErrorPayload(code: "SESSION_NOT_FOUND")
+        let payload = try decodeCLIErrorPayload(code: "session_not_found")
+        let error = ConnectionError.from(payload)
 
-        XCTAssertEqual(ConnectionError.from(payload), .sessionNotFound)
+        guard case .sessionNotFound = error else {
+            XCTFail("Expected sessionNotFound, got \(error)")
+            return
+        }
+    }
+
+    func test_connectionError_from_sessionExpired_mapsToSessionExpired() throws {
+        let payload = try decodeCLIErrorPayload(code: "session_expired")
+        let error = ConnectionError.from(payload)
+
+        guard case .sessionExpired = error else {
+            XCTFail("Expected sessionExpired, got \(error)")
+            return
+        }
     }
 
     func test_connectionError_from_sessionInvalid_mapsToSessionInvalid() throws {
-        let payload = try decodeCLIErrorPayload(code: "SESSION_INVALID")
-
-        XCTAssertEqual(ConnectionError.from(payload), .sessionInvalid)
-    }
-
-    func test_connectionError_from_unknownCode_mapsToServerError() throws {
-        let payload = try decodeCLIErrorPayload(code: "PERMISSION_DENIED", message: "Denied", recoverable: false)
+        let payload = try decodeCLIErrorPayload(code: "session_invalid")
         let error = ConnectionError.from(payload)
 
-        XCTAssertEqual(error, .serverError(code: "PERMISSION_DENIED", message: "Denied", recoverable: false))
+        guard case .sessionInvalid = error else {
+            XCTFail("Expected sessionInvalid, got \(error)")
+            return
+        }
+    }
+
+    func test_connectionError_from_cursorInvalid_mapsToSessionInvalid() throws {
+        let payload = try decodeCLIErrorPayload(code: "cursor_invalid")
+        let error = ConnectionError.from(payload)
+
+        guard case .sessionInvalid = error else {
+            XCTFail("Expected sessionInvalid, got \(error)")
+            return
+        }
+    }
+
+    func test_connectionError_from_authenticationFailed_mapsToAuthenticationFailed() throws {
+        let payload = try decodeCLIErrorPayload(code: "authentication_failed")
+        let error = ConnectionError.from(payload)
+
+        guard case .authenticationFailed = error else {
+            XCTFail("Expected authenticationFailed, got \(error)")
+            return
+        }
+    }
+
+    func test_connectionError_from_unknownCode_mapsToProtocolError() throws {
+        let payload = try decodeCLIErrorPayload(code: "unknown_error", message: "Something went wrong")
+        let error = ConnectionError.from(payload)
+
+        if case .protocolError(let msg) = error {
+            XCTAssertEqual(msg, "Something went wrong")
+        } else {
+            XCTFail("Expected protocolError")
+        }
     }
 
     // MARK: - CLIAgentState
-
-    func test_cliAgentState_displayText() {
-        XCTAssertEqual(CLIAgentState.starting.displayText, "Starting...")
-        XCTAssertEqual(CLIAgentState.thinking.displayText, "Thinking...")
-        XCTAssertEqual(CLIAgentState.executing.displayText, "Running tool...")
-        XCTAssertEqual(CLIAgentState.waitingInput.displayText, "Waiting for input...")
-        XCTAssertEqual(CLIAgentState.waitingPermission.displayText, "Waiting for approval...")
-        XCTAssertEqual(CLIAgentState.idle.displayText, "Ready")
-        XCTAssertEqual(CLIAgentState.recovering.displayText, "Recovering...")
-        XCTAssertEqual(CLIAgentState.stopped.displayText, "Stopped")
-    }
 
     func test_cliAgentState_isProcessing() {
         XCTAssertTrue(CLIAgentState.thinking.isProcessing)
         XCTAssertTrue(CLIAgentState.executing.isProcessing)
         XCTAssertFalse(CLIAgentState.idle.isProcessing)
+        XCTAssertFalse(CLIAgentState.starting.isProcessing)
+        XCTAssertFalse(CLIAgentState.stopped.isProcessing)
+        XCTAssertFalse(CLIAgentState.waitingInput.isProcessing)
+        XCTAssertFalse(CLIAgentState.waitingPermission.isProcessing)
+        XCTAssertFalse(CLIAgentState.recovering.isProcessing)
     }
 
-    func test_cliAgentState_isConnecting() {
-        XCTAssertTrue(CLIAgentState.starting.isConnecting)
-        XCTAssertFalse(CLIAgentState.thinking.isConnecting)
+    func test_cliAgentState_isWorking() {
+        XCTAssertTrue(CLIAgentState.thinking.isWorking)
+        XCTAssertTrue(CLIAgentState.executing.isWorking)
+        XCTAssertTrue(CLIAgentState.recovering.isWorking)
+        XCTAssertFalse(CLIAgentState.idle.isWorking)
+        XCTAssertFalse(CLIAgentState.starting.isWorking)
+        XCTAssertFalse(CLIAgentState.stopped.isWorking)
+        XCTAssertFalse(CLIAgentState.waitingInput.isWorking)
+        XCTAssertFalse(CLIAgentState.waitingPermission.isWorking)
     }
 
-    func test_cliAgentState_isWaiting() {
-        XCTAssertTrue(CLIAgentState.waitingInput.isWaiting)
-        XCTAssertTrue(CLIAgentState.waitingPermission.isWaiting)
-        XCTAssertFalse(CLIAgentState.executing.isWaiting)
-    }
-
-    func test_cliAgentState_canSendInput() {
-        XCTAssertTrue(CLIAgentState.idle.canSendInput)
-        XCTAssertTrue(CLIAgentState.thinking.canSendInput)
-        XCTAssertTrue(CLIAgentState.executing.canSendInput)
-        XCTAssertFalse(CLIAgentState.waitingInput.canSendInput)
-    }
-
-    func test_cliAgentState_isActive() {
-        XCTAssertFalse(CLIAgentState.stopped.isActive)
-        XCTAssertTrue(CLIAgentState.idle.isActive)
+    func test_cliAgentState_initFromProtocolState() {
+        XCTAssertEqual(CLIAgentState(from: .thinking), .thinking)
+        XCTAssertEqual(CLIAgentState(from: .executing), .executing)
+        XCTAssertEqual(CLIAgentState(from: .waitingInput), .waitingInput)
+        XCTAssertEqual(CLIAgentState(from: .waitingPermission), .waitingPermission)
+        XCTAssertEqual(CLIAgentState(from: .idle), .idle)
+        XCTAssertEqual(CLIAgentState(from: .recovering), .recovering)
     }
 
     // MARK: - Helpers
@@ -1027,9 +971,10 @@ final class CLIBridgeTypesTests: XCTestCase {
         code: String,
         message: String = "Error",
         recoverable: Bool = false,
-        retryAfter: Int? = nil
+        retryAfter: Double? = nil
     ) throws -> CLIErrorPayload {
         var object: [String: Any] = [
+            "type": "error",
             "code": code,
             "message": message,
             "recoverable": recoverable

@@ -41,6 +41,38 @@ for f in "$MODELS_DIR"/*.swift; do
   sed -i '' 's/, ParameterConvertible//g' "$f"
 done
 
+# Remove Identifiable extensions from enum types (enums don't have id property)
+# The generator adds "@available(...)\nextension Foo: Identifiable {}" but enums can't conform without an id
+for f in "$MODELS_DIR"/*.swift; do
+  # Check if file contains "public enum" (is an enum type)
+  if grep -q "^public enum" "$f"; then
+    # Remove lines containing these Identifiable extensions (both @available line and extension line)
+    sed -i '' '/@available.*$/d' "$f"
+    sed -i '' '/^extension.*: Identifiable {}$/d' "$f"
+  fi
+done
+
+# Fix Bool enum raw type issue (Swift doesn't support Bool as enum raw type)
+# The generator creates patterns like:
+#   public enum Success: Bool { case _true = true }
+#   public var success: Success
+# We convert these to simple Bool properties
+for f in "$MODELS_DIR"/*.swift; do
+  # Check if file has Bool enum pattern
+  if grep -q "enum.*: Bool" "$f"; then
+    # Remove the enum definition lines (enum declaration and case line)
+    sed -i '' '/public enum [A-Za-z]*: Bool/,/^    }/d' "$f"
+    # Change property types from enum name to Bool
+    # Handle: ": Success)" ": Success," ": Success$" for various contexts
+    sed -i '' 's/: Success)/: Bool)/g' "$f"
+    sed -i '' 's/: Success,/: Bool,/g' "$f"
+    sed -i '' 's/: Success$/: Bool/' "$f"
+    sed -i '' 's/: WouldSend)/: Bool)/g' "$f"
+    sed -i '' 's/: WouldSend,/: Bool,/g' "$f"
+    sed -i '' 's/: WouldSend$/: Bool/' "$f"
+  fi
+done
+
 # Types that conflict with our existing app types - prefix with "API"
 # These are generated types that would clash with hand-written app types:
 # - Project: App has Project model with UI properties, sessions list
@@ -48,15 +80,24 @@ done
 # - ThinkingMode: App has ThinkingMode enum with different semantics
 # - Model: App has Model type for Claude model selection
 # - Error: Conflicts with Swift.Error
+# - SubRepo: App has SubRepo in GitModels.swift
+# - FileEntry: App has FileEntry in SSHManager.swift
+# - PermissionMode: App has PermissionMode in PermissionTypes.swift
+# - GlobalPermissions: App has GlobalPermissions in PermissionTypes.swift
+# - FileEntryType: Used by FileEntry
+# - QuestionOption: App has QuestionOption in Models.swift
+# - ProjectPermissions: App has ProjectPermissions in PermissionTypes.swift
+# - ImageAttachment: App has ImageAttachment in Models/ImageAttachment.swift
+# - PermissionConfig: App has PermissionConfig in PermissionTypes.swift
 # Note: Using perl for word boundary support (BSD sed on macOS doesn't support \b)
-CONFLICTING_TYPES="Project|GitStatus|ThinkingMode|Model|Error"
+CONFLICTING_TYPES="Project|GitStatus|ThinkingMode|Model|Error|SubRepo|FileEntry|PermissionMode|GlobalPermissions|FileEntryType|QuestionOption|ProjectPermissions|ImageAttachment|PermissionConfig"
 
 for f in "$MODELS_DIR"/*.swift; do
   perl -i -pe "s/\b($CONFLICTING_TYPES)\b/API\$1/g" "$f"
 done
 
 # Rename conflicting files
-for type in Project GitStatus ThinkingMode Model Error; do
+for type in Project GitStatus ThinkingMode Model Error SubRepo FileEntry PermissionMode GlobalPermissions FileEntryType QuestionOption ProjectPermissions ImageAttachment PermissionConfig; do
   if [ -f "$MODELS_DIR/${type}.swift" ]; then
     mv "$MODELS_DIR/${type}.swift" "$MODELS_DIR/API${type}.swift"
   fi

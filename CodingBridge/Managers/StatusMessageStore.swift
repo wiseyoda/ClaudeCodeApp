@@ -89,7 +89,7 @@ class StatusMessageStore: ObservableObject {
                 // MCP tools and others default to executing
                 return .executing
             }
-        case .starting, .waitingInput, .waitingPermission, .recovering:
+        case .starting, .waitingInput, .waitingPermission, .recovering, .networkUnavailable:
             return .executing
         }
     }

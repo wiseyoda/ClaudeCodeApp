@@ -178,7 +178,7 @@ final class MockSessionRepository: SessionRepository {
     var shouldThrowError = false
 
     // New mock data
-    var mockCountResponse = CLISessionCountResponse(total: 0, user: nil, agent: nil, helper: nil, count: nil, source: nil)
+    var mockCountResponse = CLISessionCountResponse(total: 0, count: nil, source: nil, user: nil, agent: nil, helper: nil)
     var mockSearchResponse = CLISessionSearchResponse(query: "", total: 0, results: [], hasMore: false)
     var archiveSessionCalled = false
     var unarchiveSessionCalled = false

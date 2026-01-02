@@ -12,9 +12,9 @@ public struct DirectoryListing: Sendable, Codable, Hashable {
     /** Path relative to project root */
     public var path: String
     /** Directory entries */
-    public var entries: [FileEntry]
+    public var entries: [APIFileEntry]
 
-    public init(path: String, entries: [FileEntry]) {
+    public init(path: String, entries: [APIFileEntry]) {
         self.path = path
         self.entries = entries
     }

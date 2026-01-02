@@ -9,15 +9,12 @@ import Foundation
 
 public struct RegisterFcmResponse: Sendable, Codable, Hashable {
 
-    public enum Success: Bool, Sendable, Codable, CaseIterable {
-        case _true = true
-    }
     /** Registration success indicator */
-    public var success: Success
+    public var success: Bool
     /** Registered token ID */
     public var tokenId: String
 
-    public init(success: Success, tokenId: String) {
+    public init(success: Bool, tokenId: String) {
         self.success = success
         self.tokenId = tokenId
     }

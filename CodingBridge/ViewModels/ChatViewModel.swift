@@ -1622,12 +1622,20 @@ class ChatViewModel: ObservableObject {
             return .sessionExpired
         case .connectionReplaced:
             return .connectionFailed("Session opened on another device")
-        case .sessionNotFound, .sessionInvalid:
+        case .sessionNotFound, .sessionInvalid, .sessionExpired:
             return .sessionExpired
         case .rateLimited(let retryAfter):
             return .connectionFailed("Rate limited, retry in \(retryAfter)s")
         case .serverError(_, let message, _):
             return .connectionFailed(message)
+        case .authenticationFailed:
+            return .connectionFailed("Authentication failed")
+        case .connectionFailed(let msg):
+            return .connectionFailed(msg)
+        case .protocolError(let msg):
+            return .connectionFailed("Protocol error: \(msg)")
+        case .unknown(let msg):
+            return .connectionFailed(msg)
         }
     }
 }

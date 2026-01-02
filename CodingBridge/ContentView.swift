@@ -74,7 +74,7 @@ struct ContentView: View {
                     if let project = projects.first(where: { $0.path == result.projectPath }) {
                         selectedProject = project
                         // Set the session ID so ChatView loads this session
-                        sessionStore.setSelectedSession(result.sessionId, for: project.path)
+                        sessionStore.setSelectedSession(result.sessionId.uuidString, for: project.path)
                         showGlobalSearch = false
                     }
                 }
@@ -188,7 +188,7 @@ struct ContentView: View {
                     // Find or create project for this session
                     if let project = projects.first(where: { $0.path == session.projectPath }) {
                         // Set session so ChatView loads it
-                        sessionStore.setSelectedSession(session.id, for: project.path)
+                        sessionStore.setSelectedSession(session.id.uuidString, for: project.path)
                         selectedProject = project
                     } else {
                         // Project not in list - create temporary one
@@ -201,7 +201,7 @@ struct ContentView: View {
                             sessions: nil,
                             sessionMeta: nil
                         )
-                        sessionStore.setSelectedSession(session.id, for: project.path)
+                        sessionStore.setSelectedSession(session.id.uuidString, for: project.path)
                         selectedProject = project
                     }
                 },

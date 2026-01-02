@@ -300,8 +300,7 @@ struct ToolProgressBanner: View {
     SubagentBanner(
       subagent: CLISubagentStartContent(
         id: "task-123",
-        description: "Reviewing changes for code style and best practices",
-        agentType: "code-reviewer"
+        description: "Reviewing changes for code style and best practices"
       )
     )
     .environmentObject(AppSettings())
@@ -315,8 +314,8 @@ struct ToolProgressBanner: View {
     ToolProgressBanner(
       progress: CLIProgressContent(
         tool: "Grep",
-        elapsed: 5,
-        progress: 45,
+        elapsed: 5.0,
+        progress: 45.0,
         detail: "Searching source files..."
       )
     )

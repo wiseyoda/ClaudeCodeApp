@@ -54,6 +54,15 @@ enum CLIConnectionState: Equatable {
         }
     }
 
+    var accessibilityLabel: String {
+        switch self {
+        case .disconnected: return "Disconnected from server"
+        case .connecting: return "Connecting to server"
+        case .connected: return "Connected to server"
+        case .reconnecting(let attempt): return "Reconnecting, attempt \(attempt)"
+        }
+    }
+
     var agentId: String? {
         if case .connected(let id) = self { return id }
         return nil
@@ -597,7 +606,7 @@ class CLIBridgeManager: ObservableObject {
     }
 
     /// Respond to a permission request
-    func respondToPermission(id: String, choice: CLIPermissionResponsePayload.CLIPermissionChoice) async throws {
+    func respondToPermission(id: String, choice: CLIPermissionChoice) async throws {
         let payload = CLIPermissionResponsePayload(id: id, choice: choice)
         try await send(.permissionResponse(payload))
         pendingPermission = nil
@@ -607,7 +616,7 @@ class CLIBridgeManager: ObservableObject {
     func respondToQuestion(id: String, answers: [String: Any]) async throws {
         let payload = CLIQuestionResponsePayload(
             id: id,
-            answers: answers.mapValues { AnyCodableValue($0) }
+            answers: answers.mapValues { QuestionResponseMessageAnswersValue(AnyCodableValue($0)) }
         )
         try await send(.questionResponse(payload))
         pendingQuestion = nil
@@ -626,7 +635,7 @@ class CLIBridgeManager: ObservableObject {
 
     /// Set permission mode for the agent
     /// - Parameter mode: "default", "acceptEdits", or "bypassPermissions"
-    func setPermissionMode(_ mode: CLISetPermissionModePayload.CLIPermissionMode) async throws {
+    func setPermissionMode(_ mode: CLIPermissionMode) async throws {
         try await send(.setPermissionMode(CLISetPermissionModePayload(mode: mode)))
     }
 
@@ -748,95 +757,96 @@ class CLIBridgeManager: ObservableObject {
 
     private func processServerMessage(_ message: CLIServerMessage) async {
         switch message {
-        case .connected(let payload):
+        case .typeConnectedMessage(let payload):
             handleConnected(payload)
 
-        case .stream(let streamMessage):
-            // Convert to unified StoredMessage format and track ID
+        case .typeStreamServerMessage(let streamMessage):
+            // Convert to unified CLIStoredMessage format and track ID
             let stored = streamMessage.toStoredMessage()
-            lastMessageId = stored.id
+            lastMessageId = stored.idString
             handleStreamMessage(stored)
 
-        case .permission(let request):
+        case .typePermissionRequestMessage(let request):
             handlePermissionRequest(request)
 
-        case .question(let request):
+        case .typeQuestionMessage(let request):
             handleQuestionRequest(request)
 
-        case .sessionEvent(let event):
+        case .typeSessionEventMessage(let event):
             onSessionEvent?(event)
 
-        case .history(let payload):
+        case .typeHistoryMessage(let payload):
             onHistory?(payload)
 
-        case .modelChanged(let payload):
+        case .typeModelChangedMessage(let payload):
             currentModel = payload.model
             onModelChanged?(payload.model)
 
-        case .permissionModeChanged(let payload):
+        case .typePermissionModeChangedMessage(let payload):
             log.debug("Permission mode changed to: \(payload.mode)")
-            onPermissionModeChanged?(payload.mode)
+            onPermissionModeChanged?(payload.mode.rawValue)
 
-        case .queued(let payload):
+        case .typeQueuedMessage(let payload):
             isInputQueued = true
             queuePosition = payload.position
 
-        case .queueCleared:
+        case .typeQueueClearedMessage:
             isInputQueued = false
             queuePosition = 0
 
-        case .error(let payload):
-            handleError(payload)
+        case .typeErrorMessage(let payload):
+            handleError(WsErrorMessage(from: payload))
 
-        case .pong:
+        case .typePongMessage:
             // Keepalive response - no action needed
             log.debug("Received pong from server")
 
         // Top-level control messages (not inside stream)
-        case .stopped(let payload):
+        case .typeStoppedMessage(let payload):
             agentState = .idle
             activeSubagent = nil  // Clear in case subagent_complete wasn't received
             toolProgress = nil
-            onStopped?(payload.reason)
+            onStopped?(payload.reason.rawValue)
 
-        case .interrupted:
+        case .typeInterruptedMessage:
             agentState = .idle
             activeSubagent = nil  // Clear in case subagent_complete wasn't received
             toolProgress = nil
             onStopped?("interrupted")
 
         // History hardening: cursor/reconnect messages
-        case .cursorEvicted(let payload):
-            log.warning("[CLIBridge] Cursor evicted for session \(payload.sessionId): \(payload.reason ?? "memory_limit")")
+        case .typeCursorEvictedMessage(let payload):
+            log.warning("[CLIBridge] Cursor evicted, lastMessageId=\(payload.lastMessageId), recommendation=\(payload.recommendation)")
             onCursorEvicted?(payload)
 
-        case .cursorInvalid(let payload):
-            log.warning("[CLIBridge] Invalid cursor \(payload.cursorId) for session \(payload.sessionId ?? "unknown")")
+        case .typeCursorInvalidMessage(let payload):
+            log.warning("[CLIBridge] Invalid cursor, lastMessageId=\(payload.lastMessageId), recommendation=\(payload.recommendation)")
             onCursorInvalid?(payload)
 
-        case .reconnectComplete(let payload):
-            log.info("[CLIBridge] Reconnect complete: \(payload.missedCount) messages replayed, hasGap=\(payload.hasGap)")
+        case .typeReconnectCompleteMessage(let payload):
+            log.info("[CLIBridge] Reconnect complete: \(payload.missedCount) messages replayed from \(payload.fromMessageId)")
             reconnectAttempt = 0  // Reset on successful reconnect
             onReconnectComplete?(payload)
         }
     }
 
     private func handleConnected(_ payload: CLIConnectedPayload) {
+        let sessionIdStr = payload.sessionId.uuidString
         currentAgentId = payload.agentId
-        sessionId = payload.sessionId
+        sessionId = sessionIdStr
         currentModel = payload.model
-        protocolVersion = payload.protocolVersion
+        protocolVersion = payload.protocolVersion.rawValue
         connectionState = .connected(agentId: payload.agentId)
         agentState = .idle
 
         // History hardening: Load persisted lastMessageId for this session
-        lastMessageId = loadLastMessageId(for: payload.sessionId)
+        lastMessageId = loadLastMessageId(for: sessionIdStr)
         if lastMessageId != nil {
             log.debug("[CLIBridge] Loaded lastMessageId: \(lastMessageId!)")
         }
 
-        onSessionConnected?(payload.sessionId)
-        log.info("Connected to cli-bridge: agent=\(payload.agentId), session=\(payload.sessionId), model=\(payload.model)")
+        onSessionConnected?(sessionIdStr)
+        log.info("Connected to cli-bridge: agent=\(payload.agentId), session=\(sessionIdStr), model=\(payload.model)")
     }
 
     // MARK: - History Hardening: LastMessageId Persistence
@@ -871,13 +881,12 @@ class CLIBridgeManager: ObservableObject {
         receivedMessageIds.removeAll()
     }
 
-    private func handleStreamMessage(_ stored: StoredMessage) {
-        // History hardening: Validate incoming message
-        stored.validateAndLog()
+    private func handleStreamMessage(_ stored: CLIStoredMessage) {
+        let idString = stored.idString
 
         // History hardening: Deduplication - skip if we've already processed this message
-        if receivedMessageIds.contains(stored.id) {
-            log.debug("[CLIBridge] Skipping duplicate message: \(stored.id)")
+        if receivedMessageIds.contains(idString) {
+            log.debug("[CLIBridge] Skipping duplicate message: \(idString)")
             return
         }
 
@@ -888,74 +897,76 @@ class CLIBridgeManager: ObservableObject {
                 receivedMessageIds.remove(first)
             }
         }
-        receivedMessageIds.insert(stored.id)
+        receivedMessageIds.insert(idString)
 
         // Persist lastMessageId for reconnection
-        persistLastMessageId(stored.id)
+        persistLastMessageId(idString)
 
         switch stored.message {
-        case .assistant(let assistantContent):
+        case .typeAssistantStreamMessage(let assistantContent):
             appendText(assistantContent.content, isFinal: assistantContent.isFinal)
 
-        case .user:
+        case .typeUserStreamMessage:
             // User message echo - ignore (we already have it locally)
             break
 
-        case .system(let systemContent):
+        case .typeSystemStreamMessage(let systemContent):
             // System messages with subtype "result" are displayable (e.g., greeting messages)
-            if systemContent.subtype == "result" {
+            if systemContent.subtype == SystemStreamMessage.Subtype.result {
                 onSystem?(systemContent.content)
             }
             // "init" and "progress" subtypes are internal status updates - ignore
 
-        case .thinking(let thinkingContent):
-            onThinking?(thinkingContent.content)
+        case .typeThinkingStreamMessage(let thinkingContent):
+            // Use thinking property for compatibility, fall back to content
+            onThinking?(thinkingContent.thinking ?? thinkingContent.content)
 
-        case .toolUse(let toolContent):
+        case .typeToolUseStreamMessage(let toolContent):
             lastMessageId = toolContent.id
             agentState = .executing
             toolProgress = nil
             let input = toolContent.input.mapValues { $0.value }
             onToolStart?(toolContent.id, toolContent.name, input)
 
-        case .toolResult(let resultContent):
+        case .typeToolResultStreamMessage(let resultContent):
             lastMessageId = resultContent.id
             agentState = .thinking
             toolProgress = nil
             onToolResult?(resultContent.id, resultContent.tool, resultContent.output, resultContent.success)
 
-        case .progress(let progressContent):
+        case .typeProgressStreamMessage(let progressContent):
             // Only update progress if NOT waiting for user input or permission approval
             // (server continues sending progress while waiting, but we want to hide the banner)
             if agentState != .waitingInput && agentState != .waitingPermission {
                 toolProgress = progressContent
             }
 
-        case .usage(let usageContent):
+        case .typeUsageStreamMessage(let usageContent):
             tokenUsage = usageContent
 
-        case .state(let stateContent):
+        case .typeStateStreamMessage(let stateContent):
+            let newState = CLIAgentState(from: stateContent.state)
             // Skip duplicate state updates (cli-bridge may send idle twice at end of turn)
-            if agentState == stateContent.state && currentTool == stateContent.tool {
+            if agentState == newState && currentTool == stateContent.tool {
                 log.debug("[CLIBridge] Skipping duplicate state: \(stateContent.state)")
                 return
             }
-            agentState = stateContent.state
+            agentState = newState
             currentTool = stateContent.tool  // Track tool name for StatusBubbleView
 
-        case .subagentStart(let subagentContent):
+        case .typeSubagentStartStreamMessage(let subagentContent):
             activeSubagent = subagentContent
             onSubagentStart?(subagentContent)
 
-        case .subagentComplete(let subagentContent):
+        case .typeSubagentCompleteStreamMessage(let subagentContent):
             activeSubagent = nil
             onSubagentComplete?(subagentContent)
 
-        case .question(let request):
+        case .typeQuestionMessage(let request):
             // Question came via stream wrapper - handle same as top-level
             handleQuestionRequest(request)
 
-        case .permission(let request):
+        case .typePermissionRequestMessage(let request):
             // Permission came via stream wrapper - handle same as top-level
             handlePermissionRequest(request)
         }
@@ -1132,6 +1143,10 @@ extension CLIBridgeManager {
     }
 
     func test_handleStreamMessage(_ stored: StoredMessage) {
+        handleStreamMessage(stored.toCLIStoredMessage())
+    }
+
+    func test_handleStreamMessage(_ stored: CLIStoredMessage) {
         handleStreamMessage(stored)
     }
 

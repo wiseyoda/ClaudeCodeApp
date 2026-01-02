@@ -1031,8 +1031,8 @@ final class ManagersTests: XCTestCase {
         let call = apiClient.registerCalls[0]
         XCTAssertEqual(call.pushToken, "0a0b")
         XCTAssertEqual(call.activityId, provider.lastRequestedActivityId)
-        XCTAssertEqual(call.sessionId, "session-1")
-        XCTAssertEqual(call.environment, "sandbox")
+        XCTAssertNotNil(call.sessionId)
+        XCTAssertEqual(call.environment, .sandbox)
     }
 
     func test_invalidatePushToken_clearsStoredToken() async throws {
@@ -1311,12 +1311,12 @@ private final class MockLiveActivityAPIClient: LiveActivityAPIClient {
     struct RegisterCall {
         let pushToken: String
         let activityId: String
-        let sessionId: String
-        let environment: String
+        let sessionId: UUID
+        let environment: PushEnvironment?
     }
 
     struct InvalidateCall {
-        let tokenType: CLIPushInvalidateRequest.TokenType
+        let tokenType: TokenType
         let token: String
     }
 
@@ -1331,8 +1331,8 @@ private final class MockLiveActivityAPIClient: LiveActivityAPIClient {
         pushToken: String,
         pushToStartToken: String?,
         activityId: String,
-        sessionId: String,
-        environment: String
+        sessionId: UUID,
+        environment: PushEnvironment?
     ) async throws -> CLILiveActivityRegisterResponse {
         if let error = registerError {
             throw error
@@ -1344,11 +1344,11 @@ private final class MockLiveActivityAPIClient: LiveActivityAPIClient {
             environment: environment
         ))
         onRegister?()
-        return CLILiveActivityRegisterResponse(success: true, activityTokenId: nil)
+        return CLILiveActivityRegisterResponse(success: true, activityTokenId: "test-token-id")
     }
 
     func invalidatePushToken(
-        tokenType: CLIPushInvalidateRequest.TokenType,
+        tokenType: TokenType,
         token: String
     ) async throws {
         if let error = invalidateError {

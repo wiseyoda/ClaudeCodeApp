@@ -211,7 +211,16 @@ struct FilePickerSheet: View {
                 : "/"
             let directory = relativeDir.isEmpty ? "/" : relativeDir
             let response = try await apiClient.listFiles(projectPath: projectPath, directory: directory)
-            files = response.entries.toFileEntries()
+            files = response.entries.map { apiEntry in
+                FileEntry(
+                    name: apiEntry.name,
+                    path: currentPath + "/" + apiEntry.name,
+                    isDirectory: apiEntry.type == .directory,
+                    isSymlink: apiEntry.type == .symlink,
+                    size: Int64(apiEntry.size ?? 0),
+                    permissions: ""
+                )
+            }
             isLoading = false
         } catch {
             self.error = error.localizedDescription

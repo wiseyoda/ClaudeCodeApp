@@ -11,15 +11,18 @@ final class CLISearchExportTypesTests: XCTestCase {
         CLISearchSnippet(type: type, text: text, matchStart: matchStart, matchLength: matchLength)
     }
 
+    private let testSessionId1 = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+    private let testSessionId42 = UUID(uuidString: "42424242-4242-4242-4242-424242424242")!
+
     private func makeResult(
-        sessionId: String = "session-1",
+        sessionId: UUID? = nil,
         projectPath: String = "/Users/dev/project",
         snippets: [CLISearchSnippet] = [CLISearchSnippet(type: "user", text: "Hello", matchStart: 0, matchLength: 5)],
         score: Double = 0.75,
         timestamp: String = "2024-01-02T03:04:05Z"
     ) -> CLISearchResult {
         CLISearchResult(
-            sessionId: sessionId,
+            sessionId: sessionId ?? testSessionId1,
             projectPath: projectPath,
             snippets: snippets,
             score: score,
@@ -78,9 +81,9 @@ final class CLISearchExportTypesTests: XCTestCase {
     }
 
     func test_searchResult_idUsesSessionId() {
-        let result = makeResult(sessionId: "session-42")
+        let result = makeResult(sessionId: testSessionId42)
 
-        XCTAssertEqual(result.id, "session-42")
+        XCTAssertEqual(result.id, testSessionId42.uuidString)
     }
 
     func test_searchResult_dateParsesValidTimestamp() {
@@ -137,7 +140,7 @@ final class CLISearchExportTypesTests: XCTestCase {
           "total": 2,
           "results": [
             {
-              "sessionId": "session-1",
+              "sessionId": "11111111-1111-1111-1111-111111111111",
               "projectPath": "/Users/dev/project",
               "snippets": [
                 { "type": "user", "text": "hello", "matchStart": 0, "matchLength": 5 }
@@ -155,7 +158,7 @@ final class CLISearchExportTypesTests: XCTestCase {
         XCTAssertEqual(response.query, "error")
         XCTAssertEqual(response.total, 2)
         XCTAssertEqual(response.results.count, 1)
-        XCTAssertEqual(response.results.first?.sessionId, "session-1")
+        XCTAssertEqual(response.results.first?.sessionId, testSessionId1)
         XCTAssertEqual(response.hasMore, true)
     }
 

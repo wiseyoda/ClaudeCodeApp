@@ -16,13 +16,13 @@ public struct InputMessage: Sendable, Codable, Hashable {
     /** User message content */
     public var text: String
     /** Optional image attachments */
-    public var images: [ImageAttachment]?
+    public var images: [APIImageAttachment]?
     /** Client-provided ID for retry correlation */
     public var messageId: String?
     /** Extended thinking mode (e.g., think, think_hard, think_harder, ultrathink) */
     public var thinkingMode: String?
 
-    public init(type: ModelType, text: String, images: [ImageAttachment]? = nil, messageId: String? = nil, thinkingMode: String? = nil) {
+    public init(type: ModelType, text: String, images: [APIImageAttachment]? = nil, messageId: String? = nil, thinkingMode: String? = nil) {
         self.type = type
         self.text = text
         self.images = images

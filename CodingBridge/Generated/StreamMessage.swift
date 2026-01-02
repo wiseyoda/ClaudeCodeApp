@@ -9,11 +9,14 @@ import Foundation
 
 public enum StreamMessage: Sendable, Codable, Hashable {
     case typeAssistantStreamMessage(AssistantStreamMessage)
+    case typePermissionRequestMessage(PermissionRequestMessage)
     case typeProgressStreamMessage(ProgressStreamMessage)
+    case typeQuestionMessage(QuestionMessage)
     case typeStateStreamMessage(StateStreamMessage)
     case typeSubagentCompleteStreamMessage(SubagentCompleteStreamMessage)
     case typeSubagentStartStreamMessage(SubagentStartStreamMessage)
     case typeSystemStreamMessage(SystemStreamMessage)
+    case typeThinkingStreamMessage(ThinkingStreamMessage)
     case typeToolResultStreamMessage(ToolResultStreamMessage)
     case typeToolUseStreamMessage(ToolUseStreamMessage)
     case typeUsageStreamMessage(UsageStreamMessage)
@@ -24,7 +27,11 @@ public enum StreamMessage: Sendable, Codable, Hashable {
         switch self {
         case .typeAssistantStreamMessage(let value):
             try container.encode(value)
+        case .typePermissionRequestMessage(let value):
+            try container.encode(value)
         case .typeProgressStreamMessage(let value):
+            try container.encode(value)
+        case .typeQuestionMessage(let value):
             try container.encode(value)
         case .typeStateStreamMessage(let value):
             try container.encode(value)
@@ -33,6 +40,8 @@ public enum StreamMessage: Sendable, Codable, Hashable {
         case .typeSubagentStartStreamMessage(let value):
             try container.encode(value)
         case .typeSystemStreamMessage(let value):
+            try container.encode(value)
+        case .typeThinkingStreamMessage(let value):
             try container.encode(value)
         case .typeToolResultStreamMessage(let value):
             try container.encode(value)
@@ -49,8 +58,12 @@ public enum StreamMessage: Sendable, Codable, Hashable {
         let container = try decoder.singleValueContainer()
         if let value = try? container.decode(AssistantStreamMessage.self) {
             self = .typeAssistantStreamMessage(value)
+        } else if let value = try? container.decode(PermissionRequestMessage.self) {
+            self = .typePermissionRequestMessage(value)
         } else if let value = try? container.decode(ProgressStreamMessage.self) {
             self = .typeProgressStreamMessage(value)
+        } else if let value = try? container.decode(QuestionMessage.self) {
+            self = .typeQuestionMessage(value)
         } else if let value = try? container.decode(StateStreamMessage.self) {
             self = .typeStateStreamMessage(value)
         } else if let value = try? container.decode(SubagentCompleteStreamMessage.self) {
@@ -59,6 +72,8 @@ public enum StreamMessage: Sendable, Codable, Hashable {
             self = .typeSubagentStartStreamMessage(value)
         } else if let value = try? container.decode(SystemStreamMessage.self) {
             self = .typeSystemStreamMessage(value)
+        } else if let value = try? container.decode(ThinkingStreamMessage.self) {
+            self = .typeThinkingStreamMessage(value)
         } else if let value = try? container.decode(ToolResultStreamMessage.self) {
             self = .typeToolResultStreamMessage(value)
         } else if let value = try? container.decode(ToolUseStreamMessage.self) {
@@ -74,5 +89,3 @@ public enum StreamMessage: Sendable, Codable, Hashable {
 }
 
 
-@available(iOS 13, tvOS 13, watchOS 6, macOS 10.15, *)
-extension StreamMessage: Identifiable {}

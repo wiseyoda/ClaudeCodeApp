@@ -9,17 +9,14 @@ import Foundation
 
 public struct ProjectCreateResponse: Sendable, Codable, Hashable {
 
-    public enum Success: Bool, Sendable, Codable, CaseIterable {
-        case _true = true
-    }
     /** Operation succeeded */
-    public var success: Success
+    public var success: Bool
     /** Absolute path to the created project */
     public var path: String
     /** Whether Claude Code was initialized */
     public var initialized: Bool
 
-    public init(success: Success, path: String, initialized: Bool) {
+    public init(success: Bool, path: String, initialized: Bool) {
         self.success = success
         self.path = path
         self.initialized = initialized

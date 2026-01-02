@@ -72,25 +72,25 @@ enum PermissionMode: String, Codable, CaseIterable, Equatable {
     }
 
     /// Convert to CLIPermissionMode for WebSocket communication
-    func toCLIPermissionMode() -> CLISetPermissionModePayload.CLIPermissionMode {
+    func toCLIPermissionMode() -> CLIPermissionMode {
         switch self {
         case .default:
-            return .default
+            return ._default
         case .acceptEdits:
-            return .acceptEdits
+            return .acceptedits
         case .bypassPermissions:
-            return .bypassPermissions
+            return .bypasspermissions
         }
     }
 
     /// Create from CLIPermissionMode
-    init(from cliMode: CLISetPermissionModePayload.CLIPermissionMode) {
+    init(from cliMode: CLIPermissionMode) {
         switch cliMode {
-        case .default:
+        case ._default:
             self = .default
-        case .acceptEdits:
+        case .acceptedits:
             self = .acceptEdits
-        case .bypassPermissions:
+        case .bypasspermissions:
             self = .bypassPermissions
         }
     }
@@ -217,7 +217,7 @@ enum PermissionChoice: String, Codable {
     case always
 
     /// Convert to CLI choice for WebSocket response
-    func toCLIChoice() -> CLIPermissionResponsePayload.CLIPermissionChoice {
+    func toCLIChoice() -> CLIPermissionChoice {
         switch self {
         case .allow:
             return .allow

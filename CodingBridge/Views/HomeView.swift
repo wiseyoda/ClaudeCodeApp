@@ -334,7 +334,11 @@ struct RecentActivitySection: View {
         guard let date = CLIDateFormatter.parseDate(isoString) else {
             return ""
         }
+        return relativeTime(from: date)
+    }
 
+    /// Convert Date to relative time string
+    private func relativeTime(from date: Date) -> String {
         let now = Date()
         let interval = now.timeIntervalSince(date)
 

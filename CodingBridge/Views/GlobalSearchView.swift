@@ -187,7 +187,7 @@ struct GlobalSearchView: View {
     private var filteredResults: [CLISearchResult] {
         guard dateFilter != .anyTime else { return searchService.results }
         return searchService.results.filter { result in
-            guard let date = result.date else { return true }
+            guard let date = result.date else { return false }
             return dateFilter.matches(date)
         }
     }
@@ -617,7 +617,7 @@ struct SearchResultRow: View {
 
                 Spacer()
 
-                Text("Session: \(result.sessionId.prefix(8))...")
+                Text("Session: \(result.sessionId.uuidString.prefix(8))...")
                     .font(settings.scaledFont(.small))
                     .foregroundColor(CLITheme.mutedText(for: colorScheme))
             }

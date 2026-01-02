@@ -44,9 +44,7 @@ class GitStatusCoordinator: ObservableObject {
                 gitStatuses[cliProject.path] = status
                 // Also update the cache so HomeView gets the fresh status
                 projectCache.updateGitStatus(for: cliProject.path, status: status, branchName: git.branch)
-                if let branch = git.branch {
-                    branchNames[cliProject.path] = branch
-                }
+                branchNames[cliProject.path] = git.branch
             }
         }
     }
@@ -74,9 +72,7 @@ class GitStatusCoordinator: ObservableObject {
                 if let git = cliProject.git {
                     gitStatuses[cliProject.path] = git.toGitStatus
                     projectCache.updateGitStatus(for: cliProject.path, status: git.toGitStatus, branchName: git.branch)
-                    if let branch = git.branch {
-                        branchNames[cliProject.path] = branch
-                    }
+                    branchNames[cliProject.path] = git.branch
                 }
             }
         } catch {
@@ -133,9 +129,7 @@ class GitStatusCoordinator: ObservableObject {
                let git = cliProject.git {
                 gitStatuses[project.path] = git.toGitStatus
                 projectCache.updateGitStatus(for: project.path, status: git.toGitStatus, branchName: git.branch)
-                if let branch = git.branch {
-                    branchNames[project.path] = branch
-                }
+                branchNames[project.path] = git.branch
             } else {
                 gitStatuses[project.path] = .notGitRepo
             }

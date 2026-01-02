@@ -269,7 +269,7 @@ final class ChatViewModelTests: XCTestCase {
 
     func test_handleSlashCommand_statusAddsSystemMessage() {
         let (viewModel, adapter, _, _) = makeFixture()
-        adapter.connectionState = .connected
+        adapter.connectionState = .connected(agentId: "agent-123")
         adapter.sessionId = "session-123"
         adapter.tokenUsage = TokenUsage(used: 5, total: 10)
 
@@ -324,7 +324,7 @@ final class ChatViewModelTests: XCTestCase {
     func test_webSocket_onToolUse_tracksSubagentTool() {
         let (viewModel, adapter, _, _) = makeFixture()
         viewModel.setupWebSocketCallbacks()
-        adapter.activeSubagent = CLISubagentStartContent(description: "Task")
+        adapter.activeSubagent = CLISubagentStartContent(id: "subagent-1", description: "Task")
 
         adapter.onToolUse?("tool-2", "Shell", "ls")
 
@@ -335,7 +335,7 @@ final class ChatViewModelTests: XCTestCase {
     func test_webSocket_onToolResult_filtersSubagentResult() {
         let (viewModel, adapter, _, _) = makeFixture()
         viewModel.setupWebSocketCallbacks()
-        adapter.activeSubagent = CLISubagentStartContent(description: "Task")
+        adapter.activeSubagent = CLISubagentStartContent(id: "subagent-2", description: "Task")
 
         adapter.onToolUse?("tool-3", "Shell", "ls")
         adapter.onToolResult?("tool-3", "Shell", "done")
@@ -427,14 +427,12 @@ final class ChatViewModelTests: XCTestCase {
         let (viewModel, adapter, _, _) = makeFixture()
         viewModel.setupWebSocketCallbacks()
         viewModel.messages = [ChatMessage(role: .user, content: "Existing")]
-        // Use unified StoredMessage format for history
-        let history = StoredMessage(
-            id: "h1",
-            timestamp: "2025-01-01T12:00:00Z",
-            message: .assistant(CLIAssistantContent(content: "History", delta: nil))
+        // Use StreamMessage format for history (HistoryMessage takes [StreamMessage])
+        let historyMessage = StreamMessage.typeAssistantStreamMessage(
+            AssistantStreamMessage(type: .assistant, content: "History", delta: nil)
         )
 
-        adapter.onHistory?(CLIHistoryPayload(messages: [history], hasMore: false, cursor: nil))
+        adapter.onHistory?(CLIHistoryPayload(type: .history, messages: [historyMessage], hasMore: false, cursor: nil))
 
         XCTAssertEqual(viewModel.messages.first?.content, "History")
         XCTAssertEqual(viewModel.messages.last?.content, "Existing")
@@ -511,7 +509,7 @@ final class ChatViewModelTests: XCTestCase {
             UserQuestion(question: "Continue?", header: nil, options: [], multiSelect: false)
         ])
 
-        adapter.connectionState = .connected
+        adapter.connectionState = .connected(agentId: "agent-1")
         adapter.isReattaching = true
         adapter.isProcessing = true
         adapter.isAborting = true
@@ -521,8 +519,8 @@ final class ChatViewModelTests: XCTestCase {
         adapter.pendingQuestion = question
         adapter.isInputQueued = true
         adapter.queuePosition = 2
-        adapter.activeSubagent = CLISubagentStartContent(description: "Task")
-        adapter.toolProgress = CLIProgressContent(tool: "Shell")
+        adapter.activeSubagent = CLISubagentStartContent(id: "subagent-1", description: "Task")
+        adapter.toolProgress = CLIProgressContent(tool: "Shell", elapsed: 1.0)
         adapter.sessionId = "session-1"
 
         XCTAssertTrue(viewModel.isConnected)
@@ -556,7 +554,7 @@ final class ChatViewModelTests: XCTestCase {
         let adapter = TestCLIBridgeAdapter(settings: settings)
         let project = makeProject(path: "/tmp/project-model-change")
         let viewModel = ChatViewModel(project: project, settings: settings, wsManager: adapter)
-        adapter.connectionState = .connected
+        adapter.connectionState = .connected(agentId: "agent-1")
 
         viewModel.handleModelChange(oldModel: .haiku, newModel: .sonnet)
 

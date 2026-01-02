@@ -137,7 +137,7 @@ final class PushNotificationManager: NSObject, ObservableObject {
         }
 
         do {
-            let environment = isProductionEnvironment ? "production" : "sandbox"
+            let environment: PushEnvironment = isProductionEnvironment ? .production : .sandbox
             let response = try await client.registerPushToken(
                 fcmToken: token,
                 environment: environment

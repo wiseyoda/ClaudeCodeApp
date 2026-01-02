@@ -10,9 +10,9 @@ import Foundation
 public struct SubReposListResponse: Sendable, Codable, Hashable {
 
     /** List of sub-repositories */
-    public var subrepos: [SubRepo]
+    public var subrepos: [APISubRepo]
 
-    public init(subrepos: [SubRepo]) {
+    public init(subrepos: [APISubRepo]) {
         self.subrepos = subrepos
     }
 

@@ -8,7 +8,8 @@ final class PushNotificationTypesTests: XCTestCase {
     func test_pushRegisterRequest_encodesCorrectly() throws {
         let request = CLIPushRegisterRequest(
             fcmToken: "test-fcm-token-123",
-            environment: "sandbox",
+            platform: .ios,
+            environment: .sandbox,
             appVersion: "1.0.0",
             osVersion: "18.0"
         )
@@ -17,7 +18,7 @@ final class PushNotificationTypesTests: XCTestCase {
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
 
         XCTAssertEqual(json?["fcmToken"] as? String, "test-fcm-token-123")
-        XCTAssertEqual(json?["platform"] as? String, "ios")  // Platform is set internally
+        XCTAssertEqual(json?["platform"] as? String, "ios")
         XCTAssertEqual(json?["environment"] as? String, "sandbox")
         XCTAssertEqual(json?["appVersion"] as? String, "1.0.0")
         XCTAssertEqual(json?["osVersion"] as? String, "18.0")
@@ -61,13 +62,15 @@ final class PushNotificationTypesTests: XCTestCase {
     // MARK: - CLILiveActivityRegisterRequest Tests
 
     func test_liveActivityRegisterRequest_encodesCorrectly() throws {
+        let sessionUUID = UUID()
         let request = CLILiveActivityRegisterRequest(
             pushToken: "push-token-abc",
             pushToStartToken: "start-token-xyz",
             activityId: "activity-123",
-            sessionId: "session-456",
+            sessionId: sessionUUID,
             attributesType: "CodingBridgeAttributes",
-            environment: "production"
+            platform: .ios,
+            environment: .production
         )
 
         let data = try JSONEncoder().encode(request)
@@ -76,19 +79,22 @@ final class PushNotificationTypesTests: XCTestCase {
         XCTAssertEqual(json?["pushToken"] as? String, "push-token-abc")
         XCTAssertEqual(json?["pushToStartToken"] as? String, "start-token-xyz")
         XCTAssertEqual(json?["activityId"] as? String, "activity-123")
-        XCTAssertEqual(json?["sessionId"] as? String, "session-456")
+        XCTAssertEqual(json?["sessionId"] as? String, sessionUUID.uuidString)
         XCTAssertEqual(json?["attributesType"] as? String, "CodingBridgeAttributes")
-        XCTAssertEqual(json?["platform"] as? String, "ios")  // Platform is set internally
+        XCTAssertEqual(json?["platform"] as? String, "ios")
         XCTAssertEqual(json?["environment"] as? String, "production")
     }
 
     func test_liveActivityRegisterRequest_encodesWithNilPushToStartToken() throws {
+        let sessionUUID = UUID()
         let request = CLILiveActivityRegisterRequest(
             pushToken: "push-token-abc",
             pushToStartToken: nil,
             activityId: "activity-123",
-            sessionId: "session-456",
-            environment: "sandbox"
+            sessionId: sessionUUID,
+            attributesType: nil,
+            platform: nil,
+            environment: .sandbox
         )
 
         let data = try JSONEncoder().encode(request)
@@ -135,7 +141,7 @@ final class PushNotificationTypesTests: XCTestCase {
         let data = try JSONEncoder().encode(request)
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
 
-        XCTAssertEqual(json?["tokenType"] as? String, "live_activity")  // Uses raw value from enum
+        XCTAssertEqual(json?["tokenType"] as? String, "live_activity")
         XCTAssertEqual(json?["token"] as? String, "la-token")
     }
 
@@ -201,28 +207,29 @@ final class PushNotificationTypesTests: XCTestCase {
         XCTAssertTrue(response.liveActivityTokens.isEmpty)
     }
 
-    // MARK: - CLIPushSuccessResponse Tests
+    // MARK: - Success Response Tests
 
-    func test_pushSuccessResponse_decodesSuccess() throws {
+    func test_successResponse_decodesSuccess() throws {
         let json = """
         {"success": true}
         """
 
+        // Use the register response which has success field
         let response = try JSONDecoder().decode(
-            CLIPushSuccessResponse.self,
+            CLIPushRegisterResponse.self,
             from: Data(json.utf8)
         )
 
         XCTAssertTrue(response.success)
     }
 
-    func test_pushSuccessResponse_decodesFailure() throws {
+    func test_successResponse_decodesFailure() throws {
         let json = """
         {"success": false}
         """
 
         let response = try JSONDecoder().decode(
-            CLIPushSuccessResponse.self,
+            CLIPushRegisterResponse.self,
             from: Data(json.utf8)
         )
 

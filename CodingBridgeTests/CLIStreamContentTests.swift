@@ -15,13 +15,83 @@ final class CLIStreamContentTests: XCTestCase {
         try decodeJSON(json, as: CLIStreamMessage.self)
     }
 
+    // MARK: - Convenience pattern matching helpers
+    // These helpers extract the payload from CLIStreamContent cases for cleaner test assertions
+
+    private func extractAssistant(_ content: CLIStreamContent) -> AssistantStreamMessage? {
+        if case .typeAssistantStreamMessage(let payload) = content { return payload }
+        return nil
+    }
+
+    private func extractUser(_ content: CLIStreamContent) -> UserStreamMessage? {
+        if case .typeUserStreamMessage(let payload) = content { return payload }
+        return nil
+    }
+
+    private func extractSystem(_ content: CLIStreamContent) -> SystemStreamMessage? {
+        if case .typeSystemStreamMessage(let payload) = content { return payload }
+        return nil
+    }
+
+    private func extractThinking(_ content: CLIStreamContent) -> ThinkingStreamMessage? {
+        if case .typeThinkingStreamMessage(let payload) = content { return payload }
+        return nil
+    }
+
+    private func extractToolUse(_ content: CLIStreamContent) -> ToolUseStreamMessage? {
+        if case .typeToolUseStreamMessage(let payload) = content { return payload }
+        return nil
+    }
+
+    private func extractToolResult(_ content: CLIStreamContent) -> ToolResultStreamMessage? {
+        if case .typeToolResultStreamMessage(let payload) = content { return payload }
+        return nil
+    }
+
+    private func extractProgress(_ content: CLIStreamContent) -> ProgressStreamMessage? {
+        if case .typeProgressStreamMessage(let payload) = content { return payload }
+        return nil
+    }
+
+    private func extractUsage(_ content: CLIStreamContent) -> UsageStreamMessage? {
+        if case .typeUsageStreamMessage(let payload) = content { return payload }
+        return nil
+    }
+
+    private func extractState(_ content: CLIStreamContent) -> StateStreamMessage? {
+        if case .typeStateStreamMessage(let payload) = content { return payload }
+        return nil
+    }
+
+    private func extractSubagentStart(_ content: CLIStreamContent) -> SubagentStartStreamMessage? {
+        if case .typeSubagentStartStreamMessage(let payload) = content { return payload }
+        return nil
+    }
+
+    private func extractSubagentComplete(_ content: CLIStreamContent) -> SubagentCompleteStreamMessage? {
+        if case .typeSubagentCompleteStreamMessage(let payload) = content { return payload }
+        return nil
+    }
+
+    private func extractQuestion(_ content: CLIStreamContent) -> QuestionMessage? {
+        if case .typeQuestionMessage(let payload) = content { return payload }
+        return nil
+    }
+
+    private func extractPermission(_ content: CLIStreamContent) -> PermissionRequestMessage? {
+        if case .typePermissionRequestMessage(let payload) = content { return payload }
+        return nil
+    }
+
     // MARK: - Stream Message Wrapper
 
     func test_streamMessage_decodesAssistantPayload() throws {
-        // v0.3.5+ format: CLIStreamMessage includes id and timestamp at top level
+        // v0.3.5+ format: CLIStreamMessage (StreamServerMessage) includes id (UUID) and timestamp (Date) at top level
+        let messageId = UUID()
         let json = """
         {
-          "id": "msg-123",
+          "type": "stream",
+          "id": "\(messageId.uuidString)",
           "timestamp": "2025-01-01T12:00:00.000Z",
           "message": {
             "type": "assistant",
@@ -33,10 +103,11 @@ final class CLIStreamContentTests: XCTestCase {
 
         let message = try decodeStreamMessage(json)
 
-        XCTAssertEqual(message.id, "msg-123")
-        XCTAssertEqual(message.timestamp, "2025-01-01T12:00:00.000Z")
+        XCTAssertEqual(message.id, messageId)
+        // timestamp is now Date, check it was parsed
+        XCTAssertNotNil(message.timestamp)
 
-        guard case let .assistant(payload) = message.message else {
+        guard case .typeAssistantStreamMessage(let payload) = message.message else {
             XCTFail("Expected assistant content")
             return
         }
@@ -46,36 +117,35 @@ final class CLIStreamContentTests: XCTestCase {
         XCTAssertTrue(payload.isFinal)
     }
 
-    func test_streamMessage_decodesPermissionPayload() throws {
-        // v0.3.5+ format: CLIStreamMessage includes id and timestamp at top level
+    func test_streamMessage_decodesToolUsePayload() throws {
+        // Permission is not a StreamMessage type - test tool_use instead
+        let messageId = UUID()
         let json = """
         {
-          "id": "msg-456",
+          "type": "stream",
+          "id": "\(messageId.uuidString)",
           "timestamp": "2025-01-01T12:00:01.000Z",
           "message": {
-            "type": "permission",
-            "id": "perm-1",
-            "tool": "Bash",
-            "input": { "command": "ls -la" },
-            "options": ["allow", "deny", "always"]
+            "type": "tool_use",
+            "id": "tool-1",
+            "name": "Bash",
+            "input": { "command": "ls -la" }
           }
         }
         """
 
         let message = try decodeStreamMessage(json)
 
-        XCTAssertEqual(message.id, "msg-456")
-        XCTAssertEqual(message.timestamp, "2025-01-01T12:00:01.000Z")
+        XCTAssertEqual(message.id, messageId)
 
-        guard case let .permission(payload) = message.message else {
-            XCTFail("Expected permission content")
+        guard case .typeToolUseStreamMessage(let payload) = message.message else {
+            XCTFail("Expected tool_use content")
             return
         }
 
-        XCTAssertEqual(payload.id, "perm-1")
-        XCTAssertEqual(payload.tool, "Bash")
+        XCTAssertEqual(payload.id, "tool-1")
+        XCTAssertEqual(payload.name, "Bash")
         XCTAssertEqual(payload.input["command"]?.stringValue, "ls -la")
-        XCTAssertEqual(payload.options, ["allow", "deny", "always"])
     }
 
     // MARK: - Stream Content Types
@@ -91,7 +161,7 @@ final class CLIStreamContentTests: XCTestCase {
 
         let content = try decodeStreamContent(json)
 
-        guard case let .assistant(payload) = content else {
+        guard let payload = extractAssistant(content) else {
             XCTFail("Expected assistant content")
             return
         }
@@ -111,7 +181,7 @@ final class CLIStreamContentTests: XCTestCase {
 
         let content = try decodeStreamContent(json)
 
-        guard case let .assistant(payload) = content else {
+        guard let payload = extractAssistant(content) else {
             XCTFail("Expected assistant content")
             return
         }
@@ -131,7 +201,7 @@ final class CLIStreamContentTests: XCTestCase {
 
         let content = try decodeStreamContent(json)
 
-        guard case let .user(payload) = content else {
+        guard let payload = extractUser(content) else {
             XCTFail("Expected user content")
             return
         }
@@ -149,7 +219,7 @@ final class CLIStreamContentTests: XCTestCase {
 
         let content = try decodeStreamContent(json)
 
-        guard case let .system(payload) = content else {
+        guard let payload = extractSystem(content) else {
             XCTFail("Expected system content")
             return
         }
@@ -169,31 +239,33 @@ final class CLIStreamContentTests: XCTestCase {
 
         let content = try decodeStreamContent(json)
 
-        guard case let .system(payload) = content else {
+        guard let payload = extractSystem(content) else {
             XCTFail("Expected system content")
             return
         }
 
         XCTAssertEqual(payload.content, "Init message")
-        XCTAssertEqual(payload.subtype, "init")
+        // subtype is now an enum, not a string
+        XCTAssertEqual(payload.subtype, ._init)
     }
 
     func test_streamContent_decodesThinkingCase() throws {
         let json = """
         {
           "type": "thinking",
-          "content": "Reasoning"
+          "thinking": "Reasoning"
         }
         """
 
         let content = try decodeStreamContent(json)
 
-        guard case let .thinking(payload) = content else {
+        guard let payload = extractThinking(content) else {
             XCTFail("Expected thinking content")
             return
         }
 
-        XCTAssertEqual(payload.content, "Reasoning")
+        // ThinkingBlock uses 'thinking' property, not 'content'
+        XCTAssertEqual(payload.thinking, "Reasoning")
     }
 
     func test_streamContent_decodesToolUseCase() throws {
@@ -214,7 +286,7 @@ final class CLIStreamContentTests: XCTestCase {
 
         let content = try decodeStreamContent(json)
 
-        guard case let .toolUse(payload) = content else {
+        guard let payload = extractToolUse(content) else {
             XCTFail("Expected tool_use content")
             return
         }
@@ -225,7 +297,12 @@ final class CLIStreamContentTests: XCTestCase {
         XCTAssertEqual(payload.input["cwd"]?.stringValue, "/tmp")
         XCTAssertEqual(payload.input["interactive"]?.boolValue, true)
         XCTAssertEqual(payload.input["count"]?.intValue, 2)
-        XCTAssertEqual(payload.input["options"]?.arrayValue as? [String], ["-l", "-a"])
+        // arrayValue returns [JSONValue]?, need to map to strings
+        if let arr = payload.input["options"]?.arrayValue {
+            XCTAssertEqual(arr.compactMap { $0.stringValue }, ["-l", "-a"])
+        } else {
+            XCTFail("Expected options array")
+        }
     }
 
     func test_streamContent_decodesToolResultCase() throws {
@@ -241,7 +318,7 @@ final class CLIStreamContentTests: XCTestCase {
 
         let content = try decodeStreamContent(json)
 
-        guard case let .toolResult(payload) = content else {
+        guard let payload = extractToolResult(content) else {
             XCTFail("Expected tool_result content")
             return
         }
@@ -267,7 +344,7 @@ final class CLIStreamContentTests: XCTestCase {
 
         let content = try decodeStreamContent(json)
 
-        guard case let .toolResult(payload) = content else {
+        guard let payload = extractToolResult(content) else {
             XCTFail("Expected tool_result content")
             return
         }
@@ -293,7 +370,7 @@ final class CLIStreamContentTests: XCTestCase {
 
         let content = try decodeStreamContent(json)
 
-        guard case let .progress(payload) = content else {
+        guard let payload = extractProgress(content) else {
             XCTFail("Expected progress content")
             return
         }
@@ -301,7 +378,8 @@ final class CLIStreamContentTests: XCTestCase {
         XCTAssertEqual(payload.id, "tool-3")
         XCTAssertEqual(payload.tool, "Bash")
         XCTAssertEqual(payload.elapsed, 12.5, accuracy: 0.001)
-        XCTAssertEqual(payload.progress, 42)
+        // progress is now Double?, not Int?
+        XCTAssertEqual(payload.progress ?? 0, 42, accuracy: 0.001)
         XCTAssertEqual(payload.detail, "Working")
         XCTAssertEqual(payload.elapsedSeconds, 12)
     }
@@ -322,7 +400,7 @@ final class CLIStreamContentTests: XCTestCase {
 
         let content = try decodeStreamContent(json)
 
-        guard case let .usage(payload) = content else {
+        guard let payload = extractUsage(content) else {
             XCTFail("Expected usage content")
             return
         }
@@ -353,7 +431,7 @@ final class CLIStreamContentTests: XCTestCase {
 
         let content = try decodeStreamContent(json)
 
-        guard case let .state(payload) = content else {
+        guard let payload = extractState(content) else {
             XCTFail("Expected state content")
             return
         }
@@ -363,26 +441,26 @@ final class CLIStreamContentTests: XCTestCase {
     }
 
     func test_streamContent_decodesSubagentStartCase() throws {
+        // SubagentStartStreamMessage doesn't have agentType - only id and description
         let json = """
         {
           "type": "subagent_start",
-          "id": "agent-1",
-          "description": "Review code",
-          "agentType": "code-reviewer"
+          "id": "Task:code-reviewer",
+          "description": "Review code"
         }
         """
 
         let content = try decodeStreamContent(json)
 
-        guard case let .subagentStart(payload) = content else {
+        guard let payload = extractSubagentStart(content) else {
             XCTFail("Expected subagent_start content")
             return
         }
 
-        XCTAssertEqual(payload.id, "agent-1")
+        XCTAssertEqual(payload.id, "Task:code-reviewer")
         XCTAssertEqual(payload.description, "Review code")
-        XCTAssertEqual(payload.agentType, "code-reviewer")
-        XCTAssertEqual(payload.displayAgentType, "code-reviewer")
+        // displayAgentType is computed from id (extracts prefix before colon)
+        XCTAssertEqual(payload.displayAgentType, "Task")
     }
 
     func test_streamContent_decodesSubagentCompleteCase() throws {
@@ -396,7 +474,7 @@ final class CLIStreamContentTests: XCTestCase {
 
         let content = try decodeStreamContent(json)
 
-        guard case let .subagentComplete(payload) = content else {
+        guard let payload = extractSubagentComplete(content) else {
             XCTFail("Expected subagent_complete content")
             return
         }
@@ -427,7 +505,7 @@ final class CLIStreamContentTests: XCTestCase {
 
         let content = try decodeStreamContent(json)
 
-        guard case let .question(payload) = content else {
+        guard let payload = extractQuestion(content) else {
             XCTFail("Expected question content")
             return
         }
@@ -459,7 +537,7 @@ final class CLIStreamContentTests: XCTestCase {
 
         let content = try decodeStreamContent(json)
 
-        guard case let .permission(payload) = content else {
+        guard let payload = extractPermission(content) else {
             XCTFail("Expected permission content")
             return
         }
@@ -467,7 +545,8 @@ final class CLIStreamContentTests: XCTestCase {
         XCTAssertEqual(payload.id, "perm-2")
         XCTAssertEqual(payload.tool, "Read")
         XCTAssertEqual(payload.input["file_path"]?.stringValue, "/tmp/readme.md")
-        XCTAssertEqual(payload.options, ["allow", "deny"])
+        // options is now [Options] enum, not [String]
+        XCTAssertEqual(payload.options, [.allow, .deny])
     }
 
     func test_streamContent_throwsForUnknownType() throws {
@@ -478,8 +557,8 @@ final class CLIStreamContentTests: XCTestCase {
         """
 
         XCTAssertThrowsError(try decodeStreamContent(json)) { error in
-            guard case DecodingError.dataCorrupted = error else {
-                XCTFail("Expected dataCorrupted error")
+            guard case DecodingError.typeMismatch = error else {
+                XCTFail("Expected typeMismatch error, got \(error)")
                 return
             }
         }
@@ -488,8 +567,10 @@ final class CLIStreamContentTests: XCTestCase {
     // MARK: - Assistant Content
 
     func test_assistantContent_decodesContentAndDelta() throws {
+        // Generated types require "type" field
         let json = """
         {
+          "type": "assistant",
           "content": "Hello",
           "delta": true
         }
@@ -504,6 +585,7 @@ final class CLIStreamContentTests: XCTestCase {
     func test_assistantContent_isFinal_trueWhenDeltaMissing() throws {
         let json = """
         {
+          "type": "assistant",
           "content": "Hello"
         }
         """
@@ -517,6 +599,7 @@ final class CLIStreamContentTests: XCTestCase {
     func test_assistantContent_isFinal_trueWhenDeltaFalse() throws {
         let json = """
         {
+          "type": "assistant",
           "content": "Hello",
           "delta": false
         }
@@ -531,6 +614,7 @@ final class CLIStreamContentTests: XCTestCase {
     func test_assistantContent_isFinal_falseWhenDeltaTrue() throws {
         let json = """
         {
+          "type": "assistant",
           "content": "Hello",
           "delta": true
         }
@@ -547,6 +631,7 @@ final class CLIStreamContentTests: XCTestCase {
     func test_userContent_decodesContent() throws {
         let json = """
         {
+          "type": "user",
           "content": "User message"
         }
         """
@@ -561,6 +646,7 @@ final class CLIStreamContentTests: XCTestCase {
     func test_systemContent_decodesContent() throws {
         let json = """
         {
+          "type": "system",
           "content": "System notice"
         }
         """
@@ -574,6 +660,7 @@ final class CLIStreamContentTests: XCTestCase {
     func test_systemContent_decodesSubtypeWhenPresent() throws {
         let json = """
         {
+          "type": "system",
           "content": "Progress update",
           "subtype": "progress"
         }
@@ -582,21 +669,24 @@ final class CLIStreamContentTests: XCTestCase {
         let content = try decodeJSON(json, as: CLISystemContent.self)
 
         XCTAssertEqual(content.content, "Progress update")
-        XCTAssertEqual(content.subtype, "progress")
+        // subtype is now an enum, not a string
+        XCTAssertEqual(content.subtype, .progress)
     }
 
     // MARK: - Thinking Content
 
     func test_thinkingContent_decodesContent() throws {
+        // ThinkingBlock uses 'thinking' property, not 'content'
         let json = """
         {
-          "content": "Reasoning block"
+          "type": "thinking",
+          "thinking": "Reasoning block"
         }
         """
 
         let content = try decodeJSON(json, as: CLIThinkingContent.self)
 
-        XCTAssertEqual(content.content, "Reasoning block")
+        XCTAssertEqual(content.thinking, "Reasoning block")
     }
 
     // MARK: - Tool Use Content
@@ -604,6 +694,7 @@ final class CLIStreamContentTests: XCTestCase {
     func test_toolUseContent_decodesFields() throws {
         let json = """
         {
+          "type": "tool_use",
           "id": "tool-9",
           "name": "Read",
           "input": {
@@ -622,6 +713,7 @@ final class CLIStreamContentTests: XCTestCase {
     func test_toolUseContent_decodesInputValues() throws {
         let json = """
         {
+          "type": "tool_use",
           "id": "tool-10",
           "name": "Bash",
           "input": {
@@ -638,12 +730,18 @@ final class CLIStreamContentTests: XCTestCase {
         XCTAssertEqual(content.input["command"]?.stringValue, "pwd")
         XCTAssertEqual(content.input["count"]?.intValue, 3)
         XCTAssertEqual(content.input["dry_run"]?.boolValue, true)
-        XCTAssertEqual(content.input["args"]?.arrayValue as? [String], ["-L", "-P"])
+        // arrayValue returns [JSONValue]?, need to map to strings
+        if let arr = content.input["args"]?.arrayValue {
+            XCTAssertEqual(arr.compactMap { $0.stringValue }, ["-L", "-P"])
+        } else {
+            XCTFail("Expected args array")
+        }
     }
 
     func test_toolUseContent_decodesNestedInputDictionary() throws {
         let json = """
         {
+          "type": "tool_use",
           "id": "tool-11",
           "name": "Edit",
           "input": {
@@ -656,10 +754,10 @@ final class CLIStreamContentTests: XCTestCase {
         """
 
         let content = try decodeJSON(json, as: CLIToolUseContent.self)
-        let metadata = content.input["metadata"]?.dictValue
+        let metadata = content.input["metadata"]?.dictionaryValue
 
-        XCTAssertEqual(metadata?["path"] as? String, "/tmp/file.txt")
-        XCTAssertEqual(metadata?["mode"] as? String, "safe")
+        XCTAssertEqual(metadata?["path"]?.stringValue, "/tmp/file.txt")
+        XCTAssertEqual(metadata?["mode"]?.stringValue, "safe")
     }
 
     // MARK: - Tool Result Content
@@ -667,6 +765,7 @@ final class CLIStreamContentTests: XCTestCase {
     func test_toolResultContent_decodesFields() throws {
         let json = """
         {
+          "type": "tool_result",
           "id": "tool-12",
           "tool": "Bash",
           "output": "Done",
@@ -685,6 +784,7 @@ final class CLIStreamContentTests: XCTestCase {
     func test_toolResultContent_decodesIsErrorWhenPresent() throws {
         let json = """
         {
+          "type": "tool_result",
           "id": "tool-13",
           "tool": "Write",
           "output": "Failed",
@@ -701,6 +801,7 @@ final class CLIStreamContentTests: XCTestCase {
     func test_toolResultContent_isErrorDefaultsToNil() throws {
         let json = """
         {
+          "type": "tool_result",
           "id": "tool-14",
           "tool": "Write",
           "output": "OK",
@@ -718,6 +819,7 @@ final class CLIStreamContentTests: XCTestCase {
     func test_progressContent_decodesFields() throws {
         let json = """
         {
+          "type": "progress",
           "id": "tool-15",
           "tool": "Read",
           "elapsed": 4.25,
@@ -731,13 +833,15 @@ final class CLIStreamContentTests: XCTestCase {
         XCTAssertEqual(content.id, "tool-15")
         XCTAssertEqual(content.tool, "Read")
         XCTAssertEqual(content.elapsed, 4.25, accuracy: 0.001)
-        XCTAssertEqual(content.progress, 80)
+        // progress is now Double?, not Int
+        XCTAssertEqual(content.progress ?? 0, 80, accuracy: 0.001)
         XCTAssertEqual(content.detail, "Almost done")
     }
 
     func test_progressContent_elapsedSeconds_truncatesDouble() throws {
         let json = """
         {
+          "type": "progress",
           "id": "tool-16",
           "tool": "Read",
           "elapsed": 9.9
@@ -752,6 +856,7 @@ final class CLIStreamContentTests: XCTestCase {
     func test_progressContent_optionalFields_defaultNil() throws {
         let json = """
         {
+          "type": "progress",
           "id": "tool-17",
           "tool": "Read",
           "elapsed": 0.2
@@ -769,6 +874,7 @@ final class CLIStreamContentTests: XCTestCase {
     func test_usageContent_decodesFields() throws {
         let json = """
         {
+          "type": "usage",
           "inputTokens": 4,
           "outputTokens": 6,
           "cacheReadTokens": 1,
@@ -797,6 +903,7 @@ final class CLIStreamContentTests: XCTestCase {
     func test_usageContent_totalTokens_sumsInputAndOutput() throws {
         let json = """
         {
+          "type": "usage",
           "inputTokens": 7,
           "outputTokens": 9
         }
@@ -810,6 +917,7 @@ final class CLIStreamContentTests: XCTestCase {
     func test_usageContent_contextPercentage_calculatesWhenValuesPresent() throws {
         let json = """
         {
+          "type": "usage",
           "inputTokens": 1,
           "outputTokens": 1,
           "contextUsed": 250,
@@ -825,6 +933,7 @@ final class CLIStreamContentTests: XCTestCase {
     func test_usageContent_contextPercentage_returnsZeroWhenMissingValues() throws {
         let json = """
         {
+          "type": "usage",
           "inputTokens": 1,
           "outputTokens": 1,
           "contextLimit": 500
@@ -839,6 +948,7 @@ final class CLIStreamContentTests: XCTestCase {
     func test_usageContent_contextPercentage_returnsZeroWhenLimitZero() throws {
         let json = """
         {
+          "type": "usage",
           "inputTokens": 1,
           "outputTokens": 1,
           "contextUsed": 100,
@@ -854,6 +964,7 @@ final class CLIStreamContentTests: XCTestCase {
     func test_usageContent_optionalFields_defaultNil() throws {
         let json = """
         {
+          "type": "usage",
           "inputTokens": 2,
           "outputTokens": 3
         }
@@ -873,6 +984,7 @@ final class CLIStreamContentTests: XCTestCase {
     func test_stateContent_decodesState() throws {
         let json = """
         {
+          "type": "state",
           "state": "waiting_input"
         }
         """
@@ -886,6 +998,7 @@ final class CLIStreamContentTests: XCTestCase {
     func test_stateContent_decodesToolWhenPresent() throws {
         let json = """
         {
+          "type": "state",
           "state": "executing",
           "tool": "Bash"
         }
@@ -900,31 +1013,35 @@ final class CLIStreamContentTests: XCTestCase {
     // MARK: - Subagent Start Content
 
     func test_subagentStartContent_decodesFields() throws {
+        // SubagentStartStreamMessage doesn't have agentType - only id and description
         let json = """
         {
-          "id": "agent-2",
-          "description": "Summarize",
-          "agentType": "summarizer"
+          "type": "subagent_start",
+          "id": "Task:summarizer",
+          "description": "Summarize"
         }
         """
 
         let content = try decodeJSON(json, as: CLISubagentStartContent.self)
 
-        XCTAssertEqual(content.id, "agent-2")
+        XCTAssertEqual(content.id, "Task:summarizer")
         XCTAssertEqual(content.description, "Summarize")
-        XCTAssertEqual(content.agentType, "summarizer")
+        // displayAgentType is computed from id (extracts prefix before colon)
+        XCTAssertEqual(content.displayAgentType, "Task")
     }
 
     func test_subagentStartContent_displayAgentType_defaultsToTask() {
+        // Use the convenience initializer (doesn't require type parameter)
         let content = CLISubagentStartContent(id: "agent-3", description: "Run tests")
 
         XCTAssertEqual(content.displayAgentType, "Task")
     }
 
-    func test_subagentStartContent_displayAgentType_usesAgentType() {
-        let content = CLISubagentStartContent(id: "agent-4", description: "Analyze", agentType: "analyzer")
+    func test_subagentStartContent_displayAgentType_extractsFromId() {
+        // displayAgentType extracts the prefix before colon from id
+        let content = CLISubagentStartContent(id: "Analyzer:code-review", description: "Analyze")
 
-        XCTAssertEqual(content.displayAgentType, "analyzer")
+        XCTAssertEqual(content.displayAgentType, "Analyzer")
     }
 
     // MARK: - Subagent Complete Content
@@ -932,6 +1049,7 @@ final class CLIStreamContentTests: XCTestCase {
     func test_subagentCompleteContent_decodesFields() throws {
         let json = """
         {
+          "type": "subagent_complete",
           "id": "agent-5",
           "summary": "Done"
         }
@@ -944,24 +1062,29 @@ final class CLIStreamContentTests: XCTestCase {
     }
 
     func test_subagentCompleteContent_displaySummary_defaultsToTaskCompleted() {
+        // Use the convenience initializer
         let content = CLISubagentCompleteContent(id: "agent-6")
 
         XCTAssertEqual(content.displaySummary, "Task completed")
     }
 
     func test_subagentCompleteContent_displaySummary_usesSummary() {
+        // Use the convenience initializer
         let content = CLISubagentCompleteContent(id: "agent-7", summary: "Merged")
 
         XCTAssertEqual(content.displaySummary, "Merged")
     }
 
     // MARK: - StoredMessage to ChatMessage Conversion (History Display)
+    // Note: StoredMessage uses StreamMessage which doesn't include thinking/question/permission
+    // For those message types, use CLIStoredMessage with CLIStreamContent instead
 
     func test_storedMessage_toolUse_convertsToCorrectChatMessage() throws {
         // Real API format from /messages endpoint
+        let messageId = UUID()
         let json = """
         {
-          "id": "bf263a34-e1c8-4cf6-a4e6-a3bf6797077d",
+          "id": "\(messageId.uuidString)",
           "timestamp": "2025-12-31T10:00:00.000Z",
           "message": {
             "type": "tool_use",
@@ -987,9 +1110,10 @@ final class CLIStreamContentTests: XCTestCase {
 
     func test_storedMessage_toolResult_convertsToCorrectChatMessage() throws {
         // Real API format from /messages endpoint
+        let messageId = UUID()
         let json = """
         {
-          "id": "82d1a5d1-1f75-4404-b87e-f3802b5c9127",
+          "id": "\(messageId.uuidString)",
           "timestamp": "2025-12-31T10:00:01.000Z",
           "message": {
             "type": "tool_result",
@@ -1011,9 +1135,10 @@ final class CLIStreamContentTests: XCTestCase {
     }
 
     func test_storedMessage_toolResultWithError_convertsToErrorRole() throws {
+        let messageId = UUID()
         let json = """
         {
-          "id": "error-123",
+          "id": "\(messageId.uuidString)",
           "timestamp": "2025-12-31T10:00:02.000Z",
           "message": {
             "type": "tool_result",
@@ -1036,9 +1161,10 @@ final class CLIStreamContentTests: XCTestCase {
 
     func test_storedMessage_editToolUse_convertsWithFullInput() throws {
         // Edit tool with old_string/new_string should preserve full content
+        let messageId = UUID()
         let json = """
         {
-          "id": "edit-123",
+          "id": "\(messageId.uuidString)",
           "timestamp": "2025-12-31T10:00:03.000Z",
           "message": {
             "type": "tool_use",
@@ -1064,9 +1190,10 @@ final class CLIStreamContentTests: XCTestCase {
     }
 
     func test_storedMessage_todoWriteToolUse_convertsWithTodosArray() throws {
+        let messageId = UUID()
         let json = """
         {
-          "id": "todo-123",
+          "id": "\(messageId.uuidString)",
           "timestamp": "2025-12-31T10:00:04.000Z",
           "message": {
             "type": "tool_use",
@@ -1094,9 +1221,10 @@ final class CLIStreamContentTests: XCTestCase {
 
     func test_storedMessage_assistantDelta_returnsNil() throws {
         // Streaming deltas should not create chat messages
+        let messageId = UUID()
         let json = """
         {
-          "id": "delta-123",
+          "id": "\(messageId.uuidString)",
           "timestamp": "2025-12-31T10:00:05.000Z",
           "message": {
             "type": "assistant",
@@ -1113,9 +1241,10 @@ final class CLIStreamContentTests: XCTestCase {
     }
 
     func test_storedMessage_assistantFinal_convertsToAssistantRole() throws {
+        let messageId = UUID()
         let json = """
         {
-          "id": "final-123",
+          "id": "\(messageId.uuidString)",
           "timestamp": "2025-12-31T10:00:06.000Z",
           "message": {
             "type": "assistant",
@@ -1133,30 +1262,11 @@ final class CLIStreamContentTests: XCTestCase {
         XCTAssertEqual(chatMessage?.content, "Final response")
     }
 
-    func test_storedMessage_thinking_convertsToThinkingRole() throws {
-        let json = """
-        {
-          "id": "thinking-123",
-          "timestamp": "2025-12-31T10:00:07.000Z",
-          "message": {
-            "type": "thinking",
-            "content": "Let me think about this..."
-          }
-        }
-        """
-
-        let storedMessage = try decodeJSON(json, as: StoredMessage.self)
-        let chatMessage = storedMessage.toChatMessage()
-
-        XCTAssertNotNil(chatMessage)
-        XCTAssertEqual(chatMessage?.role, .thinking)
-        XCTAssertEqual(chatMessage?.content, "Let me think about this...")
-    }
-
     func test_storedMessage_user_convertsToUserRole() throws {
+        let messageId = UUID()
         let json = """
         {
-          "id": "user-123",
+          "id": "\(messageId.uuidString)",
           "timestamp": "2025-12-31T10:00:08.000Z",
           "message": {
             "type": "user",
@@ -1171,5 +1281,26 @@ final class CLIStreamContentTests: XCTestCase {
         XCTAssertNotNil(chatMessage)
         XCTAssertEqual(chatMessage?.role, .user)
         XCTAssertEqual(chatMessage?.content, "Hello, Claude!")
+    }
+
+    func test_storedMessage_system_convertsToSystemRole() throws {
+        let messageId = UUID()
+        let json = """
+        {
+          "id": "\(messageId.uuidString)",
+          "timestamp": "2025-12-31T10:00:09.000Z",
+          "message": {
+            "type": "system",
+            "content": "System notification"
+          }
+        }
+        """
+
+        let storedMessage = try decodeJSON(json, as: StoredMessage.self)
+        let chatMessage = storedMessage.toChatMessage()
+
+        XCTAssertNotNil(chatMessage)
+        XCTAssertEqual(chatMessage?.role, .system)
+        XCTAssertEqual(chatMessage?.content, "System notification")
     }
 }

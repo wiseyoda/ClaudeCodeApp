@@ -376,7 +376,7 @@ final class ThemeTests: XCTestCase {
 
     func test_connectionStatusIndicator_dotColor_dark() {
         let scheme: ColorScheme = .dark
-        assertColorEqual(ConnectionStatusIndicator.dotColor(for: .connected, scheme: scheme), CLITheme.green(for: scheme))
+        assertColorEqual(ConnectionStatusIndicator.dotColor(for: .connected(agentId: "test-123"), scheme: scheme), CLITheme.green(for: scheme))
         assertColorEqual(ConnectionStatusIndicator.dotColor(for: .connecting, scheme: scheme), CLITheme.yellow(for: scheme))
         assertColorEqual(ConnectionStatusIndicator.dotColor(for: .reconnecting(attempt: 1), scheme: scheme), CLITheme.yellow(for: scheme))
         assertColorEqual(ConnectionStatusIndicator.dotColor(for: .disconnected, scheme: scheme), CLITheme.red(for: scheme))
@@ -384,7 +384,7 @@ final class ThemeTests: XCTestCase {
 
     func test_connectionStatusIndicator_dotColor_light() {
         let scheme: ColorScheme = .light
-        assertColorEqual(ConnectionStatusIndicator.dotColor(for: .connected, scheme: scheme), CLITheme.green(for: scheme))
+        assertColorEqual(ConnectionStatusIndicator.dotColor(for: .connected(agentId: "test-456"), scheme: scheme), CLITheme.green(for: scheme))
         assertColorEqual(ConnectionStatusIndicator.dotColor(for: .connecting, scheme: scheme), CLITheme.yellow(for: scheme))
         assertColorEqual(ConnectionStatusIndicator.dotColor(for: .reconnecting(attempt: 2), scheme: scheme), CLITheme.yellow(for: scheme))
         assertColorEqual(ConnectionStatusIndicator.dotColor(for: .disconnected, scheme: scheme), CLITheme.red(for: scheme))

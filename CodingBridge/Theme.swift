@@ -466,7 +466,7 @@ private struct PulseAnimation: ViewModifier {
     VStack(spacing: 20) {
         HStack {
             Text("Connected:")
-            ConnectionStatusIndicator(state: .connected)
+            ConnectionStatusIndicator(state: .connected(agentId: "preview"))
         }
         HStack {
             Text("Connecting:")

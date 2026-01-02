@@ -24,8 +24,8 @@ func stringifyAnyValue(_ value: Any) -> String {
         return num.stringValue
     }
     // Handle AnyCodableValue wrapper (from CLIBridgeTypes.swift)
-    if let codable = value as? AnyCodableValue {
-        return codable.stringValue
+    if let codable = value as? AnyCodableValue, let str = codable.stringValue {
+        return str
     }
     // Handle dictionaries - convert to JSON or extract common fields
     if let dict = value as? [String: Any] {

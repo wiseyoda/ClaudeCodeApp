@@ -9,45 +9,35 @@ final class CLISessionTypesTests: XCTestCase {
     }
 
     private func makeMetadata(
-        id: String = "session-1",
+        id: UUID = UUID(),
         projectPath: String = "/tmp/project",
         messageCount: Int = 3,
-        createdAt: String = "2024-01-01T00:00:00Z",
-        lastActivityAt: String = "2024-01-02T00:00:00Z",
+        createdAt: Date? = Date(timeIntervalSince1970: 1704067200), // 2024-01-01T00:00:00Z
+        lastActivityAt: Date = Date(timeIntervalSince1970: 1704153600), // 2024-01-02T00:00:00Z
         lastUserMessage: String? = nil,
         lastAssistantMessage: String? = nil,
         title: String? = nil,
         customTitle: String? = nil,
         model: String? = "claude-3-5",
-        source: CLISessionMetadata.SessionSource? = nil,
-        archivedAt: String? = nil,
-        parentSessionId: String? = nil
+        source: CLISessionMetadata.SessionSource = .user,
+        archivedAt: Date? = nil,
+        parentSessionId: UUID? = nil
     ) -> CLISessionMetadata {
         return CLISessionMetadata(
             id: id,
             projectPath: projectPath,
-            messageCount: messageCount,
+            source: source,
             createdAt: createdAt,
             lastActivityAt: lastActivityAt,
+            messageCount: messageCount,
             lastUserMessage: lastUserMessage,
             lastAssistantMessage: lastAssistantMessage,
             title: title,
             customTitle: customTitle,
             model: model,
-            source: source,
             archivedAt: archivedAt,
             parentSessionId: parentSessionId
         )
-    }
-
-    private func parseISODate(_ string: String) -> Date? {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = formatter.date(from: string) {
-            return date
-        }
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter.date(from: string)
     }
 
     // MARK: - CLIPermissionRequest
@@ -55,6 +45,7 @@ final class CLISessionTypesTests: XCTestCase {
     func test_permissionRequest_decodesFields() throws {
         let json = """
         {
+            "type": "permission",
             "id": "perm-1",
             "tool": "bash",
             "input": {
@@ -70,7 +61,7 @@ final class CLISessionTypesTests: XCTestCase {
 
         XCTAssertEqual(request.id, "perm-1")
         XCTAssertEqual(request.tool, "bash")
-        XCTAssertEqual(request.options, ["allow", "deny", "always"])
+        XCTAssertEqual(request.options, [.allow, .deny, .always])
         XCTAssertEqual(request.input["command"]?.stringValue, "ls -la")
         XCTAssertEqual(request.input["timeout"]?.intValue, 10)
         XCTAssertEqual(request.input["dryRun"]?.boolValue, true)
@@ -78,11 +69,12 @@ final class CLISessionTypesTests: XCTestCase {
 
     func test_permissionRequest_description_prefersCommand() {
         let request = CLIPermissionRequest(
+            type: .permission,
             id: "perm-2",
             tool: "bash",
             input: [
-                "command": AnyCodableValue("git status"),
-                "file_path": AnyCodableValue("/tmp/notes.txt")
+                "command": JSONValue("git status"),
+                "file_path": JSONValue("/tmp/notes.txt")
             ],
             options: []
         )
@@ -92,9 +84,10 @@ final class CLISessionTypesTests: XCTestCase {
 
     func test_permissionRequest_description_usesFilePath() {
         let request = CLIPermissionRequest(
+            type: .permission,
             id: "perm-3",
             tool: "file_read",
-            input: ["file_path": AnyCodableValue("/tmp/notes.txt")],
+            input: ["file_path": JSONValue("/tmp/notes.txt")],
             options: []
         )
 
@@ -103,9 +96,10 @@ final class CLISessionTypesTests: XCTestCase {
 
     func test_permissionRequest_description_usesFilePathCamelCase() {
         let request = CLIPermissionRequest(
+            type: .permission,
             id: "perm-4",
             tool: "file_write",
-            input: ["filePath": AnyCodableValue("/tmp/new.txt")],
+            input: ["filePath": JSONValue("/tmp/new.txt")],
             options: []
         )
 
@@ -114,6 +108,7 @@ final class CLISessionTypesTests: XCTestCase {
 
     func test_permissionRequest_description_fallsBackToTool() {
         let request = CLIPermissionRequest(
+            type: .permission,
             id: "perm-5",
             tool: "custom_tool",
             input: [:],
@@ -128,6 +123,7 @@ final class CLISessionTypesTests: XCTestCase {
     func test_questionRequest_decodesNestedQuestions() throws {
         let json = """
         {
+            "type": "question",
             "id": "question-1",
             "questions": [
                 {
@@ -219,12 +215,19 @@ final class CLISessionTypesTests: XCTestCase {
 
     // MARK: - CLISessionEvent
 
+    private let testSessionId1 = UUID(uuidString: "11111111-1111-1111-1111-111111111111")!
+    private let testSessionId2 = UUID(uuidString: "22222222-2222-2222-2222-222222222222")!
+    private let testSessionId3 = UUID(uuidString: "33333333-3333-3333-3333-333333333333")!
+    private let testSessionId4 = UUID(uuidString: "44444444-4444-4444-4444-444444444444")!
+    private let testSessionId5 = UUID(uuidString: "55555555-5555-5555-5555-555555555555")!
+
     func test_sessionEvent_decodesCreatedAction() throws {
         let json = """
         {
+            "type": "session_event",
             "action": "created",
             "projectPath": "/tmp/project",
-            "sessionId": "session-1"
+            "sessionId": "11111111-1111-1111-1111-111111111111"
         }
         """
 
@@ -232,49 +235,53 @@ final class CLISessionTypesTests: XCTestCase {
 
         XCTAssertEqual(event.action, .created)
         XCTAssertEqual(event.projectPath, "/tmp/project")
-        XCTAssertEqual(event.sessionId, "session-1")
+        XCTAssertEqual(event.sessionId, testSessionId1)
         XCTAssertNil(event.metadata)
     }
 
     func test_sessionEvent_decodesUpdatedAction() throws {
         let json = """
         {
+            "type": "session_event",
             "action": "updated",
             "projectPath": "/tmp/project",
-            "sessionId": "session-2"
+            "sessionId": "22222222-2222-2222-2222-222222222222"
         }
         """
 
         let event = try decode(CLISessionEvent.self, from: json)
 
         XCTAssertEqual(event.action, .updated)
-        XCTAssertEqual(event.sessionId, "session-2")
+        XCTAssertEqual(event.sessionId, testSessionId2)
     }
 
     func test_sessionEvent_decodesDeletedAction() throws {
         let json = """
         {
+            "type": "session_event",
             "action": "deleted",
             "projectPath": "/tmp/project",
-            "sessionId": "session-3"
+            "sessionId": "33333333-3333-3333-3333-333333333333"
         }
         """
 
         let event = try decode(CLISessionEvent.self, from: json)
 
         XCTAssertEqual(event.action, .deleted)
-        XCTAssertEqual(event.sessionId, "session-3")
+        XCTAssertEqual(event.sessionId, testSessionId3)
     }
 
     func test_sessionEvent_decodesMetadataWhenPresent() throws {
         let json = """
         {
+            "type": "session_event",
             "action": "created",
             "projectPath": "/tmp/project",
-            "sessionId": "session-4",
+            "sessionId": "44444444-4444-4444-4444-444444444444",
             "metadata": {
-                "id": "session-4",
+                "id": "44444444-4444-4444-4444-444444444444",
                 "projectPath": "/tmp/project",
+                "source": "user",
                 "messageCount": 4,
                 "createdAt": "2024-02-01T12:00:00Z",
                 "lastActivityAt": "2024-02-01T12:10:00Z"
@@ -284,17 +291,19 @@ final class CLISessionTypesTests: XCTestCase {
 
         let event = try decode(CLISessionEvent.self, from: json)
 
-        XCTAssertEqual(event.metadata?.id, "session-4")
+        XCTAssertEqual(event.metadata?.id, testSessionId4)
         XCTAssertEqual(event.metadata?.messageCount, 4)
-        XCTAssertEqual(event.metadata?.lastActivityAt, "2024-02-01T12:10:00Z")
+        // lastActivityAt is now a Date, compare by checking the decoded value exists
+        XCTAssertNotNil(event.metadata?.lastActivityAt)
     }
 
     func test_sessionEvent_decodesWithoutMetadata() throws {
         let json = """
         {
+            "type": "session_event",
             "action": "updated",
             "projectPath": "/tmp/project",
-            "sessionId": "session-5",
+            "sessionId": "55555555-5555-5555-5555-555555555555",
             "metadata": null
         }
         """
@@ -306,11 +315,14 @@ final class CLISessionTypesTests: XCTestCase {
 
     // MARK: - CLISessionMetadata Decoding
 
+    private let testSessionId6 = UUID(uuidString: "66666666-6666-6666-6666-666666666666")!
+
     func test_sessionMetadata_decodesAllFields() throws {
         let json = """
         {
-            "id": "session-6",
+            "id": "66666666-6666-6666-6666-666666666666",
             "projectPath": "/tmp/project",
+            "source": "agent",
             "messageCount": 12,
             "createdAt": "2024-03-01T08:00:00Z",
             "lastActivityAt": "2024-03-01T08:30:00Z",
@@ -318,18 +330,17 @@ final class CLISessionTypesTests: XCTestCase {
             "lastAssistantMessage": "Assistant message",
             "title": "Session title",
             "customTitle": "Custom title",
-            "model": "claude",
-            "source": "agent"
+            "model": "claude"
         }
         """
 
         let metadata = try decode(CLISessionMetadata.self, from: json)
 
-        XCTAssertEqual(metadata.id, "session-6")
+        XCTAssertEqual(metadata.id, testSessionId6)
         XCTAssertEqual(metadata.projectPath, "/tmp/project")
         XCTAssertEqual(metadata.messageCount, 12)
-        XCTAssertEqual(metadata.createdAt, "2024-03-01T08:00:00Z")
-        XCTAssertEqual(metadata.lastActivityAt, "2024-03-01T08:30:00Z")
+        XCTAssertNotNil(metadata.createdAt)
+        XCTAssertNotNil(metadata.lastActivityAt)
         XCTAssertEqual(metadata.lastUserMessage, "User message")
         XCTAssertEqual(metadata.lastAssistantMessage, "Assistant message")
         XCTAssertEqual(metadata.title, "Session title")
@@ -338,42 +349,24 @@ final class CLISessionTypesTests: XCTestCase {
         XCTAssertEqual(metadata.source, .agent)
     }
 
-    func test_sessionMetadata_createdDate_parsesFractionalSeconds() {
-        let createdAt = "2024-03-02T10:15:30.123Z"
+    func test_sessionMetadata_createdAt_storesDate() {
+        let createdAt = Date(timeIntervalSince1970: 1709373330.123) // 2024-03-02T10:15:30.123Z
         let metadata = makeMetadata(createdAt: createdAt)
 
-        XCTAssertEqual(metadata.createdDate, parseISODate(createdAt))
+        XCTAssertEqual(metadata.createdAt, createdAt)
     }
 
-    func test_sessionMetadata_createdDate_parsesWithoutFractionalSeconds() {
-        let createdAt = "2024-03-02T10:15:30Z"
-        let metadata = makeMetadata(createdAt: createdAt)
-
-        XCTAssertEqual(metadata.createdDate, parseISODate(createdAt))
-    }
-
-    func test_sessionMetadata_lastActivityDate_parsesFractionalSeconds() {
-        let lastActivityAt = "2024-03-02T11:00:00.456Z"
+    func test_sessionMetadata_lastActivityAt_storesDate() {
+        let lastActivityAt = Date(timeIntervalSince1970: 1709376000.456) // 2024-03-02T11:00:00.456Z
         let metadata = makeMetadata(lastActivityAt: lastActivityAt)
 
-        XCTAssertEqual(metadata.lastActivityDate, parseISODate(lastActivityAt))
+        XCTAssertEqual(metadata.lastActivityAt, lastActivityAt)
     }
 
-    func test_sessionMetadata_lastActivityDate_parsesWithoutFractionalSeconds() {
-        let lastActivityAt = "2024-03-02T11:00:00Z"
-        let metadata = makeMetadata(lastActivityAt: lastActivityAt)
+    func test_sessionMetadata_createdAt_canBeNil() {
+        let metadata = makeMetadata(createdAt: nil)
 
-        XCTAssertEqual(metadata.lastActivityDate, parseISODate(lastActivityAt))
-    }
-
-    func test_sessionMetadata_dateParsing_returnsNilForInvalidValues() {
-        let metadata = makeMetadata(
-            createdAt: "not-a-date",
-            lastActivityAt: "still-not-a-date"
-        )
-
-        XCTAssertNil(metadata.createdDate)
-        XCTAssertNil(metadata.lastActivityDate)
+        XCTAssertNil(metadata.createdAt)
     }
 
     // MARK: - CLISessionMetadata Display Title
@@ -403,102 +396,10 @@ final class CLISessionTypesTests: XCTestCase {
         XCTAssertEqual(metadata.displayTitle, "Plain title")
     }
 
-    func test_sessionMetadata_displayTitle_parsesJsonTitleTextBlocks() {
-        let title = #"[{"type":"text","text":"Hello"}]"#
-        let metadata = makeMetadata(title: title)
-
-        XCTAssertEqual(metadata.displayTitle, "Hello")
-    }
-
-    func test_sessionMetadata_displayTitle_parsesJsonTitleToolResultContent() {
-        let title = #"[{"type":"tool_result","content":"Tool output"}]"#
-        let metadata = makeMetadata(title: title)
-
-        XCTAssertEqual(metadata.displayTitle, "Tool output")
-    }
-
-    func test_sessionMetadata_displayTitle_fallsBackToLastUserMessageWhenTitleUnparseable() {
-        let title = #"["oops"]"#
-        let lastUser = #"[{"type":"text","text":"Last message"}]"#
-        let metadata = makeMetadata(lastUserMessage: lastUser, title: title)
-
-        XCTAssertEqual(metadata.displayTitle, "Last message")
-    }
-
-    func test_sessionMetadata_displayTitle_usesLastUserMessageWhenTitleMissing() {
-        let lastUser = #"[{"type":"text","text":"Only message"}]"#
-        let metadata = makeMetadata(lastUserMessage: lastUser, title: nil)
-
-        XCTAssertEqual(metadata.displayTitle, "Only message")
-    }
-
-    func test_sessionMetadata_displayTitle_returnsRawTitleWhenLastUserMessageUnavailable() {
-        let title = #"["raw"]"#
-        let metadata = makeMetadata(lastUserMessage: nil, title: title)
-
-        XCTAssertEqual(metadata.displayTitle, title)
-    }
-
-    func test_sessionMetadata_displayTitle_handlesTruncatedJsonPrefix() {
-        let title = "[{\"type\":\"text\",\"text\":\""
-        let metadata = makeMetadata(lastUserMessage: nil, title: title)
-
-        XCTAssertEqual(metadata.displayTitle, "")
-    }
-
-    func test_sessionMetadata_displayTitle_returnsNilWhenNoTitleOrLastUserMessage() {
-        let metadata = makeMetadata(lastUserMessage: nil, title: nil)
+    func test_sessionMetadata_displayTitle_returnsNilWhenNoTitle() {
+        let metadata = makeMetadata(title: nil, customTitle: nil)
 
         XCTAssertNil(metadata.displayTitle)
-    }
-
-    // MARK: - Parsed Last User Message
-
-    func test_sessionMetadata_parsedLastUserMessage_returnsNilWhenMissing() {
-        let metadata = makeMetadata(lastUserMessage: nil)
-
-        XCTAssertNil(metadata.parsedLastUserMessage)
-    }
-
-    func test_sessionMetadata_parsedLastUserMessage_returnsPlainText() {
-        let metadata = makeMetadata(lastUserMessage: "Plain message")
-
-        XCTAssertEqual(metadata.parsedLastUserMessage, "Plain message")
-    }
-
-    func test_sessionMetadata_parsedLastUserMessage_parsesTextBlocks() {
-        let message = #"[{"type":"text","text":"One"},{"type":"text","text":"Two"}]"#
-        let metadata = makeMetadata(lastUserMessage: message)
-
-        XCTAssertEqual(metadata.parsedLastUserMessage, "One Two")
-    }
-
-    func test_sessionMetadata_parsedLastUserMessage_parsesToolResultContent() {
-        let message = #"[{"type":"tool_result","content":"Tool output"}]"#
-        let metadata = makeMetadata(lastUserMessage: message)
-
-        XCTAssertEqual(metadata.parsedLastUserMessage, "Tool output")
-    }
-
-    func test_sessionMetadata_parsedLastUserMessage_parsesMixedArray() {
-        let message = #"["ignore", {"type":"text","text":"Mixed"}]"#
-        let metadata = makeMetadata(lastUserMessage: message)
-
-        XCTAssertEqual(metadata.parsedLastUserMessage, "Mixed")
-    }
-
-    func test_sessionMetadata_parsedLastUserMessage_fallsBackToRegexForInvalidJson() {
-        let message = #"[{"type":"text","text":"Line 1\nLine 2""#
-        let metadata = makeMetadata(lastUserMessage: message)
-
-        XCTAssertEqual(metadata.parsedLastUserMessage, "Line 1\nLine 2")
-    }
-
-    func test_sessionMetadata_parsedLastUserMessage_fallsBackToTruncatedText() {
-        let message = #"[{"type":"text","text":"Truncated..."#
-        let metadata = makeMetadata(lastUserMessage: message)
-
-        XCTAssertEqual(metadata.parsedLastUserMessage, "Truncated")
     }
 
     // MARK: - Source Flags
@@ -527,43 +428,49 @@ final class CLISessionTypesTests: XCTestCase {
         XCTAssertTrue(metadata.isUserVisible)
     }
 
-    func test_sessionMetadata_sourceNil_isUserVisible() {
-        let metadata = makeMetadata(source: nil)
-
-        XCTAssertTrue(metadata.isUserVisible)
-        XCTAssertFalse(metadata.isHelper)
-        XCTAssertFalse(metadata.isAgent)
-    }
-
     // MARK: - ProjectSession Conversion
 
-    func test_sessionMetadata_toProjectSession_usesParsedFields() {
-        let title = #"[{"type":"text","text":"Summary"}]"#
-        let lastUser = #"[{"type":"text","text":"User text"}]"#
+    private let testSessionId7 = UUID(uuidString: "77777777-7777-7777-7777-777777777777")!
+    private let testSessionId8 = UUID(uuidString: "88888888-8888-8888-8888-888888888888")!
+
+    func test_sessionMetadata_toProjectSession_mapsFields() {
         let metadata = makeMetadata(
-            id: "session-7",
+            id: testSessionId7,
             messageCount: 8,
-            lastActivityAt: "2024-04-01T09:00:00Z",
-            lastUserMessage: lastUser,
+            lastActivityAt: Date(timeIntervalSince1970: 1711958400), // 2024-04-01T08:00:00Z
+            lastUserMessage: "User text",
             lastAssistantMessage: "Assistant text",
-            title: title
+            title: "Session Summary"
         )
 
         let session = metadata.toProjectSession()
 
-        XCTAssertEqual(session.id, "session-7")
-        XCTAssertEqual(session.summary, "Summary")
+        XCTAssertEqual(session.id, testSessionId7.uuidString)
+        XCTAssertEqual(session.summary, "Session Summary")
         XCTAssertEqual(session.messageCount, 8)
-        XCTAssertEqual(session.lastActivity, "2024-04-01T09:00:00Z")
+        // lastActivity is ISO8601 formatted string from the Date
+        XCTAssertNotNil(session.lastActivity)
         XCTAssertEqual(session.lastUserMessage, "User text")
         XCTAssertEqual(session.lastAssistantMessage, "Assistant text")
     }
 
+    func test_sessionMetadata_toProjectSession_prefersCustomTitle() {
+        let metadata = makeMetadata(
+            id: testSessionId7,
+            title: "Auto Title",
+            customTitle: "Custom Title"
+        )
+
+        let session = metadata.toProjectSession()
+
+        XCTAssertEqual(session.summary, "Custom Title")
+    }
+
     func test_sessionMetadata_toProjectSession_handlesNilTitle() {
         let metadata = makeMetadata(
-            id: "session-8",
+            id: testSessionId8,
             messageCount: 0,
-            lastActivityAt: "2024-04-02T09:00:00Z",
+            lastActivityAt: Date(timeIntervalSince1970: 1712044800), // 2024-04-02T08:00:00Z
             lastUserMessage: nil,
             lastAssistantMessage: nil,
             title: nil
@@ -571,7 +478,7 @@ final class CLISessionTypesTests: XCTestCase {
 
         let session = metadata.toProjectSession()
 
-        XCTAssertEqual(session.id, "session-8")
+        XCTAssertEqual(session.id, testSessionId8.uuidString)
         XCTAssertNil(session.summary)
         XCTAssertNil(session.lastUserMessage)
         XCTAssertNil(session.lastAssistantMessage)

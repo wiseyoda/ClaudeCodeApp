@@ -57,10 +57,10 @@ final class CLIBridgeAdapterTests: XCTestCase {
         var connectCalls: [(projectPath: String, sessionId: String?, model: String?, helper: Bool)] = []
         var updateServerURLCalls: [String] = []
         var sendInputCalls: [(text: String, images: [CLIImageAttachment]?, thinkingMode: String?)] = []
-        var respondToPermissionCalls: [(id: String, choice: CLIPermissionResponsePayload.CLIPermissionChoice)] = []
+        var respondToPermissionCalls: [(id: String, choice: CLIPermissionChoice)] = []
         var respondToQuestionCalls: [(id: String, answers: [String: Any])] = []
         var setModelCalls: [String] = []
-        var setPermissionModeCalls: [CLISetPermissionModePayload.CLIPermissionMode] = []
+        var setPermissionModeCalls: [CLIPermissionMode] = []
         var cancelQueuedInputCount = 0
         var interruptCount = 0
         var disconnectCount = 0
@@ -107,7 +107,7 @@ final class CLIBridgeAdapterTests: XCTestCase {
 
         override func respondToPermission(
             id: String,
-            choice: CLIPermissionResponsePayload.CLIPermissionChoice
+            choice: CLIPermissionChoice
         ) async throws {
             respondToPermissionCalls.append((id, choice))
             respondToPermissionExpectation?.fulfill()
@@ -132,7 +132,7 @@ final class CLIBridgeAdapterTests: XCTestCase {
             }
         }
 
-        override func setPermissionMode(_ mode: CLISetPermissionModePayload.CLIPermissionMode) async throws {
+        override func setPermissionMode(_ mode: CLIPermissionMode) async throws {
             setPermissionModeCalls.append(mode)
             setPermissionModeExpectation?.fulfill()
             if let error = setPermissionModeError {
@@ -423,7 +423,7 @@ final class CLIBridgeAdapterTests: XCTestCase {
         )
 
         await fulfillment(of: [manager.setPermissionModeExpectation!, manager.sendInputExpectation!], timeout: 1)
-        XCTAssertEqual(manager.setPermissionModeCalls.last, .acceptEdits)
+        XCTAssertEqual(manager.setPermissionModeCalls.last, .acceptedits)
         XCTAssertEqual(manager.sendInputCalls.last?.text, "Hello")
         XCTAssertEqual(manager.sendInputCalls.last?.thinkingMode, "think")
     }
@@ -442,7 +442,7 @@ final class CLIBridgeAdapterTests: XCTestCase {
         )
 
         await fulfillment(of: [manager.setPermissionModeExpectation!, manager.sendInputExpectation!], timeout: 1)
-        XCTAssertEqual(manager.setPermissionModeCalls.last, .default)
+        XCTAssertEqual(manager.setPermissionModeCalls.last, ._default)
     }
 
     func test_parsePermissionMode_bypassPermissions() async {
@@ -459,7 +459,7 @@ final class CLIBridgeAdapterTests: XCTestCase {
         )
 
         await fulfillment(of: [manager.setPermissionModeExpectation!, manager.sendInputExpectation!], timeout: 1)
-        XCTAssertEqual(manager.setPermissionModeCalls.last, .bypassPermissions)
+        XCTAssertEqual(manager.setPermissionModeCalls.last, .bypasspermissions)
     }
 
     func test_sendMessage_errorUpdatesLastError() async {
@@ -994,7 +994,7 @@ final class CLIBridgeAdapterTests: XCTestCase {
         adapter.setSessionPermissionMode(.bypassPermissions)
 
         await fulfillment(of: [manager.setPermissionModeExpectation!], timeout: 1)
-        XCTAssertEqual(manager.setPermissionModeCalls.last, .bypassPermissions)
+        XCTAssertEqual(manager.setPermissionModeCalls.last, .bypasspermissions)
         XCTAssertEqual(adapter.sessionPermissionMode, .bypassPermissions)
     }
 
@@ -1169,10 +1169,11 @@ final class CLIBridgeAdapterTests: XCTestCase {
         }
 
         let request = CLIPermissionRequest(
+            type: .permission,
             id: "perm-1",
             tool: "Bash",
-            input: ["command": AnyCodableValue("ls -la")],
-            options: ["allow", "deny"]
+            input: ["command": JSONValue.string("ls -la")],
+            options: [.allow, .deny]
         )
         manager.onPermissionRequest?(request)
 
@@ -1189,13 +1190,13 @@ final class CLIBridgeAdapterTests: XCTestCase {
             questionExpectation.fulfill()
         }
 
-        let question = CLIQuestionItem(
+        let question = QuestionItem(
             question: "Pick one",
             header: "Header",
-            options: [CLIQuestionOption(label: "A", description: nil)],
+            options: [APIQuestionOption(label: "A", description: nil)],
             multiSelect: false
         )
-        let request = CLIQuestionRequest(id: "question-1", questions: [question])
+        let request = QuestionMessage(type: .question, id: "question-1", questions: [question])
         manager.onQuestionRequest?(request)
 
         wait(for: [questionExpectation], timeout: 1)
@@ -1211,8 +1212,8 @@ final class CLIBridgeAdapterTests: XCTestCase {
         adapter.onSubagentStart = { _ in startExpectation.fulfill() }
         adapter.onSubagentComplete = { _ in completeExpectation.fulfill() }
 
-        let start = CLISubagentStartContent(id: "agent-1", description: "Run")
-        let complete = CLISubagentCompleteContent(id: "agent-1", summary: "Done")
+        let start = SubagentStartStreamMessage(type: .subagentStart, id: "agent-1", description: "Run")
+        let complete = SubagentCompleteStreamMessage(type: .subagentComplete, id: "agent-1", summary: "Done")
         manager.onSubagentStart?(start)
         manager.onSubagentComplete?(complete)
 
@@ -1229,12 +1230,13 @@ final class CLIBridgeAdapterTests: XCTestCase {
         adapter.onHistory = { _ in historyExpectation.fulfill() }
 
         let event = CLISessionEvent(
+            type: .sessionEvent,
             action: .created,
             projectPath: "/tmp",
-            sessionId: "session-1",
+            sessionId: UUID(),
             metadata: nil
         )
-        let history = CLIHistoryPayload(messages: [], hasMore: false, cursor: nil)
+        let history = CLIHistoryPayload(type: .history, messages: [], hasMore: false, cursor: nil)
         manager.onSessionEvent?(event)
         manager.onHistory?(history)
 
@@ -1315,6 +1317,7 @@ final class CLIBridgeAdapterTests: XCTestCase {
         let manager = MockCLIBridgeManager()
         let adapter = CLIBridgeAdapter(manager: manager)
         let usage = CLIUsageContent(
+            type: .usage,
             inputTokens: 10,
             outputTokens: 5,
             cacheReadTokens: nil,
@@ -1355,8 +1358,8 @@ final class CLIBridgeAdapterTests: XCTestCase {
     func test_stateSync_activeSubagentAndProgress() async {
         let manager = MockCLIBridgeManager()
         let adapter = CLIBridgeAdapter(manager: manager)
-        let subagent = CLISubagentStartContent(id: "agent-2", description: "Work")
-        let progress = CLIProgressContent(id: "tool-1", tool: "Read", elapsed: 1.0)
+        let subagent = SubagentStartStreamMessage(type: .subagentStart, id: "agent-2", description: "Work")
+        let progress = ProgressStreamMessage(type: .progress, id: "tool-1", tool: "Read", elapsed: 1.0)
 
         manager.activeSubagent = subagent
         manager.toolProgress = progress

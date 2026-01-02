@@ -14,11 +14,11 @@ public struct QuestionItem: Sendable, Codable, Hashable {
     /** Short header/label */
     public var header: String
     /** Available options */
-    public var options: [QuestionOption]
+    public var options: [APIQuestionOption]
     /** Allow multiple selections */
     public var multiSelect: Bool
 
-    public init(question: String, header: String, options: [QuestionOption], multiSelect: Bool) {
+    public init(question: String, header: String, options: [APIQuestionOption], multiSelect: Bool) {
         self.question = question
         self.header = header
         self.options = options

@@ -252,11 +252,17 @@ class CLIBridgeAPIClient: ObservableObject {
         customTitle: String? = nil
     ) async throws -> CLIBulkOperationResponse {
         let encodedPath = encodeProjectPath(projectPath)
-        let request = CLIBulkOperationRequest(
-            sessionIds: sessionIds,
-            action: action,
-            customTitle: customTitle
-        )
+        // Convert String sessionIds to UUIDs
+        let uuids = sessionIds.compactMap { UUID(uuidString: $0) }
+        guard uuids.count == sessionIds.count else {
+            throw CLIBridgeAPIError.invalidRequest("Invalid session ID format")
+        }
+        // Parse action string to enum
+        guard let actionEnum = BulkOperationRequestOperation.Action(rawValue: action) else {
+            throw CLIBridgeAPIError.invalidRequest("Invalid action: \(action)")
+        }
+        let operation = BulkOperationRequestOperation(action: actionEnum, customTitle: customTitle)
+        let request = CLIBulkOperationRequest(sessionIds: uuids, operation: operation)
         return try await postWithBody("/projects/\(encodedPath)/sessions/bulk", body: request)
     }
 
@@ -528,13 +534,14 @@ class CLIBridgeAPIClient: ObservableObject {
     /// Register FCM token for push notifications
     /// - Parameters:
     ///   - fcmToken: Firebase Cloud Messaging token
-    ///   - environment: APNs environment ("sandbox" or "production")
+    ///   - environment: APNs environment (sandbox or production)
     func registerPushToken(
         fcmToken: String,
-        environment: String
+        environment: PushEnvironment
     ) async throws -> CLIPushRegisterResponse {
         let request = CLIPushRegisterRequest(
             fcmToken: fcmToken,
+            platform: .ios,
             environment: environment,
             appVersion: AppVersion.version,
             osVersion: UIDevice.current.systemVersion
@@ -547,8 +554,8 @@ class CLIBridgeAPIClient: ObservableObject {
         pushToken: String,
         pushToStartToken: String? = nil,
         activityId: String,
-        sessionId: String,
-        environment: String
+        sessionId: UUID,
+        environment: PushEnvironment? = nil
     ) async throws -> CLILiveActivityRegisterResponse {
         let request = CLILiveActivityRegisterRequest(
             pushToken: pushToken,
@@ -561,9 +568,9 @@ class CLIBridgeAPIClient: ObservableObject {
     }
 
     /// Invalidate a push token (on logout or token refresh)
-    func invalidatePushToken(tokenType: CLIPushInvalidateRequest.TokenType, token: String) async throws {
+    func invalidatePushToken(tokenType: TokenType, token: String) async throws {
         let request = CLIPushInvalidateRequest(tokenType: tokenType, token: token)
-        let _: CLIPushSuccessResponse = try await deleteWithBody("/api/push/invalidate", body: request)
+        let _: EmptyResponse = try await deleteWithBody("/api/push/invalidate", body: request)
     }
 
     /// Get push registration status
@@ -1087,6 +1094,7 @@ struct CLISubReposResponse: Decodable {
 enum CLIBridgeAPIError: LocalizedError {
     case invalidURL
     case invalidResponse
+    case invalidRequest(String)
     case badRequest
     case unauthorized
     case forbidden
@@ -1104,6 +1112,8 @@ enum CLIBridgeAPIError: LocalizedError {
             return "Invalid server URL"
         case .invalidResponse:
             return "Invalid server response"
+        case .invalidRequest(let message):
+            return "Invalid request: \(message)"
         case .badRequest:
             return "Bad request"
         case .unauthorized:

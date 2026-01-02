@@ -189,13 +189,14 @@ private func projectDetailJSON(path: String = "/Users/me/App", name: String = "A
 }
 
 private func sessionMetadataJSON(
-    id: String = "session-1",
+    id: String = "00000000-0000-0000-0000-000000000001",
     projectPath: String = "/Users/me/App",
     archivedAt: String? = nil
 ) -> [String: Any] {
     var payload: [String: Any] = [
         "id": id,
         "projectPath": projectPath,
+        "source": "user",
         "messageCount": 2,
         "createdAt": "2024-01-01T00:00:00Z",
         "lastActivityAt": "2024-01-01T01:00:00Z",
@@ -581,15 +582,16 @@ final class CLIBridgeAPIClientTests: XCTestCase {
     }
 
     func test_fetchSession_success() async throws {
-        let payload = sessionMetadataJSON(id: "session-1")
+        let testSessionId = "00000000-0000-0000-0000-000000000001"
+        let payload = sessionMetadataJSON(id: testSessionId)
         MockURLProtocol.requestHandler = { request in
-            assertRequest(request, method: "GET", path: "/projects/-Users-me-App/sessions/session-1")
+            assertRequest(request, method: "GET", path: "/projects/-Users-me-App/sessions/\(testSessionId)")
             return makeResponse(for: request, json: payload)
         }
 
-        let session = try await makeClient().fetchSession(projectPath: "/Users/me/App", sessionId: "session-1")
+        let session = try await makeClient().fetchSession(projectPath: "/Users/me/App", sessionId: testSessionId)
 
-        XCTAssertEqual(session.id, "session-1")
+        XCTAssertEqual(session.id, UUID(uuidString: testSessionId))
     }
 
     func test_fetchSession_notFound() async {
@@ -1062,7 +1064,7 @@ final class CLIBridgeAPIClientTests: XCTestCase {
             return makeResponse(for: request, json: payload)
         }
 
-        let response = try await makeClient().registerPushToken(fcmToken: "token-123", environment: "sandbox")
+        let response = try await makeClient().registerPushToken(fcmToken: "token-123", environment: .sandbox)
 
         XCTAssertEqual(response.success, true)
         XCTAssertEqual(response.tokenId, "token-1")
@@ -1082,6 +1084,7 @@ final class CLIBridgeAPIClientTests: XCTestCase {
     }
 
     func test_registerLiveActivityToken_success() async throws {
+        let testSessionId = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
         let payload: [String: Any] = ["success": true, "activityTokenId": "activity-token-1"]
         MockURLProtocol.requestHandler = { request in
             assertRequest(request, method: "POST", path: "/api/push/live-activity")
@@ -1089,7 +1092,7 @@ final class CLIBridgeAPIClientTests: XCTestCase {
             XCTAssertEqual(body["pushToken"] as? String, "push-1")
             XCTAssertEqual(body["pushToStartToken"] as? String, "start-1")
             XCTAssertEqual(body["activityId"] as? String, "activity-1")
-            XCTAssertEqual(body["sessionId"] as? String, "session-1")
+            XCTAssertEqual(body["sessionId"] as? String, testSessionId.uuidString)
             XCTAssertEqual(body["environment"] as? String, "sandbox")
             XCTAssertEqual(body["platform"] as? String, "ios")
             return makeResponse(for: request, json: payload)
@@ -1099,8 +1102,8 @@ final class CLIBridgeAPIClientTests: XCTestCase {
             pushToken: "push-1",
             pushToStartToken: "start-1",
             activityId: "activity-1",
-            sessionId: "session-1",
-            environment: "sandbox"
+            sessionId: testSessionId,
+            environment: .sandbox
         )
 
         XCTAssertEqual(response.success, true)

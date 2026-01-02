@@ -9,15 +9,12 @@ import Foundation
 
 public struct RegisterLiveActivityResponse: Sendable, Codable, Hashable {
 
-    public enum Success: Bool, Sendable, Codable, CaseIterable {
-        case _true = true
-    }
     /** Registration success indicator */
-    public var success: Success
+    public var success: Bool
     /** Registered activity token ID */
     public var activityTokenId: String
 
-    public init(success: Success, activityTokenId: String) {
+    public init(success: Bool, activityTokenId: String) {
         self.success = success
         self.activityTokenId = activityTokenId
     }

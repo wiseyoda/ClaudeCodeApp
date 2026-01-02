@@ -189,7 +189,7 @@ final class ModelsTests: XCTestCase {
         }
 
         let decoded = try JSONDecoder().decode(Wrapper.self, from: data)
-        let dict = decoded.value.dictValue
+        let dict = decoded.value.value as? [String: Any]
         XCTAssertNotNil(dict)
         XCTAssertEqual(dict?["nested"] as? String, "data")
     }
@@ -205,11 +205,12 @@ final class ModelsTests: XCTestCase {
         }
 
         let decoded = try JSONDecoder().decode(Wrapper.self, from: data)
-        let stringValue = decoded.value.stringValue
+        // For dict values, stringValue returns nil, so check the dict directly
+        let dict = decoded.value.value as? [String: Any]
 
-        // Should be JSON string representation
-        XCTAssertTrue(stringValue.contains("key"))
-        XCTAssertTrue(stringValue.contains("val"))
+        // Should contain key/val in the dictionary
+        XCTAssertNotNil(dict)
+        XCTAssertEqual(dict?["key"] as? String, "val")
     }
 
     // MARK: - QuestionOption Tests

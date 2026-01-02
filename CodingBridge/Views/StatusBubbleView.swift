@@ -145,6 +145,8 @@ struct StatusBubbleView: View {
             stateLabel = "Waiting for input"
         case .waitingPermission:
             stateLabel = "Waiting for approval"
+        case .networkUnavailable:
+            stateLabel = "Network unavailable"
         }
 
         if showElapsedTime {

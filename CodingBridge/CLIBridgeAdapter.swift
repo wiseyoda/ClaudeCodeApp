@@ -349,14 +349,14 @@ class CLIBridgeAdapter: ObservableObject {
     }
 
     /// Parse permission mode string to CLI type
-    private func parsePermissionMode(_ mode: String) -> CLISetPermissionModePayload.CLIPermissionMode {
+    private func parsePermissionMode(_ mode: String) -> CLIPermissionMode {
         switch mode {
         case "bypassPermissions":
-            return .bypassPermissions
+            return .bypasspermissions
         case "acceptEdits":
-            return .acceptEdits
+            return .acceptedits
         default:
-            return .default
+            return ._default
         }
     }
 
@@ -396,7 +396,7 @@ class CLIBridgeAdapter: ObservableObject {
 
     func respondToApproval(requestId: String, approved: Bool, alwaysAllow: Bool) {
         Task {
-            let choice: CLIPermissionResponsePayload.CLIPermissionChoice
+            let choice: CLIPermissionChoice
             if alwaysAllow {
                 choice = .always
             } else if approved {
@@ -746,8 +746,8 @@ class CLIBridgeAdapter: ObservableObject {
                     self.connectionState = .disconnected
                 case .connecting:
                     self.connectionState = .connecting
-                case .connected:
-                    self.connectionState = .connected
+                case .connected(let agentId):
+                    self.connectionState = .connected(agentId: agentId)
                 case .reconnecting(let attempt):
                     self.connectionState = .reconnecting(attempt: attempt)
                 }
@@ -963,8 +963,8 @@ class CLIBridgeAdapter: ObservableObject {
             connectionState = .disconnected
         case .connecting:
             connectionState = .connecting
-        case .connected:
-            connectionState = .connected
+        case .connected(let agentId):
+            connectionState = .connected(agentId: agentId)
         case .reconnecting(let attempt):
             connectionState = .reconnecting(attempt: attempt)
         }

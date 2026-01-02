@@ -371,10 +371,10 @@ final class SessionStore: ObservableObject {
         switch event.action {
         case .deleted:
             if var sessions = sessionsByProject[projectPath] {
-                sessions.removeAll { $0.id == event.sessionId }
+                sessions.removeAll { $0.id == event.sessionId.uuidString }
                 sessionsByProject[projectPath] = sessions
             }
-            if activeSessionIds[projectPath] == event.sessionId {
+            if activeSessionIds[projectPath] == event.sessionId.uuidString {
                 activeSessionIds[projectPath] = nil
             }
 
@@ -392,7 +392,7 @@ final class SessionStore: ObservableObject {
             // Update the session in place if metadata available
             if let metadata = event.metadata {
                 if var sessions = sessionsByProject[projectPath] {
-                    if let index = sessions.firstIndex(where: { $0.id == event.sessionId }) {
+                    if let index = sessions.firstIndex(where: { $0.id == event.sessionId.uuidString }) {
                         sessions[index] = metadata.toProjectSession()
                         sessionsByProject[projectPath] = sessions
                     }
@@ -538,7 +538,7 @@ extension SessionStore {
         do {
             let counts = try await repository.getSessionCount(projectName: projectName, source: nil)
             countsByProject[projectPath] = counts
-            log.debug("[SessionStore] Loaded counts for \(projectPath): total=\(counts.total), user=\(counts.user ?? 0), agent=\(counts.agent ?? 0)")
+            log.debug("[SessionStore] Loaded counts for \(projectPath): total=\(counts.total ?? 0), user=\(counts.user ?? 0), agent=\(counts.agent ?? 0)")
         } catch let error as URLError where error.code == .cancelled {
             // Request was cancelled (e.g., user navigated away or view refreshed) - ignore
             log.debug("[SessionStore] Session count request cancelled for \(projectPath)")

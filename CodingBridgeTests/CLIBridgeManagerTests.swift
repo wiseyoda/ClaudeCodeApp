@@ -119,20 +119,12 @@ final class CLIBridgeManagerTests: XCTestCase {
     }
 
     private func assistantStreamContent(text: String, delta: Bool?) -> CLIStreamContent {
-        var payload: [String: Any] = [
-            "type": "assistant",
-            "content": text
-        ]
-        if let delta = delta {
-            payload["delta"] = delta
-        }
-        let data = try! JSONSerialization.data(withJSONObject: payload)
-        return try! JSONDecoder().decode(CLIStreamContent.self, from: data)
+        .typeAssistantStreamMessage(AssistantStreamMessage(type: .assistant, content: text, delta: delta))
     }
 
-    /// Helper to create a StoredMessage from CLIStreamContent for test_handleStreamMessage
-    private func storedMessage(from content: CLIStreamContent, id: String = UUID().uuidString, timestamp: String = "2024-01-01T00:00:00.000Z") -> StoredMessage {
-        StoredMessage(id: id, timestamp: timestamp, message: content)
+    /// Helper to create a CLIStoredMessage from CLIStreamContent for test_handleStreamMessage
+    private func storedMessage(from content: CLIStreamContent, id: UUID = UUID(), timestamp: Date = Date()) -> CLIStoredMessage {
+        CLIStoredMessage(id: id, timestamp: timestamp, message: content)
     }
 
     private func messageString(from object: [String: Any], file: StaticString = #filePath, line: UInt = #line) -> URLSessionWebSocketTask.Message {
@@ -373,7 +365,7 @@ final class CLIBridgeManagerTests: XCTestCase {
             expectation.fulfill()
         }
 
-        manager.test_handleStreamMessage(storedMessage(from: .thinking(CLIThinkingContent(content: "Thinking..."))))
+        manager.test_handleStreamMessage(storedMessage(from: .typeThinkingStreamMessage(ThinkingStreamMessage(type: .thinking, content: "Thinking..."))))
 
         await fulfillment(of: [expectation], timeout: 1)
     }
@@ -388,12 +380,13 @@ final class CLIBridgeManagerTests: XCTestCase {
             expectation.fulfill()
         }
 
-        let toolContent = CLIToolUseContent(
+        let toolContent = ToolUseStreamMessage(
+            type: .toolUse,
             id: "tool-1",
             name: "Bash",
-            input: ["command": AnyCodableValue("ls")]
+            input: ["command": JSONValue("ls")]
         )
-        manager.test_handleStreamMessage(storedMessage(from: .toolUse(toolContent)))
+        manager.test_handleStreamMessage(storedMessage(from: .typeToolUseStreamMessage(toolContent)))
 
         XCTAssertEqual(manager.agentState, .executing)
         XCTAssertNil(manager.toolProgress)
@@ -411,14 +404,15 @@ final class CLIBridgeManagerTests: XCTestCase {
             expectation.fulfill()
         }
 
-        let resultContent = CLIToolResultContent(
+        let resultContent = ToolResultStreamMessage(
+            type: .toolResult,
             id: "tool-1",
             tool: "Bash",
             output: "done",
             success: true,
             isError: nil
         )
-        manager.test_handleStreamMessage(storedMessage(from: .toolResult(resultContent)))
+        manager.test_handleStreamMessage(storedMessage(from: .typeToolResultStreamMessage(resultContent)))
 
         XCTAssertEqual(manager.agentState, .thinking)
         XCTAssertNil(manager.toolProgress)
@@ -428,9 +422,9 @@ final class CLIBridgeManagerTests: XCTestCase {
     func test_parseMessage_progressUpdatesToolProgress() {
         let (manager, _, _) = makeManager()
         manager.agentState = .executing
-        let progress = CLIProgressContent(id: "tool-1", tool: "Bash", elapsed: 2, progress: 50, detail: "Half")
+        let progress = ProgressStreamMessage(type: .progress, id: "tool-1", tool: "Bash", elapsed: 2, progress: 50, detail: "Half")
 
-        manager.test_handleStreamMessage(storedMessage(from: .progress(progress)))
+        manager.test_handleStreamMessage(storedMessage(from: .typeProgressStreamMessage(progress)))
 
         XCTAssertEqual(manager.toolProgress?.id, "tool-1")
         XCTAssertEqual(manager.toolProgress?.progress, 50)
@@ -438,7 +432,8 @@ final class CLIBridgeManagerTests: XCTestCase {
 
     func test_parseMessage_usageUpdatesTokenUsage() {
         let (manager, _, _) = makeManager()
-        let usage = CLIUsageContent(
+        let usage = UsageStreamMessage(
+            type: .usage,
             inputTokens: 10,
             outputTokens: 5,
             cacheReadTokens: nil,
@@ -448,7 +443,7 @@ final class CLIBridgeManagerTests: XCTestCase {
             contextLimit: nil
         )
 
-        manager.test_handleStreamMessage(storedMessage(from: .usage(usage)))
+        manager.test_handleStreamMessage(storedMessage(from: .typeUsageStreamMessage(usage)))
 
         XCTAssertEqual(manager.tokenUsage?.inputTokens, 10)
         XCTAssertEqual(manager.tokenUsage?.outputTokens, 5)
@@ -456,23 +451,24 @@ final class CLIBridgeManagerTests: XCTestCase {
 
     func test_parseMessage_stateUpdatesAgentState() {
         let (manager, _, _) = makeManager()
-        let state = CLIStateContent(state: .executing, tool: "Bash")
+        let state = StateStreamMessage(type: .state, state: .executing, tool: "Bash")
 
-        manager.test_handleStreamMessage(storedMessage(from: .state(state)))
+        manager.test_handleStreamMessage(storedMessage(from: .typeStateStreamMessage(state)))
 
         XCTAssertEqual(manager.agentState, .executing)
     }
 
     func test_parseMessage_permissionRequestStoresRequest() {
         let (manager, _, _) = makeManager()
-        let request = CLIPermissionRequest(
+        let request = PermissionRequestMessage(
+            type: .permission,
             id: "perm-1",
             tool: "Bash",
-            input: ["command": AnyCodableValue("ls")],
-            options: ["allow", "deny", "always"]
+            input: ["command": JSONValue("ls")],
+            options: [.allow, .deny, .always]
         )
 
-        manager.test_handleStreamMessage(storedMessage(from: .permission(request)))
+        manager.test_handleStreamMessage(storedMessage(from: .typePermissionRequestMessage(request)))
 
         XCTAssertEqual(manager.pendingPermission?.id, "perm-1")
         XCTAssertEqual(manager.agentState, .waitingPermission)
@@ -481,19 +477,20 @@ final class CLIBridgeManagerTests: XCTestCase {
 
     func test_parseMessage_questionRequestStoresQuestion() {
         let (manager, _, _) = makeManager()
-        let question = CLIQuestionRequest(
+        let question = QuestionMessage(
+            type: .question,
             id: "question-1",
             questions: [
-                CLIQuestionItem(
+                QuestionItem(
                     question: "Ready?",
                     header: "Status",
-                    options: [CLIQuestionOption(label: "Yes", description: nil)],
+                    options: [APIQuestionOption(label: "Yes", description: nil)],
                     multiSelect: false
                 )
             ]
         )
 
-        manager.test_handleStreamMessage(storedMessage(from: .question(question)))
+        manager.test_handleStreamMessage(storedMessage(from: .typeQuestionMessage(question)))
 
         XCTAssertEqual(manager.pendingQuestion?.id, "question-1")
         XCTAssertEqual(manager.agentState, .waitingInput)
@@ -545,8 +542,8 @@ final class CLIBridgeManagerTests: XCTestCase {
             expectation.fulfill()
         }
 
-        let subagent = CLISubagentStartContent(id: "sub-1", description: "Helper", agentType: "helper")
-        manager.test_handleStreamMessage(storedMessage(from: .subagentStart(subagent)))
+        let subagent = SubagentStartStreamMessage(type: .subagentStart, id: "sub-1", description: "Helper")
+        manager.test_handleStreamMessage(storedMessage(from: .typeSubagentStartStreamMessage(subagent)))
 
         XCTAssertEqual(manager.activeSubagent?.id, "sub-1")
         await fulfillment(of: [expectation], timeout: 1)
@@ -554,15 +551,15 @@ final class CLIBridgeManagerTests: XCTestCase {
 
     func test_parseMessage_subagentCompleteCallsCallback() async {
         let (manager, _, _) = makeManager()
-        manager.activeSubagent = CLISubagentStartContent(id: "sub-1", description: "Helper", agentType: "helper")
+        manager.activeSubagent = SubagentStartStreamMessage(type: .subagentStart, id: "sub-1", description: "Helper")
         let expectation = expectation(description: "subagent complete")
         manager.onSubagentComplete = { content in
             XCTAssertEqual(content.id, "sub-1")
             expectation.fulfill()
         }
 
-        let complete = CLISubagentCompleteContent(id: "sub-1", summary: "Done")
-        manager.test_handleStreamMessage(storedMessage(from: .subagentComplete(complete)))
+        let complete = SubagentCompleteStreamMessage(type: .subagentComplete, id: "sub-1", summary: "Done")
+        manager.test_handleStreamMessage(storedMessage(from: .typeSubagentCompleteStreamMessage(complete)))
 
         XCTAssertNil(manager.activeSubagent)
         await fulfillment(of: [expectation], timeout: 1)
@@ -571,12 +568,13 @@ final class CLIBridgeManagerTests: XCTestCase {
     func test_parseMessage_sessionEventCallsCallback() async {
         let (manager, _, _) = makeManager()
         let expectation = expectation(description: "session event")
+        let testSessionId = UUID()
         manager.onSessionEvent = { event in
-            XCTAssertEqual(event.sessionId, "session-1")
+            XCTAssertEqual(event.sessionId, testSessionId)
             expectation.fulfill()
         }
 
-        let event = CLISessionEvent(action: .created, projectPath: "/tmp", sessionId: "session-1", metadata: nil)
+        let event = CLISessionEvent(type: .sessionEvent, action: .created, projectPath: "/tmp", sessionId: testSessionId, metadata: nil)
         await manager.test_processServerMessage(.sessionEvent(event))
 
         await fulfillment(of: [expectation], timeout: 1)
@@ -590,7 +588,7 @@ final class CLIBridgeManagerTests: XCTestCase {
             expectation.fulfill()
         }
 
-        let history = CLIHistoryPayload(messages: [], hasMore: false, cursor: nil)
+        let history = CLIHistoryPayload(type: .history, messages: [], hasMore: false, cursor: nil)
         await manager.test_processServerMessage(.history(history))
 
         await fulfillment(of: [expectation], timeout: 1)
@@ -628,7 +626,10 @@ final class CLIBridgeManagerTests: XCTestCase {
         manager.test_setNetworkAvailable(true)
         let expectation = expectation(description: "reconnect failed")
         manager.onConnectionError = { error in
-            XCTAssertEqual(error, .reconnectFailed)
+            guard case .reconnectFailed = error else {
+                XCTFail("Expected .reconnectFailed, got \(error)")
+                return
+            }
             expectation.fulfill()
         }
 
@@ -749,7 +750,7 @@ final class CLIBridgeManagerTests: XCTestCase {
     func test_respondToPermission_allowSendsCorrectMessage() async throws {
         let (manager, _, task) = makeManager()
         manager.test_setWebSocket(task)
-        manager.pendingPermission = CLIPermissionRequest(id: "perm-1", tool: "Bash", input: [:], options: [])
+        manager.pendingPermission = PermissionRequestMessage(type: .permission, id: "perm-1", tool: "Bash", input: [:], options: [])
 
         try await manager.respondToPermission(id: "perm-1", choice: .allow)
 
@@ -763,7 +764,7 @@ final class CLIBridgeManagerTests: XCTestCase {
     func test_respondToPermission_denySendsCorrectMessage() async throws {
         let (manager, _, task) = makeManager()
         manager.test_setWebSocket(task)
-        manager.pendingPermission = CLIPermissionRequest(id: "perm-1", tool: "Bash", input: [:], options: [])
+        manager.pendingPermission = PermissionRequestMessage(type: .permission, id: "perm-1", tool: "Bash", input: [:], options: [])
 
         try await manager.respondToPermission(id: "perm-1", choice: .deny)
 
@@ -776,7 +777,7 @@ final class CLIBridgeManagerTests: XCTestCase {
     func test_respondToPermission_alwaysSendsCorrectMessage() async throws {
         let (manager, _, task) = makeManager()
         manager.test_setWebSocket(task)
-        manager.pendingPermission = CLIPermissionRequest(id: "perm-1", tool: "Bash", input: [:], options: [])
+        manager.pendingPermission = PermissionRequestMessage(type: .permission, id: "perm-1", tool: "Bash", input: [:], options: [])
 
         try await manager.respondToPermission(id: "perm-1", choice: .always)
 
@@ -789,7 +790,7 @@ final class CLIBridgeManagerTests: XCTestCase {
     func test_respondToQuestion_sendsAnswers() async throws {
         let (manager, _, task) = makeManager()
         manager.test_setWebSocket(task)
-        manager.pendingQuestion = CLIQuestionRequest(id: "question-1", questions: [])
+        manager.pendingQuestion = QuestionMessage(type: .question, id: "question-1", questions: [])
 
         try await manager.respondToQuestion(id: "question-1", answers: ["choice": "yes", "count": 2])
 
@@ -827,7 +828,7 @@ final class CLIBridgeManagerTests: XCTestCase {
         let (manager, _, task) = makeManager()
         manager.test_setWebSocket(task)
 
-        try await manager.setPermissionMode(.bypassPermissions)
+        try await manager.setPermissionMode(.bypasspermissions)
 
         let json = lastSentJSON(from: task)
         XCTAssertEqual(json["type"] as? String, "set_permission_mode")
@@ -879,7 +880,7 @@ final class CLIBridgeManagerTests: XCTestCase {
             expectation.fulfill()
         }
 
-        manager.test_handleStreamMessage(storedMessage(from: .thinking(CLIThinkingContent(content: "Reasoning"))))
+        manager.test_handleStreamMessage(storedMessage(from: .typeThinkingStreamMessage(ThinkingStreamMessage(type: .thinking, content: "Reasoning"))))
 
         await fulfillment(of: [expectation], timeout: 1)
     }
@@ -894,12 +895,13 @@ final class CLIBridgeManagerTests: XCTestCase {
             expectation.fulfill()
         }
 
-        let toolContent = CLIToolUseContent(
+        let toolContent = ToolUseStreamMessage(
+            type: .toolUse,
             id: "tool-1",
             name: "Bash",
-            input: ["command": AnyCodableValue("ls")]
+            input: ["command": JSONValue("ls")]
         )
-        manager.test_handleStreamMessage(storedMessage(from: .toolUse(toolContent)))
+        manager.test_handleStreamMessage(storedMessage(from: .typeToolUseStreamMessage(toolContent)))
 
         await fulfillment(of: [expectation], timeout: 1)
     }
@@ -915,14 +917,15 @@ final class CLIBridgeManagerTests: XCTestCase {
             expectation.fulfill()
         }
 
-        let resultContent = CLIToolResultContent(
+        let resultContent = ToolResultStreamMessage(
+            type: .toolResult,
             id: "tool-1",
             tool: "Bash",
             output: "done",
             success: true,
             isError: nil
         )
-        manager.test_handleStreamMessage(storedMessage(from: .toolResult(resultContent)))
+        manager.test_handleStreamMessage(storedMessage(from: .typeToolResultStreamMessage(resultContent)))
 
         await fulfillment(of: [expectation], timeout: 1)
     }
@@ -989,7 +992,7 @@ final class CLIBridgeManagerTests: XCTestCase {
             expectation.fulfill()
         }
 
-        let payload = CLIModelChangedPayload(model: "claude-3", previousModel: "claude-2")
+        let payload = CLIModelChangedPayload(type: .modelChanged, model: "claude-3", previousModel: "claude-2")
         await manager.test_processServerMessage(.modelChanged(payload))
 
         await fulfillment(of: [expectation], timeout: 1)
@@ -1014,7 +1017,10 @@ final class CLIBridgeManagerTests: XCTestCase {
         manager.test_setNetworkAvailable(true)
         let expectation = expectation(description: "invalid url")
         manager.onConnectionError = { error in
-            XCTAssertEqual(error, .invalidServerURL)
+            guard case .invalidServerURL = error else {
+                XCTFail("Expected .invalidServerURL, got \(error)")
+                return
+            }
             expectation.fulfill()
         }
 
@@ -1059,7 +1065,10 @@ final class CLIBridgeManagerTests: XCTestCase {
         manager.test_setNetworkAvailable(false)
         let expectation = expectation(description: "network unavailable")
         manager.onConnectionError = { error in
-            XCTAssertEqual(error, .networkUnavailable)
+            guard case .networkUnavailable = error else {
+                XCTFail("Expected .networkUnavailable, got \(error)")
+                return
+            }
             expectation.fulfill()
         }
 
@@ -1079,27 +1088,29 @@ final class CLIBridgeManagerTests: XCTestCase {
         manager.agentState = .thinking
         manager.sessionId = "session-1"
         manager.currentText = "Working"
-        manager.pendingPermission = CLIPermissionRequest(
+        manager.pendingPermission = PermissionRequestMessage(
+            type: .permission,
             id: "perm-1",
             tool: "Bash",
-            input: ["command": AnyCodableValue("ls")],
-            options: ["allow"]
+            input: ["command": JSONValue("ls")],
+            options: [.allow]
         )
-        manager.pendingQuestion = CLIQuestionRequest(
+        manager.pendingQuestion = QuestionMessage(
+            type: .question,
             id: "question-1",
             questions: [
-                CLIQuestionItem(
+                QuestionItem(
                     question: "Proceed?",
                     header: "Confirm",
-                    options: [CLIQuestionOption(label: "Yes", description: nil)],
+                    options: [APIQuestionOption(label: "Yes", description: nil)],
                     multiSelect: false
                 )
             ]
         )
         manager.isInputQueued = true
         manager.queuePosition = 2
-        manager.activeSubagent = CLISubagentStartContent(id: "sub-1", description: "Helper", agentType: "helper")
-        manager.toolProgress = CLIProgressContent(id: "tool-1", tool: "Bash", elapsed: 1, progress: 20, detail: "Start")
+        manager.activeSubagent = SubagentStartStreamMessage(type: .subagentStart, id: "sub-1", description: "Helper")
+        manager.toolProgress = ProgressStreamMessage(type: .progress, id: "tool-1", tool: "Bash", elapsed: 1, progress: 20, detail: "Start")
 
         manager.disconnect()
 
@@ -1234,10 +1245,11 @@ final class CLIBridgeManagerTests: XCTestCase {
         let (manager, _, _) = makeManager()
         let expectation = expectation(description: "server error")
         manager.onConnectionError = { error in
-            XCTAssertEqual(
-                error,
-                .serverError(code: "AGENT_ERROR", message: "Server error", recoverable: false)
-            )
+            guard case .serverError(_, let message, _) = error else {
+                XCTFail("Expected .serverError, got \(error)")
+                return
+            }
+            XCTAssertEqual(message, "Server error")
             expectation.fulfill()
         }
 
@@ -1261,7 +1273,10 @@ final class CLIBridgeManagerTests: XCTestCase {
         manager.agentState = .executing
         let expectation = expectation(description: "session invalid")
         manager.onConnectionError = { error in
-            XCTAssertEqual(error, .sessionInvalid)
+            guard case .sessionInvalid = error else {
+                XCTFail("Expected .sessionInvalid, got \(error)")
+                return
+            }
             expectation.fulfill()
         }
 
@@ -1286,7 +1301,11 @@ final class CLIBridgeManagerTests: XCTestCase {
         manager.test_setPendingConnection(projectPath: "/tmp/project", sessionId: "session-1", model: nil, helper: false)
         let errorExpectation = expectation(description: "rate limited")
         manager.onConnectionError = { error in
-            XCTAssertEqual(error, .rateLimited(retryAfter: 0))
+            guard case .rateLimited(let retryAfter) = error else {
+                XCTFail("Expected .rateLimited, got \(error)")
+                return
+            }
+            XCTAssertEqual(retryAfter, 0)
             errorExpectation.fulfill()
         }
         let sendExpectation = expectation(description: "retry connect")
@@ -1335,21 +1354,23 @@ final class CLIBridgeManagerTests: XCTestCase {
 
         try await manager.sendInput("Hello")
 
-        let toolUse = CLIToolUseContent(
+        let toolUse = ToolUseStreamMessage(
+            type: .toolUse,
             id: "tool-1",
             name: "Bash",
-            input: ["command": AnyCodableValue("ls")]
+            input: ["command": JSONValue("ls")]
         )
-        manager.test_handleStreamMessage(storedMessage(from: .toolUse(toolUse)))
+        manager.test_handleStreamMessage(storedMessage(from: .typeToolUseStreamMessage(toolUse)))
 
-        let toolResult = CLIToolResultContent(
+        let toolResult = ToolResultStreamMessage(
+            type: .toolResult,
             id: "tool-1",
             tool: "Bash",
             output: "done",
             success: true,
             isError: nil
         )
-        manager.test_handleStreamMessage(storedMessage(from: .toolResult(toolResult)))
+        manager.test_handleStreamMessage(storedMessage(from: .typeToolResultStreamMessage(toolResult)))
 
         await manager.test_processServerMessage(.stopped(CLIStoppedPayload(reason: "done")))
 
