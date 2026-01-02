@@ -10,9 +10,9 @@ import Foundation
 public struct ModelsListResponse: Sendable, Codable, Hashable {
 
     /** Available Claude models */
-    public var models: [Model]
+    public var models: [APIModel]
 
-    public init(models: [Model]) {
+    public init(models: [APIModel]) {
         self.models = models
     }
 

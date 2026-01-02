@@ -11,9 +11,9 @@ public struct SearchSnippet: Sendable, Codable, Hashable {
 
     /** Message type (user, assistant, etc.) */
     public var type: String
-    /** Snippet text with context */
+    /** The matched text with surrounding context */
     public var text: String
-    /** Character offset of match start */
+    /** Position of match within text */
     public var matchStart: Int
     /** Length of match */
     public var matchLength: Int

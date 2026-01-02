@@ -169,6 +169,7 @@ The app connects to [cli-bridge](https://github.com/anthropics/claude-code/tree/
 | `CLIBridgeAdapter` | `CLIBridgeAdapter.swift` | Adapts CLIBridgeManager to callback-style interface |
 | `CLIBridgeAPIClient` | `CLIBridgeAPIClient.swift` | HTTP client for health checks, project/session listing |
 | `CLIBridgeTypes` | `CLIBridgeTypes.swift` | All message types and protocol models |
+| Generated Types | `Generated/*.swift` | OpenAPI-generated types (41 files, prefixed with `API` where conflicts exist) |
 
 ### Message Flow
 

@@ -48,12 +48,15 @@ The `AppVersion` utility (`Utilities/AppVersion.swift`) provides runtime access:
 |------|---------|
 | `CLIBridgeManager.swift` | Core cli-bridge API client, SSE streaming |
 | `CLIBridgeAdapter.swift` | Adapts CLIBridgeManager to WebSocket-style interface |
-| `CLIBridgeTypes.swift` | All cli-bridge message types and models |
+| `CLIBridgeTypes.swift` | Hand-written cli-bridge message types (unions, helpers) |
+| `CLIBridgeTypesMigration.swift` | Typealiases and adapters for generated types |
 | `SessionStore.swift` | Session state, pagination, real-time updates |
 | `SSHManager.swift` | SSH terminal, file ops, git commands via Citadel |
 | `ChatView.swift` | Main chat UI, message handling, slash commands |
 | `Models.swift` | All data models, enums, persistence stores |
 | `AppSettings.swift` | @AppStorage configuration |
+| `Generated/` | OpenAPI-generated Swift types from cli-bridge spec |
+| `scripts/regenerate-api-types.sh` | Regenerates Generated/ from OpenAPI spec |
 
 ## Rules
 
@@ -120,8 +123,46 @@ App → SSHManager → sshd (file ops, git, session history)
 - **Models/**: GitModels, ImageAttachment, LiveActivityAttributes, TaskState (4 files)
 - **Extensions/**: String+Markdown
 - **Persistence/**: DraftInputPersistence, MessageQueuePersistence
+- **Generated/**: OpenAPI-generated Swift types (143 files)
 
 See `requirements/ARCHITECTURE.md` for full structure and data flows.
+
+## Generated API Types
+
+Swift types auto-generated from cli-bridge OpenAPI spec (v0.4.2). Ensures iOS types stay in sync with backend.
+
+```bash
+# Regenerate after API changes (generates 143 files)
+./scripts/regenerate-api-types.sh
+```
+
+**Generated files location:** `CodingBridge/Generated/`
+
+**What's generated:**
+- **REST types:** `SessionMetadata`, `SearchResult`, `AgentDetail`, `FileEntry`, etc.
+- **WebSocket messages:** `ClientMessage`, `ServerMessage`, `StreamMessage`, `ConnectedMessage`, etc.
+- **Content blocks:** `TextBlock`, `ToolUseBlock`, `ThinkingBlock`, etc.
+- **Stream types:** `AssistantStreamMessage`, `ToolUseStreamMessage`, `UsageStreamMessage`, etc.
+
+**Conflict resolution:** Types that conflict with existing app types are prefixed with `API`:
+- `APIProject` - API response (path, name, lastUsed, sessionCount, git)
+- `APIGitStatus` - API git data (branch, isClean, ahead, behind)
+- `APIThinkingMode` - API thinking mode enum
+- `APIModel` - API model enum
+- `APIError` - API error response (conflicts with Swift.Error)
+
+**App types (hand-written, different purpose):**
+- `Project` - App model with sessions, displayName, computed UI properties
+- `GitStatus` - UI enum with icons, colors, accessibility labels
+- `ThinkingMode`, `Model` - App-level enums
+
+**Migration helpers** (`CLIBridgeTypesMigration.swift`):
+- 84 typealiases bridging `CLI*` names to generated types (e.g., `CLIServerMessage` → `ServerMessage`)
+- Extensions: Convenience methods for `ServerMessage`, `StreamMessage`, `StoredMessage`, etc.
+- Compatibility: `ConnectedMessage.sessionIdString`, `StreamServerMessage.toStoredMessage()`, etc.
+- Adapters: `JSONValue` extensions, `StreamMessage` content accessors
+
+To add new conflicting types, edit `scripts/regenerate-api-types.sh` and add to the `CONFLICTING_TYPES` pattern.
 
 ## Persistence
 

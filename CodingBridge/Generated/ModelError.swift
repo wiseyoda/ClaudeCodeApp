@@ -9,9 +9,9 @@ import Foundation
 
 public struct ModelError: Sendable, Codable, Hashable {
 
-    /** Error message */
+    /** APIError message */
     public var error: String
-    /** Error code */
+    /** APIError code */
     public var code: String?
     /** Additional error details */
     public var details: [String: JSONValue]?

@@ -10,25 +10,25 @@ import Foundation
 public struct SearchResponse: Sendable, Codable, Hashable {
 
     /** Search query */
-    public var query: String?
-    /** Search results */
-    public var results: [SearchResult]
-    /** Total matches */
+    public var query: String
+    /** Total number of matches */
     public var total: Int
-    /** More results available */
+    /** Paginated results */
+    public var results: [SearchResult]
+    /** Whether there are more results */
     public var hasMore: Bool
 
-    public init(query: String? = nil, results: [SearchResult], total: Int, hasMore: Bool) {
+    public init(query: String, total: Int, results: [SearchResult], hasMore: Bool) {
         self.query = query
-        self.results = results
         self.total = total
+        self.results = results
         self.hasMore = hasMore
     }
 
     public enum CodingKeys: String, CodingKey, CaseIterable {
         case query
-        case results
         case total
+        case results
         case hasMore
     }
 
@@ -36,9 +36,9 @@ public struct SearchResponse: Sendable, Codable, Hashable {
 
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encodeIfPresent(query, forKey: .query)
-        try container.encode(results, forKey: .results)
+        try container.encode(query, forKey: .query)
         try container.encode(total, forKey: .total)
+        try container.encode(results, forKey: .results)
         try container.encode(hasMore, forKey: .hasMore)
     }
 }

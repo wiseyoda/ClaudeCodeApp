@@ -340,7 +340,7 @@ struct ToolTestFixture: Codable, Identifiable {
         description = try container.decode(String.self, forKey: .description)
 
         // Decode message as generic JSON
-        let messageData = try container.decode(JSONValue.self, forKey: .message)
+        let messageData = try container.decode(LocalJSONValue.self, forKey: .message)
         message = messageData.toDictionary() ?? [:]
     }
 
@@ -349,18 +349,18 @@ struct ToolTestFixture: Codable, Identifiable {
         try container.encode(id, forKey: .id)
         try container.encode(category, forKey: .category)
         try container.encode(description, forKey: .description)
-        try container.encode(JSONValue.from(message), forKey: .message)
+        try container.encode(LocalJSONValue.from(message), forKey: .message)
     }
 }
 
 /// Helper for decoding arbitrary JSON
-enum JSONValue: Codable {
+enum LocalJSONValue: Codable {
     case string(String)
     case int(Int)
     case double(Double)
     case bool(Bool)
-    case array([JSONValue])
-    case object([String: JSONValue])
+    case array([LocalJSONValue])
+    case object([String: LocalJSONValue])
     case null
 
     init(from decoder: Decoder) throws {
@@ -374,9 +374,9 @@ enum JSONValue: Codable {
             self = .double(value)
         } else if let value = try? container.decode(Bool.self) {
             self = .bool(value)
-        } else if let value = try? container.decode([JSONValue].self) {
+        } else if let value = try? container.decode([LocalJSONValue].self) {
             self = .array(value)
-        } else if let value = try? container.decode([String: JSONValue].self) {
+        } else if let value = try? container.decode([String: LocalJSONValue].self) {
             self = .object(value)
         } else if container.decodeNil() {
             self = .null
@@ -424,7 +424,7 @@ enum JSONValue: Codable {
         }
     }
 
-    static func from(_ any: Any) -> JSONValue {
+    static func from(_ any: Any) -> LocalJSONValue {
         switch any {
         case let s as String: return .string(s)
         case let i as Int: return .int(i)
@@ -432,7 +432,7 @@ enum JSONValue: Codable {
         case let b as Bool: return .bool(b)
         case let arr as [Any]: return .array(arr.map { from($0) })
         case let dict as [String: Any]:
-            var result: [String: JSONValue] = [:]
+            var result: [String: LocalJSONValue] = [:]
             for (k, v) in dict {
                 result[k] = from(v)
             }

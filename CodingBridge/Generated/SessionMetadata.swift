@@ -7,6 +7,7 @@
 
 import Foundation
 
+/** Session metadata (for created/updated) */
 public struct SessionMetadata: Sendable, Codable, Hashable {
 
     public enum Source: String, Sendable, Codable, CaseIterable {

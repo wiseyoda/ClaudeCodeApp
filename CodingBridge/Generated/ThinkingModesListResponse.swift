@@ -10,9 +10,9 @@ import Foundation
 public struct ThinkingModesListResponse: Sendable, Codable, Hashable {
 
     /** Available thinking modes */
-    public var modes: [ThinkingMode]
+    public var modes: [APIThinkingMode]
 
-    public init(modes: [ThinkingMode]) {
+    public init(modes: [APIThinkingMode]) {
         self.modes = modes
     }
 

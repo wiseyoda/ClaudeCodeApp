@@ -9,30 +9,30 @@ import Foundation
 
 public struct SearchResult: Sendable, Codable, Hashable {
 
-    /** Matched session ID */
-    public var sessionId: String
-    /** Project path */
+    /** Session ID */
+    public var sessionId: UUID
+    /** APIProject path */
     public var projectPath: String
-    /** Relevance score */
-    public var score: Double
-    /** Matched text snippets */
+    /** Matching content snippets with context */
     public var snippets: [SearchSnippet]
+    /** Relevance score (higher = more relevant) */
+    public var score: Double
     /** Session timestamp */
     public var timestamp: String
 
-    public init(sessionId: String, projectPath: String, score: Double, snippets: [SearchSnippet], timestamp: String) {
+    public init(sessionId: UUID, projectPath: String, snippets: [SearchSnippet], score: Double, timestamp: String) {
         self.sessionId = sessionId
         self.projectPath = projectPath
-        self.score = score
         self.snippets = snippets
+        self.score = score
         self.timestamp = timestamp
     }
 
     public enum CodingKeys: String, CodingKey, CaseIterable {
         case sessionId
         case projectPath
-        case score
         case snippets
+        case score
         case timestamp
     }
 
@@ -42,8 +42,8 @@ public struct SearchResult: Sendable, Codable, Hashable {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(sessionId, forKey: .sessionId)
         try container.encode(projectPath, forKey: .projectPath)
-        try container.encode(score, forKey: .score)
         try container.encode(snippets, forKey: .snippets)
+        try container.encode(score, forKey: .score)
         try container.encode(timestamp, forKey: .timestamp)
     }
 }

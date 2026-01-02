@@ -10,9 +10,9 @@ import Foundation
 public struct ProjectListResponse: Sendable, Codable, Hashable {
 
     /** List of discovered projects */
-    public var projects: [Project]
+    public var projects: [APIProject]
 
-    public init(projects: [Project]) {
+    public init(projects: [APIProject]) {
         self.projects = projects
     }
 
