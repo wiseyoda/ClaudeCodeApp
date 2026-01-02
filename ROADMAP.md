@@ -22,6 +22,16 @@
 
 ---
 
+## Completed: v0.6.10 Generated API Types
+
+- Full cli-bridge OpenAPI coverage with 90+ Swift types (WebSocket messages, permissions, file operations, push notifications, streaming events, project management)
+- Firebase Integration documentation (FCM, Crashlytics, Analytics, Remote Config, Performance)
+- API type regeneration script: `scripts/regenerate-api-types.sh`
+- Type naming fixes: `Model.swift` -> `APIModel.swift`, `ThinkingMode.swift` -> `APIThinkingMode.swift`
+- Backwards compatibility via `CLIBridgeTypesMigration.swift` typealiases
+
+---
+
 ## Completed: v0.6.9 Firebase & Type Updates
 
 - Added Firebase files to .gitignore to prevent credential leakage
@@ -296,4 +306,4 @@ Phase 7 (Tests)        =========================================>
 
 ---
 
-_Last updated: January 1, 2026 - v0.6.9 Firebase & Type Updates complete_
+_Last updated: January 1, 2026 - v0.6.10 Generated API Types complete_

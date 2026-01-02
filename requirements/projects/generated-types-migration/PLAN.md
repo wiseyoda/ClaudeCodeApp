@@ -8,12 +8,12 @@ This project migrates all hand-written cli-bridge types in `CLIBridgeTypes.swift
 
 ## Prerequisites
 
-| Issue | Status | Description |
-|-------|--------|-------------|
-| [#8](https://github.com/wiseyoda/cli-bridge/issues/8) | ✅ Fixed | ServerMessage uses `oneOf` with discriminator |
-| [#9](https://github.com/wiseyoda/cli-bridge/issues/9) | ✅ Fixed | Push notification endpoints in OpenAPI |
-| [#10](https://github.com/wiseyoda/cli-bridge/issues/10) | 🔄 Pending | File/directory endpoints in OpenAPI |
-| [#11](https://github.com/wiseyoda/cli-bridge/issues/11) | 🔄 Pending | Other missing endpoints in OpenAPI |
+| Issue                                                   | Status   | Description                                   |
+| ------------------------------------------------------- | -------- | --------------------------------------------- |
+| [#8](https://github.com/wiseyoda/cli-bridge/issues/8)   | ✅ Fixed | ServerMessage uses `oneOf` with discriminator |
+| [#9](https://github.com/wiseyoda/cli-bridge/issues/9)   | ✅ Fixed | Push notification endpoints in OpenAPI        |
+| [#10](https://github.com/wiseyoda/cli-bridge/issues/10) | ✅ Fixed | File/directory endpoints in OpenAPI           |
+| [#11](https://github.com/wiseyoda/cli-bridge/issues/11) | ✅ Fixed | Other missing endpoints in OpenAPI            |
 
 **Do not start until all 4 issues are resolved.**
 
@@ -38,6 +38,7 @@ ls CodingBridge/Generated/ | grep -E "Push|File|Server"
 ```
 
 **Expected new generated types:**
+
 - `ServerMessage` (now proper enum, not flat struct)
 - `PushRegisterRequest`, `PushRegisterResponse`
 - `LiveActivityRegisterRequest`, `LiveActivityRegisterResponse`
@@ -45,6 +46,7 @@ ls CodingBridge/Generated/ | grep -E "Push|File|Server"
 - `PermissionsConfig`, `GitPullResponse`, `SubRepoInfo`
 
 **Verification:**
+
 ```bash
 # Count should increase from 96 to ~110+
 ls CodingBridge/Generated/*.swift | wc -l
@@ -54,7 +56,7 @@ ls CodingBridge/Generated/*.swift | wc -l
 
 ### Phase 2: Create Comprehensive Typealiases
 
-**Goal:** Bridge all old CLI* names to new generated types without breaking callers
+**Goal:** Bridge all old CLI\* names to new generated types without breaking callers
 
 **File:** `CLIBridgeTypesMigration.swift`
 
@@ -86,6 +88,7 @@ public typealias CLIFileEntry = FileEntry
 ```
 
 **Verification:**
+
 ```bash
 # Build should succeed with no errors
 xcodebuild -project CodingBridge.xcodeproj -scheme CodingBridge \
@@ -101,6 +104,7 @@ xcodebuild -project CodingBridge.xcodeproj -scheme CodingBridge \
 **Key changes in `CLIBridgeManager.swift`:**
 
 1. **Replace `CLIServerMessage` decoding:**
+
 ```swift
 // Before (hand-written enum)
 let serverMessage = try JSONDecoder().decode(CLIServerMessage.self, from: data)
@@ -110,6 +114,7 @@ let serverMessage = try JSONDecoder().decode(ServerMessage.self, from: data)
 ```
 
 2. **Update `processServerMessage()` switch:**
+
 ```swift
 // Before
 switch message {
@@ -127,6 +132,7 @@ case .typeStreamServerMessage(let streamMsg):
 ```
 
 3. **Update `send()` method:**
+
 ```swift
 // Before
 private func send(_ message: CLIClientMessage) async throws
@@ -136,6 +142,7 @@ private func send(_ message: ClientMessage) async throws
 ```
 
 **Files to update:**
+
 - `CLIBridgeManager.swift` - Main WebSocket handling
 - `CLIBridgeAdapter.swift` - Adapter layer
 
@@ -162,6 +169,7 @@ func listFiles(...) async throws -> FileListResponse
 ```
 
 **Files to update:**
+
 - `CLIBridgeAPIClient.swift` - All REST methods
 
 ---
@@ -171,6 +179,7 @@ func listFiles(...) async throws -> FileListResponse
 **Goal:** Update UI code to use generated types
 
 **Files to check:**
+
 - `ChatView.swift` - Message display
 - `SessionStore.swift` - Session handling
 - `PermissionSheet.swift` - Permission UI
@@ -179,6 +188,7 @@ func listFiles(...) async throws -> FileListResponse
 - All files using `CLI*` types
 
 **Search for remaining usages:**
+
 ```bash
 grep -r "CLI[A-Z]" CodingBridge/*.swift CodingBridge/**/*.swift | grep -v "CLIBridgeTypes\|CLIBridgeTypesMigration"
 ```
@@ -190,6 +200,7 @@ grep -r "CLI[A-Z]" CodingBridge/*.swift CodingBridge/**/*.swift | grep -v "CLIBr
 **Goal:** Delete `CLIBridgeTypes.swift` entirely
 
 1. **Move app-only types to appropriate files:**
+
    - `CLIDateFormatter` → `Utilities/DateFormatters.swift`
    - `ConnectionState` → `CLIBridgeManager.swift` (already there)
    - `TokenUsage` → `Models.swift`
@@ -199,6 +210,7 @@ grep -r "CLI[A-Z]" CodingBridge/*.swift CodingBridge/**/*.swift | grep -v "CLIBr
 2. **Delete `CLIBridgeTypes.swift`**
 
 3. **Rename `CLIBridgeTypesMigration.swift`:**
+
    - Keep only essential extensions (not typealiases)
    - Rename to `CLIBridgeExtensions.swift`
 
@@ -213,10 +225,12 @@ grep -r "CLI[A-Z]" CodingBridge/*.swift CodingBridge/**/*.swift | grep -v "CLIBr
 1. **Remove unused typealiases** from migration file
 
 2. **Update `CLAUDE.md`:**
+
    - Remove references to hand-written types
    - Document generated type usage patterns
 
 3. **Update architecture docs:**
+
    - `requirements/ARCHITECTURE.md`
 
 4. **Add migration notes to `CHANGELOG.md`**
@@ -227,118 +241,121 @@ grep -r "CLI[A-Z]" CodingBridge/*.swift CodingBridge/**/*.swift | grep -v "CLIBr
 
 ### WebSocket Client Messages
 
-| Old Type | New Generated Type |
-|----------|-------------------|
-| `CLIClientMessage` | `ClientMessage` |
-| `CLIStartPayload` | `StartMessage` |
-| `CLIInputPayload` | `InputMessage` |
+| Old Type                       | New Generated Type          |
+| ------------------------------ | --------------------------- |
+| `CLIClientMessage`             | `ClientMessage`             |
+| `CLIStartPayload`              | `StartMessage`              |
+| `CLIInputPayload`              | `InputMessage`              |
 | `CLIPermissionResponsePayload` | `PermissionResponseMessage` |
-| `CLIQuestionResponsePayload` | `QuestionResponseMessage` |
-| `CLISubscribeSessionsPayload` | `SubscribeSessionsMessage` |
-| `CLISetModelPayload` | `SetModelMessage` |
-| `CLISetPermissionModePayload` | `SetPermissionModeMessage` |
-| `CLIRetryPayload` | `RetryMessage` |
-| `CLIReconnectPayload` | `ReconnectMessage` |
+| `CLIQuestionResponsePayload`   | `QuestionResponseMessage`   |
+| `CLISubscribeSessionsPayload`  | `SubscribeSessionsMessage`  |
+| `CLISetModelPayload`           | `SetModelMessage`           |
+| `CLISetPermissionModePayload`  | `SetPermissionModeMessage`  |
+| `CLIRetryPayload`              | `RetryMessage`              |
+| `CLIReconnectPayload`          | `ReconnectMessage`          |
 
 ### WebSocket Server Messages
 
-| Old Type | New Generated Type |
-|----------|-------------------|
-| `CLIServerMessage` | `ServerMessage` |
-| `CLIConnectedPayload` | `ConnectedMessage` |
-| `CLIStoppedPayload` | `StoppedMessage` |
-| `CLIModelChangedPayload` | `ModelChangedMessage` |
+| Old Type                          | New Generated Type             |
+| --------------------------------- | ------------------------------ |
+| `CLIServerMessage`                | `ServerMessage`                |
+| `CLIConnectedPayload`             | `ConnectedMessage`             |
+| `CLIStoppedPayload`               | `StoppedMessage`               |
+| `CLIModelChangedPayload`          | `ModelChangedMessage`          |
 | `CLIPermissionModeChangedPayload` | `PermissionModeChangedMessage` |
-| `CLIPongPayload` | `PongMessage` |
-| `CLIQueuedPayload` | `QueuedMessage` |
-| `CLIHistoryPayload` | `HistoryMessage` |
-| `CLIErrorPayload` | `WsErrorMessage` |
-| `CLICursorEvictedPayload` | `CursorEvictedMessage` |
-| `CLICursorInvalidPayload` | `CursorInvalidMessage` |
-| `CLIReconnectCompletePayload` | `ReconnectCompleteMessage` |
+| `CLIPongPayload`                  | `PongMessage`                  |
+| `CLIQueuedPayload`                | `QueuedMessage`                |
+| `CLIHistoryPayload`               | `HistoryMessage`               |
+| `CLIErrorPayload`                 | `WsErrorMessage`               |
+| `CLICursorEvictedPayload`         | `CursorEvictedMessage`         |
+| `CLICursorInvalidPayload`         | `CursorInvalidMessage`         |
+| `CLIReconnectCompletePayload`     | `ReconnectCompleteMessage`     |
 
 ### Stream Content
 
-| Old Type | New Generated Type |
-|----------|-------------------|
-| `CLIStreamMessage` | `StreamServerMessage` |
-| `CLIStreamContent` | `StreamMessage` |
-| `CLIAssistantContent` | `AssistantStreamMessage` |
-| `CLIUserContent` | `UserStreamMessage` |
-| `CLISystemContent` | `SystemStreamMessage` |
-| `CLIThinkingContent` | `ThinkingBlock` |
-| `CLIToolUseContent` | `ToolUseStreamMessage` |
-| `CLIToolResultContent` | `ToolResultStreamMessage` |
-| `CLIProgressContent` | `ProgressStreamMessage` |
-| `CLIUsageContent` | `UsageStreamMessage` |
-| `CLIStateContent` | `StateStreamMessage` |
-| `CLISubagentStartContent` | `SubagentStartStreamMessage` |
+| Old Type                     | New Generated Type              |
+| ---------------------------- | ------------------------------- |
+| `CLIStreamMessage`           | `StreamServerMessage`           |
+| `CLIStreamContent`           | `StreamMessage`                 |
+| `CLIAssistantContent`        | `AssistantStreamMessage`        |
+| `CLIUserContent`             | `UserStreamMessage`             |
+| `CLISystemContent`           | `SystemStreamMessage`           |
+| `CLIThinkingContent`         | `ThinkingBlock`                 |
+| `CLIToolUseContent`          | `ToolUseStreamMessage`          |
+| `CLIToolResultContent`       | `ToolResultStreamMessage`       |
+| `CLIProgressContent`         | `ProgressStreamMessage`         |
+| `CLIUsageContent`            | `UsageStreamMessage`            |
+| `CLIStateContent`            | `StateStreamMessage`            |
+| `CLISubagentStartContent`    | `SubagentStartStreamMessage`    |
 | `CLISubagentCompleteContent` | `SubagentCompleteStreamMessage` |
-| `CLIAgentState` | `StateStreamMessage.State` |
+| `CLIAgentState`              | `StateStreamMessage.State`      |
 
 ### Permissions & Questions
 
-| Old Type | New Generated Type |
-|----------|-------------------|
+| Old Type               | New Generated Type         |
+| ---------------------- | -------------------------- |
 | `CLIPermissionRequest` | `PermissionRequestMessage` |
-| `CLIQuestionRequest` | `QuestionMessage` |
-| `CLIQuestionItem` | `QuestionItem` |
-| `CLIQuestionOption` | `QuestionOption` |
+| `CLIQuestionRequest`   | `QuestionMessage`          |
+| `CLIQuestionItem`      | `QuestionItem`             |
+| `CLIQuestionOption`    | `QuestionOption`           |
 
 ### Sessions & Search
 
-| Old Type | New Generated Type |
-|----------|-------------------|
-| `CLISessionEvent` | `SessionEventMessage` |
-| `CLISessionMetadata` | `SessionMetadata` |
-| `CLISearchSnippet` | `SearchSnippet` |
-| `CLISearchResult` | `SearchResult` |
-| `CLISearchResponse` | `SearchResponse` |
-| `StoredMessage` | `StoredMessage` |
+| Old Type             | New Generated Type    |
+| -------------------- | --------------------- |
+| `CLISessionEvent`    | `SessionEventMessage` |
+| `CLISessionMetadata` | `SessionMetadata`     |
+| `CLISearchSnippet`   | `SearchSnippet`       |
+| `CLISearchResult`    | `SearchResult`        |
+| `CLISearchResponse`  | `SearchResponse`      |
+| `StoredMessage`      | `StoredMessage`       |
 
 ### Push Notifications (after #9)
 
-| Old Type | New Generated Type |
-|----------|-------------------|
-| `CLIPushRegisterRequest` | `PushRegisterRequest` |
-| `CLIPushRegisterResponse` | `PushRegisterResponse` |
-| `CLILiveActivityRegisterRequest` | `LiveActivityRegisterRequest` |
+| Old Type                          | New Generated Type             |
+| --------------------------------- | ------------------------------ |
+| `CLIPushRegisterRequest`          | `PushRegisterRequest`          |
+| `CLIPushRegisterResponse`         | `PushRegisterResponse`         |
+| `CLILiveActivityRegisterRequest`  | `LiveActivityRegisterRequest`  |
 | `CLILiveActivityRegisterResponse` | `LiveActivityRegisterResponse` |
-| `CLIPushInvalidateRequest` | `PushInvalidateRequest` |
-| `CLIPushStatusResponse` | `PushStatusResponse` |
+| `CLIPushInvalidateRequest`        | `PushInvalidateRequest`        |
+| `CLIPushStatusResponse`           | `PushStatusResponse`           |
 
 ### Files (after #10)
 
-| Old Type | New Generated Type |
-|----------|-------------------|
-| `CLIFileEntry` | `FileEntry` |
-| `CLIFileListResponse` | `FileListResponse` |
+| Old Type                 | New Generated Type    |
+| ------------------------ | --------------------- |
+| `CLIFileEntry`           | `FileEntry`           |
+| `CLIFileListResponse`    | `FileListResponse`    |
 | `CLIFileContentResponse` | `FileContentResponse` |
 
 ### Other (after #11)
 
-| Old Type | New Generated Type |
-|----------|-------------------|
-| `CLIGitStatus` | `APIGitStatus` |
+| Old Type          | New Generated Type  |
+| ----------------- | ------------------- |
+| `CLIGitStatus`    | `APIGitStatus`      |
 | Permissions types | `PermissionsConfig` |
-| Git pull types | `GitPullResponse` |
-| Sub-repo types | `SubRepoInfo` |
+| Git pull types    | `GitPullResponse`   |
+| Sub-repo types    | `SubRepoInfo`       |
 
 ---
 
 ## Testing Strategy
 
 ### Unit Tests
+
 - All existing tests should pass with typealiases
 - Add tests for generated type decoding
 - Test edge cases in discriminated unions
 
 ### Integration Tests
+
 - Test WebSocket message round-trip
 - Test REST API calls with generated types
 - Test Live Activity registration flow
 
 ### Manual Testing
+
 - Connect to cli-bridge and verify all message types work
 - Test permission flow
 - Test question flow

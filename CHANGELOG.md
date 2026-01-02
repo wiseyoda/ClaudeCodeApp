@@ -6,6 +6,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.6.10] - 2026-01-01
+
+### Added
+
+- **Generated API Types**: Full cli-bridge OpenAPI coverage with 90+ Swift types
+  - WebSocket message types (ClientMessage, ServerMessage, StreamMessage variants)
+  - Permission system types (PermissionConfig, PermissionMode, request/response messages)
+  - File operations (DirectoryListing, FileContent, FileEntry, error responses)
+  - Push notification types (FCM registration, Live Activity tokens, delivery status)
+  - Streaming events (ToolUse, ToolResult, Thinking, Progress, Usage blocks)
+  - Project management (clone, create, delete, subrepos)
+  - Question/answer flow types for interactive prompts
+- **Firebase Integration Docs**: Step-by-step guides for FCM, Crashlytics, Analytics, Remote Config, Performance
+- **API Type Regeneration Script**: `scripts/regenerate-api-types.sh` with conflict resolution
+
+### Changed
+
+- **Type Naming**: Renamed `Model.swift` → `APIModel.swift`, `ThinkingMode.swift` → `APIThinkingMode.swift` to avoid Swift naming conflicts
+- **Backwards Compatibility**: Added `CLIBridgeTypesMigration.swift` with typealiases for renamed types
+
+---
+
 ## [0.6.9] - 2026-01-01
 
 ### Changed
@@ -627,6 +649,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Highlights                                             |
 | ------- | ------------------------------------------------------ |
+| 0.6.10  | Generated API types (90+), Firebase docs, type renames |
 | 0.6.9   | Firebase gitignore, CLIIntegrity types update          |
 | 0.6.8   | History hardening, List scroll performance, audit fixes|
 | 0.6.6   | SSH to HTTPS URL conversion for clone operations       |
