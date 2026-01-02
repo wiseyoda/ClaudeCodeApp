@@ -1,6 +1,6 @@
 # Issue #30: Update docs to match WebSocket streaming
 
-> **Status**: Pending
+> **Status**: Complete
 > **Priority**: Tier 2
 > **Depends On**: #1/#17
 > **Blocks**: None
@@ -9,15 +9,19 @@
 
 ## Summary
 
-Implement roadmap task: Update docs to match WebSocket streaming.
+Update all documentation to reflect the current architecture: WebSocket streaming (not SSE), CLIBridgeManager direct usage (not CLIBridgeAdapter), and unified StreamEvent enum.
 
 ## Problem
 
-Current implementation adds indirection or duplication, which slows debugging and makes behavior harder to reason about. This issue removes the extra layer without changing user-visible behavior.
+Documentation references outdated architecture:
+- SSE streaming instead of WebSocket
+- CLIBridgeAdapter layer that was removed in #17
+- CLIBridgeTypes.swift instead of split CLIBridgeAppTypes.swift + CLIBridgeExtensions.swift
+- Individual callbacks instead of unified StreamEvent enum
 
 ## Solution
 
-Apply the roadmap change directly, delete the legacy path, and update call sites to use the simplified flow. Keep behavior identical while reducing code paths.
+Update all .md files in requirements/ and root to reflect the actual code architecture after #1 and #17 were completed.
 
 ---
 
@@ -41,10 +45,15 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 | File | Change |
 |---|---|
-| requirements/ARCHITECTURE.md | Remove SSE references |
-| CLAUDE.md | Update streaming description |
-| AGENTS.md | Update backend overview |
-| README.md | Update backend description |
+| requirements/ARCHITECTURE.md | SSE -> WebSocket, CLIBridgeAdapter -> CLIBridgeManager, add StreamEvent docs |
+| CLAUDE.md | Update key files table, remove CLIBridgeAdapter reference |
+| requirements/OVERVIEW.md | SSE -> WebSocket, add v0.7.0 resolved section |
+| requirements/BACKEND.md | SSE -> WebSocket, update troubleshooting |
+| requirements/SESSIONS.md | SSE -> WebSocket |
+| requirements/projects/message-queuing/ARCHITECTURE.md | SSE -> WebSocket, CLIBridgeAdapter -> CLIBridgeManager |
+| requirements/projects/message-queuing/IMPLEMENTATION-PLAN.md | CLIBridgeAdapter -> CLIBridgeManager |
+| requirements/projects/firebase-integration/guides/01-firebase-console.md | sse_reconnect -> websocket_reconnect |
+| requirements/projects/firebase-integration/guides/06-remote-config.md | sse_reconnect -> websocket_reconnect |
 
 ### Files to Delete
 
@@ -71,10 +80,11 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Update docs to match WebSocket streaming is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Update docs to match WebSocket streaming is implemented as described
+- [x] All SSE references updated to WebSocket
+- [x] All CLIBridgeAdapter references updated to CLIBridgeManager
+- [x] StreamEvent enum documented in ARCHITECTURE.md
+- [x] No code changes (documentation only)
 
 ---
 
@@ -125,5 +135,53 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | Identified 9 files with outdated references |
+| 2026-01-02 | Completed | Updated ARCHITECTURE.md, CLAUDE.md, OVERVIEW.md, BACKEND.md, SESSIONS.md, message-queuing docs, firebase-integration docs |
+
+## Changes Made
+
+### requirements/ARCHITECTURE.md
+- Updated system diagram: CLIBridgeAdapter -> CLIBridgeManager, SSE Streaming -> WebSocket Stream
+- Updated CLI Bridge Architecture section with WebSocket description
+- Updated Core Components table: removed CLIBridgeAdapter, added CLIBridgeAppTypes and CLIBridgeExtensions
+- Updated Message Flow diagram for WebSocket
+- Added comprehensive StreamEvent Enum documentation table
+- Updated Permission Approval System diagram for WebSocket
+- Updated Data Flow sections for WebSocket
+- Added v0.7.0 resolved section
+
+### CLAUDE.md
+- Updated Key Files table: added CLIBridgeAppTypes.swift and CLIBridgeExtensions.swift
+- Removed CLIBridgeAdapter.swift reference
+- Updated example to use CLIBridgeManager instead of CLIBridgeAdapter
+
+### requirements/OVERVIEW.md
+- Updated Background section: SSE -> WebSocket
+- Updated Chat Interface: SSE -> WebSocket
+- Updated Permission Approval: SSE -> WebSocket
+- Updated Completed Features: SSE -> WebSocket
+- Added v0.7.0 resolved section
+
+### requirements/BACKEND.md
+- Updated overview: SSE -> WebSocket
+- Updated Send Message section for WebSocket
+- Updated event types table with additional WebSocket events
+- Updated troubleshooting section for WebSocket
+
+### requirements/SESSIONS.md
+- Updated troubleshooting: SSE -> WebSocket
+
+### requirements/projects/message-queuing/ARCHITECTURE.md
+- Updated diagram: CLIBridgeAdapter -> CLIBridgeManager, SSE -> WebSocket
+- Updated integration points for CLIBridgeManager
+- Updated code examples
+
+### requirements/projects/message-queuing/IMPLEMENTATION-PLAN.md
+- Updated CLIBridgeAdapter references to CLIBridgeManager
+- Updated SSE references to WebSocket
+
+### requirements/projects/firebase-integration/guides/01-firebase-console.md
+- Updated sse_reconnect_delay_ms to websocket_reconnect_delay_ms
+
+### requirements/projects/firebase-integration/guides/06-remote-config.md
+- Updated sse_reconnect_delay_ms to websocket_reconnect_delay_ms

@@ -1,6 +1,7 @@
 import Foundation
 import ActivityKit
 import UIKit
+import Combine
 
 protocol LiveActivityProviding {
     var areActivitiesEnabled: Bool { get }
@@ -160,6 +161,8 @@ final class LiveActivityManager: ObservableObject {
     private var lastRegisteredActivityId: String?
     private var pushTokenTask: Task<Void, Never>?
     private var isSupportOverrideEnabled: Bool = false
+    private var currentServerURL: String = ""
+    private var cancellables = Set<AnyCancellable>()
     private var activeActivityId: String? {
         currentActivityId ?? currentActivity?.id
     }
@@ -169,12 +172,27 @@ final class LiveActivityManager: ObservableObject {
     private init(activityProvider: LiveActivityProviding = RealLiveActivityProvider()) {
         self.activityProvider = activityProvider
         checkSupport()
+        setupServerURLObserver()
+    }
+
+    /// Observe serverURL changes and reconfigure automatically
+    private func setupServerURLObserver() {
+        AppSettings.serverURLPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] newURL in
+                guard let self = self else { return }
+                guard newURL != self.currentServerURL, self.apiClient != nil else { return }
+                log.info("[LiveActivity] Server URL changed to \(newURL) - reconfiguring")
+                self.configure(serverURL: newURL)
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - Configuration
 
     /// Configure the Live Activity manager with the server URL
     func configure(serverURL: String) {
+        currentServerURL = serverURL
         apiClient = CLIBridgeAPIClient(serverURL: serverURL)
         checkSupport()
     }

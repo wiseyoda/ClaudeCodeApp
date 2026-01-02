@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Combine
 
 // Thinking mode - sent to server via thinkingMode field in input messages
 enum ThinkingMode: String, CaseIterable {
@@ -472,5 +473,27 @@ enum SSHAuthType: String, CaseIterable {
         case .password: return "Password"
         case .publicKey: return "SSH Key"
         }
+    }
+}
+
+// MARK: - Notification Names for Settings Changes
+
+extension Notification.Name {
+    /// Posted when serverURL setting changes - services should reconfigure
+    static let serverURLDidChange = Notification.Name("serverURLDidChange")
+}
+
+// MARK: - ServerURL Change Publisher
+
+extension AppSettings {
+    /// Publisher that emits the new serverURL whenever it changes in UserDefaults.
+    /// Use this to reconfigure long-lived services when the user changes the server URL.
+    static var serverURLPublisher: AnyPublisher<String, Never> {
+        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+            .compactMap { _ in
+                UserDefaults.standard.string(forKey: "serverURL")
+            }
+            .removeDuplicates()
+            .eraseToAnyPublisher()
     }
 }

@@ -1,11 +1,11 @@
 import SwiftUI
 import UserNotifications
 import BackgroundTasks
-@preconcurrency import UIKit
+import UIKit
 
 // MARK: - App Delegate for Orientation Control, Background Tasks, and Push Notifications
 
-class AppDelegate: NSObject, UIApplicationDelegate {
+class AppDelegate: NSObject, @preconcurrency UIApplicationDelegate {
     /// Controls which orientations are allowed. Updated by AppSettings.lockToPortrait
     static var orientationLock: UIInterfaceOrientationMask = .portrait
 
@@ -39,11 +39,6 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     }
 
     // MARK: - Background Push Handling
-
-    // Note: Swift 6 will require Sendable compliance for [AnyHashable: Any].
-    // This is a known UIKit limitation - the protocol requires this non-Sendable type.
-    // Suppressing with @preconcurrency until Apple updates the UIApplicationDelegate protocol.
-    @preconcurrency
     func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any]) async -> UIBackgroundFetchResult {
         log.info("[Push] Received remote notification in background")
 

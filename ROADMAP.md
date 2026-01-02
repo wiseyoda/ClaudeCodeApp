@@ -48,10 +48,10 @@
 | 7 | #5 | Consolidate stores into one persistence layer | Medium | #23/#25 | Won't Fix | Audit found no duplication; stores are intentionally separate. |
 | 8 | #21 | Centralize project path encode/decode (preserve hyphens) | High | #1 | Complete | Created ProjectPathEncoder utility; migrated MessageStore to - encoding. |
 | 9 | #22 | Replace hard-coded path stripping in Project.title | Low | #21 | Complete | Removed hard-coded path prefix; name field is already basename. |
-| 10 | #26 | Reconfigure long-lived services on serverURL change | Medium | #21 | Planned | Avoid stale serverURL in stores/services. |
+| 10 | #26 | Reconfigure long-lived services on serverURL change | Medium | #21 | Complete | 5 services now auto-reconfigure via Combine publisher. |
 | 11 | #24 | Define a single permission resolution pipeline | Medium | #23/#26 | Planned | Global -> project -> session -> server. |
-| 12 | #16 | Consolidate sheet booleans into activeSheet enum | Low | - | Planned | Reduce UI state sprawl. |
-| 13 | #30 | Update docs to match WebSocket streaming; remove SSE/WebSocketManager refs | Medium | #1/#17 | Planned | Align docs with code. |
+| 12 | #16 | Consolidate sheet booleans into activeSheet enum | Low | - | Complete | 7 @Published booleans replaced with single ActiveSheet enum. |
+| 13 | #30 | Update docs to match WebSocket streaming; remove SSE/WebSocketManager refs | Medium | #1/#17 | Complete | Updated 9 files to reflect WebSocket architecture. |
 
 ### Backlog (Unscheduled or Parallel)
 

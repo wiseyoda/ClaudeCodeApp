@@ -1,6 +1,7 @@
 import Foundation
 import UserNotifications
 import UIKit
+import Combine
 
 // MARK: - Push Notification Manager
 // Manages FCM token registration and push notification handling
@@ -23,6 +24,8 @@ final class PushNotificationManager: NSObject, ObservableObject {
     private var apiClient: CLIBridgeAPIClient?
     private var pendingTokenRegistration: String?
     private var isFirebaseConfigured: Bool = false
+    private var currentServerURL: String = ""
+    private var cancellables = Set<AnyCancellable>()
 
     // MARK: - Initialization
 
@@ -30,6 +33,20 @@ final class PushNotificationManager: NSObject, ObservableObject {
         super.init()
         // Load cached FCM token from Keychain
         fcmToken = KeychainHelper.shared.retrieveFCMToken()
+        setupServerURLObserver()
+    }
+
+    /// Observe serverURL changes and reconfigure automatically
+    private func setupServerURLObserver() {
+        AppSettings.serverURLPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] newURL in
+                guard let self = self else { return }
+                guard newURL != self.currentServerURL, self.apiClient != nil else { return }
+                log.info("[Push] Server URL changed to \(newURL) - reconfiguring")
+                self.configure(serverURL: newURL)
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - Configuration
@@ -37,6 +54,7 @@ final class PushNotificationManager: NSObject, ObservableObject {
     /// Configure the push notification manager with the server URL
     /// Call this when the app starts and push notifications are enabled
     func configure(serverURL: String) {
+        currentServerURL = serverURL
         apiClient = CLIBridgeAPIClient(serverURL: serverURL)
 
         // Check if Firebase is configured (GoogleService-Info.plist exists)

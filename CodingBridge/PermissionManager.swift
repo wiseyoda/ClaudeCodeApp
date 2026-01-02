@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Combine
 
 // MARK: - Permission Manager
 
@@ -21,8 +22,28 @@ class PermissionManager: ObservableObject {
     /// API client for server communication
     private var apiClient: CLIBridgeAPIClient?
 
+    /// Current serverURL for change detection
+    private var currentServerURL: String = ""
+
+    /// Combine subscriptions
+    private var cancellables = Set<AnyCancellable>()
+
     private init(apiClient: CLIBridgeAPIClient? = nil) {
         self.apiClient = apiClient
+        setupServerURLObserver()
+    }
+
+    /// Observe serverURL changes and reconfigure automatically
+    private func setupServerURLObserver() {
+        AppSettings.serverURLPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] newURL in
+                guard let self = self else { return }
+                guard newURL != self.currentServerURL else { return }
+                log.info("[PermissionManager] Server URL changed to \(newURL) - reconfiguring")
+                self.configure(serverURL: newURL)
+            }
+            .store(in: &cancellables)
     }
 
 #if DEBUG
@@ -35,6 +56,7 @@ class PermissionManager: ObservableObject {
 
     /// Configure the manager with server settings
     func configure(serverURL: String) {
+        self.currentServerURL = serverURL
         self.apiClient = CLIBridgeAPIClient(serverURL: serverURL)
         self.config = nil
         self.lastError = nil

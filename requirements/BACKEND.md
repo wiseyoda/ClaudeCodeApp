@@ -1,12 +1,12 @@
 # Backend Setup Requirements
 
-> cli-bridge REST API with SSE streaming for Claude Code iOS client.
+> cli-bridge REST API with WebSocket streaming for Claude Code iOS client.
 
 **Related:** [SESSIONS.md](./SESSIONS.md) (session details), [ARCHITECTURE.md](./ARCHITECTURE.md) (data flow)
 
 ## Overview
 
-The iOS app connects to [cli-bridge](https://github.com/anthropics/claude-code/tree/main/packages/cli-bridge) via REST API with SSE streaming. Optional SSH for file operations.
+The iOS app connects to [cli-bridge](https://github.com/anthropics/claude-code/tree/main/packages/cli-bridge) via REST API with WebSocket streaming. Optional SSH for file operations.
 
 ## Prerequisites
 
@@ -53,21 +53,21 @@ Content-Type: application/json
 
 Response: `{"id": "agent-uuid-here"}`
 
-### Send Message (SSE Streaming)
+### Send Message (WebSocket Streaming)
 
-```
-POST /agents/:id/message
-Content-Type: application/json
-Accept: text/event-stream
+The iOS app connects via WebSocket to `/ws/agents/:id` after creating an agent. Messages are sent as JSON over the WebSocket connection.
 
+**Send Message:**
+```json
 {
+  "type": "message",
   "message": "Help me fix this bug",
   "sessionId": "optional-session-id",
   "options": {"model": "claude-sonnet-4-20250514"}
 }
 ```
 
-**SSE Event Types:**
+**WebSocket Event Types:**
 | Event | Data | Purpose |
 |-------|------|---------|
 | `assistant` | `{"text": "..."}` | Streaming text |
@@ -76,6 +76,8 @@ Accept: text/event-stream
 | `thinking` | `{"text": "..."}` | Reasoning block |
 | `result` | `{"sessionId": "...", "usage": {...}}` | Task complete |
 | `error` | `{"message": "..."}` | Error |
+| `permission_request` | `{...}` | Tool approval request |
+| `agent_state` | `{"state": "..."}` | Agent state change |
 
 ### Abort Request
 
@@ -328,9 +330,9 @@ SSH used for file browser, git operations, and global search.
 
 ### Streaming not working
 
-1. Ensure response consumed as SSE stream
-2. Check for proxy/load balancer buffering
-3. Verify Accept header includes `text/event-stream`
+1. Ensure WebSocket connection established
+2. Check for proxy/load balancer WebSocket support
+3. Verify WebSocket upgrade succeeds (101 Switching Protocols)
 
 ### SSH connection fails
 

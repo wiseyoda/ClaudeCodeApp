@@ -41,7 +41,7 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 | File | Change |
 |---|---|
-| CodingBridge/CLIBridgeAdapter.swift | Remove heuristic model matching |
+| CodingBridge/CLIBridgeManager.swift | Remove heuristic model matching |
 | CodingBridge/ViewModels/ChatViewModel.swift | Use alias from server |
 
 ### Files to Delete

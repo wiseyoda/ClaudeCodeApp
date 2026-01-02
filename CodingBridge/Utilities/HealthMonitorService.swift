@@ -72,6 +72,7 @@ final class HealthMonitorService: ObservableObject {
 
     private init() {
         setupNetworkObserver()
+        setupServerURLObserver()
     }
 
     // MARK: - Configuration
@@ -79,6 +80,24 @@ final class HealthMonitorService: ObservableObject {
     /// Configure the service with the server URL
     func configure(serverURL: String) {
         self.serverURL = serverURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
+
+    /// Observe serverURL changes and reconfigure automatically
+    private func setupServerURLObserver() {
+        AppSettings.serverURLPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] newURL in
+                guard let self = self else { return }
+                let trimmedURL = newURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+                guard trimmedURL != self.serverURL else { return }
+                log.info("[Health] Server URL changed to \(trimmedURL) - reconfiguring")
+                self.configure(serverURL: trimmedURL)
+                // Force immediate health check with new URL
+                Task { @MainActor in
+                    await self.forceCheck()
+                }
+            }
+            .store(in: &cancellables)
     }
 
     // MARK: - Polling Control

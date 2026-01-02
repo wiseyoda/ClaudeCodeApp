@@ -11,13 +11,13 @@ Client-side message queue implemented entirely in the iOS app. The backend and C
 │                         iOS App                                  │
 │                                                                 │
 │  ┌─────────────┐    ┌──────────────┐    ┌──────────────────┐   │
-│  │  ChatView   │───▶│ MessageQueue │───▶│ CLIBridgeAdapter │   │
+│  │  ChatView   │───▶│ MessageQueue │───▶│ CLIBridgeManager │   │
 │  │  (Input)    │    │   Manager    │    │   (Send)         │   │
 │  └─────────────┘    └──────────────┘    └──────────────────┘   │
 │         │                  │                     │              │
 │         │                  │                     ▼              │
 │         │                  │            ┌──────────────┐        │
-│         │                  │            │  SSE Stream  │        │
+│         │                  │            │  WebSocket   │        │
 │         │                  │            └──────────────┘        │
 │         │                  ▼                     │              │
 │         │          ┌──────────────┐              │              │
@@ -38,7 +38,7 @@ Client-side message queue implemented entirely in the iOS app. The backend and C
 
 ### MessageQueueManager
 
-New `@MainActor` class that owns the queue state and coordinates between UI and SSE streaming.
+New `@MainActor` class that owns the queue state and coordinates between UI and WebSocket streaming.
 
 ```swift
 @MainActor
@@ -52,7 +52,7 @@ class MessageQueueManager: ObservableObject {
     var maxQueueSize: Int = 10
 
     // Dependencies
-    private let bridgeAdapter: CLIBridgeAdapter
+    private let bridgeManager: CLIBridgeManager
     private let persistence: QueuePersistence
 
     // Core operations
@@ -125,7 +125,7 @@ User types message
     ▼       ▼
 ┌───────┐ ┌────────────────┐
 │ Queue │ │ Send directly  │
-│ it    │ │ via SSE stream │
+│ it    │ │ via WebSocket  │
 └───────┘ └────────────────┘
     │
     ▼
@@ -162,7 +162,7 @@ Agent becomes idle (claude-complete received)
                 ▼
         ┌───────────────────┐
         │ Send via          │
-        │ SSE stream        │
+        │ WebSocket         │
         └───────────────────┘
                 │
                 ▼
@@ -207,8 +207,7 @@ Agent becomes idle (claude-complete received)
 
 | File | Changes |
 |------|---------|
-| `CLIBridgeAdapter.swift` | Expose busy signals, add queue integration hooks |
-| `CLIBridgeManager.swift` | Add callbacks for processing completion |
+| `CLIBridgeManager.swift` | Expose busy signals, add queue integration hooks |
 | `ChatView.swift` | Replace direct send with queue-aware send |
 | `CLIInputView.swift` | Remove `isProcessing` disable, add urgent toggle |
 | `AppSettings.swift` | Add `maxQueueSize` setting |
@@ -216,31 +215,28 @@ Agent becomes idle (claude-complete received)
 
 ## Integration Points
 
-### CLIBridgeAdapter Integration
+### CLIBridgeManager Integration
 
 ```swift
-// CLIBridgeAdapter.swift additions
+// CLIBridgeManager.swift additions
 
-// Expose busy state signals
-@Published var isToolExecuting: Bool = false
-@Published var isPendingApproval: Bool = false
+// Expose busy state signals (already present)
+@Published var agentState: CLIAgentState = .idle
+@Published var pendingPermission: PermissionRequestMessage?
 
-// Callback when processing completes (success or error)
-var onProcessingComplete: ((Result<Void, Error>) -> Void)?
-
-// In SSE event handlers:
-// tool_use event:
-    isToolExecuting = true
-// tool_result event:
-    isToolExecuting = false
-// permission_request event:
-    isPendingApproval = true
-// permission_response:
-    isPendingApproval = false
-// result event:
-    onProcessingComplete?(.success(()))
-// error event:
-    onProcessingComplete?(.failure(error))
+// Use StreamEvent via onEvent callback:
+// .toolUse event:
+    agentState = .executing
+// .toolResult event:
+    agentState = .processing
+// .permissionRequest event:
+    pendingPermission = request
+// permission response sent:
+    pendingPermission = nil
+// .result event:
+    agentState = .idle
+// .error event:
+    // Handle error
 ```
 
 ### ChatView Integration
@@ -261,7 +257,7 @@ func sendMessage(_ content: String, urgent: Bool = false) {
     if busyState.isBusy {
         try? queueManager.enqueue(message)
     } else {
-        bridgeAdapter.sendMessage(content, ...)
+        bridgeManager.sendMessage(content, ...)
     }
 }
 ```
@@ -339,5 +335,5 @@ throw QueueError.queueFull(current: queue.count, max: maxQueueSize)
 | Unit | Queue operations (enqueue, dequeue, reorder, priority) |
 | Unit | Persistence save/load/corruption handling |
 | Unit | Busy state aggregation |
-| Integration | Queue + SSE stream flow |
+| Integration | Queue + WebSocket stream flow |
 | UI | Queue panel interactions |

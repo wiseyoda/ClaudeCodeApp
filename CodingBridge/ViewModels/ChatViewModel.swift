@@ -71,17 +71,64 @@ class ChatViewModel: ObservableObject {
     var pendingGitCommands: Set<String> = []
 
     // MARK: - Model State
-    @Published var showingModelPicker = false
     @Published var currentModel: ClaudeModel?
     @Published var customModelId = ""
 
     // MARK: - Sheet State
-    @Published var showingHelpSheet = false
-    @Published var showingSessionPicker = false
-    @Published var showingBookmarks = false
-    @Published var showIdeasDrawer = false
-    @Published var showQuickCapture = false
-    @Published var showQuickSettings = false
+    /// Enum representing which sheet is currently presented (if any)
+    enum ActiveSheet: Identifiable {
+        case help
+        case sessionPicker
+        case bookmarks
+        case ideasDrawer
+        case quickCapture
+        case quickSettings
+        case modelPicker
+
+        var id: String {
+            switch self {
+            case .help: return "help"
+            case .sessionPicker: return "sessionPicker"
+            case .bookmarks: return "bookmarks"
+            case .ideasDrawer: return "ideasDrawer"
+            case .quickCapture: return "quickCapture"
+            case .quickSettings: return "quickSettings"
+            case .modelPicker: return "modelPicker"
+            }
+        }
+    }
+
+    @Published var activeSheet: ActiveSheet?
+
+    // Convenience computed properties for compatibility with existing code
+    var showingHelpSheet: Bool {
+        get { activeSheet == .help }
+        set { activeSheet = newValue ? .help : nil }
+    }
+    var showingSessionPicker: Bool {
+        get { activeSheet == .sessionPicker }
+        set { activeSheet = newValue ? .sessionPicker : nil }
+    }
+    var showingBookmarks: Bool {
+        get { activeSheet == .bookmarks }
+        set { activeSheet = newValue ? .bookmarks : nil }
+    }
+    var showIdeasDrawer: Bool {
+        get { activeSheet == .ideasDrawer }
+        set { activeSheet = newValue ? .ideasDrawer : nil }
+    }
+    var showQuickCapture: Bool {
+        get { activeSheet == .quickCapture }
+        set { activeSheet = newValue ? .quickCapture : nil }
+    }
+    var showQuickSettings: Bool {
+        get { activeSheet == .quickSettings }
+        set { activeSheet = newValue ? .quickSettings : nil }
+    }
+    var showingModelPicker: Bool {
+        get { activeSheet == .modelPicker }
+        set { activeSheet = newValue ? .modelPicker : nil }
+    }
 
     // MARK: - Todo Drawer State
     @Published var currentTodos: [TodoListView.TodoItem] = []
@@ -1244,6 +1291,10 @@ class ChatViewModel: ObservableObject {
     }
 
     // MARK: - JSON Serialization Helper
+
+    private static func toJSONString(_ value: [String: JSONValue]) -> String {
+        toJSONString(value.mapValues { $0.value })
+    }
 
     private static func toJSONString(_ value: [String: Any]) -> String {
         let sanitized = sanitizeForJSON(value)

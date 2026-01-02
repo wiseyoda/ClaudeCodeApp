@@ -11,10 +11,10 @@ This graph lists issue dependencies and a recommended execution order. Use it to
 5. #23 Unify draft + processing persistence ✅
 6. #25 Finish or remove MessageQueuePersistence ✅
 7. #5 Consolidate stores into a single persistence layer ❌ (Won't Fix)
-8. #16 Consolidate sheet booleans into activeSheet enum
+8. #16 Consolidate sheet booleans into activeSheet enum ✅
 9. #21 Centralize project path encode/decode ✅
 10. #22 Replace hard-coded path stripping in Project.title ✅
-11. #26 Reconfigure long-lived services on serverURL change
+11. #26 Reconfigure long-lived services on serverURL change ✅
 12. #24 Define a single permission resolution pipeline
 13. #30 Update docs to match WebSocket streaming
 14. #4 Eliminate extractFilePath() parsing

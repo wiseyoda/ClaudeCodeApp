@@ -76,7 +76,8 @@ struct SessionsResponse: Codable {
 @MainActor
 final class CLIBridgeSessionRepository: SessionRepository {
     private let apiClient: CLIBridgeAPIClient
-    private let settings: AppSettings
+    /// Settings reference - exposed for reconfiguration when serverURL changes
+    let settings: AppSettings
 
     init(apiClient: CLIBridgeAPIClient, settings: AppSettings) {
         self.apiClient = apiClient

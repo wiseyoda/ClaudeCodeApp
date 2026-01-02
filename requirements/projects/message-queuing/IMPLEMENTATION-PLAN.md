@@ -107,7 +107,7 @@ actor QueuePersistence {
 
 ### Step 1.3: Message Queue Manager
 
-Core queue operations without SSE stream integration yet.
+Core queue operations without WebSocket stream integration yet.
 
 **File:** `CodingBridge/MessageQueueManager.swift`
 
@@ -230,7 +230,7 @@ enum QueueError: Error, LocalizedError {
 
 ## Phase 2: Busy State & CLI Bridge Integration
 
-Connect queue to SSE streaming lifecycle.
+Connect queue to WebSocket streaming lifecycle.
 
 ### Step 2.1: Busy State Aggregator
 
@@ -255,18 +255,18 @@ class BusyStateAggregator: ObservableObject {
 
 ---
 
-### Step 2.2: CLIBridgeAdapter Extensions
+### Step 2.2: CLIBridgeManager Extensions
 
 Add hooks for queue integration.
 
-**File:** `CodingBridge/CLIBridgeAdapter.swift` (modify)
+**File:** `CodingBridge/CLIBridgeManager.swift` (modify)
 
 Changes:
-1. Add `@Published var isToolExecuting: Bool = false`
-2. Add `@Published var isPendingApproval: Bool = false`
+1. Use existing `@Published var agentState: CLIAgentState` for busy detection
+2. Use existing `@Published var pendingPermission: PermissionRequestMessage?` for approval state
 3. Add `var onProcessingComplete: ((Result<Void, Error>) -> Void)?`
-4. Update SSE event handlers to set tool/approval states
-5. Call `onProcessingComplete` on `result` and `error` events
+4. StreamEvent handlers already update agent state
+5. Call `onProcessingComplete` on `.result` and `.error` events
 
 ---
 
@@ -279,11 +279,11 @@ Add execution flow to MessageQueueManager.
 ```swift
 // MARK: - Execution
 
-private weak var bridgeAdapter: CLIBridgeAdapter?
+private weak var bridgeManager: CLIBridgeManager?
 
-func configure(bridgeAdapter: CLIBridgeAdapter) {
-    self.bridgeAdapter = bridgeAdapter
-    bridgeAdapter.onProcessingComplete = { [weak self] result in
+func configure(bridgeManager: CLIBridgeManager) {
+    self.bridgeManager = bridgeManager
+    bridgeManager.onProcessingComplete = { [weak self] result in
         Task { @MainActor in
             self?.handleProcessingComplete(result)
         }
@@ -296,7 +296,7 @@ func processNext() {
     isExecuting = true
     currentError = nil
 
-    bridgeAdapter?.sendMessage(
+    bridgeManager?.sendMessage(
         message.content,
         projectPath: message.projectPath,
         sessionId: message.sessionId,
@@ -369,7 +369,7 @@ Add UI in SettingsSheet for configuring queue size (5-20 range).
 
 1. Add `@StateObject private var queueManager = MessageQueueManager()`
 2. Add `@StateObject private var busyState = BusyStateAggregator()`
-3. Connect busyState to bridgeAdapter published properties
+3. Connect busyState to bridgeManager published properties
 4. Replace direct send logic with queue-aware send:
 
 ```swift
@@ -527,7 +527,7 @@ Add error banner when queue processing fails:
 | `QueuePersistenceTests` | File I/O, corruption |
 | `MessageQueueManagerTests` | All queue operations |
 | `BusyStateAggregatorTests` | State combination |
-| `QueueIntegrationTests` | End-to-end with mock CLIBridgeAdapter |
+| `QueueIntegrationTests` | End-to-end with mock CLIBridgeManager |
 
 ---
 
@@ -541,7 +541,7 @@ Phase 1 (Foundation)
 
 Phase 2 (Integration)
 ├── Step 2.1: BusyStateAggregator
-├── Step 2.2: CLIBridgeAdapter extensions
+├── Step 2.2: CLIBridgeManager extensions
 └── Step 2.3: Queue execution logic
 
 Phase 3 (UI)

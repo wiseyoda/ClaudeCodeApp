@@ -1,6 +1,6 @@
 # Issue #16: Consolidate sheet booleans into activeSheet enum
 
-> **Status**: Pending
+> **Status**: Complete (verified 2026-01-02)
 > **Priority**: Tier 3
 > **Depends On**: None
 > **Blocks**: None
@@ -69,10 +69,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Consolidate sheet booleans into activeSheet enum is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Consolidate sheet booleans into activeSheet enum is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -123,5 +123,6 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | Created ActiveSheet enum, converted 7 @Published booleans to computed properties |
+| 2026-01-02 | Completed | All acceptance criteria verified, build passes |
+| 2026-01-02 | Verified | Confirmed activeSheet usage and remaining call sites |

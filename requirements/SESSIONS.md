@@ -209,7 +209,7 @@ extension Array where Element == ProjectSession {
 ### Sessions Not Appearing
 1. Check `SessionStore.shared.sessionsByProject` has data
 2. Verify `displaySessions(for:)` filtering
-3. Ensure SSE `result` events are handled
+3. Ensure WebSocket `result` events are handled
 4. Check `activeSessionIds[path]` is passed to filter
 
 ### Wrong Session Counts

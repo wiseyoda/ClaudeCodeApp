@@ -76,19 +76,20 @@ App → SSHManager → sshd (file ops, git)
 
 | File | Purpose |
 |------|---------|
-| `CLIBridgeManager.swift` | Core API client, WebSocket streaming |
-| `CLIBridgeAdapter.swift` | Adapts manager to callback interface |
+| `CLIBridgeManager.swift` | Core WebSocket client, streaming, unified StreamEvent callbacks |
+| `CLIBridgeAppTypes.swift` | App-specific types (StreamEvent enum, message models) |
+| `CLIBridgeExtensions.swift` | Extensions for generated API types |
 | `ChatViewModel.swift` | Chat state, message handling |
 | `SessionStore.swift` | Session state, pagination |
 | `SSHManager.swift` | SSH terminal, file ops, git |
 | `Models.swift` | Data models, persistence stores |
-| `Generated/` | OpenAPI-generated types (143 files) |
+| `Generated/` | OpenAPI-generated types |
 
 ### Patterns
 
 ```swift
 // View owns manager
-@StateObject private var manager = CLIBridgeAdapter()
+@StateObject private var manager = CLIBridgeManager()
 
 // Shared settings from environment
 @EnvironmentObject var settings: AppSettings

@@ -48,7 +48,43 @@ final class SessionStore: ObservableObject {
 
     private var repository: SessionRepository?
 
-    private init() {}
+    /// Current serverURL for change detection
+    private var currentServerURL: String = ""
+
+    /// Combine subscriptions
+    private var cancellables = Set<AnyCancellable>()
+
+    private init() {
+        setupServerURLObserver()
+    }
+
+    /// Observe serverURL changes and reconfigure automatically
+    private func setupServerURLObserver() {
+        AppSettings.serverURLPublisher
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] newURL in
+                guard let self = self else { return }
+                guard newURL != self.currentServerURL, self.isConfigured else { return }
+                log.info("[SessionStore] Server URL changed to \(newURL) - reconfiguring repository")
+                self.reconfigure(serverURL: newURL)
+            }
+            .store(in: &cancellables)
+    }
+
+    /// Reconfigure the repository with a new server URL (preserves cached data)
+    private func reconfigure(serverURL: String) {
+        currentServerURL = serverURL
+        let cliClient = CLIBridgeAPIClient(serverURL: serverURL)
+        // We need settings for the repository, but since we're reconfiguring,
+        // we create a minimal repository with just the new API client
+        if let existingRepo = repository as? CLIBridgeSessionRepository {
+            // Re-use the existing settings reference
+            repository = CLIBridgeSessionRepository(
+                apiClient: cliClient,
+                settings: existingRepo.settings
+            )
+        }
+    }
 
     /// Configure the store with a repository (call during app setup)
     /// Idempotent - subsequent calls are no-ops
@@ -62,6 +98,7 @@ final class SessionStore: ObservableObject {
     /// Idempotent - subsequent calls are no-ops (check isConfigured first)
     func configure(with settings: AppSettings) {
         guard !isConfigured else { return }
+        currentServerURL = settings.serverURL
         let cliClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
         let repository = CLIBridgeSessionRepository(
             apiClient: cliClient,

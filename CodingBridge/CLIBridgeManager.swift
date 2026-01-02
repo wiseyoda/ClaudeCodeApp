@@ -885,8 +885,7 @@ class CLIBridgeManager: ObservableObject {
             lastMessageId = toolContent.id
             agentState = .executing
             toolProgress = nil
-            let input = toolContent.input.mapValues { $0.value }
-            emit(.toolStart(id: toolContent.id, name: toolContent.name, input: input))
+            emit(.toolStart(id: toolContent.id, name: toolContent.name, input: toolContent.input))
 
         case .typeToolResultStreamMessage(let resultContent):
             lastMessageId = resultContent.id

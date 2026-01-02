@@ -103,7 +103,7 @@ Click **Upload**
 | `max_message_history` | Number | `50` | Messages to keep in history |
 | `session_timeout_minutes` | Number | `30` | Session timeout |
 | `api_timeout_seconds` | Number | `30` | API request timeout |
-| `sse_reconnect_delay_ms` | Number | `1000` | SSE reconnection delay |
+| `websocket_reconnect_delay_ms` | Number | `1000` | WebSocket reconnection delay |
 
 ### Conditions (Optional)
 

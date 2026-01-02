@@ -41,8 +41,8 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 | File | Change |
 |---|---|
-| CodingBridge/CLIBridgeAdapter.swift | Remove custom JSONValue serialization |
-| CodingBridge/CLIBridgeTypesMigration.swift | Remove JSONValue parsing |
+| CodingBridge/CLIBridgeManager.swift | Remove custom JSONValue serialization |
+| CodingBridge/CLIBridgeAppTypes.swift | Remove JSONValue parsing |
 
 ### Files to Delete
 

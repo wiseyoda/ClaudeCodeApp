@@ -144,7 +144,6 @@ private func send(_ message: ClientMessage) async throws
 **Files to update:**
 
 - `CLIBridgeManager.swift` - Main WebSocket handling
-- `CLIBridgeAdapter.swift` - Adapter layer
 
 ---
 

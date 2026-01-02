@@ -6,7 +6,7 @@ Create a native iOS application that provides a full-featured mobile interface t
 
 ## Background
 
-The [cli-bridge](https://github.com/anthropics/claude-code/tree/main/packages/cli-bridge) package provides a REST API with SSE streaming for Claude Code. This iOS app acts as a native client for that backend, providing a polished mobile experience with native features like voice input, keyboard shortcuts, and Keychain storage.
+The [cli-bridge](https://github.com/anthropics/claude-code/tree/main/packages/cli-bridge) package provides a REST API with WebSocket streaming for Claude Code. This iOS app acts as a native client for that backend, providing a polished mobile experience with native features like voice input, keyboard shortcuts, and Keychain storage.
 
 ## Target Users
 
@@ -43,7 +43,7 @@ The [cli-bridge](https://github.com/anthropics/claude-code/tree/main/packages/cl
 
 #### 3. Chat Interface
 - Send messages to Claude (text, voice, or with images)
-- Receive streaming responses in real-time via SSE
+- Receive streaming responses in real-time via WebSocket
 - Display tool usage with collapsible sections (12+ tool types)
 - Display tool results (truncated with expand option)
 - Show thinking/reasoning blocks (purple, collapsible)
@@ -152,7 +152,7 @@ The [cli-bridge](https://github.com/anthropics/claude-code/tree/main/packages/cl
 - Interactive approval banner when bypass permissions is OFF
 - Approve / Always Allow / Deny buttons for each tool request
 - Per-project permission mode overrides (ProjectSettingsStore)
-- Real-time SSE protocol for permission requests/responses
+- Real-time WebSocket protocol for permission requests/responses
 - "Always Allow" remembers decisions per tool type
 
 #### 18. Configuration
@@ -201,7 +201,7 @@ The [cli-bridge](https://github.com/anthropics/claude-code/tree/main/packages/cl
 ## Completed Features
 
 ### Core
-- Real-time streaming chat via SSE
+- Real-time streaming chat via WebSocket
 - Tool use visualization with 12+ tool types
 - Diff viewer for Edit tool with line numbers
 - TodoWrite visual checklist
@@ -260,6 +260,12 @@ The [cli-bridge](https://github.com/anthropics/claude-code/tree/main/packages/cl
 See [ROADMAP.md](../ROADMAP.md) for remaining work and [ISSUES.md](../ISSUES.md) for investigation items.
 
 **Resolved in v0.6.0:**
-- Full migration from WebSocket to cli-bridge REST API with SSE
-- Removed WebSocketManager.swift and APIClient.swift
-- New CLIBridgeManager, CLIBridgeAdapter, CLIBridgeAPIClient architecture
+- Full migration to cli-bridge REST API with WebSocket streaming
+- Removed legacy WebSocketManager.swift and APIClient.swift
+- New CLIBridgeManager, CLIBridgeAPIClient architecture
+
+**Resolved in v0.7.0:**
+- Removed CLIBridgeAdapter layer (~800 lines)
+- Consolidated callbacks into unified StreamEvent enum
+- Removed CLIBridgeTypesMigration (~2,398 lines)
+- Split into CLIBridgeAppTypes.swift + CLIBridgeExtensions.swift

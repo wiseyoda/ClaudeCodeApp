@@ -399,7 +399,7 @@ public enum StreamEvent: Sendable {
   ///   - id: Tool use ID for correlation with result
   ///   - name: Tool name (e.g., "Read", "Bash", "Edit")
   ///   - input: Tool input parameters
-  case toolStart(id: String, name: String, input: [String: Any])
+  case toolStart(id: String, name: String, input: [String: JSONValue])
 
   /// Tool execution completed
   /// - Parameters:

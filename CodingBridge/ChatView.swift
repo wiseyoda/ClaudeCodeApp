@@ -142,56 +142,8 @@ struct ChatView: View {
         )) { questionData in
             userQuestionsSheet(questionData)
         }
-        .sheet(isPresented: $viewModel.showingHelpSheet) {
-            SlashCommandHelpSheet()
-        }
-        .sheet(isPresented: $viewModel.showingSessionPicker) {
-            SessionPickerSheet(
-                project: project,
-                sessions: viewModel.localSessionsBinding,
-                onSelect: { session in
-                    viewModel.showingSessionPicker = false
-                    viewModel.selectSession(session)
-                },
-                onCancel: {
-                    viewModel.showingSessionPicker = false
-                },
-                onDelete: { session in
-                    Task { await viewModel.deleteSession(session) }
-                }
-            )
-        }
-        .sheet(isPresented: $viewModel.showingModelPicker) {
-            CustomModelPickerSheet(
-                customModelId: $viewModel.customModelId,
-                onConfirm: { modelId in
-                    viewModel.showingModelPicker = false
-                    viewModel.switchToModel(.custom, customId: modelId)
-                    settings.customModelId = modelId
-                },
-                onCancel: {
-                    viewModel.showingModelPicker = false
-                }
-            )
-        }
-        .sheet(isPresented: $viewModel.showingBookmarks) {
-            BookmarksView()
-                .environmentObject(settings)
-        }
-        .sheet(isPresented: $viewModel.showIdeasDrawer) {
-            IdeasDrawerSheet(
-                isPresented: $viewModel.showIdeasDrawer,
-                ideasStore: viewModel.ideasStore,
-                projectPath: project.path,
-                onSendIdea: { idea in
-                    viewModel.appendToInput(idea.formattedPrompt)
-                }
-            )
-        }
-        .sheet(isPresented: $viewModel.showQuickCapture) {
-            QuickCaptureSheet(isPresented: $viewModel.showQuickCapture) { text in
-                viewModel.ideasStore.quickAdd(text)
-            }
+        .sheet(item: $viewModel.activeSheet) { sheet in
+            sheetContent(for: sheet)
         }
         // MARK: - Keyboard Shortcuts (iPad)
         .background {
@@ -604,7 +556,73 @@ struct ChatView: View {
             )
             .id("input-view")
         }
-        .sheet(isPresented: $viewModel.showQuickSettings) {
+    }
+
+    // MARK: - Sheet Content
+
+    @ViewBuilder
+    private func sheetContent(for sheet: ChatViewModel.ActiveSheet) -> some View {
+        switch sheet {
+        case .help:
+            SlashCommandHelpSheet()
+
+        case .sessionPicker:
+            SessionPickerSheet(
+                project: project,
+                sessions: viewModel.localSessionsBinding,
+                onSelect: { session in
+                    viewModel.activeSheet = nil
+                    viewModel.selectSession(session)
+                },
+                onCancel: {
+                    viewModel.activeSheet = nil
+                },
+                onDelete: { session in
+                    Task { await viewModel.deleteSession(session) }
+                }
+            )
+
+        case .modelPicker:
+            CustomModelPickerSheet(
+                customModelId: $viewModel.customModelId,
+                onConfirm: { modelId in
+                    viewModel.activeSheet = nil
+                    viewModel.switchToModel(.custom, customId: modelId)
+                    settings.customModelId = modelId
+                },
+                onCancel: {
+                    viewModel.activeSheet = nil
+                }
+            )
+
+        case .bookmarks:
+            BookmarksView()
+                .environmentObject(settings)
+
+        case .ideasDrawer:
+            IdeasDrawerSheet(
+                isPresented: Binding(
+                    get: { viewModel.activeSheet == .ideasDrawer },
+                    set: { if !$0 { viewModel.activeSheet = nil } }
+                ),
+                ideasStore: viewModel.ideasStore,
+                projectPath: project.path,
+                onSendIdea: { idea in
+                    viewModel.appendToInput(idea.formattedPrompt)
+                }
+            )
+
+        case .quickCapture:
+            QuickCaptureSheet(
+                isPresented: Binding(
+                    get: { viewModel.activeSheet == .quickCapture },
+                    set: { if !$0 { viewModel.activeSheet = nil } }
+                )
+            ) { text in
+                viewModel.ideasStore.quickAdd(text)
+            }
+
+        case .quickSettings:
             QuickSettingsSheet(
                 tokenUsage: viewModel.tokenUsage.map { (current: $0.used, max: $0.total) }
             )

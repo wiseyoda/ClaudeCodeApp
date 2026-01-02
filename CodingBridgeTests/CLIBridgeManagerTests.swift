@@ -380,7 +380,7 @@ final class CLIBridgeManagerTests: XCTestCase {
             guard case .toolStart(let id, let tool, let input) = event else { return }
             XCTAssertEqual(id, "tool-1")
             XCTAssertEqual(tool, "Bash")
-            XCTAssertEqual(input["command"] as? String, "ls")
+            XCTAssertEqual(input["command"]?.stringValue, "ls")
             expectation.fulfill()
         }
 
@@ -902,7 +902,7 @@ final class CLIBridgeManagerTests: XCTestCase {
             guard case .toolStart(let id, let tool, let input) = event else { return }
             XCTAssertEqual(id, "tool-1")
             XCTAssertEqual(tool, "Bash")
-            XCTAssertEqual(input["command"] as? String, "ls")
+            XCTAssertEqual(input["command"]?.stringValue, "ls")
             expectation.fulfill()
         }
 

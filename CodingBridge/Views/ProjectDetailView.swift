@@ -105,7 +105,7 @@ struct ProjectDetailView: View {
             pathSection
 
             // Git status section
-            if let git = projectDetail?.git, git.branch != nil {
+            if let git = projectDetail?.git {
                 gitSection(git)
             }
 
@@ -159,7 +159,7 @@ struct ProjectDetailView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "arrow.triangle.branch")
                         .foregroundColor(CLITheme.blue(for: colorScheme))
-                    Text(git.branch ?? "unknown")
+                    Text(git.branch.isEmpty ? "unknown" : git.branch)
                         .font(CLITheme.monoFont)
                         .foregroundColor(CLITheme.primaryText(for: colorScheme))
                 }

@@ -9,8 +9,8 @@
 |  |                         CodingBridge                                    |  |
 |  |                                                                         |  |
 |  |  +------------------+  +------------------+  +------------------------+ |  |
-|  |  |   ContentView    |--|    ChatView      |--|   CLIBridgeAdapter     | |  |
-|  |  |   (Projects)     |  |   (Messages)     |  |   (SSE Streaming)      | |  |
+|  |  |   ContentView    |--|    ChatView      |--|   CLIBridgeManager     | |  |
+|  |  |   (Projects)     |  |   (Messages)     |  |  (WebSocket Stream)    | |  |
 |  |  +------------------+  +------------------+  +------------------------+ |  |
 |  |         |                     |                      |                  |  |
 |  |         |              +------+------+                                 |  |
@@ -35,7 +35,7 @@
 |  +------------------------------------------------------------------------+  |
 +------------------------------------------------------------------------------+
                               |
-                              | REST API + SSE / SSH
+                              | REST API + WebSocket / SSH
                               | (via Tailscale)
                               v
 +------------------------------------------------------------------------------+
@@ -44,7 +44,7 @@
 |  |                          cli-bridge                                     |  |
 |  |  +-------------+  +-------------+  +-----------------------------+     |  |
 |  |  |  REST API   |--|   Agent     |--|        Claude Code CLI      |     |  |
-|  |  |  SSE Stream |  |   Manager   |  |        (Subprocess)         |     |  |
+|  |  |  WebSocket  |  |   Manager   |  |        (Subprocess)         |     |  |
 |  |  +-------------+  +-------------+  +-----------------------------+     |  |
 |  +------------------------------------------------------------------------+  |
 |                              |                                                |
@@ -79,8 +79,8 @@ The session management system uses a Clean Architecture pattern separating conce
                                ^                          |
                                |                          v
                        +-------+--------+        +-------------------+
-                       | CLIBridgeAdapter|        |  CLIBridgeAPI     |
-                       | (SSE Events)   |        |   Client (HTTP)   |
+                       | CLIBridgeManager|        |  CLIBridgeAPI     |
+                       | (WebSocket)    |        |   Client (HTTP)   |
                        +----------------+        +-------------------+
                                ^                          |
                                |                          v
@@ -152,33 +152,33 @@ protocol SessionRepository {
 
 1. **Initial Load**: View -> `SessionStore.loadSessions()` -> Repository -> CLIBridgeAPIClient -> Backend
 2. **Pagination**: View (Load More) -> `SessionStore.loadMore()` -> Repository -> CLIBridgeAPIClient
-3. **SSE Update**: Backend -> SSE Stream -> `CLIBridgeAdapter` -> `SessionStore` -> Views
+3. **WebSocket Update**: Backend -> WebSocket Stream -> `CLIBridgeManager` -> `SessionStore` -> Views
 4. **Delete**: View -> `SessionStore.deleteSession()` -> (optimistic update) -> Repository -> Backend
 
 ---
 
 ## CLI Bridge Architecture
 
-The app connects to [cli-bridge](https://github.com/anthropics/claude-code/tree/main/packages/cli-bridge) backend via REST API with Server-Sent Events (SSE) for streaming.
+The app connects to [cli-bridge](https://github.com/anthropics/claude-code/tree/main/packages/cli-bridge) backend via REST API with WebSocket for streaming.
 
 ### Core Components
 
 | Component | File | Purpose |
 |-----------|------|---------|
-| `CLIBridgeManager` | `CLIBridgeManager.swift` | Core REST API client, SSE stream handling |
-| `CLIBridgeAdapter` | `CLIBridgeAdapter.swift` | Adapts CLIBridgeManager to callback-style interface |
+| `CLIBridgeManager` | `CLIBridgeManager.swift` | Core WebSocket client, stream handling, unified StreamEvent callbacks |
 | `CLIBridgeAPIClient` | `CLIBridgeAPIClient.swift` | HTTP client for health checks, project/session listing |
-| `CLIBridgeTypes` | `CLIBridgeTypes.swift` | All message types and protocol models |
-| Generated Types | `Generated/*.swift` | OpenAPI-generated types (41 files, prefixed with `API` where conflicts exist) |
+| `CLIBridgeAppTypes` | `CLIBridgeAppTypes.swift` | App-specific types (StreamEvent enum, message models) |
+| `CLIBridgeExtensions` | `CLIBridgeExtensions.swift` | Extensions for generated API types |
+| Generated Types | `Generated/*.swift` | OpenAPI-generated types (prefixed with `API` where conflicts exist) |
 
 ### Message Flow
 
 ```
-Send:    ChatView -> CLIBridgeAdapter.sendMessage() -> POST /agents/:id/message
-Receive: SSE Stream -> CLIBridgeManager.handleSSEEvent() -> Callbacks -> ChatView
+Send:    ChatView -> CLIBridgeManager.sendMessage() -> WebSocket message
+Receive: WebSocket Stream -> CLIBridgeManager.handleMessage() -> StreamEvent -> ChatView
 ```
 
-### SSE Event Types
+### StreamEvent Types
 
 | Event | Purpose |
 |-------|---------|
@@ -189,20 +189,25 @@ Receive: SSE Stream -> CLIBridgeManager.handleSSEEvent() -> Callbacks -> ChatVie
 | `result` | Task complete (includes session info) |
 | `error` | Error message |
 
-### CLIBridgeAdapter Callbacks
+### StreamEvent Enum
 
-| Callback | Purpose |
-|----------|---------|
-| `onText()` | Streaming assistant text |
-| `onTextCommit()` | Text segment complete |
-| `onToolUse(name, input)` | Tool invocation |
-| `onToolResult()` | Tool output |
-| `onThinking()` | Reasoning blocks |
-| `onComplete(sessionId)` | Task finished |
-| `onAskUserQuestion()` | Interactive questions |
-| `onError()` | Error handling |
-| `onModelChanged()` | Model switch |
-| `onPermissionRequest()` | Tool approval request |
+The `onEvent` callback receives all streaming events via a single `StreamEvent` enum:
+
+| Case | Associated Data | Purpose |
+|------|-----------------|---------|
+| `.text(String)` | Text content | Streaming assistant text |
+| `.textCommit(String)` | Full text | Text segment complete |
+| `.toolUse(ToolUseMessage)` | Tool info | Tool invocation |
+| `.toolResult(ToolResultMessage)` | Result | Tool output |
+| `.thinking(String)` | Reasoning | Thinking/reasoning blocks |
+| `.result(ResultMessage)` | Session info | Task finished |
+| `.askUserQuestion(QuestionMessage)` | Question | Interactive questions |
+| `.error(String)` | Error message | Error handling |
+| `.modelChanged(String)` | Model ID | Model switch |
+| `.permissionRequest(PermissionRequestMessage)` | Request | Tool approval request |
+| `.agentStateChange(CLIAgentState)` | State | Agent state changes |
+| `.subagentStart(SubagentStartStreamMessage)` | Subagent info | Subagent started |
+| `.subagentEnd(SubagentEndStreamMessage)` | Subagent info | Subagent finished |
 
 ---
 
@@ -213,7 +218,7 @@ When bypass permissions is OFF, tool executions require user approval:
 ```
 +------------------+     +-------------------+     +--------------------+
 |  Claude CLI      |---->|  cli-bridge       |---->|   iOS App          |
-|  (canUseTool)    |     |  (SSE Stream)     |     |  (Approval UI)     |
+|  (canUseTool)    |     |  (WebSocket)      |     |  (Approval UI)     |
 +------------------+     +-------------------+     +--------------------+
                                |                         |
                                <-------------------------+
@@ -233,7 +238,7 @@ When bypass permissions is OFF, tool executions require user approval:
 ### Flow
 
 1. Backend receives tool call from Claude CLI
-2. `canUseTool` callback triggers SSE permission request event
+2. `canUseTool` callback triggers WebSocket permission request event
 3. iOS shows `ApprovalBannerView` with tool details
 4. User taps Approve/Always Allow/Deny
 5. iOS sends POST to backend with approval response
@@ -304,7 +309,7 @@ Key computed properties:
 
 **Connection Management:**
 - `ConnectionState` enum (disconnected/connecting/connected/error)
-- REST API with SSE streaming for responses
+- WebSocket streaming for responses
 - Agent lifecycle management (create, message, abort)
 - Health check endpoint monitoring
 
@@ -391,7 +396,7 @@ Key computed properties:
 #### ChatView.swift
 Core chat UI with responsibilities:
 - Message list with auto-scroll
-- SSE streaming integration via CLIBridgeAdapter
+- WebSocket streaming integration via CLIBridgeManager
 - Slash command handling
 - Tool use/result collapsible sections
 - Thinking block display
@@ -489,20 +494,20 @@ Core chat UI with responsibilities:
 1. User types/speaks/attaches and taps send
 2. ThinkingMode trigger appended if active
 3. ChatView adds user message to list
-4. CLIBridgeAdapter.sendMessage() called with:
+4. CLIBridgeManager.sendMessage() called with:
    - message text
    - project path (cwd)
    - sessionId (optional)
    - permissionMode
    - model options
-5. POST /agents/:id/message initiates SSE stream
-6. Response streamed via SSE events
-7. Callbacks update UI:
-   - onText: streaming assistant text
-   - onToolUse: tool invocation display
-   - onToolResult: tool output display
-   - onThinking: reasoning block display
-8. result event signals end
+5. WebSocket message sent to cli-bridge
+6. Response streamed via WebSocket events
+7. StreamEvent updates UI via onEvent callback:
+   - .text: streaming assistant text
+   - .toolUse: tool invocation display
+   - .toolResult: tool output display
+   - .thinking: reasoning block display
+8. .result event signals end
 9. MessageStore saves history to file
 10. Local notification sent (if backgrounded)
 ```
@@ -633,10 +638,16 @@ xcodebuild test -project CodingBridge.xcodeproj -scheme CodingBridge \
 See [ROADMAP.md](../ROADMAP.md) for remaining work and [ISSUES.md](../ISSUES.md) for investigation items.
 
 **Resolved in v0.6.0:**
-- Full migration from WebSocket to cli-bridge REST API with SSE
-- Removed WebSocketManager.swift (1,363 lines)
+- Full migration to cli-bridge REST API with WebSocket streaming
+- Removed legacy WebSocketManager.swift (1,363 lines)
 - Removed APIClient.swift (608 lines)
-- New CLIBridgeManager, CLIBridgeAdapter, CLIBridgeAPIClient, CLIBridgeTypes
+- New CLIBridgeManager, CLIBridgeAPIClient architecture
+
+**Resolved in v0.7.0:**
+- Removed CLIBridgeAdapter layer (~800 lines)
+- Consolidated callbacks into unified StreamEvent enum
+- Removed CLIBridgeTypesMigration (~2,398 lines)
+- Split into CLIBridgeAppTypes.swift + CLIBridgeExtensions.swift
 
 **Remaining Issues:**
 | Issue | Location | Priority |

@@ -38,7 +38,7 @@ Remote Config allows you to:
 | `max_message_history` | Number | 50 | Messages to keep per session |
 | `session_timeout_minutes` | Number | 30 | Session timeout duration |
 | `api_timeout_seconds` | Number | 30 | API request timeout |
-| `sse_reconnect_delay_ms` | Number | 1000 | SSE reconnection delay |
+| `websocket_reconnect_delay_ms` | Number | 1000 | WebSocket reconnection delay |
 | `min_supported_version` | String | "1.0.0" | Minimum app version |
 | `maintenance_mode` | Boolean | false | Enable maintenance mode |
 | `maintenance_message` | String | "" | Message to show in maintenance |
