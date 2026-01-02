@@ -157,7 +157,8 @@
 		C6E07B81FE4C2E6874667FB8 /* AgentCreated.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9840C998E440D3FBEFCB791 /* AgentCreated.swift */; };
 		CB000003 /* CLIBridgeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB000004 /* CLIBridgeManager.swift */; };
 		CB000005 /* CLIBridgeAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB000006 /* CLIBridgeAPIClient.swift */; };
-		CB000009 /* CLIBridgeTypesMigration.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB000010 /* CLIBridgeTypesMigration.swift */; };
+		CB000011 /* CLIBridgeAppTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB000012 /* CLIBridgeAppTypes.swift */; };
+		CB000013 /* CLIBridgeExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB000014 /* CLIBridgeExtensions.swift */; };
 		CCA13BBABC8E4725947D1011 /* ErrorInsightsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2CB9D357C2E4C4791DA828F /* ErrorInsightsView.swift */; };
 		CE000001 /* ChatViewExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE000002 /* ChatViewExtensions.swift */; };
 		CM000001 /* CustomModelPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CM000002 /* CustomModelPickerSheet.swift */; };
@@ -442,7 +443,8 @@
 		C6CFD89CE02E00DEB641D2EC /* SessionUpdateBody.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SessionUpdateBody.swift; sourceTree = "<group>"; };
 		CB000004 /* CLIBridgeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIBridgeManager.swift; sourceTree = "<group>"; };
 		CB000006 /* CLIBridgeAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIBridgeAPIClient.swift; sourceTree = "<group>"; };
-		CB000010 /* CLIBridgeTypesMigration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIBridgeTypesMigration.swift; sourceTree = "<group>"; };
+		CB000012 /* CLIBridgeAppTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIBridgeAppTypes.swift; sourceTree = "<group>"; };
+		CB000014 /* CLIBridgeExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIBridgeExtensions.swift; sourceTree = "<group>"; };
 		CE000002 /* ChatViewExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewExtensions.swift; sourceTree = "<group>"; };
 		CFG00001 /* Version.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Version.xcconfig; sourceTree = "<group>"; };
 		CM000002 /* CustomModelPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomModelPickerSheet.swift; sourceTree = "<group>"; };
@@ -625,7 +627,8 @@
 				SST00053 /* SessionStore.swift */,
 				CB000004 /* CLIBridgeManager.swift */,
 				CB000006 /* CLIBridgeAPIClient.swift */,
-				CB000010 /* CLIBridgeTypesMigration.swift */,
+				CB000012 /* CLIBridgeAppTypes.swift */,
+				CB000014 /* CLIBridgeExtensions.swift */,
 				A2000012 /* SpeechManager.swift */,
 				A2000013 /* UserQuestionsView.swift */,
 				A5000004 /* Utilities */,
@@ -1220,7 +1223,8 @@
 				NW000001 /* NetworkMonitor.swift in Sources */,
 				CB000003 /* CLIBridgeManager.swift in Sources */,
 				CB000005 /* CLIBridgeAPIClient.swift in Sources */,
-				CB000009 /* CLIBridgeTypesMigration.swift in Sources */,
+				CB000011 /* CLIBridgeAppTypes.swift in Sources */,
+				CB000013 /* CLIBridgeExtensions.swift in Sources */,
 				PT000001 /* PermissionTypes.swift in Sources */,
 				PM000001 /* PermissionManager.swift in Sources */,
 				PN000001 /* PushNotificationManager.swift in Sources */,

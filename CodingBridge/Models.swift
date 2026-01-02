@@ -23,7 +23,7 @@ func stringifyAnyValue(_ value: Any) -> String {
     if let num = value as? NSNumber {
         return num.stringValue
     }
-    // Handle AnyCodableValue wrapper (from CLIBridgeTypes.swift)
+    // Handle AnyCodableValue wrapper (from CLIBridgeAppTypes.swift)
     if let codable = value as? AnyCodableValue, let str = codable.stringValue {
         return str
     }

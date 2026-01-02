@@ -84,26 +84,26 @@ class CLIBridgeManager: ObservableObject {
     @Published var currentText: String = ""
 
     /// Token usage for current session
-    @Published var tokenUsage: CLIUsageContent?
+    @Published var tokenUsage: UsageStreamMessage?
 
     /// Last error message
     @Published var lastError: String?
 
     /// Current pending permission request
-    @Published var pendingPermission: CLIPermissionRequest?
+    @Published var pendingPermission: PermissionRequestMessage?
 
     /// Current pending question
-    @Published var pendingQuestion: CLIQuestionRequest?
+    @Published var pendingQuestion: QuestionMessage?
 
     /// Input is queued (sent while agent was busy)
     @Published var isInputQueued: Bool = false
     @Published var queuePosition: Int = 0
 
     /// Active subagent (if any)
-    @Published var activeSubagent: CLISubagentStartContent?
+    @Published var activeSubagent: SubagentStartStreamMessage?
 
     /// Progress for long-running tool
-    @Published var toolProgress: CLIProgressContent?
+    @Published var toolProgress: ProgressStreamMessage?
 
     // MARK: - Unified Event Callback
     //
@@ -382,7 +382,7 @@ class CLIBridgeManager: ObservableObject {
         startReceiveLoop(connectionId: currentConnectionId)
 
         // Send start message
-        let startPayload = CLIStartPayload(
+        let startPayload = StartMessage(
             projectPath: projectPath,
             sessionId: sessionId,
             model: model,
@@ -426,7 +426,7 @@ class CLIBridgeManager: ObservableObject {
         // Send reconnect message with lastMessageId for history recovery
         // Server will replay any messages missed since lastMessageId
         let messageId = lastMessageId ?? self.lastMessageId
-        let reconnectPayload = CLIReconnectPayload(agentId: agentId, lastMessageId: messageId)
+        let reconnectPayload = ReconnectMessage(agentId: agentId, lastMessageId: messageId)
 
         do {
             try await send(.reconnect(reconnectPayload))
@@ -497,8 +497,8 @@ class CLIBridgeManager: ObservableObject {
     // MARK: - Message Sending
 
     /// Send user input to the agent
-    func sendInput(_ text: String, images: [CLIImageAttachment]? = nil, thinkingMode: String? = nil) async throws {
-        let payload = CLIInputPayload(text: text, images: images, thinkingMode: thinkingMode)
+    func sendInput(_ text: String, images: [APIImageAttachment]? = nil, thinkingMode: String? = nil) async throws {
+        let payload = InputMessage(text: text, images: images, thinkingMode: thinkingMode)
         try await send(.input(payload))
         if agentState == .idle {
             agentState = .thinking
@@ -516,15 +516,15 @@ class CLIBridgeManager: ObservableObject {
     }
 
     /// Respond to a permission request
-    func respondToPermission(id: String, choice: CLIPermissionChoice) async throws {
-        let payload = CLIPermissionResponsePayload(id: id, choice: choice)
+    func respondToPermission(id: String, choice: PermissionResponseMessage.Choice) async throws {
+        let payload = PermissionResponseMessage(id: id, choice: choice)
         try await send(.permissionResponse(payload))
         pendingPermission = nil
     }
 
     /// Respond to a question
     func respondToQuestion(id: String, answers: [String: Any]) async throws {
-        let payload = CLIQuestionResponsePayload(
+        let payload = QuestionResponseMessage(
             id: id,
             answers: answers.mapValues { QuestionResponseMessageAnswersValue(AnyCodableValue($0)) }
         )
@@ -534,19 +534,19 @@ class CLIBridgeManager: ObservableObject {
 
     /// Subscribe to session events for a project
     func subscribeToSessions(projectPath: String? = nil) async throws {
-        let payload = CLISubscribeSessionsPayload(projectPath: projectPath)
+        let payload = SubscribeSessionsMessage(projectPath: projectPath)
         try await send(.subscribeSessions(payload))
     }
 
     /// Change the model mid-session
     func setModel(_ model: String) async throws {
-        try await send(.setModel(CLISetModelPayload(model: model)))
+        try await send(.setModel(SetModelMessage(model: model)))
     }
 
     /// Set permission mode for the agent
     /// - Parameter mode: "default", "acceptEdits", or "bypassPermissions"
-    func setPermissionMode(_ mode: CLIPermissionMode) async throws {
-        try await send(.setPermissionMode(CLISetPermissionModePayload(mode: mode)))
+    func setPermissionMode(_ mode: SetPermissionModeMessage.Mode) async throws {
+        try await send(.setPermissionMode(SetPermissionModeMessage(mode: mode)))
     }
 
     /// Cancel queued input
@@ -556,7 +556,7 @@ class CLIBridgeManager: ObservableObject {
 
     /// Retry a failed message
     func retry(messageId: String) async throws {
-        let payload = CLIRetryPayload(messageId: messageId)
+        let payload = RetryMessage(messageId: messageId)
         try await send(.retry(payload))
     }
 
@@ -589,7 +589,7 @@ class CLIBridgeManager: ObservableObject {
         return URL(string: urlString)
     }
 
-    private func send(_ message: CLIClientMessage) async throws {
+    private func send(_ message: ClientMessage) async throws {
         guard let webSocket = webSocket else {
             throw CLIBridgeError.notConnected
         }
@@ -655,7 +655,7 @@ class CLIBridgeManager: ObservableObject {
         }
 
         do {
-            let serverMessage = try JSONDecoder().decode(CLIServerMessage.self, from: data)
+            let serverMessage = try JSONDecoder().decode(ServerMessage.self, from: data)
             await processServerMessage(serverMessage)
         } catch {
             log.error("[WS] Failed to decode server message: \(error)")
@@ -678,7 +678,7 @@ class CLIBridgeManager: ObservableObject {
         }
     }
 
-    private func processServerMessage(_ message: CLIServerMessage) async {
+    private func processServerMessage(_ message: ServerMessage) async {
         switch message {
         case .typeConnectedMessage(let payload):
             handleConnected(payload)
@@ -760,7 +760,7 @@ class CLIBridgeManager: ObservableObject {
         }
     }
 
-    private func handleConnected(_ payload: CLIConnectedPayload) {
+    private func handleConnected(_ payload: ConnectedMessage) {
         let sessionIdStr = payload.sessionId.uuidString
         currentAgentId = payload.agentId
         sessionId = sessionIdStr
@@ -911,21 +911,21 @@ class CLIBridgeManager: ObservableObject {
         }
     }
 
-    private func handlePermissionRequest(_ request: CLIPermissionRequest) {
+    private func handlePermissionRequest(_ request: PermissionRequestMessage) {
         pendingPermission = request
         agentState = .waitingPermission
         toolProgress = nil  // Clear progress - tool is waiting for approval, not running
         emit(.permissionRequest(request))
     }
 
-    private func handleQuestionRequest(_ request: CLIQuestionRequest) {
+    private func handleQuestionRequest(_ request: QuestionMessage) {
         pendingQuestion = request
         agentState = .waitingInput
         toolProgress = nil  // Clear progress - tool is waiting for input, not running
         emit(.questionRequest(request))
     }
 
-    private func handleError(_ payload: CLIErrorPayload) {
+    private func handleError(_ payload: WsErrorMessage) {
         lastError = payload.message
         emit(.error(payload))
 
@@ -1087,7 +1087,7 @@ extension CLIBridgeManager {
         await handleMessage(message)
     }
 
-    func test_processServerMessage(_ message: CLIServerMessage) async {
+    func test_processServerMessage(_ message: ServerMessage) async {
         await processServerMessage(message)
     }
 

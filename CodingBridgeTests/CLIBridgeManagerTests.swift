@@ -4,6 +4,7 @@ import XCTest
 
 @MainActor
 final class CLIBridgeManagerTests: XCTestCase {
+    private static let validSessionId = "00000000-0000-0000-0000-000000000001"
     private var cancellables: Set<AnyCancellable> = []
 
     private final class MockURLSessionWebSocketTask: WebSocketTasking {
@@ -143,7 +144,7 @@ final class CLIBridgeManagerTests: XCTestCase {
 
     private func connectedMessage(
         agentId: String = "agent-1",
-        sessionId: String = "session-1"
+        sessionId: String = Self.validSessionId
     ) -> URLSessionWebSocketTask.Message {
         messageString(from: [
             "type": "connected",
@@ -151,7 +152,7 @@ final class CLIBridgeManagerTests: XCTestCase {
             "sessionId": sessionId,
             "model": "claude",
             "version": "1",
-            "protocolVersion": "1"
+            "protocolVersion": "1.0"
         ])
     }
 
@@ -259,12 +260,13 @@ final class CLIBridgeManagerTests: XCTestCase {
     func test_connect_withSessionIdIncludesInRequest() async {
         let (manager, _, task) = makeManager()
         manager.test_setNetworkAvailable(true)
+        let sessionId = Self.validSessionId
 
-        await manager.connect(projectPath: "/tmp/project", sessionId: "session-1")
+        await manager.connect(projectPath: "/tmp/project", sessionId: sessionId)
 
         let json = firstSentJSON(from: task)
         XCTAssertEqual(json["type"] as? String, "start")
-        XCTAssertEqual(json["sessionId"] as? String, "session-1")
+        XCTAssertEqual(json["sessionId"] as? String, sessionId)
         manager.disconnect()
     }
 
@@ -318,12 +320,12 @@ final class CLIBridgeManagerTests: XCTestCase {
 
     func test_parseMessage_systemConnectedExtractsAgentId() async {
         let (manager, _, _) = makeManager()
-        let payload = CLIConnectedPayload(
+        let payload = ConnectedMessage(
             agentId: "agent-1",
-            sessionId: "session-1",
+            sessionId: Self.validSessionId,
             model: "claude",
             version: "1",
-            protocolVersion: "1"
+            protocolVersion: "1.0"
         )
 
         await manager.test_processServerMessage(.connected(payload))
@@ -334,17 +336,17 @@ final class CLIBridgeManagerTests: XCTestCase {
 
     func test_parseMessage_systemSessionIdExtractsSessionId() async {
         let (manager, _, _) = makeManager()
-        let payload = CLIConnectedPayload(
+        let payload = ConnectedMessage(
             agentId: "agent-1",
-            sessionId: "session-1",
+            sessionId: Self.validSessionId,
             model: "claude",
             version: "1",
-            protocolVersion: "1"
+            protocolVersion: "1.0"
         )
 
         await manager.test_processServerMessage(.connected(payload))
 
-        XCTAssertEqual(manager.sessionId, "session-1")
+        XCTAssertEqual(manager.sessionId, Self.validSessionId)
     }
 
     func test_parseMessage_assistantTextSetsCurrentText() {
@@ -509,13 +511,7 @@ final class CLIBridgeManagerTests: XCTestCase {
             expectation.fulfill()
         }
 
-        let payload = CLIErrorPayload(
-            code: "agent_error",
-            message: "Boom",
-            recoverable: true,
-            retryable: nil,
-            retryAfter: nil
-        )
+        let payload = WsErrorMessage(code: "agent_error", message: "Boom", recoverable: true)
 
         await manager.test_processServerMessage(.error(payload))
 
@@ -532,7 +528,7 @@ final class CLIBridgeManagerTests: XCTestCase {
             expectation.fulfill()
         }
 
-        await manager.test_processServerMessage(.stopped(CLIStoppedPayload(reason: "done")))
+        await manager.test_processServerMessage(.stopped(StoppedMessage(reason: "complete")))
 
         XCTAssertEqual(manager.agentState, .idle)
         XCTAssertNil(manager.toolProgress)
@@ -694,8 +690,8 @@ final class CLIBridgeManagerTests: XCTestCase {
     func test_reconnect_resumesWithSameSessionId() async {
         let (manager, _, task) = makeManager()
         manager.test_setNetworkAvailable(true)
-        manager.sessionId = "session-1"
-        manager.test_setPendingConnection(projectPath: "/tmp/project", sessionId: "old-session", model: "claude", helper: false)
+        manager.sessionId = Self.validSessionId
+        manager.test_setPendingConnection(projectPath: "/tmp/project", sessionId: Self.validSessionId, model: "claude", helper: false)
         let expectation = expectation(description: "send start")
         task.onSend = { _ in
             expectation.fulfill()
@@ -705,7 +701,7 @@ final class CLIBridgeManagerTests: XCTestCase {
 
         await fulfillment(of: [expectation], timeout: 1)
         let json = firstSentJSON(from: task)
-        XCTAssertEqual(json["sessionId"] as? String, "session-1")
+        XCTAssertEqual(json["sessionId"] as? String, Self.validSessionId)
         manager.disconnect()
     }
 
@@ -969,13 +965,7 @@ final class CLIBridgeManagerTests: XCTestCase {
             expectation.fulfill()
         }
 
-        let payload = CLIErrorPayload(
-            code: "INVALID_MESSAGE",
-            message: "Oops",
-            recoverable: false,
-            retryable: nil,
-            retryAfter: nil
-        )
+        let payload = WsErrorMessage(code: "invalid_message", message: "Oops", recoverable: false)
 
         await manager.test_processServerMessage(.error(payload))
 
@@ -987,16 +977,16 @@ final class CLIBridgeManagerTests: XCTestCase {
         let expectation = expectation(description: "onSessionConnected")
         manager.onEvent = { event in
             guard case .connected(let sessionId, _, _) = event else { return }
-            XCTAssertEqual(sessionId, "session-1")
+            XCTAssertEqual(sessionId, Self.validSessionId)
             expectation.fulfill()
         }
 
-        let payload = CLIConnectedPayload(
+        let payload = ConnectedMessage(
             agentId: "agent-1",
-            sessionId: "session-1",
+            sessionId: Self.validSessionId,
             model: "claude",
             version: "1",
-            protocolVersion: "1"
+            protocolVersion: "1.0"
         )
         await manager.test_processServerMessage(.connected(payload))
 
@@ -1012,7 +1002,7 @@ final class CLIBridgeManagerTests: XCTestCase {
             expectation.fulfill()
         }
 
-        let payload = CLIModelChangedPayload(type: .modelChanged, model: "claude-3", previousModel: "claude-2")
+        let payload = ModelChangedMessage(type: .modelChanged, model: "claude-3", previousModel: "claude-2")
         await manager.test_processServerMessage(.modelChanged(payload))
 
         await fulfillment(of: [expectation], timeout: 1)
@@ -1187,8 +1177,8 @@ final class CLIBridgeManagerTests: XCTestCase {
     func test_reconnect_afterNetworkRestore_resumesSession() async throws {
         let (manager, _, task) = makeManager()
         manager.test_setNetworkAvailable(true)
-        manager.sessionId = "session-1"
-        manager.test_setPendingConnection(projectPath: "/tmp/project", sessionId: "session-1", model: "claude", helper: false)
+        manager.sessionId = Self.validSessionId
+        manager.test_setPendingConnection(projectPath: "/tmp/project", sessionId: Self.validSessionId, model: "claude", helper: false)
         let expectation = expectation(description: "reconnect send")
         task.onSend = { _ in
             expectation.fulfill()
@@ -1198,7 +1188,7 @@ final class CLIBridgeManagerTests: XCTestCase {
 
         await fulfillment(of: [expectation], timeout: 1)
         let json = firstSentJSON(from: task)
-        XCTAssertEqual(json["sessionId"] as? String, "session-1")
+        XCTAssertEqual(json["sessionId"] as? String, Self.validSessionId)
         manager.disconnect()
     }
 
@@ -1210,10 +1200,10 @@ final class CLIBridgeManagerTests: XCTestCase {
         XCTAssertEqual(manager.connectionState, .disconnected)
         XCTAssertNil(manager.sessionId)
 
-        await manager.test_handleMessage(connectedMessage())
+        await manager.test_handleMessage(connectedMessage(sessionId: Self.validSessionId))
 
         XCTAssertEqual(manager.connectionState, .connected(agentId: "agent-1"))
-        XCTAssertEqual(manager.sessionId, "session-1")
+        XCTAssertEqual(manager.sessionId, Self.validSessionId)
     }
 
     func test_stream_malformedJSON_logsErrorContinues() async throws {
@@ -1275,13 +1265,7 @@ final class CLIBridgeManagerTests: XCTestCase {
             expectation.fulfill()
         }
 
-        let payload = CLIErrorPayload(
-            code: "agent_error",
-            message: "Server error",
-            recoverable: false,
-            retryable: nil,
-            retryAfter: nil
-        )
+        let payload = WsErrorMessage(code: "agent_error", message: "Server error", recoverable: false)
         await manager.test_processServerMessage(.error(payload))
 
         XCTAssertEqual(manager.lastError, "Server error")
@@ -1303,13 +1287,7 @@ final class CLIBridgeManagerTests: XCTestCase {
             expectation.fulfill()
         }
 
-        let payload = CLIErrorPayload(
-            code: "session_invalid",
-            message: "Unauthorized",
-            recoverable: false,
-            retryable: nil,
-            retryAfter: nil
-        )
+        let payload = WsErrorMessage(code: "session_invalid", message: "Unauthorized", recoverable: false)
         await manager.test_processServerMessage(.error(payload))
 
         XCTAssertNil(manager.sessionId)
@@ -1337,13 +1315,7 @@ final class CLIBridgeManagerTests: XCTestCase {
             sendExpectation.fulfill()
         }
 
-        let payload = CLIErrorPayload(
-            code: "rate_limited",
-            message: "Too many",
-            recoverable: true,
-            retryable: true,
-            retryAfter: 0
-        )
+        let payload = WsErrorMessage(code: "rate_limited", message: "Too many", recoverable: true, retryable: true, retryAfter: 0)
         await manager.test_processServerMessage(.error(payload))
 
         await fulfillment(of: [errorExpectation, sendExpectation], timeout: 1)
@@ -1367,12 +1339,12 @@ final class CLIBridgeManagerTests: XCTestCase {
 
         await manager.connect(projectPath: "/tmp/project")
 
-        let connectedPayload = CLIConnectedPayload(
+        let connectedPayload = ConnectedMessage(
             agentId: "agent-1",
-            sessionId: "session-1",
+            sessionId: Self.validSessionId,
             model: "claude",
             version: "1",
-            protocolVersion: "1"
+            protocolVersion: "1.0"
         )
         await manager.test_processServerMessage(.connected(connectedPayload))
 
@@ -1396,7 +1368,7 @@ final class CLIBridgeManagerTests: XCTestCase {
         )
         manager.test_handleStreamMessage(storedMessage(from: .typeToolResultStreamMessage(toolResult)))
 
-        await manager.test_processServerMessage(.stopped(CLIStoppedPayload(reason: "done")))
+        await manager.test_processServerMessage(.stopped(StoppedMessage(reason: "complete")))
 
         await fulfillment(of: [expectation], timeout: 1)
         XCTAssertEqual(

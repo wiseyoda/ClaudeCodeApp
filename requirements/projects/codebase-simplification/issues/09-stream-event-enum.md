@@ -126,7 +126,7 @@ None.
 |------|--------|---------|
 | 2026-01-02 | Phase 1: StreamEvent enum and dual-emit in CLIBridgeManager | Complete |
 | 2026-01-02 | Phase 2: CLIBridgeAdapter migration to onEvent | Complete |
-| 2026-01-02 | Phase 3: ChatViewModel migration | Skipped (not needed) |
+| 2026-01-02 | Phase 3: ChatViewModel migration | Completed in #17 after CLIBridgeAdapter removal |
 | 2026-01-02 | Phase 4: Legacy callback removal | Complete |
 
 ### Phase 1 Details (Complete)
@@ -158,13 +158,13 @@ None.
 
 **Build:** Verified passing
 
-### Phase 3 Details (Skipped)
+### Phase 3 Details (Complete)
 
-ChatViewModel migration was not needed because CLIBridgeAdapter's external interface (callbacks it exposes to ChatViewModel) remained unchanged. The adapter still exposes `onText`, `onToolUse`, etc. to its consumers.
+ChatViewModel now handles `StreamEvent` directly via `CLIBridgeManager` after #17 removed the adapter layer. The previous adapter-specific callback surface is no longer in use.
 
 ### Phase 4 Details (Complete)
 
-Legacy callbacks in `CLIBridgeManager.swift` were removed after migrating tests to use `onEvent`. `CLIBridgeManagerTests.swift` and `CLIBridgeAdapterTests.swift` now emit and assert `StreamEvent` values directly.
+Legacy callbacks in `CLIBridgeManager.swift` were removed after migrating tests to use `onEvent`. `CLIBridgeManagerTests.swift` now emits and asserts `StreamEvent` values directly; `CLIBridgeAdapterTests.swift` was removed in #17.
 
 ### Summary
 

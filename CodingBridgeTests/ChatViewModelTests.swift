@@ -344,7 +344,7 @@ final class ChatViewModelTests: XCTestCase {
         manager.activeSubagent = CLISubagentStartContent(id: "subagent-2", description: "Task")
 
         manager.simulateEvent(.toolStart(id: "tool-3", name: "Shell", input: ["command": "ls"]))
-        manager.simulateEvent(.toolResult(id: "tool-3", tool: "Shell", output: "done", isError: false))
+        manager.simulateEvent(.toolResult(id: "tool-3", name: "Shell", output: "done", isError: false))
 
         XCTAssertTrue(viewModel.messages.isEmpty)
         XCTAssertFalse(viewModel.subagentToolIds.contains("tool-3"))
@@ -354,7 +354,7 @@ final class ChatViewModelTests: XCTestCase {
         let (viewModel, manager, _, _) = makeFixture()
         viewModel.setupStreamEventHandler()
 
-        manager.simulateEvent(.toolResult(id: "tool-4", tool: "Task", output: "done", isError: false))
+        manager.simulateEvent(.toolResult(id: "tool-4", name: "Task", output: "done", isError: false))
 
         XCTAssertTrue(viewModel.messages.isEmpty)
     }
@@ -363,7 +363,7 @@ final class ChatViewModelTests: XCTestCase {
         let (viewModel, manager, _, _) = makeFixture()
         viewModel.setupStreamEventHandler()
 
-        manager.simulateEvent(.toolResult(id: "tool-5", tool: "Shell", output: "done", isError: false))
+        manager.simulateEvent(.toolResult(id: "tool-5", name: "Shell", output: "done", isError: false))
 
         XCTAssertEqual(viewModel.messages.count, 1)
         XCTAssertEqual(viewModel.messages.first?.role, .toolResult)
@@ -386,7 +386,7 @@ final class ChatViewModelTests: XCTestCase {
         viewModel.setupStreamEventHandler()
         viewModel.processingStartTime = Date()
 
-        let payload = CLIErrorPayload(code: "agent_error", message: "failure", recoverable: false, retryable: false)
+        let payload = WsErrorMessage(code: "agent_error", message: "failure", recoverable: false, retryable: false)
         manager.simulateEvent(.error(payload))
 
         XCTAssertEqual(viewModel.messages.count, 1)
@@ -411,7 +411,7 @@ final class ChatViewModelTests: XCTestCase {
         let (viewModel, manager, _, _) = makeFixture()
         viewModel.setupStreamEventHandler()
 
-        let payload = CLIReconnectCompletePayload(type: .reconnectComplete, missedCount: 0, fromMessageId: "msg-1")
+        let payload = ReconnectCompleteMessage(type: .reconnectComplete, missedCount: 0, fromMessageId: "msg-1")
         manager.simulateEvent(.reconnectComplete(payload))
 
         XCTAssertEqual(viewModel.messages.count, 1)

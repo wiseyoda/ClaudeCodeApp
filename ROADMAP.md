@@ -39,9 +39,9 @@
 
 | Order | # | Task | Impact | Depends On | Status | Notes |
 |-------|---|------|--------|------------|--------|-------|
-| 1 | #9 | WebSocket callbacks -> StreamEvent enum | High | - | Complete | Legacy callbacks retained for test compat. |
+| 1 | #9 | WebSocket callbacks -> StreamEvent enum | High | - | Complete | Legacy callbacks removed; StreamEvent-only callbacks. |
 | 2 | #17 | Remove CLIBridgeAdapter layer | High | #9 | Complete | ~800 lines deleted, ChatViewModel uses manager directly. |
-| 3 | #1 | Remove CLIBridgeTypesMigration | High | #17 | Planned | After adapter removal to reduce dual type shims. |
+| 3 | #1 | Remove CLIBridgeTypesMigration | High | #17 | Complete | Split into CLIBridgeAppTypes.swift + CLIBridgeExtensions.swift. |
 | 4 | #27 | Consolidate network/lifecycle/reconnect logic; remove sleep-based connects | High | #17 | Planned | Reduce duplicate reconnect paths. |
 | 5 | #23 | Unify draft + processing persistence | High | #27 | Planned | Single source of truth for recovery. |
 | 6 | #25 | Finish or remove MessageQueuePersistence | Medium | #23 | Planned | Either wire queue or delete it. |

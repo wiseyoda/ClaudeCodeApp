@@ -1,6 +1,6 @@
 # Issue #1: Remove CLIBridgeTypesMigration
 
-> **Status**: Pending
+> **Status**: Complete
 > **Priority**: Tier 1
 > **Depends On**: #17
 > **Blocks**: #2/#21/#30/#43
@@ -71,10 +71,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Remove CLIBridgeTypesMigration is implemented as described
-- [ ] Legacy paths are removed or no longer used
+- [x] Remove CLIBridgeTypesMigration is implemented as described
+- [x] Legacy paths are removed or no longer used
 - [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] No user-visible behavior changes
 
 ---
 
@@ -125,5 +125,6 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | In progress |
+| 2026-01-02 | Completed | Split CLIBridgeTypesMigration.swift into CLIBridgeAppTypes.swift (app-specific types, StreamEvent enum, typealiases) and CLIBridgeExtensions.swift (extensions to generated types). |
+| 2026-01-02 | Follow-up | Updated test fixtures to use generated types and clarified compatibility comments. Build not rerun. |
