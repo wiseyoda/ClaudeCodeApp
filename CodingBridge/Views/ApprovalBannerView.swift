@@ -250,6 +250,127 @@ struct CompactApprovalBannerView: View {
     }
 }
 
+// MARK: - Exit Plan Mode Approval View
+
+/// A full-screen sheet for reviewing and approving ExitPlanMode requests
+/// Shows the plan content as markdown with approve/reject buttons
+struct ExitPlanModeApprovalView: View {
+    let request: ApprovalRequest
+    let onApprove: () -> Void
+    let onDeny: () -> Void
+
+    @EnvironmentObject var settings: AppSettings
+    @Environment(\.colorScheme) var colorScheme
+    @Environment(\.dismiss) var dismiss
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    // Header
+                    HStack(spacing: 12) {
+                        Image(systemName: "doc.text.magnifyingglass")
+                            .font(.system(size: 24, weight: .medium))
+                            .foregroundColor(CLITheme.cyan(for: colorScheme))
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Exit Plan Mode")
+                                .font(settings.scaledFont(.body))
+                                .fontWeight(.semibold)
+                                .foregroundColor(CLITheme.primaryText(for: colorScheme))
+
+                            Text("Review the proposed plan before Claude begins execution")
+                                .font(settings.scaledFont(.small))
+                                .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+                        }
+                    }
+                    .padding(.bottom, 8)
+
+                    Divider()
+
+                    // Plan content as markdown
+                    if let plan = request.planContent {
+                        MarkdownText(plan)
+                    } else {
+                        Text("No plan content provided")
+                            .font(settings.scaledFont(.body))
+                            .foregroundColor(CLITheme.secondaryText(for: colorScheme))
+                            .italic()
+                    }
+                }
+                .padding()
+            }
+            .background(CLITheme.background(for: colorScheme))
+            .navigationTitle("Review Plan")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Reject") {
+                        onDeny()
+                        dismiss()
+                    }
+                    .foregroundColor(CLITheme.red(for: colorScheme))
+                }
+
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Approve") {
+                        onApprove()
+                        dismiss()
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                // Bottom action buttons (duplicated for visibility)
+                HStack(spacing: 16) {
+                    Button {
+                        onDeny()
+                        dismiss()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 14, weight: .semibold))
+                            Text("Reject Plan")
+                                .font(settings.scaledFont(.body))
+                                .fontWeight(.medium)
+                        }
+                        .foregroundColor(CLITheme.red(for: colorScheme))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(CLITheme.red(for: colorScheme).opacity(0.1))
+                        .cornerRadius(10)
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        onApprove()
+                        dismiss()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 14, weight: .semibold))
+                            Text("Approve Plan")
+                                .font(settings.scaledFont(.body))
+                                .fontWeight(.medium)
+                        }
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .background(CLITheme.green(for: colorScheme))
+                        .cornerRadius(10)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding()
+                .background(
+                    CLITheme.secondaryBackground(for: colorScheme)
+                        .shadow(color: .black.opacity(0.1), radius: 8, y: -4)
+                )
+            }
+        }
+    }
+}
+
 // MARK: - Preview
 
 #Preview("Approval Banner - Bash") {
@@ -307,4 +428,36 @@ struct CompactApprovalBannerView: View {
         .environmentObject(AppSettings())
     }
     .background(Color.black)
+}
+
+#Preview("Exit Plan Mode Approval") {
+    ExitPlanModeApprovalView(
+        request: ApprovalRequest(
+            id: "test-plan",
+            toolName: "ExitPlanMode",
+            input: [
+                "plan": """
+                ## Implementation Plan
+
+                ### Phase 1: Setup
+                1. Create the new component file
+                2. Add basic structure and props
+
+                ### Phase 2: Implementation
+                1. Implement the main logic
+                2. Add error handling
+                3. Write unit tests
+
+                ### Phase 3: Integration
+                1. Update parent components
+                2. Add to exports
+                3. Update documentation
+                """
+            ],
+            receivedAt: Date()
+        ),
+        onApprove: { print("Plan Approved") },
+        onDeny: { print("Plan Rejected") }
+    )
+    .environmentObject(AppSettings())
 }

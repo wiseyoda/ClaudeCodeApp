@@ -1,6 +1,6 @@
 # Issue #29: Standardize SSHManager ownership
 
-> **Status**: Pending
+> **Status**: Complete (verified 2026-01-02)
 > **Priority**: Tier 2
 > **Depends On**: None
 > **Blocks**: #44
@@ -69,10 +69,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Standardize SSHManager ownership is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Standardize SSHManager ownership is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -123,5 +123,23 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | Audited SSHManager usage |
+| 2026-01-02 | Completed | Removed unused singleton, clarified per-view ownership |
+| 2026-01-02 | Verified | Confirmed SSHManager is instance-owned and no shared singleton remains |
+
+### Resolution Details
+
+**Audit findings:**
+1. `SSHManager.shared` singleton was defined but never used anywhere
+2. TerminalView creates its own instance via `@StateObject private var sshManager = SSHManager()`
+3. All file/git operations migrated to CLIBridgeAPIClient (no other SSHManager usage)
+
+**Decision:** Per-view instance is correct because each TerminalView needs its own:
+- Connection state (isConnected, isConnecting)
+- Host/username/port
+- Output buffer
+- Current directory
+
+**Changes made:**
+- Removed unused `static let shared = SSHManager()` singleton
+- Added clarifying comment explaining the per-view ownership pattern

@@ -57,8 +57,8 @@
 
 | # | Task | Impact | Depends On | Status | Notes |
 |---|------|--------|------------|--------|-------|
-| #2 | Simplify PaginatedMessage.toChatMessage() | Medium | #1 | Pending | Should be done after type cleanup. |
-| #3 | Remove formatJSONValue() custom serializer | Low | #2 | Pending | Use JSONEncoder. |
+| #2 | Simplify PaginatedMessage.toChatMessage() | Medium | #1 | Complete | Removed rawContent parsing path; now uses typed StreamMessage directly (25 lines saved). |
+| #3 | Remove formatJSONValue() custom serializer | Low | #2 | Complete | Replaced with JSONEncoder (19 lines saved). |
 | #4 | Eliminate extractFilePath() parsing | Medium | - | Complete | Replaced with ToolParser.extractParam() calls. |
 | #6 | Remove effectiveSessionToResume computed property | Low | #23 | Complete | Removed; manager.sessionId used directly. |
 | #7 | Remove effectiveModelId/effectivePermissionMode indirection | Low | #23 | Complete | Removed String wrapper; retained resolution logic. |
@@ -73,7 +73,7 @@
 | #19 | Remove message pruning | Low | #23 | Complete | Removed pruneMessagesIfNeeded() and 2 call sites. |
 | #20 | Simplify slash command handling | Low | - | Complete | Replaced switch with registry pattern. |
 | #28 | Gate ToolTestView/dev tools behind DEBUG or feature flag | Low | - | Complete | ToolTestView and ContentView dev tool button wrapped in #if DEBUG. |
-| #29 | Standardize SSHManager ownership | Medium | - | Pending | Align singleton vs per-view usage. |
+| #29 | Standardize SSHManager ownership | Medium | - | Complete | Removed unused singleton; per-view instance is correct pattern. |
 
 ### cli-bridge Feature Requests / Issues
 
@@ -95,10 +95,10 @@
 
 | # | Task | Impact | Depends On | Status | Notes |
 |---|------|--------|------------|--------|-------|
-| #42 | Split ChatViewModel into focused modules | Low | #17 | Pending | ~1641 lines; revisit after streaming/persistence cleanup. |
-| #43 | Split Models.swift into model + persistence files | Medium | #1 | Pending | ~1103 lines; aligns with store consolidation. |
-| #44 | Split SSHManager into key/file/git modules | Medium | - | Pending | ~1401 lines; depends on ownership decision (#29). |
-| #45 | Split CLIBridgeManager into connection + stream handler | Medium | #9/#17 | Pending | ~1237 lines; reduce churn risk. |
+| #42 | Split ChatViewModel into focused modules | Low | #17 | Complete | Split into 5 extension files; main file reduced to 534 lines. |
+| #43 | Split Models.swift into model + persistence files | Medium | #1 | Complete | Split into 9 focused files (5 models, 3 persistence, 1 utility). |
+| #44 | Split SSHManager into key/file/git modules | Medium | - | Complete | Split into 4 files: core (726), Connection (240), Files (167), Git (312). |
+| #45 | Split CLIBridgeManager into connection + stream handler | Medium | #9/#17 | Complete | Split into 5 files: core (496), Connection (233), Lifecycle (125), Messages (85), Stream (387). |
 
 ---
 

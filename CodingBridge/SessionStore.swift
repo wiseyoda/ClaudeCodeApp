@@ -555,8 +555,36 @@ extension SessionStore {
 
     // MARK: - Session Count
 
-    /// Load session counts from the API
-    /// This provides accurate counts broken down by source
+    /// Populate session counts from projects response (batch operation - no API calls)
+    /// This avoids N+1 API calls by using the sessionCount from GET /projects response
+    /// - Parameter projects: Array of CLIProject with sessionCount from API
+    func populateCountsFromProjects(_ projects: [CLIProject]) {
+        var updated = 0
+        for project in projects {
+            if let count = project.sessionCount {
+                // Create a CLISessionCountResponse with total count only
+                // The user/agent/helper breakdown is not available from the projects endpoint
+                // but the total is sufficient for display purposes
+                let countResponse = CLISessionCountResponse(
+                    total: count,
+                    count: nil,
+                    source: nil,
+                    user: count,  // Default to total for display - detailed counts loaded on demand
+                    agent: nil,
+                    helper: nil
+                )
+                countsByProject[project.path] = countResponse
+                updated += 1
+            }
+        }
+        if updated > 0 {
+            log.debug("[SessionStore] Populated counts for \(updated) projects from batch response")
+        }
+    }
+
+    /// Load session counts from the API for a single project
+    /// Use this when detailed user/agent/helper breakdown is needed
+    /// For initial display, prefer populateCountsFromProjects() which uses batch data
     func loadSessionCounts(for projectPath: String) async {
         guard let repository = repository else {
             log.error("[SessionStore] Repository not configured")

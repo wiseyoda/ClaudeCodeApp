@@ -117,12 +117,23 @@
 		A1000001 /* CodingBridgeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001 /* CodingBridgeApp.swift */; };
 		A1000002 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000002 /* ContentView.swift */; };
 		A1000003 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000003 /* ChatView.swift */; };
-		A1000004 /* Models.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000004 /* Models.swift */; };
+		CM430001 /* ClaudeModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CM430002 /* ClaudeModel.swift */; };
+		PM430001 /* ProjectModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = PM430002 /* ProjectModels.swift */; };
+		CMG43001 /* ChatMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = CMG43002 /* ChatMessage.swift */; };
+		QT430001 /* QuestionTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = QT430002 /* QuestionTypes.swift */; };
+		AT430001 /* ApprovalTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = AT430002 /* ApprovalTypes.swift */; };
+		MS430001 /* MessageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = MS430002 /* MessageStore.swift */; };
+		AP430001 /* ArchivedProjectsStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AP430002 /* ArchivedProjectsStore.swift */; };
+		BS430001 /* BookmarkStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BS430002 /* BookmarkStore.swift */; };
+		SA430001 /* StringifyAnyValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = SA430002 /* StringifyAnyValue.swift */; };
 		A1000006 /* AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000006 /* AppSettings.swift */; };
 		A1000007 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A2000007 /* Assets.xcassets */; };
 		A1000008 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000008 /* Theme.swift */; };
 		A1000009 /* TerminalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000009 /* TerminalView.swift */; };
 		A1000010 /* SSHManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000010 /* SSHManager.swift */; };
+		SSHC0001 /* SSHManager+Connection.swift in Sources */ = {isa = PBXBuildFile; fileRef = SSHC0002 /* SSHManager+Connection.swift */; };
+		SSHF0001 /* SSHManager+Files.swift in Sources */ = {isa = PBXBuildFile; fileRef = SSHF0002 /* SSHManager+Files.swift */; };
+		SSHG0001 /* SSHManager+Git.swift in Sources */ = {isa = PBXBuildFile; fileRef = SSHG0002 /* SSHManager+Git.swift */; };
 		A1000011 /* Citadel in Frameworks */ = {isa = PBXBuildFile; productRef = A1100001 /* Citadel */; };
 		A1000012 /* Highlightr in Frameworks */ = {isa = PBXBuildFile; productRef = A1100002 /* Highlightr */; };
 		A1000013 /* SpeechManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000012 /* SpeechManager.swift */; };
@@ -163,6 +174,10 @@
 		BG000001 /* BackgroundManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = BG000002 /* BackgroundManager.swift */; };
 		C6E07B81FE4C2E6874667FB8 /* AgentCreated.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9840C998E440D3FBEFCB791 /* AgentCreated.swift */; };
 		CB000003 /* CLIBridgeManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB000004 /* CLIBridgeManager.swift */; };
+		CBMC0001 /* CLIBridgeManager+Connection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBMC0002 /* CLIBridgeManager+Connection.swift */; };
+		CBML0001 /* CLIBridgeManager+Lifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBML0002 /* CLIBridgeManager+Lifecycle.swift */; };
+		CBMM0001 /* CLIBridgeManager+Messages.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBMM0002 /* CLIBridgeManager+Messages.swift */; };
+		CBMS0001 /* CLIBridgeManager+Stream.swift in Sources */ = {isa = PBXBuildFile; fileRef = CBMS0002 /* CLIBridgeManager+Stream.swift */; };
 		CB000005 /* CLIBridgeAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB000006 /* CLIBridgeAPIClient.swift */; };
 		CB000011 /* CLIBridgeAppTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB000012 /* CLIBridgeAppTypes.swift */; };
 		CB000013 /* CLIBridgeExtensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB000014 /* CLIBridgeExtensions.swift */; };
@@ -171,6 +186,11 @@
 		CM000001 /* CustomModelPickerSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = CM000002 /* CustomModelPickerSheet.swift */; };
 		CT000001 /* CompactToolView.swift in Sources */ = {isa = PBXBuildFile; fileRef = CT000002 /* CompactToolView.swift */; };
 		CVMB0001 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CVMF0001 /* ChatViewModel.swift */; };
+		CVMS0002 /* ChatViewModel+Sessions.swift in Sources */ = {isa = PBXBuildFile; fileRef = CVMS0001 /* ChatViewModel+Sessions.swift */; };
+		CVMC0002 /* ChatViewModel+SlashCommands.swift in Sources */ = {isa = PBXBuildFile; fileRef = CVMC0001 /* ChatViewModel+SlashCommands.swift */; };
+		CVME0002 /* ChatViewModel+StreamEvents.swift in Sources */ = {isa = PBXBuildFile; fileRef = CVME0001 /* ChatViewModel+StreamEvents.swift */; };
+		CVMG0002 /* ChatViewModel+Git.swift in Sources */ = {isa = PBXBuildFile; fileRef = CVMG0001 /* ChatViewModel+Git.swift */; };
+		CVMM0002 /* ChatViewModel+ManagerState.swift in Sources */ = {isa = PBXBuildFile; fileRef = CVMM0001 /* ChatViewModel+ManagerState.swift */; };
 		D2C94B063D60EF7CE7582768 /* ProjectsEncodedPathSessionsBulkPost200ResponseAllOfFailedInner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7F7B7784CC9049899D28642D /* ProjectsEncodedPathSessionsBulkPost200ResponseAllOfFailedInner.swift */; };
 		D3CD1131DB30257E4118CAA7 /* CLIThinkingMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71EB441C78A92710EA05554B /* CLIThinkingMode.swift */; };
 		D84F91096078D499E79B303A /* CLIGitStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80CB0196126E1928C1D42291 /* CLIGitStatus.swift */; };
@@ -407,12 +427,23 @@
 		A2000001 /* CodingBridgeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodingBridgeApp.swift; sourceTree = "<group>"; };
 		A2000002 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		A2000003 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
-		A2000004 /* Models.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Models.swift; sourceTree = "<group>"; };
+		CM430002 /* ClaudeModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeModel.swift; sourceTree = "<group>"; };
+		PM430002 /* ProjectModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectModels.swift; sourceTree = "<group>"; };
+		CMG43002 /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessage.swift; sourceTree = "<group>"; };
+		QT430002 /* QuestionTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QuestionTypes.swift; sourceTree = "<group>"; };
+		AT430002 /* ApprovalTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ApprovalTypes.swift; sourceTree = "<group>"; };
+		MS430002 /* MessageStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MessageStore.swift; sourceTree = "<group>"; };
+		AP430002 /* ArchivedProjectsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ArchivedProjectsStore.swift; sourceTree = "<group>"; };
+		BS430002 /* BookmarkStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkStore.swift; sourceTree = "<group>"; };
+		SA430002 /* StringifyAnyValue.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StringifyAnyValue.swift; sourceTree = "<group>"; };
 		A2000006 /* AppSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppSettings.swift; sourceTree = "<group>"; };
 		A2000007 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A2000008 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		A2000009 /* TerminalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TerminalView.swift; sourceTree = "<group>"; };
 		A2000010 /* SSHManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SSHManager.swift; sourceTree = "<group>"; };
+		SSHC0002 /* SSHManager+Connection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SSHManager+Connection.swift"; sourceTree = "<group>"; };
+		SSHF0002 /* SSHManager+Files.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SSHManager+Files.swift"; sourceTree = "<group>"; };
+		SSHG0002 /* SSHManager+Git.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SSHManager+Git.swift"; sourceTree = "<group>"; };
 		A2000012 /* SpeechManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechManager.swift; sourceTree = "<group>"; };
 		A2000013 /* UserQuestionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserQuestionsView.swift; sourceTree = "<group>"; };
 		A2000014 /* ImageUtilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageUtilities.swift; sourceTree = "<group>"; };
@@ -458,6 +489,10 @@
 		C6060B4AD4414176494042D3 /* ProjectsEncodedPathSessionsSessionIdMessagesGetDenormalizeParameter.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProjectsEncodedPathSessionsSessionIdMessagesGetDenormalizeParameter.swift; sourceTree = "<group>"; };
 		C6CFD89CE02E00DEB641D2EC /* SessionUpdateBody.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SessionUpdateBody.swift; sourceTree = "<group>"; };
 		CB000004 /* CLIBridgeManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIBridgeManager.swift; sourceTree = "<group>"; };
+		CBMC0002 /* CLIBridgeManager+Connection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLIBridgeManager+Connection.swift"; sourceTree = "<group>"; };
+		CBML0002 /* CLIBridgeManager+Lifecycle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLIBridgeManager+Lifecycle.swift"; sourceTree = "<group>"; };
+		CBMM0002 /* CLIBridgeManager+Messages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLIBridgeManager+Messages.swift"; sourceTree = "<group>"; };
+		CBMS0002 /* CLIBridgeManager+Stream.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CLIBridgeManager+Stream.swift"; sourceTree = "<group>"; };
 		CB000006 /* CLIBridgeAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIBridgeAPIClient.swift; sourceTree = "<group>"; };
 		CB000012 /* CLIBridgeAppTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIBridgeAppTypes.swift; sourceTree = "<group>"; };
 		CB000014 /* CLIBridgeExtensions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CLIBridgeExtensions.swift; sourceTree = "<group>"; };
@@ -466,6 +501,11 @@
 		CM000002 /* CustomModelPickerSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CustomModelPickerSheet.swift; sourceTree = "<group>"; };
 		CT000002 /* CompactToolView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CompactToolView.swift; sourceTree = "<group>"; };
 		CVMF0001 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
+		CVMS0001 /* ChatViewModel+Sessions.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChatViewModel+Sessions.swift"; sourceTree = "<group>"; };
+		CVMC0001 /* ChatViewModel+SlashCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChatViewModel+SlashCommands.swift"; sourceTree = "<group>"; };
+		CVME0001 /* ChatViewModel+StreamEvents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChatViewModel+StreamEvents.swift"; sourceTree = "<group>"; };
+		CVMG0001 /* ChatViewModel+Git.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChatViewModel+Git.swift"; sourceTree = "<group>"; };
+		CVMM0001 /* ChatViewModel+ManagerState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ChatViewModel+ManagerState.swift"; sourceTree = "<group>"; };
 		D04EA76C34159FEC66398279 /* ProjectListResponse.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProjectListResponse.swift; sourceTree = "<group>"; };
 		D18CED6321918B983F36A7B7 /* SessionMetadata.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SessionMetadata.swift; sourceTree = "<group>"; };
 		D2EE631238C2945D2E312D23 /* WritePreviewView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WritePreviewView.swift; sourceTree = "<group>"; };
@@ -626,7 +666,6 @@
 				A2000001 /* CodingBridgeApp.swift */,
 				A2000002 /* ContentView.swift */,
 				A2000003 /* ChatView.swift */,
-				A2000004 /* Models.swift */,
 				A2000006 /* AppSettings.swift */,
 				A2000036 /* CommandStore.swift */,
 				DB000043 /* DebugLogStore.swift */,
@@ -637,9 +676,16 @@
 				A2000008 /* Theme.swift */,
 				A2000009 /* TerminalView.swift */,
 				A2000010 /* SSHManager.swift */,
+				SSHC0002 /* SSHManager+Connection.swift */,
+				SSHF0002 /* SSHManager+Files.swift */,
+				SSHG0002 /* SSHManager+Git.swift */,
 				SR000051 /* SessionRepository.swift */,
 				SST00053 /* SessionStore.swift */,
 				CB000004 /* CLIBridgeManager.swift */,
+				CBMC0002 /* CLIBridgeManager+Connection.swift */,
+				CBML0002 /* CLIBridgeManager+Lifecycle.swift */,
+				CBMM0002 /* CLIBridgeManager+Messages.swift */,
+				CBMS0002 /* CLIBridgeManager+Stream.swift */,
 				CB000006 /* CLIBridgeAPIClient.swift */,
 				CB000012 /* CLIBridgeAppTypes.swift */,
 				CB000014 /* CLIBridgeExtensions.swift */,
@@ -688,6 +734,7 @@
 				A2000025 /* AppError.swift */,
 				NW000002 /* NetworkMonitor.swift */,
 				C2FF22075E588140D52A05C7 /* ProjectPathEncoder.swift */,
+				SA430002 /* StringifyAnyValue.swift */,
 			);
 			path = Utilities;
 			sourceTree = "<group>";
@@ -955,6 +1002,11 @@
 		GMOD0001 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				CM430002 /* ClaudeModel.swift */,
+				PM430002 /* ProjectModels.swift */,
+				CMG43002 /* ChatMessage.swift */,
+				QT430002 /* QuestionTypes.swift */,
+				AT430002 /* ApprovalTypes.swift */,
 				GM000002 /* GitModels.swift */,
 				IA000002 /* ImageAttachment.swift */,
 				LAT00002 /* LiveActivityAttributes.swift */,
@@ -967,6 +1019,9 @@
 		GPER0001 /* Persistence */ = {
 			isa = PBXGroup;
 			children = (
+				MS430002 /* MessageStore.swift */,
+				AP430002 /* ArchivedProjectsStore.swift */,
+				BS430002 /* BookmarkStore.swift */,
 				MQ000002 /* MessageQueuePersistence.swift */,
 			);
 			path = Persistence;
@@ -984,6 +1039,11 @@
 			isa = PBXGroup;
 			children = (
 				CVMF0001 /* ChatViewModel.swift */,
+				CVMS0001 /* ChatViewModel+Sessions.swift */,
+				CVMC0001 /* ChatViewModel+SlashCommands.swift */,
+				CVME0001 /* ChatViewModel+StreamEvents.swift */,
+				CVMG0001 /* ChatViewModel+Git.swift */,
+				CVMM0001 /* ChatViewModel+ManagerState.swift */,
 			);
 			path = ViewModels;
 			sourceTree = "<group>";
@@ -1168,11 +1228,27 @@
 				A1000002 /* ContentView.swift in Sources */,
 				A1000003 /* ChatView.swift in Sources */,
 				CVMB0001 /* ChatViewModel.swift in Sources */,
-				A1000004 /* Models.swift in Sources */,
+				CVMS0002 /* ChatViewModel+Sessions.swift in Sources */,
+				CVMC0002 /* ChatViewModel+SlashCommands.swift in Sources */,
+				CVME0002 /* ChatViewModel+StreamEvents.swift in Sources */,
+				CVMG0002 /* ChatViewModel+Git.swift in Sources */,
+				CVMM0002 /* ChatViewModel+ManagerState.swift in Sources */,
+				CM430001 /* ClaudeModel.swift in Sources */,
+				PM430001 /* ProjectModels.swift in Sources */,
+				CMG43001 /* ChatMessage.swift in Sources */,
+				QT430001 /* QuestionTypes.swift in Sources */,
+				AT430001 /* ApprovalTypes.swift in Sources */,
+				MS430001 /* MessageStore.swift in Sources */,
+				AP430001 /* ArchivedProjectsStore.swift in Sources */,
+				BS430001 /* BookmarkStore.swift in Sources */,
+				SA430001 /* StringifyAnyValue.swift in Sources */,
 				A1000006 /* AppSettings.swift in Sources */,
 				A1000008 /* Theme.swift in Sources */,
 				A1000009 /* TerminalView.swift in Sources */,
 				A1000010 /* SSHManager.swift in Sources */,
+				SSHC0001 /* SSHManager+Connection.swift in Sources */,
+				SSHF0001 /* SSHManager+Files.swift in Sources */,
+				SSHG0001 /* SSHManager+Git.swift in Sources */,
 				SR000050 /* SessionRepository.swift in Sources */,
 				SST00052 /* SessionStore.swift in Sources */,
 				A1000013 /* SpeechManager.swift in Sources */,
@@ -1241,6 +1317,10 @@
 				IA000001 /* ImageAttachment.swift in Sources */,
 				NW000001 /* NetworkMonitor.swift in Sources */,
 				CB000003 /* CLIBridgeManager.swift in Sources */,
+				CBMC0001 /* CLIBridgeManager+Connection.swift in Sources */,
+				CBML0001 /* CLIBridgeManager+Lifecycle.swift in Sources */,
+				CBMM0001 /* CLIBridgeManager+Messages.swift in Sources */,
+				CBMS0001 /* CLIBridgeManager+Stream.swift in Sources */,
 				CB000005 /* CLIBridgeAPIClient.swift in Sources */,
 				CB000011 /* CLIBridgeAppTypes.swift in Sources */,
 				CB000013 /* CLIBridgeExtensions.swift in Sources */,

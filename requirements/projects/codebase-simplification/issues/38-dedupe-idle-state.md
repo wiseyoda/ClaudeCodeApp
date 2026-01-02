@@ -110,7 +110,7 @@ rg -n "duplicate state" CodingBridge
 
 **GitHub Issue**: https://github.com/wiseyoda/cli-bridge/issues/15
 
-**Status**: Pending cli-bridge
+**Status**: Unblocked (cli-bridge changes complete in feature/codebase-simplification)
 
 ---
 

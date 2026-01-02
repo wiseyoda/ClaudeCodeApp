@@ -111,7 +111,7 @@ rg -n "modelsMatch" CodingBridge
 
 **GitHub Issue**: https://github.com/wiseyoda/cli-bridge/issues/17
 
-**Status**: Pending cli-bridge
+**Status**: Unblocked (cli-bridge changes complete in feature/codebase-simplification)
 
 ---
 

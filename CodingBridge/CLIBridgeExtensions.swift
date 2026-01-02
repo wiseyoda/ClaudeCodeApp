@@ -1366,55 +1366,24 @@ extension GetMessagesResponse {
 }
 
 extension PaginatedMessage {
-  /// Convert to a single ChatMessage
-  /// Checks rawContent first block to determine type, falls back to message content
+  /// Convert to a single ChatMessage using typed StreamMessage content
+  /// Returns nil for ephemeral messages (deltas, progress, state changes)
   func toChatMessage() -> ChatMessage? {
     let date = CLIDateFormatter.parseDate(timestamp) ?? Date()
 
-    // Check rawContent first block for type (tool_use, thinking, tool_result, text)
-    if let firstBlock = rawContent?.first {
-      switch firstBlock {
-      case .typeToolUseBlock(let block):
-        let inputString = formatJSONValue(.dictionary(block.input))
-        let displayContent = inputString == "{}" ? block.name : "\(block.name)(\(inputString))"
-        return ChatMessage(id: UUID(), role: .toolUse, content: displayContent, timestamp: date)
-
-      case .typeToolResultBlock(let block):
-        guard !block.content.isEmpty else { return nil }
-        let role: ChatMessage.Role = block.isError == true ? .error : .toolResult
-        return ChatMessage(id: UUID(), role: role, content: block.content, timestamp: date)
-
-      case .typeThinkingBlock(let block):
-        guard !block.thinking.isEmpty else { return nil }
-        return ChatMessage(id: UUID(), role: .thinking, content: block.thinking, timestamp: date)
-
-      case .typeTextBlock(let block):
-        guard !block.text.isEmpty else { return nil }
-        let role: ChatMessage.Role
-        switch message {
-        case .typeUserStreamMessage:
-          role = .user
-        case .typeSystemStreamMessage:
-          role = .system
-        default:
-          role = .assistant
-        }
-        return ChatMessage(id: UUID(), role: role, content: block.text, timestamp: date)
-      }
-    }
-
-    // Fall back to typed message content
     switch message {
     case .typeUserStreamMessage(let user):
       guard !user.content.isEmpty else { return nil }
       return ChatMessage(id: UUID(), role: .user, content: user.content, timestamp: date)
 
     case .typeAssistantStreamMessage(let assistant):
+      // Skip streaming deltas - only render complete messages
       if assistant.delta == true { return nil }
       guard !assistant.content.isEmpty else { return nil }
       return ChatMessage(id: UUID(), role: .assistant, content: assistant.content, timestamp: date)
 
     case .typeSystemStreamMessage(let system):
+      // Skip system messages with subtype (duplicates or metadata)
       if system.subtype != nil { return nil }
       guard !system.content.isEmpty else { return nil }
       return ChatMessage(id: UUID(), role: .system, content: system.content, timestamp: date)
@@ -1434,39 +1403,26 @@ extension PaginatedMessage {
       guard !content.isEmpty else { return nil }
       return ChatMessage(id: UUID(), role: .thinking, content: content, timestamp: date)
 
-    default:
+    case .typeUsageStreamMessage, .typeProgressStreamMessage, .typeStateStreamMessage,
+         .typeSubagentStartStreamMessage, .typeSubagentCompleteStreamMessage:
+      // Ephemeral messages - don't persist to chat
+      return nil
+
+    case .typePermissionRequestMessage, .typeQuestionMessage:
+      // Permission and question messages are handled separately
       return nil
     }
   }
 
-  /// Format a JSONValue as valid JSON for parsing
-  /// String values are properly quoted and escaped so the output can be parsed by JSONSerialization
+  /// Format a JSONValue as valid JSON string using JSONEncoder
   private func formatJSONValue(_ value: JSONValue) -> String {
-    switch value {
-    case .string(let str):
-      // Escape special characters and wrap in quotes for valid JSON
-      let escaped = str
-        .replacingOccurrences(of: "\\", with: "\\\\")
-        .replacingOccurrences(of: "\"", with: "\\\"")
-        .replacingOccurrences(of: "\n", with: "\\n")
-        .replacingOccurrences(of: "\r", with: "\\r")
-        .replacingOccurrences(of: "\t", with: "\\t")
-      return "\"\(escaped)\""
-    case .int(let int):
-      return String(int)
-    case .double(let dbl):
-      return String(dbl)
-    case .bool(let bool):
-      return String(bool)
-    case .null:
-      return "null"
-    case .array(let arr):
-      let items = arr.map { formatJSONValue($0) }
-      return "[\(items.joined(separator: ", "))]"
-    case .dictionary(let dict):
-      let pairs = dict.map { "\"\($0.key)\": \(formatJSONValue($0.value))" }
-      return "{\(pairs.joined(separator: ", "))}"
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = .sortedKeys
+    guard let data = try? encoder.encode(value),
+          let jsonString = String(data: data, encoding: .utf8) else {
+      return "{}"
     }
+    return jsonString
   }
 }
 

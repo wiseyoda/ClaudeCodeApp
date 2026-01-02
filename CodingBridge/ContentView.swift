@@ -177,11 +177,8 @@ struct ContentView: View {
                 projects: projects,
                 isLoading: isLoading,
                 onRefresh: {
+                    // loadProjects() now populates session counts from batch response
                     await loadProjects()
-                    // Note: loadProjects() already extracts git statuses from API
-                    if !projects.isEmpty {
-                        await loadAllSessionCounts()
-                    }
                 },
                 onSelectProject: { project in
                     selectedProject = project
@@ -255,11 +252,8 @@ struct ContentView: View {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button {
                         Task {
+                            // loadProjects() now populates session counts from batch response
                             await loadProjects()
-                            // Note: loadProjects() already extracts git statuses from API
-                            if !projects.isEmpty {
-                                await loadAllSessionCounts()
-                            }
                         }
                     } label: {
                         Image(systemName: "arrow.clockwise")
@@ -347,11 +341,8 @@ struct ContentView: View {
                     ToolbarItem(placement: .navigationBarLeading) {
                         Button {
                             Task {
+                                // loadProjects() now populates session counts from batch response
                                 await loadProjects()
-                                // Note: loadProjects() already extracts git statuses from API
-                                if !projects.isEmpty {
-                                    await loadAllSessionCounts()
-                                }
                             }
                         } label: {
                             Image(systemName: "arrow.clockwise")
@@ -418,25 +409,13 @@ struct ContentView: View {
             return
         }
 
-        // Run remaining tasks in parallel
-        await withTaskGroup(of: Void.self) { group in
-            // Sub-repo discovery
-            group.addTask { @MainActor in
-                let start = CFAbsoluteTimeGetCurrent()
-                await self.gitStatusCoordinator.discoverAllSubRepos(serverURL: self.settings.serverURL, projects: self.projects)
-                log.info("[Background] Sub-repo discovery took \(String(format: "%.1f", (CFAbsoluteTimeGetCurrent() - start) * 1000))ms")
-            }
+        // Sub-repo discovery (session counts already populated from loadProjects)
+        let start = CFAbsoluteTimeGetCurrent()
+        await self.gitStatusCoordinator.discoverAllSubRepos(serverURL: self.settings.serverURL, projects: self.projects)
+        log.info("[Background] Sub-repo discovery took \(String(format: "%.1f", (CFAbsoluteTimeGetCurrent() - start) * 1000))ms")
 
-            // Session counts
-            group.addTask { @MainActor in
-                let start = CFAbsoluteTimeGetCurrent()
-                await self.loadAllSessionCounts()
-                log.info("[Background] Session counts took \(String(format: "%.1f", (CFAbsoluteTimeGetCurrent() - start) * 1000))ms")
-
-                // Save session counts to cache for next startup
-                self.saveSessionCountsToCache()
-            }
-        }
+        // Save session counts to cache for next startup (counts come from loadProjects batch response)
+        saveSessionCountsToCache()
 
         // Save updated data to cache
         projectCache.saveProjects(projects, gitStatuses: gitStatusCoordinator.gitStatuses, branchNames: gitStatusCoordinator.branchNames)
@@ -471,10 +450,10 @@ struct ContentView: View {
             selectedProject: $selectedProject,
             gitStatusCoordinator: gitStatusCoordinator,
             onRefresh: {
+                // loadProjects() now populates session counts from batch response
                 await loadProjects()
                 if !projects.isEmpty {
                     await gitStatusCoordinator.discoverAllSubRepos(serverURL: settings.serverURL, projects: projects)
-                    await loadAllSessionCounts()
                 }
             },
             onDeleteProject: { project in
@@ -556,6 +535,11 @@ struct ContentView: View {
             // Extract git statuses and branch names from cli-bridge response
             gitStatusCoordinator.updateFromCLIProjects(cliProjects)
 
+            // Populate session counts from the projects response (no N+1 API calls)
+            // This uses the sessionCount field returned by GET /projects
+            sessionStore.configure(with: settings)
+            sessionStore.populateCountsFromProjects(cliProjects)
+
             isLoading = false
         } catch CLIBridgeAPIError.unauthorized {
             if !settings.apiKey.isEmpty {
@@ -594,25 +578,6 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Session Count Loading
-
-    /// Load accurate session counts for all projects via SessionStore
-    /// Calls the /sessions/count API for each project to get user/agent/helper breakdown.
-    /// Individual sessions are loaded when entering ChatView.
-    private func loadAllSessionCounts() async {
-        // Ensure SessionStore is configured with repository before loading counts
-        sessionStore.configure(with: settings)
-
-        // Load session counts from the dedicated count API endpoint for each project
-        // This provides accurate user/agent/helper breakdown for display
-        await withTaskGroup(of: Void.self) { group in
-            for project in projects {
-                group.addTask {
-                    await sessionStore.loadSessionCounts(for: project.path)
-                }
-            }
-        }
-    }
 }
 #Preview {
     ContentView()

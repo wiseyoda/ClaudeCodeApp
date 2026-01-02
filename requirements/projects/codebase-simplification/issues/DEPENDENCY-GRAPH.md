@@ -31,24 +31,24 @@ This graph lists issue dependencies and a recommended execution order. Use it to
 25. #19 Remove message pruning ✅
 26. #20 Simplify slash command handling ✅
 27. #28 Gate ToolTestView/dev tools behind DEBUG ✅
-28. #29 Standardize SSHManager ownership
-29. #31 Exit Plan Mode approval UI
-30. #32 Multi-repo/monorepo git status aggregation
-31. #33 Batch session counts API
-32. #34 Idempotent reconnection protocol
-33. #35 Typed StreamMessage in paginated responses
-34. #36 Normalize model ID handling (echo alias)
-35. #37 Typed tool input instead of JSONValue dict
-36. #38 Fix duplicate idle state messages
-37. #39 Include session count in project list response
-38. #40 Standardize ISO8601 with fractional seconds
-39. #41 Document error responses in OpenAPI
-40. #2 Simplify PaginatedMessage.toChatMessage()
-41. #3 Remove formatJSONValue() custom serializer
-42. #42 Split ChatViewModel into focused modules
-43. #43 Split Models.swift into model + persistence files
-44. #44 Split SSHManager into key/file/git modules
-45. #45 Split CLIBridgeManager into connection + stream handler
+28. #29 Standardize SSHManager ownership ✅
+29. #31 Exit Plan Mode approval UI ✅
+30. #32 Multi-repo/monorepo git status aggregation ✅
+31. #33 Batch session counts API ✅
+32. #34 Idempotent reconnection protocol (unblocked)
+33. #35 Typed StreamMessage in paginated responses (unblocked)
+34. #36 Normalize model ID handling (echo alias) (unblocked)
+35. #37 Typed tool input instead of JSONValue dict (unblocked)
+36. #38 Fix duplicate idle state messages (unblocked)
+37. #39 Include session count in project list response (unblocked)
+38. #40 Standardize ISO8601 with fractional seconds (unblocked)
+39. #41 Document error responses in OpenAPI (unblocked)
+40. #2 Simplify PaginatedMessage.toChatMessage() ✅
+41. #3 Remove formatJSONValue() custom serializer ✅
+42. #42 Split ChatViewModel into focused modules ✅
+43. #43 Split Models.swift into model + persistence files ✅
+44. #44 Split SSHManager into key/file/git modules ✅
+45. #45 Split CLIBridgeManager into connection + stream handler ✅
 
 ## Dependency Edges
 
@@ -89,6 +89,6 @@ graph TD
 
 - #5 was marked "Won't Fix" after audit found no duplication - stores are intentionally separate
 - #16, #42, #43 are no longer blocked by #5 (dependencies removed)
-- cli-bridge issues (#33-#41) can be worked in parallel with iOS cleanup; they unblock several simplifications
+- cli-bridge issues (#33-#41) are unblocked by feature/codebase-simplification backend work
 - #15 completed - ChatView already used native ScrollViewReader; ScrollStateManager was unused indirection
 - #8 was completed by converting @Published var to let/computed property (no more UUID regeneration)

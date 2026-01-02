@@ -32,6 +32,33 @@ struct ChatView: View {
         return project.title
     }
 
+    /// Binding for ExitPlanMode approval sheet - extracted to avoid type-checking complexity
+    private var exitPlanModeBinding: Binding<ApprovalRequest?> {
+        Binding<ApprovalRequest?>(
+            get: {
+                guard let approval = viewModel.pendingApproval, approval.isExitPlanMode else {
+                    return nil
+                }
+                return approval
+            },
+            set: { _ in }  // Handled by approve/deny actions
+        )
+    }
+
+    /// Sheet view for ExitPlanMode approval - extracted to avoid type-checking complexity
+    @ViewBuilder
+    private func exitPlanModeSheet(for approval: ApprovalRequest) -> some View {
+        ExitPlanModeApprovalView(
+            request: approval,
+            onApprove: {
+                viewModel.approvePendingRequest(alwaysAllow: false)
+            },
+            onDeny: {
+                viewModel.denyPendingRequest()
+            }
+        )
+    }
+
     init(project: Project, initialGitStatus: GitStatus = .unknown, onSessionsChanged: (() -> Void)? = nil) {
         self.project = project
         self.initialGitStatus = initialGitStatus
@@ -144,6 +171,10 @@ struct ChatView: View {
         }
         .sheet(item: $viewModel.activeSheet) { sheet in
             sheetContent(for: sheet)
+        }
+        // ExitPlanMode approval sheet (shown when pending approval is ExitPlanMode)
+        .sheet(item: exitPlanModeBinding) { approval in
+            exitPlanModeSheet(for: approval)
         }
         // MARK: - Keyboard Shortcuts (iPad)
         .background {
@@ -484,8 +515,8 @@ struct ChatView: View {
                 ))
             }
 
-            // Permission approval banner
-            if let approval = viewModel.pendingApproval {
+            // Permission approval banner (regular tools only - ExitPlanMode uses sheet)
+            if let approval = viewModel.pendingApproval, !approval.isExitPlanMode {
                 ApprovalBannerView(
                     request: approval,
                     onApprove: {

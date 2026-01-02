@@ -110,7 +110,7 @@ rg -n "CLIBridgeAPIError" CodingBridge
 
 **GitHub Issue**: https://github.com/wiseyoda/cli-bridge/issues/14
 
-**Status**: Pending cli-bridge
+**Status**: Unblocked (cli-bridge changes complete in feature/codebase-simplification)
 
 ---
 

@@ -1,6 +1,6 @@
 # Issue #2: Simplify PaginatedMessage.toChatMessage()
 
-> **Status**: Pending
+> **Status**: Complete (verified 2026-01-02)
 > **Priority**: Tier 2
 > **Depends On**: #1/#35
 > **Blocks**: #3
@@ -41,7 +41,9 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 | File | Change |
 |---|---|
-| CodingBridge/CLIBridgeTypesMigration.swift | Replace multi-path parsing with a single switch |
+| CodingBridge/CLIBridgeExtensions.swift | Replace multi-path parsing with a single switch on StreamMessage |
+
+> Note: Original issue referenced CLIBridgeTypesMigration.swift which was deleted in Issue #1. The code now lives in CLIBridgeExtensions.swift.
 
 ### Files to Delete
 
@@ -68,10 +70,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Simplify PaginatedMessage.toChatMessage() is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Simplify PaginatedMessage.toChatMessage() is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -110,13 +112,17 @@ rg -n "toChatMessage" CodingBridge
 
 **GitHub Issue**: https://github.com/wiseyoda/cli-bridge/issues/21
 
-**Status**: Pending cli-bridge
+**Status**: Complete - cli-bridge already returns typed StreamMessage in PaginatedMessage.message field. The `rawContent` path was a legacy fallback that is no longer needed.
 
 ---
 
 ## Notes
 
-May become trivial once cli-bridge returns typed StreamMessage (#35).
+cli-bridge already returns typed StreamMessage (#35 is resolved). The implementation had two parsing paths:
+1. `rawContent` (ContentBlock array) - legacy fallback
+2. `message` (StreamMessage) - typed, complete data
+
+The `message` path has MORE data than `rawContent` (e.g., `ToolResultStreamMessage` has `success` field that `ToolResultBlock` lacks), making the `rawContent` path not only redundant but less accurate for error detection.
 
 ---
 
@@ -136,5 +142,16 @@ May become trivial once cli-bridge returns typed StreamMessage (#35).
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | Audited code, found rawContent path redundant |
+| 2026-01-02 | Completed | Removed rawContent parsing path, 25 lines saved, build passes |
+| 2026-01-02 | Verified | Confirmed PaginatedMessage.toChatMessage uses StreamMessage only |
+
+### Changes Made
+- `CLIBridgeExtensions.swift`: Removed 25 lines of redundant `rawContent` parsing in `PaginatedMessage.toChatMessage()`
+- Added explicit handling for all StreamMessage cases (no `default` fallthrough)
+- Added documentation comments matching `StoredMessage.toChatMessage()` style
+
+### Before/After
+- Before: 1463 lines in CLIBridgeExtensions.swift
+- After: 1438 lines
+- Reduction: 25 lines (1.7%)

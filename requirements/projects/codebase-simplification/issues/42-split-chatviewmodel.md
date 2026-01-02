@@ -1,6 +1,6 @@
 # Issue #42: Split ChatViewModel into focused modules
 
-> **Status**: Pending
+> **Status**: Complete (verified 2026-01-02)
 > **Priority**: Tier 3
 > **Depends On**: #17
 > **Blocks**: None
@@ -41,7 +41,17 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 | File | Change |
 |---|---|
-| CodingBridge/ViewModels/ChatViewModel.swift | Extract logical sections |
+| CodingBridge/ViewModels/ChatViewModel.swift | Core state, initialization, lifecycle, message sending (534 lines) |
+
+### Files Created
+
+| File | Purpose | Lines |
+|---|---|---|
+| CodingBridge/ViewModels/ChatViewModel+Sessions.swift | Session management, selection, history loading | 231 |
+| CodingBridge/ViewModels/ChatViewModel+SlashCommands.swift | Slash command registry and handlers | 237 |
+| CodingBridge/ViewModels/ChatViewModel+StreamEvents.swift | WebSocket event handling | 358 |
+| CodingBridge/ViewModels/ChatViewModel+Git.swift | Git status monitoring and Claude prompts | 228 |
+| CodingBridge/ViewModels/ChatViewModel+ManagerState.swift | Manager state accessors, actions, change handlers | 321 |
 
 ### Files to Delete
 
@@ -68,10 +78,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Split ChatViewModel into focused modules is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Split ChatViewModel into focused modules is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -102,7 +112,11 @@ rg -n "ChatViewModel" CodingBridge
 
 ## Notes
 
-None.
+Split ChatViewModel.swift (1852 lines) into focused extension files:
+- Main file reduced to 534 lines (core state, initialization, lifecycle, message sending)
+- 5 extension files for logical groupings
+- Total: 1909 lines (slight increase due to import statements and extension declarations)
+- All behavior preserved - no functional changes
 
 ---
 
@@ -122,5 +136,6 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | Split ChatViewModel into 5 extension files |
+| 2026-01-02 | Completed | All acceptance criteria verified, build passes |
+| 2026-01-02 | Verified | Confirmed new ChatViewModel extension files are in project and referenced |

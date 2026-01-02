@@ -1,6 +1,6 @@
 # Issue #43: Split Models.swift into model + persistence files
 
-> **Status**: Pending
+> **Status**: Complete (verified 2026-01-02)
 > **Priority**: Tier 2
 > **Depends On**: #1
 > **Blocks**: None
@@ -37,17 +37,25 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Implementation
 
-### Files to Modify
+### Files Created
 
-| File | Change |
+| File | Contents |
 |---|---|
-| CodingBridge/Models.swift | Extract models and stores |
+| CodingBridge/Models/ClaudeModel.swift | ClaudeModel enum (88 lines) |
+| CodingBridge/Models/ProjectModels.swift | Project, ProjectSession, ProjectSessionMeta (137 lines) |
+| CodingBridge/Models/ChatMessage.swift | ChatMessage struct (74 lines) |
+| CodingBridge/Models/QuestionTypes.swift | QuestionOption, UserQuestion, AskUserQuestionData (129 lines) |
+| CodingBridge/Models/ApprovalTypes.swift | ApprovalRequest, ApprovalResponse (125 lines) |
+| CodingBridge/Persistence/MessageStore.swift | MessageStore class, ChatMessageDTO (433 lines) |
+| CodingBridge/Persistence/ArchivedProjectsStore.swift | ArchivedProjectsStore class (53 lines) |
+| CodingBridge/Persistence/BookmarkStore.swift | BookmarkStore, BookmarkedMessage (126 lines) |
+| CodingBridge/Utilities/StringifyAnyValue.swift | stringifyAnyValue() function (60 lines) |
 
-### Files to Delete
+### Files Deleted
 
 | File | Reason |
 |---|---|
-| None | N/A |
+| CodingBridge/Models.swift | Split into 9 focused files above (1191 lines -> 9 files totaling 1225 lines) |
 
 ### Steps
 
@@ -68,10 +76,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Split Models.swift into model + persistence files is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Split Models.swift into model + persistence files is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -122,5 +130,6 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | Split Models.swift into 9 focused files |
+| 2026-01-02 | Completed | Build passes, all acceptance criteria verified |
+| 2026-01-02 | Verified | Confirmed split files are in project and Models.swift is removed |

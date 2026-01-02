@@ -1,6 +1,6 @@
 # Issue #45: Split CLIBridgeManager into connection + stream handler
 
-> **Status**: Pending
+> **Status**: Complete (verified 2026-01-02)
 > **Priority**: Tier 2
 > **Depends On**: #9/#17/#27
 > **Blocks**: None
@@ -68,10 +68,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Split CLIBridgeManager into connection + stream handler is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Split CLIBridgeManager into connection + stream handler is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -102,7 +102,36 @@ rg -n "CLIBridgeManager" CodingBridge
 
 ## Notes
 
-None.
+### Implementation Details
+
+Split CLIBridgeManager.swift (1188 lines) into 5 files:
+
+| File | Lines | Purpose |
+|------|-------|---------|
+| CLIBridgeManager.swift | 496 | Core state, initialization, internal accessors |
+| CLIBridgeManager+Connection.swift | 233 | Connect, disconnect, reconnect logic |
+| CLIBridgeManager+Lifecycle.swift | 125 | App lifecycle, network monitoring |
+| CLIBridgeManager+Messages.swift | 85 | Message sending methods |
+| CLIBridgeManager+Stream.swift | 387 | WebSocket message handling, event dispatch |
+| **Total** | **1326** | (includes new accessor methods for extensions) |
+
+### Architecture
+
+The main file now contains:
+- All `@Published` properties (state)
+- Private state variables
+- Internal accessor methods for extensions
+- URL building and message encoding
+- `emit()` helper for event dispatch
+
+Extensions in the same module can access internal members, so the main file provides getter/setter methods for private state that extensions need to modify.
+
+### Lines Saved
+
+This refactor does not reduce total lines but improves organization:
+- Main file reduced from 1188 to ~497 lines (59% reduction)
+- Logical separation of concerns reduces cognitive load
+- Easier to find and modify specific functionality
 
 ---
 
@@ -122,5 +151,6 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | Split into 4 extension files |
+| 2026-01-02 | Completed | All acceptance criteria verified, build passes |
+| 2026-01-02 | Verified | Confirmed split files exist and are included in the Xcode project |

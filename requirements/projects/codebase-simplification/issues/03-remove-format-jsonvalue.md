@@ -1,6 +1,6 @@
 # Issue #3: Remove formatJSONValue() custom serializer
 
-> **Status**: Pending
+> **Status**: Complete (verified 2026-01-02)
 > **Priority**: Tier 3
 > **Depends On**: #2
 > **Blocks**: None
@@ -41,7 +41,7 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 | File | Change |
 |---|---|
-| CodingBridge/CLIBridgeTypesMigration.swift | Replace custom formatting with JSONEncoder |
+| CodingBridge/CLIBridgeExtensions.swift | Replace custom formatting with JSONEncoder |
 
 ### Files to Delete
 
@@ -68,10 +68,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Remove formatJSONValue() custom serializer is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Remove formatJSONValue() custom serializer is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -102,7 +102,11 @@ rg -n "formatJSONValue" CodingBridge
 
 ## Notes
 
-None.
+- Original issue referenced CLIBridgeTypesMigration.swift which was deleted in a prior simplification.
+- Function was found in CLIBridgeExtensions.swift (lines 1444-1470).
+- The custom serializer manually handled escaping and recursive formatting for 7 JSON types.
+- Replaced with Foundation's JSONEncoder which handles all escaping and formatting correctly.
+- Used `.sortedKeys` output formatting for deterministic output.
 
 ---
 
@@ -122,5 +126,6 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | In progress |
+| 2026-01-02 | Completed | Replaced 27-line custom serializer with 9-line JSONEncoder-based implementation |
+| 2026-01-02 | Verified | Confirmed JSONValue formatting uses JSONEncoder and legacy serializer is gone |

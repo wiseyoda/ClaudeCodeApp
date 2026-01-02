@@ -111,7 +111,7 @@ rg -n "sessionCount" CodingBridge
 
 **GitHub Issue**: https://github.com/wiseyoda/cli-bridge/issues/18
 
-**Status**: Pending cli-bridge
+**Status**: Unblocked (cli-bridge changes complete in feature/codebase-simplification)
 
 ---
 
