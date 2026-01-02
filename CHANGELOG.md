@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased]
+
+### Changed
+
+- Documentation: Reset ROADMAP to focus on simplification; archived phase summaries below.
+- Documentation: Triaged ISSUES into ROADMAP and reset ISSUES for new intake.
+- Documentation: Added codebase simplification issue set and dependency graph; linked from README.
+
+### Roadmap Archive (Phases 1-7)
+
+- Phase 1 Security Hardening - Complete (see releases 0.5.0-0.6.10).
+- Phase 2 Data Correctness - Complete (see 0.5.1).
+- Phase 3 Stability & Thread Safety - Complete (see 0.6.3-0.6.8).
+- Phase 4 Architecture Refactoring - Complete (see 0.6.3).
+- Phase 5 Performance & Polish - Complete (see 0.6.3-0.6.8).
+- Phase 6 iOS 26 Adoption - Complete (see 0.6.6).
+- Phase 7 Test Coverage - Complete (see 0.5.1 and later).
+
+---
+
 ## [0.6.10] - 2026-01-01
 
 ### Added

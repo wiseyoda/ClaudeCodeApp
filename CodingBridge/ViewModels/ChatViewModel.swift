@@ -43,6 +43,8 @@ class ChatViewModel: ObservableObject {
     var toolUseMap: [String: String] = [:]
     /// Tool IDs created while a subagent was active - not @Published as changes don't affect UI
     var subagentToolIds: Set<String> = []
+    /// Stores committed text for message creation in onComplete (adapter clears currentText on commit)
+    var committedText: String?
 
     // MARK: - Search State
     @Published var isSearching = false
@@ -592,6 +594,7 @@ class ChatViewModel: ObservableObject {
         }
 
         let defaultPrompt = imagesToSend.count == 1 ? "What is this image?" : "What are these images?"
+        committedText = nil  // Clear before new message cycle
         wsManager.sendMessage(
             text.isEmpty ? defaultPrompt : messageToSend,
             projectPath: project.path,
@@ -883,13 +886,9 @@ class ChatViewModel: ObservableObject {
         }
 
         wsManager.onTextCommit = { [weak self] text in
-            guard let self = self else { return }
-            let assistantMsg = ChatMessage(
-                role: .assistant,
-                content: text,
-                timestamp: Date()
-            )
-            self.messages.append(assistantMsg)
+            // Capture committed text - message created in onComplete with full metadata
+            // (adapter clears currentText on commit, so we store it here)
+            self?.committedText = text
         }
 
         wsManager.onToolUse = { [weak self] id, name, input in
@@ -975,19 +974,21 @@ class ChatViewModel: ObservableObject {
             self.toolUseMap.removeAll()
             self.subagentToolIds.removeAll()
 
-            if !self.wsManager.currentText.isEmpty {
+            // Create assistant message from committed text (captured in onTextCommit)
+            if let text = self.committedText, !text.isEmpty {
                 let executionTime: TimeInterval? = self.processingStartTime.map { Date().timeIntervalSince($0) }
                 let tokenCount = self.wsManager.tokenUsage?.used
 
                 let assistantMessage = ChatMessage(
                     role: .assistant,
-                    content: self.wsManager.currentText,
+                    content: text,
                     timestamp: Date(),
                     executionTime: executionTime,
                     tokenCount: tokenCount
                 )
                 self.messages.append(assistantMessage)
             }
+            self.committedText = nil
             self.processingStartTime = nil
 
             self.refreshGitStatus()

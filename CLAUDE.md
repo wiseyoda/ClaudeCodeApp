@@ -1,236 +1,160 @@
-# CLAUDE.md
+# CodingBridge
 
-iOS client for [cli-bridge](https://github.com/anthropics/claude-code/tree/main/packages/cli-bridge) backend. SwiftUI app targeting iOS 26+ with Citadel SSH library.
+iOS client for [cli-bridge](https://github.com/wiseyoda/cli-bridge). SwiftUI app targeting iOS 26+.
 
-## Commands
-
-**IMPORTANT: Always use iPhone 17 Pro with iOS 26.2 - this is the current development target.**
+## Quick Start
 
 ```bash
 # Build
-xcodebuild -project CodingBridge.xcodeproj -scheme CodingBridge -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'
+xcodebuild -project CodingBridge.xcodeproj -scheme CodingBridge \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'
 
 # Test
-xcodebuild test -project CodingBridge.xcodeproj -scheme CodingBridge -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'
+xcodebuild test -project CodingBridge.xcodeproj -scheme CodingBridge \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'
 
 # Open in Xcode
 open CodingBridge.xcodeproj
 ```
 
-## Slash Commands
+**Always use iPhone 17 Pro with iOS 26.2** - this is the development target.
 
-| Command | Description |
-|---------|-------------|
-| `/bump [major\|minor\|patch]` | Full release workflow: update changelog, bump version, run tests, push to main |
-
-## Versioning
-
-Version is defined in a single location: `Config/Version.xcconfig`
+## Backend
 
 ```bash
-# To bump version manually:
-# 1. Edit Config/Version.xcconfig (MARKETING_VERSION)
-# 2. Update CHANGELOG.md
-# 3. Commit and tag
+# Start local dev server (REQUIRED for development)
+cd ~/dev/cli-bridge && deno task dev
 
-# Or use the /bump command for automated workflow
+# Verify
+curl -s http://localhost:3100/health
 ```
 
-The `AppVersion` utility (`Utilities/AppVersion.swift`) provides runtime access:
-- `AppVersion.version` - Marketing version (e.g., "0.6.7")
-- `AppVersion.build` - Build number
-- `AppVersion.fullVersion` - "0.6.7 (1)"
-- `AppVersion.userAgent` - "CodingBridge/0.6.7"
+| Environment | URL | Use |
+|-------------|-----|-----|
+| Local dev | `http://localhost:3100` | Always use for development |
+| Production | `http://172.20.0.2:3100` | QNAP container (Tailscale) |
 
-## Key Files
+**API docs**: http://localhost:3100/docs
 
-| File | Purpose |
-|------|---------|
-| `CLIBridgeManager.swift` | Core cli-bridge API client, SSE streaming |
-| `CLIBridgeAdapter.swift` | Adapts CLIBridgeManager to WebSocket-style interface |
-| `CLIBridgeTypes.swift` | Hand-written cli-bridge message types (unions, helpers) |
-| `CLIBridgeTypesMigration.swift` | Typealiases and adapters for generated types |
-| `SessionStore.swift` | Session state, pagination, real-time updates |
-| `SSHManager.swift` | SSH terminal, file ops, git commands via Citadel |
-| `ChatView.swift` | Main chat UI, message handling, slash commands |
-| `Models.swift` | All data models, enums, persistence stores |
-| `AppSettings.swift` | @AppStorage configuration |
-| `Generated/` | OpenAPI-generated Swift types from cli-bridge spec |
-| `scripts/regenerate-api-types.sh` | Regenerates Generated/ from OpenAPI spec |
+---
 
-## Rules
+## Critical Rules
 
-**IMPORTANT - Adding Files:**
-- MUST add new `.swift` files to `project.pbxproj` (use `xcodebuild` or Xcode)
-- After creating a file, run build to verify it's included—unlinked files won't compile
+### Files
 
-**IMPORTANT - Thread Safety:**
-- MUST add `@MainActor` to any new `ObservableObject` class
-- MUST use `Task { @MainActor in }` for UI updates from async contexts
-- NEVER update `@Published` properties from background threads
+New `.swift` files must be added to `project.pbxproj` or they won't compile. The **xcode-linker agent** handles this automatically - it runs after creating Swift files to link them and verify the build passes.
 
-**IMPORTANT - Security:**
-- MUST escape all file paths passed to `SSHManager.executeCommand()` using proper shell quoting
-- NEVER store secrets in `@AppStorage` (use Keychain via `KeychainHelper`)
-- NEVER commit credentials or API keys
+### Thread Safety
 
-**IMPORTANT - SSH Shell Expansion:**
-- MUST use `$HOME` instead of `~` for home directory paths in SSH commands
-- MUST use double quotes (`"..."`) not single quotes (`'...'`) when paths contain `$HOME`
-- Single quotes prevent shell variable expansion, causing paths to fail silently
-- See `.claude/rules/ssh-security.md` for examples
+- **MUST** add `@MainActor` to any `ObservableObject` class
+- **MUST** use `Task { @MainActor in }` for UI updates from async contexts
+- **NEVER** update `@Published` properties from background threads
 
-**Code Patterns:**
-- Use `@StateObject` for manager ownership in views (CLIBridgeAdapter, SSHManager, IdeasStore)
-- Use `@EnvironmentObject` for AppSettings (injected at app root)
-- Use singletons for shared stores: `SessionStore.shared`, `CommandStore.shared`, `BookmarkStore.shared`
-- Persist to Documents directory using `FileManager.default.urls(for: .documentDirectory)`
+### Security
 
-## Patterns
+- **MUST** escape file paths passed to `SSHManager.executeCommand()`
+- **NEVER** store secrets in `@AppStorage` - use `KeychainHelper`
+- **NEVER** commit credentials or API keys
+- See @.claude/rules/ssh-security.md for shell escaping rules
 
-```swift
-// Correct: View owns the manager
-struct ChatView: View {
-    @StateObject private var wsManager = CLIBridgeAdapter()
-}
+### SSH Paths
 
-// Correct: Shared settings from environment
-struct SomeView: View {
-    @EnvironmentObject var settings: AppSettings
-}
+- **MUST** use `$HOME` instead of `~` for home directory paths
+- **MUST** use double quotes (`"..."`) when paths contain `$HOME`
+- Single quotes prevent shell expansion - paths fail silently
 
-// Correct: MainActor for ObservableObject
-@MainActor
-class APIClient: ObservableObject {
-    @Published var projects: [Project] = []
-}
-
-// Correct: Escape paths for SSH
-let escaped = path.replacingOccurrences(of: "'", with: "'\\''")
-let command = "cat '\(escaped)'"
-```
+---
 
 ## Architecture
 
 ```
-App → CLIBridgeAdapter → cli-bridge backend → Claude Code CLI
-App → SSHManager → sshd (file ops, git, session history)
+App → CLIBridgeManager → cli-bridge backend → Claude Code CLI
+App → SSHManager → sshd (file ops, git)
 ```
 
-- **Views/**: 48 UI components (sheets, pickers, message views)
-- **Utilities/**: Logger, AppError, ImageUtilities, KeychainHelper, etc. (10 files)
-- **Managers/**: BackgroundManager, LiveActivityManager, NotificationManager, etc. (5 files)
-- **Models/**: GitModels, ImageAttachment, LiveActivityAttributes, TaskState (4 files)
-- **Extensions/**: String+Markdown
-- **Persistence/**: DraftInputPersistence, MessageQueuePersistence
-- **Generated/**: OpenAPI-generated Swift types (143 files)
+### Key Files
 
-See `requirements/ARCHITECTURE.md` for full structure and data flows.
+| File | Purpose |
+|------|---------|
+| `CLIBridgeManager.swift` | Core API client, WebSocket streaming |
+| `CLIBridgeAdapter.swift` | Adapts manager to callback interface |
+| `ChatViewModel.swift` | Chat state, message handling |
+| `SessionStore.swift` | Session state, pagination |
+| `SSHManager.swift` | SSH terminal, file ops, git |
+| `Models.swift` | Data models, persistence stores |
+| `Generated/` | OpenAPI-generated types (143 files) |
 
-## Generated API Types
+### Patterns
 
-Swift types auto-generated from cli-bridge OpenAPI spec (v0.4.2). Ensures iOS types stay in sync with backend.
+```swift
+// View owns manager
+@StateObject private var manager = CLIBridgeAdapter()
+
+// Shared settings from environment
+@EnvironmentObject var settings: AppSettings
+
+// Singleton stores
+@ObservedObject var commands = CommandStore.shared
+```
+
+See @.claude/rules/swiftui-patterns.md for more patterns.
+
+---
+
+## Common Tasks
+
+### Regenerate API Types
 
 ```bash
-# Regenerate after API changes (generates 143 files)
 ./scripts/regenerate-api-types.sh
 ```
 
-**Generated files location:** `CodingBridge/Generated/`
+Run after cli-bridge API changes. Generates types in `CodingBridge/Generated/`.
 
-**What's generated:**
-- **REST types:** `SessionMetadata`, `SearchResult`, `AgentDetail`, `FileEntry`, etc.
-- **WebSocket messages:** `ClientMessage`, `ServerMessage`, `StreamMessage`, `ConnectedMessage`, etc.
-- **Content blocks:** `TextBlock`, `ToolUseBlock`, `ThinkingBlock`, etc.
-- **Stream types:** `AssistantStreamMessage`, `ToolUseStreamMessage`, `UsageStreamMessage`, etc.
+### Add New Features
 
-**Conflict resolution:** Types that conflict with existing app types are prefixed with `API`:
-- `APIProject` - API response (path, name, lastUsed, sessionCount, git)
-- `APIGitStatus` - API git data (branch, isClean, ahead, behind)
-- `APIThinkingMode` - API thinking mode enum
-- `APIModel` - API model enum
-- `APIError` - API error response (conflicts with Swift.Error)
+See @.claude/rules/adding-features.md for:
+- Adding tool types
+- Adding persistence stores
+- Adding sheets/modals
+- Adding slash commands
 
-**App types (hand-written, different purpose):**
-- `Project` - App model with sessions, displayName, computed UI properties
-- `GitStatus` - UI enum with icons, colors, accessibility labels
-- `ThinkingMode`, `Model` - App-level enums
+### Version Bump
 
-**Migration helpers** (`CLIBridgeTypesMigration.swift`):
-- 84 typealiases bridging `CLI*` names to generated types (e.g., `CLIServerMessage` → `ServerMessage`)
-- Extensions: Convenience methods for `ServerMessage`, `StreamMessage`, `StoredMessage`, etc.
-- Compatibility: `ConnectedMessage.sessionIdString`, `StreamServerMessage.toStoredMessage()`, etc.
-- Adapters: `JSONValue` extensions, `StreamMessage` content accessors
+```bash
+/bump [major|minor|patch]
+```
 
-To add new conflicting types, edit `scripts/regenerate-api-types.sh` and add to the `CONFLICTING_TYPES` pattern.
+Or manually edit `Config/Version.xcconfig`.
+
+---
 
 ## Persistence
 
-| Store | Location | Purpose |
-|-------|----------|---------|
-| MessageStore | `Documents/{encoded-path}.json` | Chat history (50 msgs) |
-| BookmarkStore | `Documents/bookmarks.json` | Saved messages |
-| CommandStore | `Documents/commands.json` | Saved prompts |
-| IdeasStore | `Documents/ideas-{path}.json` | Per-project ideas |
-| SessionNamesStore | UserDefaults | Custom session names |
+| Store | Location |
+|-------|----------|
+| MessageStore | `Documents/{encoded-path}.json` |
+| BookmarkStore | `Documents/bookmarks.json` |
+| CommandStore | `Documents/commands.json` |
+| IdeasStore | `Documents/ideas-{path}.json` |
 
-## Backend
+Path encoding: `/home/dev/project` → `-home-dev-project`
 
-Connects to [cli-bridge](~/dev/cli-bridge) via REST API with SSE streaming.
+---
 
-**IMPORTANT - API Documentation:**
-- **OpenAPI Spec (JSON):** `http://172.20.0.2:3100/openapi.json` - Check this first before implementing API calls
-- **Interactive Docs:** `http://172.20.0.2:3100/docs` - Swagger UI for testing endpoints
-- Always verify endpoint signatures against the live OpenAPI spec
-- **Use `curl` via Bash** for local/Tailscale endpoints (WebFetch can't access 172.20.0.2 or localhost)
+## iOS Quirks
 
-**Local Development:**
-```bash
-# Start cli-bridge (in ~/dev/cli-bridge)
-deno task dev  # Runs on http://localhost:3100
+| Issue | Workaround |
+|-------|------------|
+| TextEditor paste drops first char | `SSHKeyDetection` auto-recovers for SSH keys |
+| Smart punctuation converts dashes | `normalizeKeyContent()` converts back to ASCII |
+| Text hyphenation adds soft hyphens | Base64 filtering strips non-base64 chars |
 
-# Verify it's running
-curl -s http://localhost:3100/health
-```
-
-**Default Server URL:** `http://localhost:3100` (configurable in app settings)
-
-**Key Endpoints:**
-- `GET /health` - Health check
-- `POST /agents` - Start new agent session
-- `POST /agents/:id/message` - Send message (SSE response)
-- `POST /agents/:id/abort` - Abort current operation
-
-Session files: `$HOME/.claude/projects/{encoded-path}/{session}.jsonl`
-Path encoding: `/home/dev/project` → `-home-dev-project` (starts with dash)
-
-See `requirements/BACKEND.md` for full API reference.
-
-## Known Issues
-
-| Issue | Location | Priority |
-|-------|----------|----------|
-| @MainActor on BookmarkStore | `Models.swift` | High |
-
-Many critical issues fixed in v0.4.0. See `ROADMAP.md` for remaining work.
-
-## Testing
-
-300+ unit tests covering parsers and utilities. Test files in `CodingBridgeTests/`.
-
-## iOS Platform Quirks
-
-| Issue | Workaround | Location |
-|-------|------------|----------|
-| TextEditor paste truncation | First character sometimes dropped when pasting. `SSHKeyDetection` auto-recovers by detecting invalid magic bytes and prepending missing `b` for OpenSSH keys. | `SSHManager.swift:360-384` |
-| Smart Punctuation | iOS converts `-` to em/en dashes. `normalizeKeyContent()` converts all Unicode dashes back to ASCII. | `SSHManager.swift:245-281` |
-| Text hyphenation | iOS adds soft hyphens to wrapped text. Base64 filtering strips all non-base64 chars. | `SSHManager.swift:339-341` |
+---
 
 ## References
 
-- `CHANGELOG.md` - Version history
-- `ROADMAP.md` - Remaining work
-- `ISSUES.md` - Bug tracking
-- `requirements/ARCHITECTURE.md` - System architecture, data flows
-- `requirements/BACKEND.md` - API reference
-- `requirements/SESSIONS.md` - Session system deep dive
+- @CHANGELOG.md - Version history
+- @ROADMAP.md - Current work
+- @requirements/ARCHITECTURE.md - Full architecture
+- @requirements/BACKEND.md - API reference

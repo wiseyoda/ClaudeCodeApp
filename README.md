@@ -146,6 +146,10 @@ Control Claude's reasoning depth with 5 levels:
 - A running [cli-bridge](https://github.com/anthropics/claude-code/tree/main/packages/cli-bridge) backend
 - Network access to the backend (via Tailscale or local network)
 
+## Project Docs
+
+- Codebase simplification issues: `requirements/projects/codebase-simplification/issues/README.md`
+
 ## Setup
 
 ### Backend Setup
