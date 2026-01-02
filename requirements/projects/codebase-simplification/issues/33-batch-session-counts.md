@@ -104,15 +104,26 @@ rg -n "session counts" CodingBridge
 
 ## cli-bridge Dependency
 
-**Change Required**: Add batch session count endpoint
+**Change Required**: ✅ None - `GET /projects` already includes `sessionCount`
 
 **API Impact**:
-- Endpoint: `POST /projects/sessions/counts`
-- Change: New endpoint returning per-path counts
+- Endpoint: `GET /projects` returns `sessionCount` for each project
+- No N+1 problem - single API call gets all counts
+- Implemented in [cli-bridge#18](https://github.com/wiseyoda/cli-bridge/issues/18)
 
-**GitHub Issue**: N/A - create in cli-bridge repo
+**GitHub Issue**: [cli-bridge#31](https://github.com/wiseyoda/cli-bridge/issues/31) ✅ Closed
 
-**Status**: Pending cli-bridge
+**Status**: ✅ Complete - verified that `GET /projects` response includes sessionCount
+
+**Example response:**
+```json
+{
+  "projects": [
+    { "name": "my-app", "path": "/home/user/my-app", "sessionCount": 5, ... },
+    { "name": "other", "path": "/home/user/other", "sessionCount": 12, ... }
+  ]
+}
+```
 
 ---
 
