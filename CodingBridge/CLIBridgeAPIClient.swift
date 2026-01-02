@@ -10,6 +10,22 @@ class CLIBridgeAPIClient: ObservableObject {
     private let serverURL: String
     private let session: URLSession
 
+    // MARK: - JSON Coding Configuration
+
+    /// JSON decoder configured for API date format (ISO8601)
+    private static let jsonDecoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }()
+
+    /// JSON encoder configured for API date format (ISO8601)
+    private static let jsonEncoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }()
+
     // MARK: - Timeout Configuration
 
     /// Default timeout waiting for server to begin responding (seconds)
@@ -480,7 +496,7 @@ class CLIBridgeAPIClient: ObservableObject {
 
         let (data, response) = try await session.data(for: request)
         try validateResponse(response)
-        return try JSONDecoder().decode(CLIImageUploadResponse.self, from: data)
+        return try Self.jsonDecoder.decode(CLIImageUploadResponse.self, from: data)
     }
 
     // MARK: - Agents
@@ -656,7 +672,7 @@ class CLIBridgeAPIClient: ObservableObject {
         let (data, response) = try await session.data(for: request)
         log.debug("[API] GET \(endpoint) completed in \(String(format: "%.0f", (CFAbsoluteTimeGetCurrent() - start) * 1000))ms")
         try validateResponse(response)
-        return try JSONDecoder().decode(T.self, from: data)
+        return try Self.jsonDecoder.decode(T.self, from: data)
     }
 
     private func post<T: Decodable>(_ endpoint: String, queryItems: [URLQueryItem]? = nil) async throws -> T {
@@ -670,7 +686,7 @@ class CLIBridgeAPIClient: ObservableObject {
 
         let (data, response) = try await session.data(for: request)
         try validateResponse(response)
-        return try JSONDecoder().decode(T.self, from: data)
+        return try Self.jsonDecoder.decode(T.self, from: data)
     }
 
     private func postWithBody<T: Decodable, B: Encodable>(_ endpoint: String, body: B) async throws -> T {
@@ -687,11 +703,11 @@ class CLIBridgeAPIClient: ObservableObject {
         let userId = KeychainHelper.shared.getOrCreateUserId()
         request.setValue("Bearer \(userId)", forHTTPHeaderField: "Authorization")
 
-        request.httpBody = try JSONEncoder().encode(body)
+        request.httpBody = try Self.jsonEncoder.encode(body)
 
         let (data, response) = try await session.data(for: request)
         try validateResponse(response)
-        return try JSONDecoder().decode(T.self, from: data)
+        return try Self.jsonDecoder.decode(T.self, from: data)
     }
 
     private func put<T: Decodable, B: Encodable>(_ endpoint: String, body: B) async throws -> T {
@@ -703,11 +719,11 @@ class CLIBridgeAPIClient: ObservableObject {
         request.httpMethod = "PUT"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.httpBody = try JSONEncoder().encode(body)
+        request.httpBody = try Self.jsonEncoder.encode(body)
 
         let (data, response) = try await session.data(for: request)
         try validateResponse(response)
-        return try JSONDecoder().decode(T.self, from: data)
+        return try Self.jsonDecoder.decode(T.self, from: data)
     }
 
     private func delete(_ endpoint: String, queryItems: [URLQueryItem]? = nil) async throws {
@@ -733,7 +749,7 @@ class CLIBridgeAPIClient: ObservableObject {
 
         let (data, response) = try await session.data(for: request)
         try validateResponse(response)
-        return try JSONDecoder().decode(T.self, from: data)
+        return try Self.jsonDecoder.decode(T.self, from: data)
     }
 
     private func deleteWithBody<T: Decodable, B: Encodable>(_ endpoint: String, body: B) async throws -> T {
@@ -750,11 +766,11 @@ class CLIBridgeAPIClient: ObservableObject {
         let userId = KeychainHelper.shared.getOrCreateUserId()
         request.setValue("Bearer \(userId)", forHTTPHeaderField: "Authorization")
 
-        request.httpBody = try JSONEncoder().encode(body)
+        request.httpBody = try Self.jsonEncoder.encode(body)
 
         let (data, response) = try await session.data(for: request)
         try validateResponse(response)
-        return try JSONDecoder().decode(T.self, from: data)
+        return try Self.jsonDecoder.decode(T.self, from: data)
     }
 
     private func validateResponse(_ response: URLResponse) throws {

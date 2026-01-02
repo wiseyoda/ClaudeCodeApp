@@ -6,6 +6,22 @@ import Foundation
 class ProjectCache: ObservableObject {
     static let shared = ProjectCache()
 
+    // MARK: - JSON Coding Configuration
+
+    /// JSON decoder configured for API date format (ISO8601)
+    private static let jsonDecoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return decoder
+    }()
+
+    /// JSON encoder configured for API date format (ISO8601)
+    private static let jsonEncoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }()
+
     @Published private(set) var cachedProjects: [Project] = []
     @Published private(set) var cachedGitStatuses: [String: GitStatus] = [:]
     @Published private(set) var cachedBranchNames: [String: String] = [:]
@@ -58,7 +74,7 @@ class ProjectCache: ObservableObject {
             guard let data = try? Data(contentsOf: cacheFile) else { return }
 
             do {
-                let cache = try JSONDecoder().decode(CachedProjectData.self, from: data)
+                let cache = try Self.jsonDecoder.decode(CachedProjectData.self, from: data)
                 Task { @MainActor [weak self] in
                     self?.cachedProjects = cache.projects
                     self?.cachedGitStatuses = cache.gitStatuses
@@ -112,7 +128,7 @@ class ProjectCache: ObservableObject {
 
         Self.fileQueue.async {
             do {
-                let data = try JSONEncoder().encode(cache)
+                let data = try Self.jsonEncoder.encode(cache)
                 try data.write(to: cacheFile, options: .atomic)
             } catch {
                 log.error("[ProjectCache] Failed to save cache: \(error)")
