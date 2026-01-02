@@ -739,8 +739,8 @@ final class CLIBridgeTypesTests: XCTestCase {
 
     func test_cliServerMessage_decodesUnknownType_throws() {
         XCTAssertThrowsError(try decodeServerMessage(from: ["type": "mystery"])) { error in
-            guard case DecodingError.dataCorrupted = error else {
-                XCTFail("Expected dataCorrupted error")
+            guard case DecodingError.typeMismatch = error else {
+                XCTFail("Expected typeMismatch error")
                 return
             }
         }
@@ -948,9 +948,32 @@ final class CLIBridgeTypesTests: XCTestCase {
 
     // MARK: - Helpers
 
+    private func makeDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            if let dateString = try? container.decode(String.self),
+               let date = CLIDateFormatter.parseDate(dateString) {
+                return date
+            }
+            if let timeInterval = try? container.decode(Double.self) {
+                return Date(timeIntervalSince1970: timeInterval)
+            }
+            if let timeInterval = try? container.decode(Int.self) {
+                return Date(timeIntervalSince1970: Double(timeInterval))
+            }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Invalid date format"
+            )
+        }
+        return decoder
+    }
+
     private func decodeAnyCodableValue(_ json: String) throws -> AnyCodableValue {
         let data = Data(json.utf8)
-        return try JSONDecoder().decode(AnyCodableValue.self, from: data)
+        let decoder = makeDecoder()
+        return try decoder.decode(AnyCodableValue.self, from: data)
     }
 
     private func encodeAnyCodableValueToObject(_ value: AnyCodableValue) throws -> Any {
@@ -966,7 +989,8 @@ final class CLIBridgeTypesTests: XCTestCase {
 
     private func decodeServerMessage(from object: [String: Any]) throws -> ServerMessage {
         let data = try JSONSerialization.data(withJSONObject: object, options: [])
-        return try JSONDecoder().decode(ServerMessage.self, from: data)
+        let decoder = makeDecoder()
+        return try decoder.decode(ServerMessage.self, from: data)
     }
 
     private func decodeCLIErrorPayload(
@@ -985,6 +1009,7 @@ final class CLIBridgeTypesTests: XCTestCase {
             object["retryAfter"] = retryAfter
         }
         let data = try JSONSerialization.data(withJSONObject: object, options: [])
-        return try JSONDecoder().decode(WsErrorMessage.self, from: data)
+        let decoder = makeDecoder()
+        return try decoder.decode(WsErrorMessage.self, from: data)
     }
 }

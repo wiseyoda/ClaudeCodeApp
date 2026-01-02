@@ -198,9 +198,6 @@ struct CodingBridgeApp: App {
         // Pause health monitoring to avoid background network activity
         HealthMonitorService.shared.pausePolling()
 
-        // Save draft input
-        DraftInputPersistence.shared.save()
-
         // Save any pending messages
         await MessageQueuePersistence.shared.save()
 

@@ -2,17 +2,40 @@ import XCTest
 @testable import CodingBridge
 
 final class CLIStreamContentTests: XCTestCase {
+    private func makeDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            if let dateString = try? container.decode(String.self),
+               let date = CLIDateFormatter.parseDate(dateString) {
+                return date
+            }
+            if let timeInterval = try? container.decode(Double.self) {
+                return Date(timeIntervalSince1970: timeInterval)
+            }
+            if let timeInterval = try? container.decode(Int.self) {
+                return Date(timeIntervalSince1970: Double(timeInterval))
+            }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Invalid date format"
+            )
+        }
+        return decoder
+    }
+
     private func decodeJSON<T: Decodable>(_ json: String, as type: T.Type = T.self) throws -> T {
         let data = Data(json.utf8)
-        return try JSONDecoder().decode(T.self, from: data)
+        let decoder = makeDecoder()
+        return try decoder.decode(T.self, from: data)
     }
 
     private func decodeStreamContent(_ json: String) throws -> CLIStreamContent {
         try decodeJSON(json, as: CLIStreamContent.self)
     }
 
-    private func decodeStreamMessage(_ json: String) throws -> CLIStreamMessage {
-        try decodeJSON(json, as: CLIStreamMessage.self)
+    private func decodeStreamMessage(_ json: String) throws -> StreamServerMessage {
+        try decodeJSON(json, as: StreamServerMessage.self)
     }
 
     // MARK: - Convenience pattern matching helpers
@@ -86,7 +109,7 @@ final class CLIStreamContentTests: XCTestCase {
     // MARK: - Stream Message Wrapper
 
     func test_streamMessage_decodesAssistantPayload() throws {
-        // v0.3.5+ format: CLIStreamMessage (StreamServerMessage) includes id (UUID) and timestamp (Date) at top level
+        // v0.3.5+ format: StreamServerMessage includes id (UUID) and timestamp (Date) at top level
         let messageId = UUID()
         let json = """
         {
@@ -253,7 +276,7 @@ final class CLIStreamContentTests: XCTestCase {
         let json = """
         {
           "type": "thinking",
-          "thinking": "Reasoning"
+          "content": "Reasoning"
         }
         """
 
@@ -264,8 +287,7 @@ final class CLIStreamContentTests: XCTestCase {
             return
         }
 
-        // ThinkingBlock uses 'thinking' property, not 'content'
-        XCTAssertEqual(payload.thinking, "Reasoning")
+        XCTAssertEqual(payload.content, "Reasoning")
     }
 
     func test_streamContent_decodesToolUseCase() throws {
@@ -576,7 +598,7 @@ final class CLIStreamContentTests: XCTestCase {
         }
         """
 
-        let content = try decodeJSON(json, as: CLIAssistantContent.self)
+        let content = try decodeJSON(json, as: AssistantStreamMessage.self)
 
         XCTAssertEqual(content.content, "Hello")
         XCTAssertEqual(content.delta, true)
@@ -590,7 +612,7 @@ final class CLIStreamContentTests: XCTestCase {
         }
         """
 
-        let content = try decodeJSON(json, as: CLIAssistantContent.self)
+        let content = try decodeJSON(json, as: AssistantStreamMessage.self)
 
         XCTAssertNil(content.delta)
         XCTAssertTrue(content.isFinal)
@@ -605,7 +627,7 @@ final class CLIStreamContentTests: XCTestCase {
         }
         """
 
-        let content = try decodeJSON(json, as: CLIAssistantContent.self)
+        let content = try decodeJSON(json, as: AssistantStreamMessage.self)
 
         XCTAssertEqual(content.delta, false)
         XCTAssertTrue(content.isFinal)
@@ -620,7 +642,7 @@ final class CLIStreamContentTests: XCTestCase {
         }
         """
 
-        let content = try decodeJSON(json, as: CLIAssistantContent.self)
+        let content = try decodeJSON(json, as: AssistantStreamMessage.self)
 
         XCTAssertEqual(content.delta, true)
         XCTAssertFalse(content.isFinal)
@@ -636,7 +658,7 @@ final class CLIStreamContentTests: XCTestCase {
         }
         """
 
-        let content = try decodeJSON(json, as: CLIUserContent.self)
+        let content = try decodeJSON(json, as: UserStreamMessage.self)
 
         XCTAssertEqual(content.content, "User message")
     }
@@ -651,7 +673,7 @@ final class CLIStreamContentTests: XCTestCase {
         }
         """
 
-        let content = try decodeJSON(json, as: CLISystemContent.self)
+        let content = try decodeJSON(json, as: SystemStreamMessage.self)
 
         XCTAssertEqual(content.content, "System notice")
         XCTAssertNil(content.subtype)
@@ -666,7 +688,7 @@ final class CLIStreamContentTests: XCTestCase {
         }
         """
 
-        let content = try decodeJSON(json, as: CLISystemContent.self)
+        let content = try decodeJSON(json, as: SystemStreamMessage.self)
 
         XCTAssertEqual(content.content, "Progress update")
         // subtype is now an enum, not a string
@@ -676,17 +698,17 @@ final class CLIStreamContentTests: XCTestCase {
     // MARK: - Thinking Content
 
     func test_thinkingContent_decodesContent() throws {
-        // ThinkingBlock uses 'thinking' property, not 'content'
+        // ThinkingStreamMessage expects "content" (optional "thinking" alias)
         let json = """
         {
           "type": "thinking",
-          "thinking": "Reasoning block"
+          "content": "Reasoning block"
         }
         """
 
-        let content = try decodeJSON(json, as: CLIThinkingContent.self)
+        let content = try decodeJSON(json, as: ThinkingStreamMessage.self)
 
-        XCTAssertEqual(content.thinking, "Reasoning block")
+        XCTAssertEqual(content.content, "Reasoning block")
     }
 
     // MARK: - Tool Use Content
@@ -703,7 +725,7 @@ final class CLIStreamContentTests: XCTestCase {
         }
         """
 
-        let content = try decodeJSON(json, as: CLIToolUseContent.self)
+        let content = try decodeJSON(json, as: ToolUseStreamMessage.self)
 
         XCTAssertEqual(content.id, "tool-9")
         XCTAssertEqual(content.name, "Read")
@@ -725,7 +747,7 @@ final class CLIStreamContentTests: XCTestCase {
         }
         """
 
-        let content = try decodeJSON(json, as: CLIToolUseContent.self)
+        let content = try decodeJSON(json, as: ToolUseStreamMessage.self)
 
         XCTAssertEqual(content.input["command"]?.stringValue, "pwd")
         XCTAssertEqual(content.input["count"]?.intValue, 3)
@@ -753,7 +775,7 @@ final class CLIStreamContentTests: XCTestCase {
         }
         """
 
-        let content = try decodeJSON(json, as: CLIToolUseContent.self)
+        let content = try decodeJSON(json, as: ToolUseStreamMessage.self)
         let metadata = content.input["metadata"]?.dictionaryValue
 
         XCTAssertEqual(metadata?["path"]?.stringValue, "/tmp/file.txt")
@@ -773,7 +795,7 @@ final class CLIStreamContentTests: XCTestCase {
         }
         """
 
-        let content = try decodeJSON(json, as: CLIToolResultContent.self)
+        let content = try decodeJSON(json, as: ToolResultStreamMessage.self)
 
         XCTAssertEqual(content.id, "tool-12")
         XCTAssertEqual(content.tool, "Bash")
@@ -793,7 +815,7 @@ final class CLIStreamContentTests: XCTestCase {
         }
         """
 
-        let content = try decodeJSON(json, as: CLIToolResultContent.self)
+        let content = try decodeJSON(json, as: ToolResultStreamMessage.self)
 
         XCTAssertEqual(content.isError, true)
     }
@@ -809,7 +831,7 @@ final class CLIStreamContentTests: XCTestCase {
         }
         """
 
-        let content = try decodeJSON(json, as: CLIToolResultContent.self)
+        let content = try decodeJSON(json, as: ToolResultStreamMessage.self)
 
         XCTAssertNil(content.isError)
     }
@@ -989,7 +1011,7 @@ final class CLIStreamContentTests: XCTestCase {
         }
         """
 
-        let content = try decodeJSON(json, as: CLIStateContent.self)
+        let content = try decodeJSON(json, as: StateStreamMessage.self)
 
         XCTAssertEqual(content.state, .waitingInput)
         XCTAssertNil(content.tool)
@@ -1004,7 +1026,7 @@ final class CLIStreamContentTests: XCTestCase {
         }
         """
 
-        let content = try decodeJSON(json, as: CLIStateContent.self)
+        let content = try decodeJSON(json, as: StateStreamMessage.self)
 
         XCTAssertEqual(content.state, .executing)
         XCTAssertEqual(content.tool, "Bash")

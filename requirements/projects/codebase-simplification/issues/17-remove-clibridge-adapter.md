@@ -126,4 +126,4 @@ None.
 | 2026-01-02 | Started implementation | Refactored ChatViewModel to use CLIBridgeManager directly |
 | 2026-01-02 | Completed | Deleted CLIBridgeAdapter.swift (~800 lines), updated tests |
 | 2026-01-02 | Follow-up | Removed remaining adapter test references in ChatViewModelTests |
-| 2026-01-02 | Verification | Confirmed no remaining CLIBridgeAdapter references; updated StreamEvent test payloads for generated types. Build not rerun. |
+| 2026-01-02 | Verification | Confirmed no remaining CLIBridgeAdapter references; targeted unit tests (CLIBridgeManager/CLIStreamContent/CLIBridgeTypes/CLISessionTypes/APIClientModels/Models) pass via `xcodebuild test`. Existing Sendable warnings persist. |

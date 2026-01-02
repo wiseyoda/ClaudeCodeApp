@@ -14,6 +14,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Documentation: Triaged ISSUES into ROADMAP and reset ISSUES for new intake.
 - Documentation: Added codebase simplification issue set and dependency graph; linked from README.
 
+### Fixed
+
+- Fix duplicate foreground reconnect handling by removing redundant ChatView reconnect logic; CLIBridgeManager owns lifecycle reconnects. (#27)
+
 ### Roadmap Archive (Phases 1-7)
 
 - Phase 1 Security Hardening - Complete (see releases 0.5.0-0.6.10).

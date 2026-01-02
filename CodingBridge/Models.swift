@@ -699,6 +699,57 @@ class MessageStore {
         let key = processingKey(for: projectPath)
         UserDefaults.standard.removeObject(forKey: key)
     }
+
+    // MARK: - Global Recovery State (for background task handling)
+
+    private static let globalProcessingKey = "global_was_processing"
+    private static let globalSessionIdKey = "global_last_session_id"
+    private static let globalProjectPathKey = "global_last_project_path"
+
+    /// Get whether any processing was active when app backgrounded
+    static var wasProcessingOnBackground: Bool {
+        UserDefaults.standard.bool(forKey: globalProcessingKey)
+    }
+
+    /// Get the last session ID that was active
+    static var lastBackgroundSessionId: String? {
+        UserDefaults.standard.string(forKey: globalSessionIdKey)
+    }
+
+    /// Get the last project path that was active
+    static var lastBackgroundProjectPath: String? {
+        UserDefaults.standard.string(forKey: globalProjectPathKey)
+    }
+
+    /// Save global recovery state when entering background
+    static func saveGlobalRecoveryState(
+        wasProcessing: Bool,
+        sessionId: String?,
+        projectPath: String?
+    ) {
+        let defaults = UserDefaults.standard
+        defaults.set(wasProcessing, forKey: globalProcessingKey)
+
+        if let sessionId = sessionId {
+            defaults.set(sessionId, forKey: globalSessionIdKey)
+        } else {
+            defaults.removeObject(forKey: globalSessionIdKey)
+        }
+
+        if let projectPath = projectPath {
+            defaults.set(projectPath, forKey: globalProjectPathKey)
+        } else {
+            defaults.removeObject(forKey: globalProjectPathKey)
+        }
+    }
+
+    /// Clear global recovery state after successful foreground return
+    static func clearGlobalRecoveryState() {
+        let defaults = UserDefaults.standard
+        defaults.set(false, forKey: globalProcessingKey)
+        defaults.removeObject(forKey: globalSessionIdKey)
+        defaults.removeObject(forKey: globalProjectPathKey)
+    }
 }
 
 // MARK: - Archived Projects Store

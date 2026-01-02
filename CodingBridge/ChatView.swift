@@ -12,7 +12,7 @@ struct ChatView: View {
 
     // MARK: - Environment
     @EnvironmentObject var settings: AppSettings
-    @Environment(\.scenePhase) private var scenePhase
+    // Note: scenePhase removed - reconnection handled by CLIBridgeManager lifecycle observers
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var colorScheme
 
@@ -134,24 +134,8 @@ struct ChatView: View {
                 }
             }
         }
-        .onChange(of: scenePhase) { _, newPhase in
-            switch newPhase {
-            case .active:
-                if !viewModel.isConnected {
-                    log.debug("[ChatView] App active - reconnecting WebSocket")
-                    Task {
-                        await viewModel.manager.connect(
-                            projectPath: project.path,
-                            sessionId: viewModel.activeSessionId
-                        )
-                    }
-                }
-            case .inactive, .background:
-                break
-            @unknown default:
-                break
-            }
-        }
+        // Note: Reconnection on app foreground is handled centrally by CLIBridgeManager's
+        // lifecycle observers (didBecomeActiveNotification). No scenePhase handler needed.
         .sheet(item: Binding(
             get: { viewModel.pendingQuestion },
             set: { _ in }  // Handled by viewModel

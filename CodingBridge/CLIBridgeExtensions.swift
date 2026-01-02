@@ -616,23 +616,17 @@ extension ProgressStreamMessage {
 extension PermissionRequestMessage {
   /// Generate description from tool and input parameters
   public var description: String {
-    // Try to get a meaningful description from input
-    if let command = input["command"]?.stringValue {
-      return "\(tool): \(command)"
-    }
-    if let path = input["path"]?.stringValue {
-      return "\(tool): \(path)"
-    }
-    // Fallback to just tool name
-    return tool
+    requestDescription
   }
 
   /// Get a human-readable description of what's being requested
   public var requestDescription: String {
-    if let command = input["command"]?.value as? String {
+    if let command = input["command"]?.stringValue {
       return "Run command: \(command)"
     }
-    if let filePath = input["file_path"]?.value as? String ?? input["filePath"]?.value as? String {
+    if let filePath = input["file_path"]?.stringValue
+        ?? input["filePath"]?.stringValue
+        ?? input["path"]?.stringValue {
       return "\(tool): \(filePath)"
     }
     return tool

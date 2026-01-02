@@ -276,7 +276,13 @@ final class ChatViewModelTests: XCTestCase {
         let (viewModel, manager, _, _) = makeFixture()
         manager.connectionState = .connected(agentId: "agent-123")
         manager.sessionId = "session-123"
-        manager.tokenUsage = TokenUsage(used: 5, total: 10)
+        manager.tokenUsage = UsageStreamMessage(
+            type: .usage,
+            inputTokens: 5,
+            outputTokens: 0,
+            contextUsed: 5,
+            contextLimit: 10
+        )
 
         let handled = viewModel.handleSlashCommand("/status")
 
@@ -309,7 +315,7 @@ final class ChatViewModelTests: XCTestCase {
         viewModel.setupStreamEventHandler()
 
         manager.simulateEvent(.text("Hello", isFinal: true))
-        manager.simulateEvent(.stopped)
+        manager.simulateEvent(.stopped(reason: "complete"))
 
         XCTAssertEqual(viewModel.messages.count, 1)
         XCTAssertEqual(viewModel.messages.first?.role, .assistant)
@@ -512,7 +518,8 @@ final class ChatViewModelTests: XCTestCase {
         manager.currentText = "streaming"
         manager.tokenUsage = CLIUsageContent(
             type: .usage,
-            totalTokens: 3,
+            inputTokens: 1,
+            outputTokens: 2,
             contextUsed: 3,
             contextLimit: 7
         )

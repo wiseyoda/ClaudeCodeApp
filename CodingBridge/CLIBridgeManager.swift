@@ -638,6 +638,28 @@ class CLIBridgeManager: ObservableObject {
         }
     }
 
+    private static func makeServerMessageDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            if let dateString = try? container.decode(String.self),
+               let date = CLIDateFormatter.parseDate(dateString) {
+                return date
+            }
+            if let timeInterval = try? container.decode(Double.self) {
+                return Date(timeIntervalSince1970: timeInterval)
+            }
+            if let timeInterval = try? container.decode(Int.self) {
+                return Date(timeIntervalSince1970: Double(timeInterval))
+            }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Invalid date format"
+            )
+        }
+        return decoder
+    }
+
     private func handleMessage(_ message: URLSessionWebSocketTask.Message) async {
         let data: Data
         switch message {
@@ -655,7 +677,8 @@ class CLIBridgeManager: ObservableObject {
         }
 
         do {
-            let serverMessage = try JSONDecoder().decode(ServerMessage.self, from: data)
+            let decoder = Self.makeServerMessageDecoder()
+            let serverMessage = try decoder.decode(ServerMessage.self, from: data)
             await processServerMessage(serverMessage)
         } catch {
             log.error("[WS] Failed to decode server message: \(error)")

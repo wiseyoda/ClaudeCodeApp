@@ -42,8 +42,8 @@
 | 1 | #9 | WebSocket callbacks -> StreamEvent enum | High | - | Complete | Legacy callbacks removed; StreamEvent-only callbacks. |
 | 2 | #17 | Remove CLIBridgeAdapter layer | High | #9 | Complete | ~800 lines deleted, ChatViewModel uses manager directly. |
 | 3 | #1 | Remove CLIBridgeTypesMigration | High | #17 | Complete | Split into CLIBridgeAppTypes.swift + CLIBridgeExtensions.swift. |
-| 4 | #27 | Consolidate network/lifecycle/reconnect logic; remove sleep-based connects | High | #17 | Planned | Reduce duplicate reconnect paths. |
-| 5 | #23 | Unify draft + processing persistence | High | #27 | Planned | Single source of truth for recovery. |
+| 4 | #27 | Consolidate network/lifecycle/reconnect logic; remove sleep-based connects | High | #17 | Complete | Removed duplicate ChatView reconnect handler; rely on CLIBridgeManager lifecycle observers. |
+| 5 | #23 | Unify draft + processing persistence | High | #27 | Complete | Deleted DraftInputPersistence.swift; unified global recovery in MessageStore. |
 | 6 | #25 | Finish or remove MessageQueuePersistence | Medium | #23 | Planned | Either wire queue or delete it. |
 | 7 | #5 | Consolidate stores into one persistence layer | Medium | #23/#25 | Planned | Avoid state duplication. |
 | 8 | #16 | Consolidate sheet booleans into activeSheet enum | Low | #5 | Planned | Reduce UI state sprawl. |

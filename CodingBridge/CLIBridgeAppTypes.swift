@@ -149,7 +149,7 @@ public struct AnyCodableValue: Codable, Equatable, Hashable, Sendable {
   public init(from decoder: Decoder) throws {
     let container = try decoder.singleValueContainer()
     if container.decodeNil() {
-      value = Optional<String>.none as Any
+      value = NSNull()
     } else if let bool = try? container.decode(Bool.self) {
       value = bool
     } else if let int = try? container.decode(Int.self) {
@@ -173,7 +173,9 @@ public struct AnyCodableValue: Codable, Equatable, Hashable, Sendable {
   public func encode(to encoder: Encoder) throws {
     var container = encoder.singleValueContainer()
     switch value {
-    case Optional<Any>.none:
+    case is NSNull,
+         Optional<Any>.none,
+         Optional<String>.none:
       try container.encodeNil()
     case let bool as Bool:
       try container.encode(bool)
@@ -185,7 +187,11 @@ public struct AnyCodableValue: Codable, Equatable, Hashable, Sendable {
       try container.encode(string)
     case let array as [Any]:
       try container.encode(array.map { AnyCodableValue($0) })
+    case let array as [any Sendable]:
+      try container.encode(array.map { AnyCodableValue($0) })
     case let dict as [String: Any]:
+      try container.encode(dict.mapValues { AnyCodableValue($0) })
+    case let dict as [String: any Sendable]:
       try container.encode(dict.mapValues { AnyCodableValue($0) })
     default:
       throw EncodingError.invalidValue(
@@ -196,18 +202,172 @@ public struct AnyCodableValue: Codable, Equatable, Hashable, Sendable {
   }
 
   public static func == (lhs: AnyCodableValue, rhs: AnyCodableValue) -> Bool {
-    // Compare string representations for simplicity
-    String(describing: lhs.value) == String(describing: rhs.value)
+    valuesEqual(lhs.value, rhs.value)
   }
 
   public func hash(into hasher: inout Hasher) {
-    // Hash based on string representation for simplicity
-    hasher.combine(String(describing: value))
+    Self.hashValue(value, into: &hasher)
   }
 
   /// Get value as String if it is one
   public var stringValue: String? {
-    value as? String
+    if let string = value as? String {
+      return string
+    }
+    if let bool = value as? Bool {
+      return bool ? "true" : "false"
+    }
+    if let int = value as? Int {
+      return String(int)
+    }
+    if let double = value as? Double {
+      return String(double)
+    }
+    if let number = value as? NSNumber {
+      return number.stringValue
+    }
+    if value is NSNull {
+      return nil
+    }
+    if let dict = Self.dictionaryValue(from: value) {
+      if let stdout = dict["stdout"] as? String {
+        return stdout
+      }
+      return Self.jsonString(from: dict) ?? String(describing: value)
+    }
+    if let array = Self.arrayValue(from: value) {
+      return Self.jsonString(from: array) ?? String(describing: value)
+    }
+    return String(describing: value)
+  }
+
+  private static func unwrapValue(_ value: Any) -> Any {
+    if let wrapped = value as? AnyCodableValue {
+      return wrapped.value
+    }
+    return value
+  }
+
+  private static func arrayValue(from value: Any) -> [Any]? {
+    if let array = value as? [Any] {
+      return array.map { unwrapValue($0) }
+    }
+    if let array = value as? [any Sendable] {
+      return array.map { unwrapValue($0) }
+    }
+    return nil
+  }
+
+  private static func dictionaryValue(from value: Any) -> [String: Any]? {
+    if let dict = value as? [String: Any] {
+      return dict.mapValues { unwrapValue($0) }
+    }
+    if let dict = value as? [String: any Sendable] {
+      return dict.mapValues { unwrapValue($0) }
+    }
+    return nil
+  }
+
+  private static func valuesEqual(_ lhs: Any, _ rhs: Any) -> Bool {
+    let lhsValue = unwrapValue(lhs)
+    let rhsValue = unwrapValue(rhs)
+
+    switch (lhsValue, rhsValue) {
+    case (_ as NSNull, _ as NSNull):
+      return true
+    case (let lhsBool as Bool, let rhsBool as Bool):
+      return lhsBool == rhsBool
+    case (let lhsInt as Int, let rhsInt as Int):
+      return lhsInt == rhsInt
+    case (let lhsDouble as Double, let rhsDouble as Double):
+      return lhsDouble == rhsDouble
+    case (let lhsInt as Int, let rhsDouble as Double):
+      return Double(lhsInt) == rhsDouble
+    case (let lhsDouble as Double, let rhsInt as Int):
+      return lhsDouble == Double(rhsInt)
+    case (let lhsString as String, let rhsString as String):
+      return lhsString == rhsString
+    default:
+      if let lhsArray = arrayValue(from: lhsValue),
+         let rhsArray = arrayValue(from: rhsValue) {
+        guard lhsArray.count == rhsArray.count else { return false }
+        for (lhsElement, rhsElement) in zip(lhsArray, rhsArray) {
+          if !valuesEqual(lhsElement, rhsElement) {
+            return false
+          }
+        }
+        return true
+      }
+      if let lhsDict = dictionaryValue(from: lhsValue),
+         let rhsDict = dictionaryValue(from: rhsValue) {
+        guard lhsDict.count == rhsDict.count else { return false }
+        for (key, lhsValue) in lhsDict {
+          guard let rhsValue = rhsDict[key],
+                valuesEqual(lhsValue, rhsValue) else {
+            return false
+          }
+        }
+        return true
+      }
+      return false
+    }
+  }
+
+  private static func hashValue(_ value: Any, into hasher: inout Hasher) {
+    let unwrapped = unwrapValue(value)
+
+    if unwrapped is NSNull {
+      hasher.combine(0)
+      return
+    }
+    if let bool = unwrapped as? Bool {
+      hasher.combine(1)
+      hasher.combine(bool)
+      return
+    }
+    if let int = unwrapped as? Int {
+      hasher.combine(2)
+      hasher.combine(int)
+      return
+    }
+    if let double = unwrapped as? Double {
+      hasher.combine(2)
+      hasher.combine(double)
+      return
+    }
+    if let string = unwrapped as? String {
+      hasher.combine(3)
+      hasher.combine(string)
+      return
+    }
+    if let array = arrayValue(from: unwrapped) {
+      hasher.combine(4)
+      for item in array {
+        hashValue(item, into: &hasher)
+      }
+      return
+    }
+    if let dict = dictionaryValue(from: unwrapped) {
+      hasher.combine(5)
+      for key in dict.keys.sorted() {
+        hasher.combine(key)
+        if let item = dict[key] {
+          hashValue(item, into: &hasher)
+        }
+      }
+      return
+    }
+    hasher.combine(6)
+    hasher.combine(String(describing: unwrapped))
+  }
+
+  private static func jsonString(from value: Any) -> String? {
+    guard JSONSerialization.isValidJSONObject(value),
+          let data = try? JSONSerialization.data(withJSONObject: value, options: []),
+          let string = String(data: data, encoding: .utf8) else {
+      return nil
+    }
+    return string
   }
 }
 

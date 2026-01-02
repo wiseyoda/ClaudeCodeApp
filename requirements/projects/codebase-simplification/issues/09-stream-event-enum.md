@@ -128,6 +128,7 @@ None.
 | 2026-01-02 | Phase 2: CLIBridgeAdapter migration to onEvent | Complete |
 | 2026-01-02 | Phase 3: ChatViewModel migration | Completed in #17 after CLIBridgeAdapter removal |
 | 2026-01-02 | Phase 4: Legacy callback removal | Complete |
+| 2026-01-02 | Verification | Added WebSocket date decoder; targeted unit tests (CLIBridgeManager/CLIStreamContent/CLIBridgeTypes/CLISessionTypes/APIClientModels/Models) pass via `xcodebuild test`. Existing Sendable warnings persist. |
 
 ### Phase 1 Details (Complete)
 

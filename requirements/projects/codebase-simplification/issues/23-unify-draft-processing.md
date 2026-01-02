@@ -1,6 +1,6 @@
 # Issue #23: Unify draft + processing persistence
 
-> **Status**: Pending
+> **Status**: Complete
 > **Priority**: Tier 1
 > **Depends On**: #27
 > **Blocks**: #5/#6/#7/#19/#24/#25
@@ -50,7 +50,7 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 | File | Reason |
 |---|---|
-| None | N/A |
+| CodingBridge/Persistence/DraftInputPersistence.swift | Unused; ChatViewModel uses MessageStore directly |
 
 ### Steps
 
@@ -71,10 +71,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Unify draft + processing persistence is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Unify draft + processing persistence is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -125,5 +125,5 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | Audited current state; DraftInputPersistence unused |
+| 2026-01-02 | Completed | Deleted DraftInputPersistence.swift, added global recovery state to MessageStore, updated BackgroundManager to use unified API |

@@ -3,7 +3,6 @@ import XCTest
 
 @MainActor
 final class PersistenceTests: XCTestCase {
-    private let draftPersistence = DraftInputPersistence.shared
     private let queuePersistence = MessageQueuePersistence.shared
 
     private var queueFileURL: URL {
@@ -13,106 +12,100 @@ final class PersistenceTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
-        draftPersistence.clear()
         queuePersistence.clear()
         try? FileManager.default.removeItem(at: queueFileURL)
+        MessageStore.clearGlobalRecoveryState()
     }
 
     override func tearDown() {
-        draftPersistence.clear()
         queuePersistence.clear()
         try? FileManager.default.removeItem(at: queueFileURL)
+        MessageStore.clearGlobalRecoveryState()
         super.tearDown()
     }
 
-    // MARK: - DraftInputPersistence
+    // MARK: - MessageStore Global Recovery State
 
-    func test_draftSaveStoresFieldsAndTimestamp() {
-        draftPersistence.save(draft: "Hello", sessionId: "session-1", projectPath: "/tmp/project")
+    func test_saveGlobalRecoveryStatePersistsAllFields() {
+        MessageStore.saveGlobalRecoveryState(
+            wasProcessing: true,
+            sessionId: "session-1",
+            projectPath: "/tmp/project"
+        )
 
-        XCTAssertEqual(draftPersistence.currentDraft, "Hello")
-        XCTAssertEqual(draftPersistence.draftSessionId, "session-1")
-        XCTAssertEqual(draftPersistence.draftProjectPath, "/tmp/project")
-        XCTAssertNotNil(draftPersistence.draftTimestamp)
-        XCTAssertFalse(draftPersistence.isDraftStale)
+        XCTAssertTrue(MessageStore.wasProcessingOnBackground)
+        XCTAssertEqual(MessageStore.lastBackgroundSessionId, "session-1")
+        XCTAssertEqual(MessageStore.lastBackgroundProjectPath, "/tmp/project")
     }
 
-    func test_draftSaveDoesNotOverrideMissingFields() {
-        draftPersistence.save(draft: "Hello", sessionId: "session-1", projectPath: "/tmp/project")
+    func test_saveGlobalRecoveryStateHandlesNilValues() {
+        // First set all values
+        MessageStore.saveGlobalRecoveryState(
+            wasProcessing: true,
+            sessionId: "session-1",
+            projectPath: "/tmp/project"
+        )
 
-        draftPersistence.save(sessionId: "session-2")
+        // Then save with nil values
+        MessageStore.saveGlobalRecoveryState(
+            wasProcessing: false,
+            sessionId: nil,
+            projectPath: nil
+        )
 
-        XCTAssertEqual(draftPersistence.currentDraft, "Hello")
-        XCTAssertEqual(draftPersistence.draftSessionId, "session-2")
-        XCTAssertEqual(draftPersistence.draftProjectPath, "/tmp/project")
+        XCTAssertFalse(MessageStore.wasProcessingOnBackground)
+        XCTAssertNil(MessageStore.lastBackgroundSessionId)
+        XCTAssertNil(MessageStore.lastBackgroundProjectPath)
     }
 
-    func test_loadForSessionReturnsDraftWhenMatch() {
-        draftPersistence.save(draft: "Draft", sessionId: "session-1", projectPath: "/tmp/project")
+    func test_clearGlobalRecoveryStateResetsAllFields() {
+        MessageStore.saveGlobalRecoveryState(
+            wasProcessing: true,
+            sessionId: "session-1",
+            projectPath: "/tmp/project"
+        )
 
-        XCTAssertEqual(draftPersistence.loadForSession("session-1"), "Draft")
+        MessageStore.clearGlobalRecoveryState()
+
+        XCTAssertFalse(MessageStore.wasProcessingOnBackground)
+        XCTAssertNil(MessageStore.lastBackgroundSessionId)
+        XCTAssertNil(MessageStore.lastBackgroundProjectPath)
     }
 
-    func test_loadForSessionReturnsNilWhenMismatch() {
-        draftPersistence.save(draft: "Draft", sessionId: "session-1", projectPath: "/tmp/project")
+    func test_wasProcessingOnBackgroundDefaultsToFalse() {
+        MessageStore.clearGlobalRecoveryState()
 
-        XCTAssertNil(draftPersistence.loadForSession("session-2"))
+        XCTAssertFalse(MessageStore.wasProcessingOnBackground)
     }
 
-    func test_loadForSessionReturnsNilWhenDraftEmpty() {
-        draftPersistence.save(draft: "", sessionId: "session-1", projectPath: "/tmp/project")
+    // MARK: - MessageStore Draft Persistence
 
-        XCTAssertNil(draftPersistence.loadForSession("session-1"))
+    func test_saveDraftPersistsText() {
+        MessageStore.saveDraft("Hello world", for: "/tmp/project")
+
+        XCTAssertEqual(MessageStore.loadDraft(for: "/tmp/project"), "Hello world")
     }
 
-    func test_loadForProjectReturnsDraftWhenMatch() {
-        draftPersistence.save(draft: "Draft", sessionId: "session-1", projectPath: "/tmp/project")
+    func test_saveDraftEmptyStringClearsDraft() {
+        MessageStore.saveDraft("Hello", for: "/tmp/project")
+        MessageStore.saveDraft("", for: "/tmp/project")
 
-        XCTAssertEqual(draftPersistence.loadForProject("/tmp/project"), "Draft")
+        XCTAssertEqual(MessageStore.loadDraft(for: "/tmp/project"), "")
     }
 
-    func test_loadForProjectReturnsNilWhenMismatch() {
-        draftPersistence.save(draft: "Draft", sessionId: "session-1", projectPath: "/tmp/project")
+    func test_clearDraftRemovesDraft() {
+        MessageStore.saveDraft("Hello", for: "/tmp/project")
+        MessageStore.clearDraft(for: "/tmp/project")
 
-        XCTAssertNil(draftPersistence.loadForProject("/other"))
+        XCTAssertEqual(MessageStore.loadDraft(for: "/tmp/project"), "")
     }
 
-    func test_draftStaleTrueWhenTimestampMissing() {
-        XCTAssertTrue(draftPersistence.isDraftStale)
-    }
+    func test_draftIsolatedPerProject() {
+        MessageStore.saveDraft("Project 1 draft", for: "/tmp/project1")
+        MessageStore.saveDraft("Project 2 draft", for: "/tmp/project2")
 
-    func test_draftStaleTrueWhenOlderThanDay() {
-        let oldDate = Date(timeIntervalSinceNow: -25 * 60 * 60)
-        draftPersistence.draftTimestamp = oldDate
-
-        XCTAssertTrue(draftPersistence.isDraftStale)
-    }
-
-    func test_draftStaleFalseWhenRecent() {
-        draftPersistence.draftTimestamp = Date()
-
-        XCTAssertFalse(draftPersistence.isDraftStale)
-    }
-
-    func test_clearResetsDraft() {
-        draftPersistence.save(draft: "Draft", sessionId: "session-1", projectPath: "/tmp/project")
-
-        draftPersistence.clear()
-
-        XCTAssertEqual(draftPersistence.currentDraft, "")
-        XCTAssertNil(draftPersistence.draftSessionId)
-        XCTAssertNil(draftPersistence.draftProjectPath)
-        XCTAssertNil(draftPersistence.draftTimestamp)
-    }
-
-    func test_clearIfSessionOnlyClearsMatchingSession() {
-        draftPersistence.save(draft: "Draft", sessionId: "session-1", projectPath: "/tmp/project")
-
-        draftPersistence.clearIfSession("session-2")
-        XCTAssertEqual(draftPersistence.currentDraft, "Draft")
-
-        draftPersistence.clearIfSession("session-1")
-        XCTAssertEqual(draftPersistence.currentDraft, "")
+        XCTAssertEqual(MessageStore.loadDraft(for: "/tmp/project1"), "Project 1 draft")
+        XCTAssertEqual(MessageStore.loadDraft(for: "/tmp/project2"), "Project 2 draft")
     }
 
     // MARK: - MessageQueuePersistence

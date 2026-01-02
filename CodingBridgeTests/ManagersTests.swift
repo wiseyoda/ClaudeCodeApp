@@ -10,11 +10,13 @@ final class ManagersTests: XCTestCase {
         super.setUp()
         BackgroundManager.shared.resetForTesting()
         BackgroundManager.shared.isAppInBackground = false
+        MessageStore.clearGlobalRecoveryState()
     }
 
     override func tearDown() {
         BackgroundManager.shared.resetForTesting()
         BackgroundManager.shared.isAppInBackground = false
+        MessageStore.clearGlobalRecoveryState()
         super.tearDown()
     }
 
@@ -29,38 +31,33 @@ final class ManagersTests: XCTestCase {
     }
 
     func test_backgroundManager_clearProcessingState_resetsUserDefaultsAndState() {
-        let defaults = UserDefaults.standard
-        defaults.set(true, forKey: "wasProcessing")
-        defaults.set("session-1", forKey: "lastSessionId")
-        defaults.set("/tmp/project", forKey: "lastProjectPath")
+        // Set state via MessageStore API
+        MessageStore.saveGlobalRecoveryState(wasProcessing: true, sessionId: "session-1", projectPath: "/tmp/project")
         BackgroundManager.shared.updateTaskState(TaskState(sessionId: "session-1", projectPath: "/tmp/project"))
 
         BackgroundManager.shared.clearProcessingState()
 
-        XCTAssertFalse(defaults.bool(forKey: "wasProcessing"))
-        XCTAssertNil(defaults.string(forKey: "lastSessionId"))
-        XCTAssertNil(defaults.string(forKey: "lastProjectPath"))
+        XCTAssertFalse(MessageStore.wasProcessingOnBackground)
+        XCTAssertNil(MessageStore.lastBackgroundSessionId)
+        XCTAssertNil(MessageStore.lastBackgroundProjectPath)
         XCTAssertNil(BackgroundManager.shared.currentTaskState)
     }
 
-    func test_backgroundManager_wasProcessingOnBackground_readsUserDefaults() {
-        let defaults = UserDefaults.standard
-        defaults.set(true, forKey: "wasProcessing")
+    func test_backgroundManager_wasProcessingOnBackground_readsMessageStore() {
+        MessageStore.saveGlobalRecoveryState(wasProcessing: true, sessionId: nil, projectPath: nil)
         XCTAssertTrue(BackgroundManager.shared.wasProcessingOnBackground)
-        defaults.set(false, forKey: "wasProcessing")
+        MessageStore.saveGlobalRecoveryState(wasProcessing: false, sessionId: nil, projectPath: nil)
         XCTAssertFalse(BackgroundManager.shared.wasProcessingOnBackground)
     }
 
-    func test_backgroundManager_lastSessionId_readsUserDefaults() {
-        let defaults = UserDefaults.standard
-        defaults.set("session-2", forKey: "lastSessionId")
+    func test_backgroundManager_lastSessionId_readsMessageStore() {
+        MessageStore.saveGlobalRecoveryState(wasProcessing: true, sessionId: "session-2", projectPath: nil)
 
         XCTAssertEqual(BackgroundManager.shared.lastSessionId, "session-2")
     }
 
-    func test_backgroundManager_lastProjectPath_readsUserDefaults() {
-        let defaults = UserDefaults.standard
-        defaults.set("/tmp/project", forKey: "lastProjectPath")
+    func test_backgroundManager_lastProjectPath_readsMessageStore() {
+        MessageStore.saveGlobalRecoveryState(wasProcessing: true, sessionId: nil, projectPath: "/tmp/project")
 
         XCTAssertEqual(BackgroundManager.shared.lastProjectPath, "/tmp/project")
     }
@@ -151,10 +148,8 @@ final class ManagersTests: XCTestCase {
     }
 
     func test_backgroundManager_cleanupOnAppTerminate() {
-        let defaults = UserDefaults.standard
-        defaults.set(true, forKey: "wasProcessing")
-        defaults.set("session-1", forKey: "lastSessionId")
-        defaults.set("/tmp/project", forKey: "lastProjectPath")
+        // Set state via MessageStore API
+        MessageStore.saveGlobalRecoveryState(wasProcessing: true, sessionId: "session-1", projectPath: "/tmp/project")
         BackgroundManager.shared.setBackgroundTaskIdentifierForTesting(UIBackgroundTaskIdentifier(rawValue: 99))
         BackgroundManager.shared.setProcessingStartTimeForTesting(Date())
         BackgroundManager.shared.setBackgroundTaskActiveForTesting(true)
@@ -167,9 +162,9 @@ final class ManagersTests: XCTestCase {
         XCTAssertFalse(BackgroundManager.shared.isBackgroundTaskActive)
         XCTAssertFalse(BackgroundManager.shared.isAppInBackground)
         XCTAssertNil(BackgroundManager.shared.currentTaskState)
-        XCTAssertFalse(defaults.bool(forKey: "wasProcessing"))
-        XCTAssertNil(defaults.string(forKey: "lastSessionId"))
-        XCTAssertNil(defaults.string(forKey: "lastProjectPath"))
+        XCTAssertFalse(MessageStore.wasProcessingOnBackground)
+        XCTAssertNil(MessageStore.lastBackgroundSessionId)
+        XCTAssertNil(MessageStore.lastBackgroundProjectPath)
     }
 
     func test_backgroundManager_resumeAfterSuspend() {

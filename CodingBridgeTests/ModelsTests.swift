@@ -205,12 +205,13 @@ final class ModelsTests: XCTestCase {
         }
 
         let decoded = try JSONDecoder().decode(Wrapper.self, from: data)
-        // For dict values, stringValue returns nil, so check the dict directly
         let dict = decoded.value.value as? [String: Any]
+        let dataValue = try JSONSerialization.data(withJSONObject: dict ?? [:])
+        let expected = String(data: dataValue, encoding: .utf8)
 
-        // Should contain key/val in the dictionary
         XCTAssertNotNil(dict)
         XCTAssertEqual(dict?["key"] as? String, "val")
+        XCTAssertEqual(decoded.value.stringValue, expected)
     }
 
     // MARK: - QuestionOption Tests

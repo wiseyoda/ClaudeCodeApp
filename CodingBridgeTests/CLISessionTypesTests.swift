@@ -3,9 +3,32 @@ import XCTest
 
 final class CLISessionTypesTests: XCTestCase {
 
+    private func makeDecoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            if let dateString = try? container.decode(String.self),
+               let date = CLIDateFormatter.parseDate(dateString) {
+                return date
+            }
+            if let timeInterval = try? container.decode(Double.self) {
+                return Date(timeIntervalSince1970: timeInterval)
+            }
+            if let timeInterval = try? container.decode(Int.self) {
+                return Date(timeIntervalSince1970: Double(timeInterval))
+            }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Invalid date format"
+            )
+        }
+        return decoder
+    }
+
     private func decode<T: Decodable>(_ type: T.Type, from json: String) throws -> T {
         let data = Data(json.utf8)
-        return try JSONDecoder().decode(type, from: data)
+        let decoder = makeDecoder()
+        return try decoder.decode(type, from: data)
     }
 
     private func makeMetadata(
@@ -172,7 +195,7 @@ final class CLISessionTypesTests: XCTestCase {
         }
         """
 
-        let item = try decode(CLIQuestionItem.self, from: json)
+        let item = try decode(QuestionItem.self, from: json)
 
         XCTAssertEqual(item.question, "Proceed?")
         XCTAssertEqual(item.header, "Confirm")
@@ -185,7 +208,7 @@ final class CLISessionTypesTests: XCTestCase {
         {"label": "Yes", "description": "Preferred"}
         """
 
-        let option = try decode(CLIQuestionOption.self, from: json)
+        let option = try decode(APIQuestionOption.self, from: json)
 
         XCTAssertEqual(option.label, "Yes")
         XCTAssertEqual(option.description, "Preferred")
@@ -196,7 +219,7 @@ final class CLISessionTypesTests: XCTestCase {
         {"label": "No", "description": null}
         """
 
-        let option = try decode(CLIQuestionOption.self, from: json)
+        let option = try decode(APIQuestionOption.self, from: json)
 
         XCTAssertEqual(option.label, "No")
         XCTAssertNil(option.description)
@@ -207,7 +230,7 @@ final class CLISessionTypesTests: XCTestCase {
         {"label": "Maybe"}
         """
 
-        let option = try decode(CLIQuestionOption.self, from: json)
+        let option = try decode(APIQuestionOption.self, from: json)
 
         XCTAssertEqual(option.label, "Maybe")
         XCTAssertNil(option.description)

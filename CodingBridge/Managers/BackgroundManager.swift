@@ -116,7 +116,7 @@ final class BackgroundManager: ObservableObject {
         }
 
         // Check if we have a saved processing state that needs recovery
-        if UserDefaults.standard.bool(forKey: "wasProcessing") {
+        if MessageStore.wasProcessingOnBackground {
             log.info("[Background] App refresh detected pending processing state")
             // Notify user that task may need attention
             await NotificationManager.shared.sendTaskPausedNotification()
@@ -184,42 +184,33 @@ final class BackgroundManager: ObservableObject {
         // Save pending messages
         await MessageQueuePersistence.shared.save()
 
-        // Save draft input
-        DraftInputPersistence.shared.save()
-
-        // Mark that we were processing
-        UserDefaults.standard.set(true, forKey: "wasProcessing")
-
-        if let sessionId = currentTaskState?.sessionId {
-            UserDefaults.standard.set(sessionId, forKey: "lastSessionId")
-        }
-
-        if let projectPath = currentTaskState?.projectPath {
-            UserDefaults.standard.set(projectPath, forKey: "lastProjectPath")
-        }
+        // Save recovery state via unified MessageStore API
+        MessageStore.saveGlobalRecoveryState(
+            wasProcessing: true,
+            sessionId: currentTaskState?.sessionId,
+            projectPath: currentTaskState?.projectPath
+        )
 
         log.info("[Background] Saved current state for recovery")
     }
 
     func clearProcessingState() {
-        UserDefaults.standard.set(false, forKey: "wasProcessing")
-        UserDefaults.standard.removeObject(forKey: "lastSessionId")
-        UserDefaults.standard.removeObject(forKey: "lastProjectPath")
+        MessageStore.clearGlobalRecoveryState()
         currentTaskState = nil
     }
 
-    // MARK: - Recovery
+    // MARK: - Recovery (delegating to MessageStore)
 
     var wasProcessingOnBackground: Bool {
-        UserDefaults.standard.bool(forKey: "wasProcessing")
+        MessageStore.wasProcessingOnBackground
     }
 
     var lastSessionId: String? {
-        UserDefaults.standard.string(forKey: "lastSessionId")
+        MessageStore.lastBackgroundSessionId
     }
 
     var lastProjectPath: String? {
-        UserDefaults.standard.string(forKey: "lastProjectPath")
+        MessageStore.lastBackgroundProjectPath
     }
 
     // MARK: - Elapsed Time

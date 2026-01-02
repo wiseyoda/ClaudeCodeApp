@@ -73,7 +73,7 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 - [x] Remove CLIBridgeTypesMigration is implemented as described
 - [x] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
+- [x] Build passes with no new warnings
 - [x] No user-visible behavior changes
 
 ---
@@ -127,4 +127,6 @@ None.
 |------|--------|---------|
 | 2026-01-02 | Started implementation | In progress |
 | 2026-01-02 | Completed | Split CLIBridgeTypesMigration.swift into CLIBridgeAppTypes.swift (app-specific types, StreamEvent enum, typealiases) and CLIBridgeExtensions.swift (extensions to generated types). |
-| 2026-01-02 | Follow-up | Updated test fixtures to use generated types and clarified compatibility comments. Build not rerun. |
+| 2026-01-02 | Follow-up | Updated test fixtures to use generated types and clarified compatibility comments. |
+| 2026-01-02 | Verification | `xcodebuild` succeeded for CodingBridge iOS 26.2 simulator. |
+| 2026-01-02 | Verification | Updated AnyCodableValue handling and permission request descriptions; targeted unit tests (CLIBridgeManager/CLIStreamContent/CLIBridgeTypes/CLISessionTypes/APIClientModels/Models) pass via `xcodebuild test`. Existing Sendable warnings persist. |

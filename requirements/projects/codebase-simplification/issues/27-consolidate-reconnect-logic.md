@@ -1,6 +1,6 @@
 # Issue #27: Consolidate network/lifecycle/reconnect logic
 
-> **Status**: Pending
+> **Status**: Complete
 > **Priority**: Tier 1
 > **Depends On**: #17
 > **Blocks**: #23/#45
@@ -70,10 +70,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Consolidate network/lifecycle/reconnect logic is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Consolidate network/lifecycle/reconnect logic is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -104,7 +104,24 @@ rg -n "Task.sleep" CodingBridge
 
 ## Notes
 
-None.
+**Analysis Summary:**
+
+The audit identified two network monitors with distinct purposes:
+1. **CLIBridgeManager** (internal NWPathMonitor): Handles WebSocket reconnection via lifecycle observers (didBecomeActiveNotification, network path changes)
+2. **NetworkMonitor.swift** (singleton): Provides network status for UI display and offline action queuing - NOT for reconnects
+
+The duplicate reconnect trigger was in **ChatView.swift**:
+- `onChange(of: scenePhase)` handler that called `manager.connect()` on `.active`
+- This duplicated CLIBridgeManager's `didBecomeActiveNotification` observer
+
+**Changes Made:**
+- Removed scenePhase reconnect handler from ChatView.swift (19 lines deleted)
+- CLIBridgeManager remains the single source of truth for connection lifecycle
+
+**Not Changed (by design):**
+- NetworkMonitor.swift notifications: Used for offline queue processing, not reconnection
+- attemptSessionReattachment polling: Different purpose (session recovery on app startup)
+- backgroundRecoveryNeeded handler: Explicit recovery path for push notification scenarios
 
 ---
 
@@ -124,5 +141,5 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | Auditing reconnect patterns |
+| 2026-01-02 | Completed | Removed duplicate scenePhase reconnect from ChatView; CLIBridgeManager is single source of truth |

@@ -154,7 +154,7 @@ Path encoding: `/home/dev/project` → `-home-dev-project`
 
 ## References
 
-- @CHANGELOG.md - Version history
+- CHANGELOG.md - Version history (read when needed)
 - @ROADMAP.md - Current work
 - @requirements/ARCHITECTURE.md - Full architecture
 - @requirements/BACKEND.md - API reference

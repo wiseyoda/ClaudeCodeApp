@@ -169,7 +169,6 @@
 		DA46E858EFB49D9171858DCD /* ModelsListResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8311B3845712926111998251 /* ModelsListResponse.swift */; };
 		DB000042 /* DebugLogStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB000043 /* DebugLogStore.swift */; };
 		DB000044 /* DebugLogView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB000045 /* DebugLogView.swift */; };
-		DI000001 /* DraftInputPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = DI000002 /* DraftInputPersistence.swift */; };
 		E0D68209C73825BFD8DBD778 /* SessionListResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2404F075B8E5B54318316870 /* SessionListResult.swift */; };
 		E4E1E82CC462390FF05FA8C2 /* GetMessagesResponseFilters.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA5FBCC6234D1624F19B2DE6 /* GetMessagesResponseFilters.swift */; };
 		E60C8EED3BA60C5C3064646F /* ProjectsEncodedPathSessionsSessionIdExportGetExcludeThinkingParameter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74618AA96A25CFEA5BE1CEF7 /* ProjectsEncodedPathSessionsSessionIdExportGetExcludeThinkingParameter.swift */; };
@@ -458,7 +457,6 @@
 		D93418BE1BE88B9D40A924D0 /* DeleteResult.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DeleteResult.swift; sourceTree = "<group>"; };
 		DB000043 /* DebugLogStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogStore.swift; sourceTree = "<group>"; };
 		DB000045 /* DebugLogView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DebugLogView.swift; sourceTree = "<group>"; };
-		DI000002 /* DraftInputPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DraftInputPersistence.swift; sourceTree = "<group>"; };
 		E523251DC772183D4DCF3DC8 /* SearchResponse.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SearchResponse.swift; sourceTree = "<group>"; };
 		EB000053 /* ErrorBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorBanner.swift; sourceTree = "<group>"; };
 		EFCB88A776B85FE55BD1176A /* PaginatedMessage.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PaginatedMessage.swift; sourceTree = "<group>"; };
@@ -946,7 +944,6 @@
 			isa = PBXGroup;
 			children = (
 				MQ000002 /* MessageQueuePersistence.swift */,
-				DI000002 /* DraftInputPersistence.swift */,
 			);
 			path = Persistence;
 			sourceTree = "<group>";
@@ -1217,7 +1214,6 @@
 				NM000001 /* NotificationManager.swift in Sources */,
 				OQ000001 /* OfflineActionQueue.swift in Sources */,
 				MQ000001 /* MessageQueuePersistence.swift in Sources */,
-				DI000001 /* DraftInputPersistence.swift in Sources */,
 				TS000001 /* TaskState.swift in Sources */,
 				IA000001 /* ImageAttachment.swift in Sources */,
 				NW000001 /* NetworkMonitor.swift in Sources */,
