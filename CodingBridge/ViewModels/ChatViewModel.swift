@@ -14,7 +14,7 @@ class ChatViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
 
     // MARK: - Managers
-    let wsManager: CLIBridgeAdapter
+    let manager: CLIBridgeManager
     let ideasStore: IdeasStore
     let scrollManager = ScrollStateManager()
     let sessionStore = SessionStore.shared
@@ -33,6 +33,12 @@ class ChatViewModel: ObservableObject {
     @Published var isLoadingHistory = false
     @Published var scrollToBottomTrigger = false
     @Published var showScrollToBottom = false
+
+    // MARK: - Connection State (previously from adapter)
+    @Published var pendingApprovalRequest: ApprovalRequest?
+    @Published var pendingQuestionData: AskUserQuestionData?
+    @Published var sessionPermissionMode: PermissionMode?
+    @Published var isReattachingSession = false
 
     // MARK: - Streaming Message Cache
     @Published var streamingMessageId = UUID()
@@ -104,15 +110,15 @@ class ChatViewModel: ObservableObject {
         self.settings = settings
         self.onSessionsChanged = onSessionsChanged
 
-        // Initialize managers
-        self.wsManager = CLIBridgeAdapter()
+        // Initialize managers - use CLIBridgeManager directly (no adapter layer)
+        self.manager = CLIBridgeManager(serverURL: settings.serverURL)
         self.ideasStore = IdeasStore(projectPath: project.path)
 
-        // Forward objectWillChange from wsManager to trigger view updates
+        // Forward objectWillChange from manager to trigger view updates
         // This fixes nested ObservableObject observation issue where SwiftUI
-        // doesn't detect changes to wsManager.agentState, etc.
+        // doesn't detect changes to manager.agentState, etc.
         // Note: No receive(on:) needed since ChatViewModel is @MainActor
-        wsManager.objectWillChange
+        manager.objectWillChange
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
             }
@@ -132,18 +138,18 @@ class ChatViewModel: ObservableObject {
         project: Project,
         initialGitStatus: GitStatus = .unknown,
         settings: AppSettings,
-        wsManager: CLIBridgeAdapter,
+        manager: CLIBridgeManager,
         onSessionsChanged: (() -> Void)? = nil
     ) {
         self.project = project
         self.initialGitStatus = initialGitStatus
         self.settings = settings
         self.onSessionsChanged = onSessionsChanged
-        self.wsManager = wsManager
+        self.manager = manager
         self.ideasStore = IdeasStore(projectPath: project.path)
 
-        // Forward objectWillChange from wsManager to trigger view updates
-        wsManager.objectWillChange
+        // Forward objectWillChange from manager to trigger view updates
+        manager.objectWillChange
             .sink { [weak self] _ in
                 self?.objectWillChange.send()
             }
@@ -169,9 +175,9 @@ class ChatViewModel: ObservableObject {
         // Configure SessionStore with settings (idempotent)
         sessionStore.configure(with: settings)
 
-        // Update managers with actual settings
-        wsManager.updateSettings(settings)
-        setupWebSocketCallbacks()
+        // Update manager with actual settings
+        manager.updateServerURL(settings.serverURL)
+        setupStreamEventHandler()
 
         // Note: HealthMonitor is now managed at app level (CodingBridgeApp.swift)
         // to avoid start/stop churn when navigating between views
@@ -210,8 +216,10 @@ class ChatViewModel: ObservableObject {
             // Connect based on selected session
             if let session = selectedSession {
                 log.debug("[ChatViewModel] Opening project with session: \(session.id.prefix(8))...")
-                wsManager.sessionId = session.id
-                wsManager.connect(projectPath: project.path, sessionId: session.id)
+                manager.sessionId = session.id
+                Task {
+                    await manager.connect(projectPath: project.path, sessionId: session.id)
+                }
                 MessageStore.saveSessionId(session.id, for: project.path)
                 loadSessionHistory(session)
 
@@ -236,7 +244,9 @@ class ChatViewModel: ObservableObject {
                 )
                 selectedSession = ephemeralSession
 
-                wsManager.connect(projectPath: project.path)
+                Task {
+                    await manager.connect(projectPath: project.path)
+                }
                 if wasProcessing {
                     MessageStore.clearProcessingState(for: project.path)
                 }
@@ -299,7 +309,7 @@ class ChatViewModel: ObservableObject {
         disconnectTask = Task {
             try? await Task.sleep(nanoseconds: 500_000_000)
             guard !Task.isCancelled else { return }
-            wsManager.disconnect()
+            manager.disconnect()
         }
     }
 
@@ -317,7 +327,7 @@ class ChatViewModel: ObservableObject {
     }
 
     var sessions: [ProjectSession] {
-        let activeId = wsManager.sessionId
+        let activeId = manager.sessionId
         if sessionStore.hasLoaded(for: project.path) {
             return localSessions.filterForDisplay(projectPath: project.path, activeSessionId: activeId)
         }
@@ -327,7 +337,7 @@ class ChatViewModel: ObservableObject {
 
     /// Compute session ID to resume, filtering out ephemeral sessions
     var effectiveSessionToResume: String? {
-        if let sessionId = wsManager.sessionId {
+        if let sessionId = manager.sessionId {
             return sessionId
         }
         if let session = selectedSession {
@@ -362,10 +372,12 @@ class ChatViewModel: ObservableObject {
 
         // CRITICAL: Disconnect and reconnect WebSocket WITHOUT a sessionId
         // This ensures the backend creates a new session when the user sends their first message
-        wsManager.disconnect()
-        wsManager.sessionId = nil
+        manager.disconnect()
+        manager.sessionId = nil
         log.debug("[ChatViewModel] Reconnecting WebSocket without sessionId for fresh session")
-        wsManager.connect(projectPath: project.path, sessionId: nil)
+        Task {
+            await manager.connect(projectPath: project.path, sessionId: nil)
+        }
 
         let welcomeMessage = ChatMessage(
             role: .system,
@@ -420,7 +432,7 @@ class ChatViewModel: ObservableObject {
         guard let mostRecent = sessions.first else { return }
 
         log.debug("[ChatViewModel] Selecting most recent session: \(mostRecent.id.prefix(8))...")
-        wsManager.sessionId = mostRecent.id
+        manager.sessionId = mostRecent.id
         selectedSession = mostRecent
         MessageStore.saveSessionId(mostRecent.id, for: project.path)
 
@@ -432,14 +444,14 @@ class ChatViewModel: ObservableObject {
     func attemptSessionReattachment(sessionId: String) {
         Task {
             var attempts = 0
-            while !wsManager.connectionState.isConnected && attempts < 20 {
+            while !manager.connectionState.isConnected && attempts < 20 {
                 try? await Task.sleep(nanoseconds: 100_000_000)
                 attempts += 1
             }
 
-            if wsManager.connectionState.isConnected {
+            if manager.connectionState.isConnected {
                 log.debug("[ChatViewModel] Reattaching to session: \(sessionId.prefix(8))...")
-                wsManager.attachToSession(sessionId: sessionId, projectPath: project.path)
+                attachToSession(sessionId: sessionId, projectPath: project.path)
             } else {
                 log.debug("[ChatViewModel] Could not reattach - WebSocket not connected after wait")
                 MessageStore.clearProcessingState(for: project.path)
@@ -451,7 +463,7 @@ class ChatViewModel: ObservableObject {
         selectedSession = session
         // Must attach to session (reconnect WebSocket), not just set sessionId property
         // Otherwise messages go to whatever session the WebSocket was previously connected to
-        wsManager.attachToSession(sessionId: session.id, projectPath: project.path)
+        attachToSession(sessionId: session.id, projectPath: project.path)
         MessageStore.saveSessionId(session.id, for: project.path)
         loadSessionHistory(session)
     }
@@ -487,7 +499,7 @@ class ChatViewModel: ObservableObject {
                     return
                 }
 
-                await wsManager.refreshTokenUsage(projectPath: project.path, sessionId: session.id)
+                // Token usage is tracked via StreamEvents when messages arrive
 
                 // Convert StoredMessages to ChatMessages using unified helper
                 // Response is in "desc" order (newest first), reverse for chronological display
@@ -532,7 +544,7 @@ class ChatViewModel: ObservableObject {
             if selectedSession?.id == session.id {
                 selectedSession = nil
                 messages.removeAll()
-                wsManager.sessionId = nil
+                manager.sessionId = nil
                 MessageStore.clearSessionId(for: project.path)
             }
             onSessionsChanged?()
@@ -595,7 +607,7 @@ class ChatViewModel: ObservableObject {
 
         let defaultPrompt = imagesToSend.count == 1 ? "What is this image?" : "What are these images?"
         committedText = nil  // Clear before new message cycle
-        wsManager.sendMessage(
+        sendToManager(
             text.isEmpty ? defaultPrompt : messageToSend,
             projectPath: project.path,
             resumeSessionId: sessionToResume,
@@ -641,7 +653,7 @@ class ChatViewModel: ObservableObject {
         processingStartTime = Date()
 
         // Resend the user message
-        wsManager.sendMessage(
+        sendToManager(
             userMessage.content,
             projectPath: project.path,
             resumeSessionId: effectiveSessionToResume,
@@ -670,7 +682,7 @@ class ChatViewModel: ObservableObject {
             return true
 
         case "/exit":
-            wsManager.disconnect()
+            manager.disconnect()
             return true
 
         case "/init":
@@ -813,9 +825,11 @@ class ChatViewModel: ObservableObject {
         selectedSession = ephemeralSession
 
         // Disconnect and reconnect WebSocket without sessionId
-        wsManager.disconnect()
-        wsManager.sessionId = nil
-        wsManager.connect(projectPath: project.path, sessionId: nil)
+        manager.disconnect()
+        manager.sessionId = nil
+        Task {
+            await manager.connect(projectPath: project.path, sessionId: nil)
+        }
 
         addSystemMessage("Conversation cleared. Starting fresh.")
         refreshDisplayMessagesCache()
@@ -843,20 +857,22 @@ class ChatViewModel: ObservableObject {
         selectedSession = ephemeralSession
 
         // Disconnect and reconnect WebSocket without sessionId
-        wsManager.disconnect()
-        wsManager.sessionId = nil
-        wsManager.connect(projectPath: project.path, sessionId: nil)
+        manager.disconnect()
+        manager.sessionId = nil
+        Task {
+            await manager.connect(projectPath: project.path, sessionId: nil)
+        }
 
         addSystemMessage("New session started.")
         refreshDisplayMessagesCache()
     }
 
     func showStatusInfo() {
-        var status = "Connection: \(wsManager.isConnected ? "Connected" : "Disconnected")"
-        if let sessionId = wsManager.sessionId {
+        var status = "Connection: \(manager.connectionState.isConnected ? "Connected" : "Disconnected")"
+        if let sessionId = manager.sessionId {
             status += "\nSession: \(sessionId.prefix(8))..."
         }
-        if let usage = wsManager.tokenUsage {
+        if let usage = tokenUsage {
             status += "\nTokens: \(usage.used)/\(usage.total)"
         }
         status += "\nProject: \(project.path)"
@@ -878,44 +894,62 @@ class ChatViewModel: ObservableObject {
         }
     }
 
-    // MARK: - WebSocket Callbacks
+    // MARK: - Stream Event Handler
 
-    func setupWebSocketCallbacks() {
-        wsManager.onText = { _ in
-            // Text is accumulated in wsManager.currentText
-        }
-
-        wsManager.onTextCommit = { [weak self] text in
-            // Capture committed text - message created in onComplete with full metadata
-            // (adapter clears currentText on commit, so we store it here)
-            self?.committedText = text
-        }
-
-        wsManager.onToolUse = { [weak self] id, name, input in
+    /// Setup unified StreamEvent handler - replaces individual callbacks
+    func setupStreamEventHandler() {
+        manager.onEvent = { [weak self] event in
             guard let self = self else { return }
-            self.toolUseMap[id] = name
+            self.handleStreamEvent(event)
+        }
+    }
 
-            if self.wsManager.activeSubagent != nil && name != "Task" {
-                self.subagentToolIds.insert(id)
+    /// Handle all stream events from CLIBridgeManager
+    private func handleStreamEvent(_ event: StreamEvent) {
+        switch event {
+        // MARK: Content Events
+        case .text(let content, let isFinal):
+            // Text is accumulated in manager.currentText
+            if isFinal {
+                // Capture committed text - message created in handleStopped with full metadata
+                committedText = content
+                manager.clearCurrentText()
+            }
+
+        case .thinking(let content):
+            let thinkingMsg = ChatMessage(
+                role: .thinking,
+                content: content,
+                timestamp: Date()
+            )
+            messages.append(thinkingMsg)
+
+        case .toolStart(let id, let name, let input):
+            toolUseMap[id] = name
+
+            if manager.activeSubagent != nil && name != "Task" {
+                subagentToolIds.insert(id)
                 log.debug("[ChatViewModel] Tracking subagent tool: \(name) (id: \(id.prefix(8)))")
                 return
             }
 
+            // Convert input dict to JSON string
+            let inputString = Self.toJSONString(input)
             let toolMsg = ChatMessage(
                 role: .toolUse,
-                content: "\(name)(\(input))",
+                content: "\(name)(\(inputString))",
                 timestamp: Date()
             )
-            self.messages.append(toolMsg)
+            messages.append(toolMsg)
 
             // Track Bash git commands for status refresh after completion
-            if name == "Bash" && self.isGitCommand(input) {
-                self.pendingGitCommands.insert(id)
+            if name == "Bash" && isGitCommand(inputString) {
+                pendingGitCommands.insert(id)
                 log.debug("[ChatViewModel] Tracking git command: \(id.prefix(8))")
             }
 
             if name == "TodoWrite" {
-                let content = "\(name)(\(input))"
+                let content = "\(name)(\(inputString))"
                 if let todos = TodoListView.parseTodoContent(content), !todos.isEmpty {
                     var transaction = Transaction()
                     transaction.disablesAnimations = true
@@ -923,19 +957,17 @@ class ChatViewModel: ObservableObject {
                         self.currentTodos = todos
                         self.showTodoDrawer = true
                     }
-                    self.todoHideTimer?.cancel()
-                    self.todoHideTimer = nil
+                    todoHideTimer?.cancel()
+                    todoHideTimer = nil
                 }
             }
-        }
 
-        wsManager.onToolResult = { [weak self] id, tool, result in
-            guard let self = self else { return }
-            let toolName = self.toolUseMap[id] ?? tool
+        case .toolResult(let id, let tool, let output, _):
+            let toolName = toolUseMap[id] ?? tool
 
-            if self.subagentToolIds.contains(id) {
+            if subagentToolIds.contains(id) {
                 log.debug("[ChatViewModel] Filtering subagent tool result: \(toolName) (id: \(id.prefix(8)))")
-                self.subagentToolIds.remove(id)
+                subagentToolIds.remove(id)
                 return
             }
 
@@ -946,205 +978,22 @@ class ChatViewModel: ObservableObject {
 
             let resultMsg = ChatMessage(
                 role: .toolResult,
-                content: result,
+                content: output,
                 timestamp: Date()
             )
-            self.messages.append(resultMsg)
+            messages.append(resultMsg)
 
             // Refresh git status after git command completes
-            if self.pendingGitCommands.contains(id) {
-                self.pendingGitCommands.remove(id)
+            if pendingGitCommands.contains(id) {
+                pendingGitCommands.remove(id)
                 log.debug("[ChatViewModel] Git command completed, refreshing status")
-                self.refreshGitStatus()
-            }
-        }
-
-        wsManager.onThinking = { [weak self] thinking in
-            guard let self = self else { return }
-            let thinkingMsg = ChatMessage(
-                role: .thinking,
-                content: thinking,
-                timestamp: Date()
-            )
-            self.messages.append(thinkingMsg)
-        }
-
-        wsManager.onComplete = { [weak self] _ in
-            guard let self = self else { return }
-            self.toolUseMap.removeAll()
-            self.subagentToolIds.removeAll()
-
-            // Create assistant message from committed text (captured in onTextCommit)
-            if let text = self.committedText, !text.isEmpty {
-                let executionTime: TimeInterval? = self.processingStartTime.map { Date().timeIntervalSince($0) }
-                let tokenCount = self.wsManager.tokenUsage?.used
-
-                let assistantMessage = ChatMessage(
-                    role: .assistant,
-                    content: text,
-                    timestamp: Date(),
-                    executionTime: executionTime,
-                    tokenCount: tokenCount
-                )
-                self.messages.append(assistantMessage)
-            }
-            self.committedText = nil
-            self.processingStartTime = nil
-
-            self.refreshGitStatus()
-
-            if self.showTodoDrawer && !self.currentTodos.isEmpty {
-                self.todoHideTimer?.cancel()
-                self.todoHideTimer = Task { [weak self] in
-                    try? await Task.sleep(nanoseconds: 15_000_000_000)
-                    guard let self, !Task.isCancelled else { return }
-                    withAnimation(.easeOut(duration: 0.3)) {
-                        self.showTodoDrawer = false
-                        self.isTodoDrawerExpanded = false
-                    }
-                }
+                refreshGitStatus()
             }
 
-            // Prune old messages to maintain performance in long sessions
-            self.pruneMessagesIfNeeded()
-
-            // Clear any lingering transient state from this processing cycle
-            self.cleanupAfterProcessingComplete()
-        }
-
-        wsManager.onError = { [weak self] error in
-            guard let self = self else { return }
-            HapticManager.error()
-
-            let errorMessage = ChatMessage(
-                role: .error,
-                content: "Error: \(error)",
-                timestamp: Date()
-            )
-            self.messages.append(errorMessage)
-            self.processingStartTime = nil
-        }
-
-        wsManager.onConnectionError = { [weak self] connectionError in
-            guard let self = self else { return }
-            HapticManager.error()
-
-            // Convert ConnectionError to AppError and post to ErrorStore for user-facing banner
-            let appError = self.mapConnectionError(connectionError)
-            ErrorStore.shared.post(appError) { [weak self] in
-                // Retry action: attempt to reconnect
-                self?.wsManager.connect()
-            }
-        }
-
-        wsManager.onSessionCreated = { [weak self] sessionId in
-            guard let self = self else { return }
-
-            let existingSession = self.sessionStore.sessions(for: self.project.path).first { $0.id == sessionId }
-            if let existing = existingSession {
-                if self.selectedSession?.id != sessionId || self.selectedSession?.summary == nil {
-                    self.selectedSession = existing
-                }
-                self.wsManager.sessionId = sessionId
-                MessageStore.saveSessionId(sessionId, for: self.project.path)
-                self.sessionStore.setActiveSession(sessionId, for: self.project.path)
-                return
-            }
-
-            self.wsManager.sessionId = sessionId
-            MessageStore.saveSessionId(sessionId, for: self.project.path)
-
-            let summary = self.messages.first { $0.role == .user }?.content.prefix(50).description
-
-            let newSession = ProjectSession(
-                id: sessionId,
-                summary: summary,
-                lastActivity: ISO8601DateFormatter().string(from: Date()),
-                messageCount: 1,
-                lastUserMessage: summary,
-                lastAssistantMessage: nil
-            )
-
-            self.sessionStore.addSession(newSession, for: self.project.path)
-            self.sessionStore.setActiveSession(sessionId, for: self.project.path)
-            self.selectedSession = newSession
-        }
-
-        wsManager.onAborted = { [weak self] in
-            guard let self = self else { return }
-            let abortMsg = ChatMessage(
-                role: .system,
-                content: "⏹ Task aborted",
-                timestamp: Date()
-            )
-            self.messages.append(abortMsg)
-            self.processingStartTime = nil
-        }
-
-        wsManager.onSessionRecovered = { [weak self] in
-            guard let self = self else { return }
-            let recoveryMsg = ChatMessage(
-                role: .system,
-                content: "⚠️ Previous session expired. Starting fresh session.",
-                timestamp: Date()
-            )
-            self.messages.append(recoveryMsg)
-            MessageStore.clearSessionId(for: self.project.path)
-            self.wsManager.sessionId = nil
-
-            // Reset selectedSession to ephemeral to prevent invalid-session-ID loop
-            // Without this, effectiveSessionToResume would keep returning the old invalid ID
-            let ephemeralSession = ProjectSession(
-                id: "new-session-\(UUID().uuidString)",
-                summary: "New Session",
-                lastActivity: ISO8601DateFormatter().string(from: Date()),
-                messageCount: 0,
-                lastUserMessage: nil,
-                lastAssistantMessage: nil
-            )
-            self.selectedSession = ephemeralSession
-            self.sessionStore.clearActiveSessionId(for: self.project.path)
-        }
-
-        wsManager.onSessionAttached = { [weak self] in
-            guard let self = self else { return }
-            let attachMsg = ChatMessage(
-                role: .system,
-                content: "🔄 Reconnected to active session",
-                timestamp: Date()
-            )
-            self.messages.append(attachMsg)
-            log.debug("[ChatViewModel] Successfully reattached to active session")
-        }
-
-        wsManager.onSessionEvent = { [weak self] event in
-            guard let self = self else { return }
-            Task { @MainActor in
-                await self.sessionStore.handleCLISessionEvent(event)
-            }
-        }
-
-        wsManager.onHistory = { [weak self] payload in
-            guard let self = self else { return }
-            // Use unified toChatMessages() which handles denormalized tool_use and filters ephemeral
-            let historyMessages = payload.toChatMessages()
-            if !historyMessages.isEmpty {
-                self.messages.insert(contentsOf: historyMessages, at: 0)
-                // Prune after inserting history to stay within limit
-                self.pruneMessagesIfNeeded()
-                self.refreshDisplayMessagesCache()
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                    self.scrollToBottomTrigger = true
-                }
-            }
-            log.debug("[ChatViewModel] Loaded \(historyMessages.count) history messages, hasMore: \(payload.hasMore)")
-        }
-
-        wsManager.onSystem = { [weak self] content in
-            guard let self = self else { return }
+        case .system(let content):
             // System messages with subtype "result" are final response messages from Claude
             // Skip if content matches the last assistant message (cli-bridge sends both)
-            if let lastAssistant = self.messages.last(where: { $0.role == .assistant }) {
+            if let lastAssistant = messages.last(where: { $0.role == .assistant }) {
                 if lastAssistant.content == content {
                     log.debug("[ChatViewModel] Skipping duplicate system/result message")
                     return
@@ -1156,8 +1005,275 @@ class ChatViewModel: ObservableObject {
                 content: content,
                 timestamp: Date()
             )
-            self.messages.append(systemMsg)
-            self.refreshDisplayMessagesCache()
+            messages.append(systemMsg)
+            refreshDisplayMessagesCache()
+
+        case .user:
+            // User message echo - ignore (we already have it locally)
+            break
+
+        case .progress, .usage, .stateChanged:
+            // These are handled via Combine observation on manager state
+            break
+
+        // MARK: Agent State Events
+        case .stopped:
+            handleStopped()
+
+        case .modelChanged:
+            // Model changes are tracked via manager.$currentModel
+            break
+
+        case .permissionModeChanged(let mode):
+            if let permMode = PermissionMode(rawValue: mode) {
+                sessionPermissionMode = permMode
+                log.debug("[ChatViewModel] Permission mode changed: \(mode)")
+            }
+
+        // MARK: Session Events
+        case .connected(let sessionIdValue, _, _):
+            handleSessionConnected(sessionId: sessionIdValue)
+
+        case .sessionEvent(let event):
+            Task { @MainActor in
+                await sessionStore.handleCLISessionEvent(event)
+            }
+
+        case .history(let payload):
+            handleHistoryPayload(payload)
+
+        // MARK: Interactive Events
+        case .permissionRequest(let request):
+            // Convert to ApprovalRequest for UI
+            let approval = ApprovalRequest(
+                id: request.id,
+                toolName: request.tool,
+                input: request.input.mapValues { $0.value },
+                receivedAt: Date()
+            )
+            pendingApprovalRequest = approval
+
+        case .questionRequest(let request):
+            // Convert to AskUserQuestionData for UI
+            let questions = request.questions.map { q in
+                UserQuestion(
+                    question: q.question,
+                    header: q.header,
+                    options: q.options.map { QuestionOption(label: $0.label, description: $0.description) },
+                    multiSelect: q.multiSelect
+                )
+            }
+            pendingQuestionData = AskUserQuestionData(requestId: request.id, questions: questions)
+
+        // MARK: Subagent Events
+        case .subagentStart, .subagentComplete:
+            // Subagent state tracked via manager.activeSubagent
+            break
+
+        // MARK: Queue Events
+        case .inputQueued, .queueCleared:
+            // Queue state tracked via manager.isInputQueued / queuePosition
+            break
+
+        // MARK: Connection Events
+        case .connectionReplaced:
+            log.warning("[ChatViewModel] Connection replaced by another client")
+
+        case .reconnecting(let attempt, let delay):
+            log.info("[ChatViewModel] Reconnecting: attempt \(attempt), delay \(delay)s")
+
+        case .reconnectComplete:
+            let attachMsg = ChatMessage(
+                role: .system,
+                content: "Reconnected to active session",
+                timestamp: Date()
+            )
+            messages.append(attachMsg)
+            log.debug("[ChatViewModel] Successfully reconnected to session")
+
+        case .connectionError(let error):
+            handleConnectionError(error)
+
+        case .networkStatusChanged(let isOnline):
+            log.debug("[ChatViewModel] Network status: \(isOnline ? "online" : "offline")")
+
+        case .cursorEvicted, .cursorInvalid:
+            // Cursor issues handled at manager level with reconnect
+            break
+
+        // MARK: Error Events
+        case .error(let payload):
+            HapticManager.error()
+            let errorMessage = ChatMessage(
+                role: .error,
+                content: "Error: \(payload.message)",
+                timestamp: Date()
+            )
+            messages.append(errorMessage)
+            processingStartTime = nil
+        }
+    }
+
+    // MARK: - Event Handlers
+
+    private func handleStopped() {
+        toolUseMap.removeAll()
+        subagentToolIds.removeAll()
+
+        // Create assistant message from committed text
+        if let text = committedText, !text.isEmpty {
+            let executionTime: TimeInterval? = processingStartTime.map { Date().timeIntervalSince($0) }
+            let tokenCount = manager.tokenUsage?.totalTokens
+
+            let assistantMessage = ChatMessage(
+                role: .assistant,
+                content: text,
+                timestamp: Date(),
+                executionTime: executionTime,
+                tokenCount: tokenCount
+            )
+            messages.append(assistantMessage)
+        }
+        committedText = nil
+        processingStartTime = nil
+
+        refreshGitStatus()
+
+        if showTodoDrawer && !currentTodos.isEmpty {
+            todoHideTimer?.cancel()
+            todoHideTimer = Task { [weak self] in
+                try? await Task.sleep(nanoseconds: 15_000_000_000)
+                guard let self, !Task.isCancelled else { return }
+                withAnimation(.easeOut(duration: 0.3)) {
+                    self.showTodoDrawer = false
+                    self.isTodoDrawerExpanded = false
+                }
+            }
+        }
+
+        pruneMessagesIfNeeded()
+        cleanupAfterProcessingComplete()
+    }
+
+    private func handleSessionConnected(sessionId: String) {
+        let existingSession = sessionStore.sessions(for: project.path).first { $0.id == sessionId }
+        if let existing = existingSession {
+            if selectedSession?.id != sessionId || selectedSession?.summary == nil {
+                selectedSession = existing
+            }
+            MessageStore.saveSessionId(sessionId, for: project.path)
+            sessionStore.setActiveSession(sessionId, for: project.path)
+            return
+        }
+
+        MessageStore.saveSessionId(sessionId, for: project.path)
+
+        let summary = messages.first { $0.role == .user }?.content.prefix(50).description
+
+        let newSession = ProjectSession(
+            id: sessionId,
+            summary: summary,
+            lastActivity: ISO8601DateFormatter().string(from: Date()),
+            messageCount: 1,
+            lastUserMessage: summary,
+            lastAssistantMessage: nil
+        )
+
+        sessionStore.addSession(newSession, for: project.path)
+        sessionStore.setActiveSession(sessionId, for: project.path)
+        selectedSession = newSession
+    }
+
+    private func handleHistoryPayload(_ payload: CLIHistoryPayload) {
+        // Use unified toChatMessages() which handles denormalized tool_use and filters ephemeral
+        let historyMessages = payload.toChatMessages()
+        if !historyMessages.isEmpty {
+            messages.insert(contentsOf: historyMessages, at: 0)
+            // Prune after inserting history to stay within limit
+            pruneMessagesIfNeeded()
+            refreshDisplayMessagesCache()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+                self?.scrollToBottomTrigger = true
+            }
+        }
+        log.debug("[ChatViewModel] Loaded \(historyMessages.count) history messages, hasMore: \(payload.hasMore)")
+    }
+
+    private func handleConnectionError(_ error: ConnectionError) {
+        HapticManager.error()
+
+        // Handle session-related errors specially
+        switch error {
+        case .sessionNotFound, .sessionInvalid, .sessionExpired:
+            let recoveryMsg = ChatMessage(
+                role: .system,
+                content: "Previous session expired. Starting fresh session.",
+                timestamp: Date()
+            )
+            messages.append(recoveryMsg)
+            MessageStore.clearSessionId(for: project.path)
+
+            // Reset selectedSession to ephemeral to prevent invalid-session-ID loop
+            let ephemeralSession = ProjectSession(
+                id: "new-session-\(UUID().uuidString)",
+                summary: "New Session",
+                lastActivity: ISO8601DateFormatter().string(from: Date()),
+                messageCount: 0,
+                lastUserMessage: nil,
+                lastAssistantMessage: nil
+            )
+            selectedSession = ephemeralSession
+            sessionStore.clearActiveSessionId(for: project.path)
+            return
+        default:
+            break
+        }
+
+        // Convert ConnectionError to AppError and post to ErrorStore for user-facing banner
+        let appError = mapConnectionError(error)
+        ErrorStore.shared.post(appError) { [weak self] in
+            // Retry action: attempt to reconnect
+            guard let self = self else { return }
+            Task {
+                await self.manager.connect(
+                    projectPath: self.project.path,
+                    sessionId: self.manager.sessionId
+                )
+            }
+        }
+    }
+
+    // MARK: - JSON Serialization Helper
+
+    private static func toJSONString(_ value: [String: Any]) -> String {
+        let sanitized = sanitizeForJSON(value)
+        if let data = try? JSONSerialization.data(withJSONObject: sanitized),
+           let str = String(data: data, encoding: .utf8) {
+            return str
+        }
+        return "{}"
+    }
+
+    private static func sanitizeForJSON(_ value: Any) -> Any {
+        switch value {
+        case let array as [Any]:
+            return array.map { sanitizeForJSON($0) }
+        case let dict as [String: Any]:
+            return dict.mapValues { sanitizeForJSON($0) }
+        case let string as String:
+            return string
+        case let number as NSNumber:
+            return number
+        case let bool as Bool:
+            return bool
+        case let int as Int:
+            return int
+        case let double as Double:
+            return double
+        case is NSNull:
+            return NSNull()
+        default:
+            return String(describing: value)
         }
     }
 
@@ -1171,16 +1287,23 @@ class ChatViewModel: ObservableObject {
         )
         messages.append(answerMessage)
 
-        wsManager.respondToQuestion(
-            requestId: questionData.requestId,
-            answers: questionData.answersDict()
-        )
+        Task {
+            do {
+                try await manager.respondToQuestion(
+                    id: questionData.requestId,
+                    answers: questionData.answersDict()
+                )
+                pendingQuestionData = nil
+            } catch {
+                log.error("[ChatViewModel] Failed to respond to question: \(error)")
+            }
+        }
         processingStartTime = Date()
     }
 
     func handleQuestionCancel() {
-        wsManager.abortSession()
-        wsManager.clearPendingQuestion()
+        abortSession()
+        clearPendingQuestion()
     }
 
     // MARK: - Display Messages
@@ -1330,7 +1453,7 @@ class ChatViewModel: ObservableObject {
             refreshGitStatus()
         }
 
-        if let sessionId = wsManager.sessionId {
+        if let sessionId = manager.sessionId {
             do {
                 let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
                 let response = try await apiClient.fetchInitialMessages(
@@ -1420,11 +1543,12 @@ class ChatViewModel: ObservableObject {
         messages.append(userMessage)
         showGitBanner = false
 
-        wsManager.sendMessage(
+        sendToManager(
             cleanupPrompt,
             projectPath: project.path,
             resumeSessionId: effectiveSessionToResume,
             permissionMode: effectivePermissionMode,
+            images: nil,
             model: effectiveModelId
         )
         processingStartTime = Date()
@@ -1443,11 +1567,12 @@ class ChatViewModel: ObservableObject {
         messages.append(userMessage)
         showGitBanner = false
 
-        wsManager.sendMessage(
+        sendToManager(
             commitPrompt,
             projectPath: project.path,
             resumeSessionId: effectiveSessionToResume,
             permissionMode: effectivePermissionMode,
+            images: nil,
             model: effectiveModelId
         )
         processingStartTime = Date()
@@ -1466,11 +1591,12 @@ class ChatViewModel: ObservableObject {
         messages.append(userMessage)
         showGitBanner = false
 
-        wsManager.sendMessage(
+        sendToManager(
             pushPrompt,
             projectPath: project.path,
             resumeSessionId: effectiveSessionToResume,
             permissionMode: effectivePermissionMode,
+            images: nil,
             model: effectiveModelId
         )
         processingStartTime = Date()
@@ -1480,30 +1606,159 @@ class ChatViewModel: ObservableObject {
         }
     }
 
-    // MARK: - WebSocket State Accessors
-    // These expose wsManager properties to avoid nested ObservableObject observation
+    // MARK: - Manager State Accessors
+    // These expose manager properties to avoid nested ObservableObject observation
     // which can cause unnecessary SwiftUI re-renders
 
-    var isProcessing: Bool { wsManager.isProcessing }
-    var isAborting: Bool { wsManager.isAborting }
-    var isConnected: Bool { wsManager.isConnected }
-    var isReattaching: Bool { wsManager.isReattaching }
-    var currentStreamingText: String { wsManager.currentText }
-    var tokenUsage: TokenUsage? { wsManager.tokenUsage }
-    var pendingApproval: ApprovalRequest? { wsManager.pendingApproval }
-    var pendingQuestion: AskUserQuestionData? { wsManager.pendingQuestion }
-    var isInputQueued: Bool { wsManager.isInputQueued }
-    var queuePosition: Int { wsManager.queuePosition }
-    var activeSubagent: CLISubagentStartContent? { wsManager.activeSubagent }
-    var toolProgress: CLIProgressContent? { wsManager.toolProgress }
-    var activeSessionId: String? { wsManager.sessionId }
+    var isProcessing: Bool { manager.agentState.isProcessing }
+    // Aborting state is transient - tracks whether an interrupt was requested but not yet complete
+    // For now, we don't have explicit abort tracking, so this is always false
+    var isAborting: Bool { false }
+    var isConnected: Bool { manager.connectionState.isConnected }
+    var isReattaching: Bool { isReattachingSession }
+    var currentStreamingText: String { manager.currentText }
+    var tokenUsage: TokenUsage? {
+        guard let usage = manager.tokenUsage else { return nil }
+        return TokenUsage(
+            used: usage.contextUsed ?? usage.totalTokens,
+            total: usage.contextLimit ?? 200_000
+        )
+    }
+    var pendingApproval: ApprovalRequest? { pendingApprovalRequest }
+    var pendingQuestion: AskUserQuestionData? { pendingQuestionData }
+    var isInputQueued: Bool { manager.isInputQueued }
+    var queuePosition: Int { manager.queuePosition }
+    var activeSubagent: CLISubagentStartContent? { manager.activeSubagent }
+    var toolProgress: CLIProgressContent? { manager.toolProgress }
+    var activeSessionId: String? { manager.sessionId }
 
-    func abortSession() { wsManager.abortSession() }
-    func approvePendingRequest(alwaysAllow: Bool) { wsManager.approvePendingRequest(alwaysAllow: alwaysAllow) }
-    func denyPendingRequest() { wsManager.denyPendingRequest() }
-    func cancelQueuedInput() { wsManager.cancelQueuedInput() }
-    func clearActiveSubagent() { wsManager.activeSubagent = nil }
-    func clearToolProgress() { wsManager.toolProgress = nil }
+    func abortSession() {
+        Task {
+            do {
+                try await manager.interrupt()
+                let abortMsg = ChatMessage(
+                    role: .system,
+                    content: "Task aborted",
+                    timestamp: Date()
+                )
+                messages.append(abortMsg)
+                processingStartTime = nil
+            } catch {
+                log.error("[ChatViewModel] Failed to abort: \(error)")
+            }
+        }
+    }
+
+    func approvePendingRequest(alwaysAllow: Bool) {
+        guard let approval = pendingApprovalRequest else { return }
+        let choice: CLIPermissionChoice = alwaysAllow ? .always : .allow
+        Task {
+            do {
+                try await manager.respondToPermission(id: approval.id, choice: choice)
+                pendingApprovalRequest = nil
+            } catch {
+                log.error("[ChatViewModel] Failed to approve: \(error)")
+            }
+        }
+    }
+
+    func denyPendingRequest() {
+        guard let approval = pendingApprovalRequest else { return }
+        Task {
+            do {
+                try await manager.respondToPermission(id: approval.id, choice: .deny)
+                pendingApprovalRequest = nil
+            } catch {
+                log.error("[ChatViewModel] Failed to deny: \(error)")
+            }
+        }
+    }
+
+    func cancelQueuedInput() {
+        guard manager.isInputQueued else { return }
+        Task {
+            do {
+                try await manager.cancelQueuedInput()
+            } catch {
+                log.error("[ChatViewModel] Failed to cancel queued input: \(error)")
+            }
+        }
+    }
+
+    func clearPendingQuestion() {
+        pendingQuestionData = nil
+    }
+
+    func clearActiveSubagent() { manager.activeSubagent = nil }
+    func clearToolProgress() { manager.toolProgress = nil }
+
+    // MARK: - Message Sending Helpers
+
+    /// Send a message to the manager, handling connection if needed
+    private func sendToManager(
+        _ message: String,
+        projectPath: String,
+        resumeSessionId: String?,
+        permissionMode: String?,
+        images: [ImageAttachment]?,
+        model: String?
+    ) {
+        Task {
+            do {
+                // Ensure connected to the right project/session
+                await manager.connect(
+                    projectPath: projectPath,
+                    sessionId: resumeSessionId,
+                    model: model
+                )
+
+                // Set permission mode if specified
+                if let mode = permissionMode, let cliMode = CLIPermissionMode(rawValue: mode) {
+                    try await manager.setPermissionMode(cliMode)
+                }
+
+                // Convert images to CLIImageAttachment if present
+                var cliImages: [CLIImageAttachment]?
+                if let images = images, !images.isEmpty {
+                    cliImages = images.map { attachment in
+                        let base64 = attachment.dataForSending.base64EncodedString()
+                        return CLIImageAttachment(
+                            type: .base64,
+                            data: base64,
+                            mimeType: attachment.mimeType
+                        )
+                    }
+                }
+
+                // Get thinking mode if active (not normal)
+                let thinkingMode = settings.thinkingMode == .normal ? nil : settings.thinkingMode.rawValue
+
+                // Send the message
+                try await manager.sendInput(message, images: cliImages, thinkingMode: thinkingMode)
+            } catch {
+                log.error("[ChatViewModel] Failed to send message: \(error)")
+                let errorMessage = ChatMessage(
+                    role: .error,
+                    content: "Failed to send message: \(error.localizedDescription)",
+                    timestamp: Date()
+                )
+                messages.append(errorMessage)
+                processingStartTime = nil
+            }
+        }
+    }
+
+    /// Attach to an existing session (for session picker selection)
+    private func attachToSession(sessionId: String, projectPath: String) {
+        isReattachingSession = true
+        Task {
+            await manager.connect(
+                projectPath: projectPath,
+                sessionId: sessionId
+            )
+            isReattachingSession = false
+        }
+    }
 
     // MARK: - Model Selection
 
@@ -1576,7 +1831,7 @@ class ChatViewModel: ObservableObject {
         subagentToolIds.removeAll(keepingCapacity: true)
 
         // Ensure streaming state is reset
-        wsManager.clearCurrentText()
+        manager.clearCurrentText()
     }
 
     func handleInputTextChange(_ newText: String) {
@@ -1600,9 +1855,19 @@ class ChatViewModel: ObservableObject {
 
     func handleModelChange(oldModel: ClaudeModel, newModel: ClaudeModel) {
         guard oldModel != newModel else { return }
-        guard wsManager.connectionState.isConnected else { return }
-        log.debug("[ChatViewModel] Model changed from \(oldModel.shortName) to \(newModel.shortName) - calling switchModel")
-        wsManager.switchModel(to: newModel)
+        guard manager.connectionState.isConnected else { return }
+        guard let modelId = newModel.modelId else {
+            log.debug("[ChatViewModel] Model \(newModel.shortName) has no modelId, skipping switch")
+            return
+        }
+        log.debug("[ChatViewModel] Model changed from \(oldModel.shortName) to \(newModel.shortName) - calling setModel")
+        Task {
+            do {
+                try await manager.setModel(modelId)
+            } catch {
+                log.error("[ChatViewModel] Failed to switch model: \(error)")
+            }
+        }
     }
 
     // MARK: - Error Mapping

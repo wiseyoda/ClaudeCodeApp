@@ -1,6 +1,6 @@
 # Issue #17: Remove CLIBridgeAdapter layer
 
-> **Status**: Pending
+> **Status**: Complete
 > **Priority**: Tier 1
 > **Depends On**: #9
 > **Blocks**: #1/#15/#27/#30/#42/#45
@@ -69,10 +69,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Remove CLIBridgeAdapter layer is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Remove CLIBridgeAdapter layer is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -123,5 +123,6 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | Refactored ChatViewModel to use CLIBridgeManager directly |
+| 2026-01-02 | Completed | Deleted CLIBridgeAdapter.swift (~800 lines), updated tests |
+| 2026-01-02 | Follow-up | Removed remaining adapter test references in ChatViewModelTests |

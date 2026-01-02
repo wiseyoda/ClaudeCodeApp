@@ -139,7 +139,12 @@ struct ChatView: View {
             case .active:
                 if !viewModel.isConnected {
                     log.debug("[ChatView] App active - reconnecting WebSocket")
-                    viewModel.wsManager.connect()  // Keep direct access for connect()
+                    Task {
+                        await viewModel.manager.connect(
+                            projectPath: project.path,
+                            sessionId: viewModel.activeSessionId
+                        )
+                    }
                 }
             case .inactive, .background:
                 break
@@ -149,7 +154,7 @@ struct ChatView: View {
         }
         .sheet(item: Binding(
             get: { viewModel.pendingQuestion },
-            set: { _ in }  // Handled by wsManager
+            set: { _ in }  // Handled by viewModel
         )) { questionData in
             userQuestionsSheet(questionData)
         }
@@ -383,7 +388,7 @@ struct ChatView: View {
                     // Bottom anchor for scrollTo target
                     // Extra space ensures last message appears above status bar
                     Spacer()
-                        .frame(height: viewModel.wsManager.agentState.isWorking ? 65 : 25)
+                        .frame(height: viewModel.manager.agentState.isWorking ? 65 : 25)
                         .id("bottomAnchor")
                         .listRowSeparator(.hidden)
                         .listRowInsets(EdgeInsets())
@@ -472,7 +477,10 @@ struct ChatView: View {
                     return
                 }
                 log.info("Background recovery requested for session: \(sessionId.prefix(8))...")
-                viewModel.wsManager.recoverFromBackground(sessionId: sessionId, projectPath: projectPath)
+                // Reconnect to the session after background recovery
+                Task {
+                    await viewModel.manager.connect(projectPath: projectPath, sessionId: sessionId)
+                }
             }
         }
     }
@@ -581,10 +589,10 @@ struct ChatView: View {
             }
 
             // Status bubble (fixed position, shows when agent is working)
-            if viewModel.wsManager.agentState.isWorking {
+            if viewModel.manager.agentState.isWorking {
                 StatusBubbleView(
-                    state: viewModel.wsManager.agentState,
-                    tool: viewModel.wsManager.currentTool
+                    state: viewModel.manager.agentState,
+                    tool: viewModel.manager.currentTool
                 )
             }
 

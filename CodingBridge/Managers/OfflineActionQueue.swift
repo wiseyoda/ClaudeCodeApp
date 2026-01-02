@@ -90,7 +90,7 @@ final class OfflineActionQueue: ObservableObject {
                 continue
             }
 
-            // Post notification for CLIBridgeAdapter to handle
+            // Post notification for ChatViewModel to handle
             notificationCenter.post(
                 name: .approvalResponseReady,
                 object: nil,

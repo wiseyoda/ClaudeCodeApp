@@ -328,7 +328,7 @@ final class NotificationManager: NSObject, ObservableObject, @preconcurrency UNU
         }
 
         // Send approval response via notification pattern
-        // CLIBridgeAdapter (owned by ChatView) observes this notification and handles the response
+        // ChatViewModel observes this notification and handles the response
         Task {
             NotificationCenter.default.post(
                 name: .approvalResponseReady,

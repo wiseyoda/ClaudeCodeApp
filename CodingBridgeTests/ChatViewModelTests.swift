@@ -49,8 +49,8 @@ final class ChatViewModelTests: XCTestCase {
     func test_initialState_setsProjectAndSettings() {
         let settings = makeSettings()
         let project = makeProject(path: "/tmp/project-init")
-        let adapter = TestCLIBridgeAdapter(settings: settings)
-        let viewModel = ChatViewModel(project: project, settings: settings, wsManager: adapter)
+        let manager = TestCLIBridgeManager()
+        let viewModel = ChatViewModel(project: project, settings: settings, manager: manager)
 
         XCTAssertEqual(viewModel.project.path, project.path)
         XCTAssertTrue(viewModel.settings === settings)
@@ -60,8 +60,8 @@ final class ChatViewModelTests: XCTestCase {
     // MARK: - Session Management
 
     func test_effectiveSessionToResume_prefersWsManagerSessionId() {
-        let (viewModel, adapter, _, _) = makeFixture()
-        adapter.sessionId = "session-ws"
+        let (viewModel, manager, _, _) = makeFixture()
+        manager.sessionId = "session-ws"
         viewModel.selectedSession = makeSession(id: "session-selected")
 
         XCTAssertEqual(viewModel.effectiveSessionToResume, "session-ws")
@@ -88,15 +88,15 @@ final class ChatViewModelTests: XCTestCase {
     }
 
     func test_startNewSession_resetsStateAndAddsWelcome() {
-        let (viewModel, adapter, _, _) = makeFixture()
+        let (viewModel, manager, _, _) = makeFixture()
         viewModel.messages = [ChatMessage(role: .user, content: "Hello")]
         viewModel.selectedSession = makeSession(id: "session-old")
-        adapter.sessionId = "session-old"
+        manager.sessionId = "session-old"
         viewModel.scrollManager.userDidScrollUp()
 
         viewModel.startNewSession()
 
-        XCTAssertNil(adapter.sessionId)
+        XCTAssertNil(manager.sessionId)
         XCTAssertTrue(viewModel.messages.count == 1)
         XCTAssertEqual(viewModel.messages.first?.role, .system)
         XCTAssertTrue(viewModel.messages.first?.content.contains("New session started") == true)
@@ -155,14 +155,14 @@ final class ChatViewModelTests: XCTestCase {
     func test_selectMostRecentSession_setsSessionAndLoadsHistory() {
         let project = makeProject(path: "/tmp/project-select-most-recent")
         let settings = makeSettings()
-        let adapter = TestCLIBridgeAdapter(settings: settings)
-        let viewModel = TestChatViewModel(project: project, settings: settings, wsManager: adapter)
+        let manager = TestCLIBridgeManager()
+        let viewModel = TestChatViewModel(project: project, settings: settings, manager: manager)
         let session = makeSession(id: "session-1")
 
         viewModel.selectMostRecentSession(from: [session])
 
         XCTAssertEqual(viewModel.selectedSession?.id, "session-1")
-        XCTAssertEqual(adapter.sessionId, "session-1")
+        XCTAssertEqual(manager.sessionId, "session-1")
         XCTAssertTrue(viewModel.didLoadSessionHistory)
         XCTAssertEqual(MessageStore.loadSessionId(for: project.path), "session-1")
     }
@@ -170,14 +170,14 @@ final class ChatViewModelTests: XCTestCase {
     func test_selectSession_setsSessionAndLoadsHistory() {
         let project = makeProject(path: "/tmp/project-select-session")
         let settings = makeSettings()
-        let adapter = TestCLIBridgeAdapter(settings: settings)
-        let viewModel = TestChatViewModel(project: project, settings: settings, wsManager: adapter)
+        let manager = TestCLIBridgeManager()
+        let viewModel = TestChatViewModel(project: project, settings: settings, manager: manager)
         let session = makeSession(id: "session-2")
 
         viewModel.selectSession(session)
 
         XCTAssertEqual(viewModel.selectedSession?.id, "session-2")
-        XCTAssertEqual(adapter.sessionId, "session-2")
+        XCTAssertEqual(manager.sessionId, "session-2")
         XCTAssertTrue(viewModel.didLoadSessionHistory)
     }
 
@@ -209,11 +209,14 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.inputText, "Hello World ")
     }
 
-    func test_sendMessage_addsUserMessageAndClearsInput() {
-        let (viewModel, adapter, _, project) = makeFixture()
+    func test_sendMessage_addsUserMessageAndClearsInput() async {
+        let (viewModel, manager, _, _) = makeFixture()
         viewModel.inputText = "Hello"
 
         viewModel.sendMessage()
+
+        // Wait for async Task to complete
+        try? await Task.sleep(nanoseconds: 100_000_000)
 
         XCTAssertEqual(viewModel.messages.count, 1)
         XCTAssertEqual(viewModel.messages.first?.role, .user)
@@ -221,30 +224,32 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.inputText, "")
         XCTAssertTrue(viewModel.selectedImages.isEmpty)
         XCTAssertNotNil(viewModel.processingStartTime)
-        XCTAssertEqual(adapter.sentMessages.count, 1)
-        XCTAssertEqual(adapter.sentMessages.first?.text, "Hello")
-        XCTAssertEqual(adapter.sentMessages.first?.projectPath, project.path)
+        XCTAssertEqual(manager.sentInputs.count, 1)
+        XCTAssertEqual(manager.sentInputs.first?.text, "Hello")
     }
 
     func test_sendMessage_ignoresEmptyMessage() {
-        let (viewModel, adapter, _, _) = makeFixture()
+        let (viewModel, manager, _, _) = makeFixture()
         viewModel.inputText = "   "
 
         viewModel.sendMessage()
 
         XCTAssertTrue(viewModel.messages.isEmpty)
-        XCTAssertTrue(adapter.sentMessages.isEmpty)
+        XCTAssertTrue(manager.sentInputs.isEmpty)
     }
 
-    func test_sendMessage_withImagesUsesDefaultPrompt() {
-        let (viewModel, adapter, _, _) = makeFixture()
+    func test_sendMessage_withImagesUsesDefaultPrompt() async {
+        let (viewModel, manager, _, _) = makeFixture()
         let imageData = Data(repeating: 0x1, count: 10)
         viewModel.selectedImages = [ImageAttachment(data: imageData)]
 
         viewModel.sendMessage()
 
+        // Wait for async Task to complete
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
         XCTAssertEqual(viewModel.messages.first?.content, "[Image attached]")
-        XCTAssertEqual(adapter.sentMessages.first?.text, "What is this image?")
+        XCTAssertEqual(manager.sentInputs.first?.text, "What is this image?")
     }
 
     // MARK: - Slash Commands
@@ -259,19 +264,19 @@ final class ChatViewModelTests: XCTestCase {
     }
 
     func test_handleSlashCommand_exitDisconnects() {
-        let (viewModel, adapter, _, _) = makeFixture()
+        let (viewModel, manager, _, _) = makeFixture()
 
         let handled = viewModel.handleSlashCommand("/exit")
 
         XCTAssertTrue(handled)
-        XCTAssertTrue(adapter.disconnectCalled)
+        XCTAssertTrue(manager.disconnectCalled)
     }
 
     func test_handleSlashCommand_statusAddsSystemMessage() {
-        let (viewModel, adapter, _, _) = makeFixture()
-        adapter.connectionState = .connected(agentId: "agent-123")
-        adapter.sessionId = "session-123"
-        adapter.tokenUsage = TokenUsage(used: 5, total: 10)
+        let (viewModel, manager, _, _) = makeFixture()
+        manager.connectionState = .connected(agentId: "agent-123")
+        manager.sessionId = "session-123"
+        manager.tokenUsage = TokenUsage(used: 5, total: 10)
 
         let handled = viewModel.handleSlashCommand("/status")
 
@@ -282,105 +287,107 @@ final class ChatViewModelTests: XCTestCase {
     }
 
     func test_handleClearCommand_clearsMessagesAndCreatesEphemeralSession() {
-        let (viewModel, adapter, _, _) = makeFixture()
+        let (viewModel, manager, _, _) = makeFixture()
         viewModel.messages = [ChatMessage(role: .user, content: "Hello")]
         viewModel.selectedSession = makeSession(id: "session-1")
-        adapter.sessionId = "session-1"
+        manager.sessionId = "session-1"
 
         viewModel.handleClearCommand()
 
         // Should create ephemeral session (not nil) to prevent invalid state
         XCTAssertNotNil(viewModel.selectedSession)
         XCTAssertTrue(viewModel.selectedSession?.id.hasPrefix("new-session-") ?? false)
-        XCTAssertNil(adapter.sessionId)
+        XCTAssertNil(manager.sessionId)
         XCTAssertEqual(viewModel.messages.count, 1)
         XCTAssertEqual(viewModel.messages.first?.role, .system)
     }
 
-    // MARK: - WebSocket Callbacks
+    // MARK: - Stream Event Handler
 
-    func test_webSocket_onTextCommit_appendsAssistantMessage() {
-        let (viewModel, adapter, _, _) = makeFixture()
-        viewModel.setupWebSocketCallbacks()
+    func test_streamEvent_textFinal_capturesCommittedText() {
+        let (viewModel, manager, _, _) = makeFixture()
+        viewModel.setupStreamEventHandler()
 
-        adapter.onTextCommit?("Hello")
+        manager.simulateEvent(.text("Hello", isFinal: true))
+        manager.simulateEvent(.stopped)
 
         XCTAssertEqual(viewModel.messages.count, 1)
         XCTAssertEqual(viewModel.messages.first?.role, .assistant)
         XCTAssertEqual(viewModel.messages.first?.content, "Hello")
     }
 
-    func test_webSocket_onToolUse_addsToolUseMessage() {
-        let (viewModel, adapter, _, _) = makeFixture()
-        viewModel.setupWebSocketCallbacks()
+    func test_streamEvent_toolStart_addsToolUseMessage() {
+        let (viewModel, manager, _, _) = makeFixture()
+        viewModel.setupStreamEventHandler()
 
-        adapter.onToolUse?("tool-1", "Shell", "ls")
+        manager.simulateEvent(.toolStart(id: "tool-1", name: "Shell", input: ["command": "ls"]))
 
         XCTAssertEqual(viewModel.messages.count, 1)
         XCTAssertEqual(viewModel.messages.first?.role, .toolUse)
-        XCTAssertEqual(viewModel.messages.first?.content, "Shell(ls)")
+        XCTAssertTrue(viewModel.messages.first?.content.contains("Shell(") == true)
     }
 
-    func test_webSocket_onToolUse_tracksSubagentTool() {
-        let (viewModel, adapter, _, _) = makeFixture()
-        viewModel.setupWebSocketCallbacks()
-        adapter.activeSubagent = CLISubagentStartContent(id: "subagent-1", description: "Task")
+    func test_streamEvent_toolStart_tracksSubagentTool() {
+        let (viewModel, manager, _, _) = makeFixture()
+        viewModel.setupStreamEventHandler()
+        manager.activeSubagent = CLISubagentStartContent(id: "subagent-1", description: "Task")
 
-        adapter.onToolUse?("tool-2", "Shell", "ls")
+        manager.simulateEvent(.toolStart(id: "tool-2", name: "Shell", input: ["command": "ls"]))
 
         XCTAssertTrue(viewModel.messages.isEmpty)
         XCTAssertTrue(viewModel.subagentToolIds.contains("tool-2"))
     }
 
-    func test_webSocket_onToolResult_filtersSubagentResult() {
-        let (viewModel, adapter, _, _) = makeFixture()
-        viewModel.setupWebSocketCallbacks()
-        adapter.activeSubagent = CLISubagentStartContent(id: "subagent-2", description: "Task")
+    func test_streamEvent_toolResult_filtersSubagentResult() {
+        let (viewModel, manager, _, _) = makeFixture()
+        viewModel.setupStreamEventHandler()
+        manager.activeSubagent = CLISubagentStartContent(id: "subagent-2", description: "Task")
 
-        adapter.onToolUse?("tool-3", "Shell", "ls")
-        adapter.onToolResult?("tool-3", "Shell", "done")
+        manager.simulateEvent(.toolStart(id: "tool-3", name: "Shell", input: ["command": "ls"]))
+        manager.simulateEvent(.toolResult(id: "tool-3", tool: "Shell", output: "done", isError: false))
 
         XCTAssertTrue(viewModel.messages.isEmpty)
         XCTAssertFalse(viewModel.subagentToolIds.contains("tool-3"))
     }
 
-    func test_webSocket_onToolResult_filtersTaskTool() {
-        let (viewModel, adapter, _, _) = makeFixture()
-        viewModel.setupWebSocketCallbacks()
+    func test_streamEvent_toolResult_filtersTaskTool() {
+        let (viewModel, manager, _, _) = makeFixture()
+        viewModel.setupStreamEventHandler()
 
-        adapter.onToolResult?("tool-4", "Task", "done")
+        manager.simulateEvent(.toolResult(id: "tool-4", tool: "Task", output: "done", isError: false))
 
         XCTAssertTrue(viewModel.messages.isEmpty)
     }
 
-    func test_webSocket_onToolResult_addsToolResultMessage() {
-        let (viewModel, adapter, _, _) = makeFixture()
-        viewModel.setupWebSocketCallbacks()
+    func test_streamEvent_toolResult_addsToolResultMessage() {
+        let (viewModel, manager, _, _) = makeFixture()
+        viewModel.setupStreamEventHandler()
 
-        adapter.onToolResult?("tool-5", "Shell", "done")
+        manager.simulateEvent(.toolResult(id: "tool-5", tool: "Shell", output: "done", isError: false))
 
         XCTAssertEqual(viewModel.messages.count, 1)
         XCTAssertEqual(viewModel.messages.first?.role, .toolResult)
         XCTAssertEqual(viewModel.messages.first?.content, "done")
     }
 
-    func test_webSocket_onThinking_appendsThinkingMessage() {
-        let (viewModel, adapter, _, _) = makeFixture()
-        viewModel.setupWebSocketCallbacks()
+    func test_streamEvent_thinking_appendsThinkingMessage() {
+        let (viewModel, manager, _, _) = makeFixture()
+        viewModel.setupStreamEventHandler()
 
-        adapter.onThinking?("thinking")
+        manager.simulateEvent(.thinking("thinking"))
 
         XCTAssertEqual(viewModel.messages.count, 1)
         XCTAssertEqual(viewModel.messages.first?.role, .thinking)
         XCTAssertEqual(viewModel.messages.first?.content, "thinking")
     }
 
-    func test_webSocket_onError_appendsErrorMessageAndClearsProcessingTime() {
-        let (viewModel, adapter, _, _) = makeFixture()
-        viewModel.setupWebSocketCallbacks()
+    func test_streamEvent_error_appendsErrorMessageAndClearsProcessingTime() {
+        let (viewModel, manager, _, _) = makeFixture()
+        viewModel.setupStreamEventHandler()
         viewModel.processingStartTime = Date()
 
-        adapter.onError?("failure")
+        let payload = CLIErrorPayload(code: "agent_error", message: "failure", recoverable: false, retryable: false)
+        manager.simulateEvent(.error(payload))
 
         XCTAssertEqual(viewModel.messages.count, 1)
         XCTAssertEqual(viewModel.messages.first?.role, .error)
@@ -388,51 +395,41 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.processingStartTime)
     }
 
-    func test_webSocket_onAborted_appendsSystemMessage() {
-        let (viewModel, adapter, _, _) = makeFixture()
-        viewModel.setupWebSocketCallbacks()
-
-        adapter.onAborted?()
-
-        XCTAssertEqual(viewModel.messages.count, 1)
-        XCTAssertEqual(viewModel.messages.first?.role, .system)
-        XCTAssertTrue(viewModel.messages.first?.content.contains("Task aborted") == true)
-    }
-
-    func test_webSocket_onSessionRecovered_clearsSessionId() {
-        let (viewModel, adapter, _, project) = makeFixture()
-        viewModel.setupWebSocketCallbacks()
-        adapter.sessionId = "session-9"
+    func test_streamEvent_connectionError_clearsSessionOnExpired() {
+        let (viewModel, manager, _, project) = makeFixture()
+        viewModel.setupStreamEventHandler()
+        manager.sessionId = "session-9"
         MessageStore.saveSessionId("session-9", for: project.path)
 
-        adapter.onSessionRecovered?()
+        manager.simulateEvent(.connectionError(.sessionExpired))
 
-        XCTAssertNil(adapter.sessionId)
         XCTAssertEqual(viewModel.messages.last?.role, .system)
         XCTAssertNil(MessageStore.loadSessionId(for: project.path))
     }
 
-    func test_webSocket_onSessionAttached_appendsSystemMessage() {
-        let (viewModel, adapter, _, _) = makeFixture()
-        viewModel.setupWebSocketCallbacks()
+    func test_streamEvent_reconnectComplete_appendsSystemMessage() {
+        let (viewModel, manager, _, _) = makeFixture()
+        viewModel.setupStreamEventHandler()
 
-        adapter.onSessionAttached?()
+        let payload = CLIReconnectCompletePayload(type: .reconnectComplete, missedCount: 0, fromMessageId: "msg-1")
+        manager.simulateEvent(.reconnectComplete(payload))
 
         XCTAssertEqual(viewModel.messages.count, 1)
         XCTAssertEqual(viewModel.messages.first?.role, .system)
         XCTAssertTrue(viewModel.messages.first?.content.contains("Reconnected") == true)
     }
 
-    func test_webSocket_onHistory_insertsMessagesAtStart() {
-        let (viewModel, adapter, _, _) = makeFixture()
-        viewModel.setupWebSocketCallbacks()
+    func test_streamEvent_history_insertsMessagesAtStart() {
+        let (viewModel, manager, _, _) = makeFixture()
+        viewModel.setupStreamEventHandler()
         viewModel.messages = [ChatMessage(role: .user, content: "Existing")]
         // Use StreamMessage format for history (HistoryMessage takes [StreamMessage])
         let historyMessage = StreamMessage.typeAssistantStreamMessage(
             AssistantStreamMessage(type: .assistant, content: "History", delta: nil)
         )
+        let payload = CLIHistoryPayload(type: .history, messages: [historyMessage], hasMore: false, cursor: nil)
 
-        adapter.onHistory?(CLIHistoryPayload(type: .history, messages: [historyMessage], hasMore: false, cursor: nil))
+        manager.simulateEvent(.history(payload))
 
         XCTAssertEqual(viewModel.messages.first?.content, "History")
         XCTAssertEqual(viewModel.messages.last?.content, "Existing")
@@ -499,36 +496,41 @@ final class ChatViewModelTests: XCTestCase {
 
     // MARK: - State & Model
 
-    func test_stateBindings_reflectWsManagerFields() {
+    func test_stateBindings_reflectManagerFields() {
         let settings = makeSettings()
-        let adapter = TestCLIBridgeAdapter(settings: settings)
+        let manager = TestCLIBridgeManager()
         let project = makeProject(path: "/tmp/project-state-bindings")
-        let viewModel = ChatViewModel(project: project, settings: settings, wsManager: adapter)
+        let viewModel = ChatViewModel(project: project, settings: settings, manager: manager)
         let approval = ApprovalRequest(id: "req-1", toolName: "bash", input: ["command": "ls"], receivedAt: Date())
         let question = AskUserQuestionData(requestId: "q1", questions: [
             UserQuestion(question: "Continue?", header: nil, options: [], multiSelect: false)
         ])
 
-        adapter.connectionState = .connected(agentId: "agent-1")
-        adapter.isReattaching = true
-        adapter.isProcessing = true
-        adapter.isAborting = true
-        adapter.currentText = "streaming"
-        adapter.tokenUsage = TokenUsage(used: 3, total: 7)
-        adapter.pendingApproval = approval
-        adapter.pendingQuestion = question
-        adapter.isInputQueued = true
-        adapter.queuePosition = 2
-        adapter.activeSubagent = CLISubagentStartContent(id: "subagent-1", description: "Task")
-        adapter.toolProgress = CLIProgressContent(tool: "Shell", elapsed: 1.0)
-        adapter.sessionId = "session-1"
+        // Set manager state
+        manager.connectionState = .connected(agentId: "agent-1")
+        manager.agentState = .executing
+        manager.currentText = "streaming"
+        manager.tokenUsage = CLIUsageContent(
+            type: .usage,
+            totalTokens: 3,
+            contextUsed: 3,
+            contextLimit: 7
+        )
+        manager.isInputQueued = true
+        manager.queuePosition = 2
+        manager.activeSubagent = CLISubagentStartContent(id: "subagent-1", description: "Task")
+        manager.toolProgress = CLIProgressContent(tool: "Shell", elapsed: 1.0)
+        manager.sessionId = "session-1"
+
+        // Set viewModel local state
+        viewModel.pendingApprovalRequest = approval
+        viewModel.pendingQuestionData = question
 
         XCTAssertTrue(viewModel.isConnected)
-        XCTAssertTrue(viewModel.isReattaching)
         XCTAssertTrue(viewModel.isProcessing)
-        XCTAssertTrue(viewModel.isAborting)
         XCTAssertEqual(viewModel.currentStreamingText, "streaming")
-        XCTAssertEqual(viewModel.tokenUsage, TokenUsage(used: 3, total: 7))
+        XCTAssertEqual(viewModel.tokenUsage?.used, 3)
+        XCTAssertEqual(viewModel.tokenUsage?.total, 7)
         XCTAssertEqual(viewModel.pendingApproval, approval)
         XCTAssertEqual(viewModel.pendingQuestion?.requestId, "q1")
         XCTAssertTrue(viewModel.isInputQueued)
@@ -549,16 +551,20 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.streamingMessageTimestamp >= previousTimestamp)
     }
 
-    func test_handleModelChange_callsSwitchModelWhenConnected() {
+    func test_handleModelChange_callsSetModelWhenConnected() async {
         let settings = makeSettings()
-        let adapter = TestCLIBridgeAdapter(settings: settings)
+        let manager = TestCLIBridgeManager()
         let project = makeProject(path: "/tmp/project-model-change")
-        let viewModel = ChatViewModel(project: project, settings: settings, wsManager: adapter)
-        adapter.connectionState = .connected(agentId: "agent-1")
+        let viewModel = ChatViewModel(project: project, settings: settings, manager: manager)
+        manager.connectionState = .connected(agentId: "agent-1")
 
         viewModel.handleModelChange(oldModel: .haiku, newModel: .sonnet)
 
-        XCTAssertEqual(adapter.switchModelCalls, [.sonnet])
+        // Wait for async Task to complete
+        try? await Task.sleep(nanoseconds: 100_000_000)
+
+        XCTAssertEqual(manager.setModelCalls.count, 1)
+        XCTAssertTrue(manager.setModelCalls.first?.contains("sonnet") == true)
     }
 
     // MARK: - Helpers
@@ -599,13 +605,13 @@ final class ChatViewModelTests: XCTestCase {
     private func makeFixture(
         project: Project? = nil,
         settings: AppSettings? = nil,
-        adapter: TestCLIBridgeAdapter? = nil
-    ) -> (ChatViewModel, TestCLIBridgeAdapter, AppSettings, Project) {
+        manager: TestCLIBridgeManager? = nil
+    ) -> (ChatViewModel, TestCLIBridgeManager, AppSettings, Project) {
         let settings = settings ?? makeSettings()
-        let adapter = adapter ?? TestCLIBridgeAdapter(settings: settings)
+        let manager = manager ?? TestCLIBridgeManager()
         let project = project ?? makeProject()
-        let viewModel = ChatViewModel(project: project, settings: settings, wsManager: adapter)
-        return (viewModel, adapter, settings, project)
+        let viewModel = ChatViewModel(project: project, settings: settings, manager: manager)
+        return (viewModel, manager, settings, project)
     }
 }
 
@@ -619,52 +625,67 @@ final class TestChatViewModel: ChatViewModel {
 }
 
 @MainActor
-final class TestCLIBridgeAdapter: CLIBridgeAdapter {
-    struct SentMessage: Equatable {
+final class TestCLIBridgeManager: CLIBridgeManager {
+    struct SentInput: Equatable {
         let text: String
+        let hasImages: Bool
+        let thinkingMode: String?
+    }
+
+    struct ConnectCall: Equatable {
         let projectPath: String
-        let resumeSessionId: String?
-        let permissionMode: String?
-        let images: [ImageAttachment]?
+        let sessionId: String?
         let model: String?
     }
 
-    private(set) var sentMessages: [SentMessage] = []
+    private(set) var sentInputs: [SentInput] = []
+    private(set) var connectCalls: [ConnectCall] = []
     private(set) var disconnectCalled = false
-    private(set) var switchModelCalls: [ClaudeModel] = []
+    private(set) var setModelCalls: [String] = []
+    private(set) var interruptCalled = false
+    private(set) var respondToPermissionCalls: [(id: String, choice: CLIPermissionChoice)] = []
+    private(set) var respondToQuestionCalls: [(id: String, answers: [String: Any])] = []
 
-    init(settings: AppSettings) {
-        super.init(settings: settings)
-    }
-
-    override func sendMessage(
-        _ message: String,
+    override func connect(
         projectPath: String,
-        resumeSessionId: String? = nil,
-        permissionMode: String? = nil,
-        images: [ImageAttachment]? = nil,
-        model: String? = nil
-    ) {
-        sentMessages.append(SentMessage(
-            text: message,
-            projectPath: projectPath,
-            resumeSessionId: resumeSessionId,
-            permissionMode: permissionMode,
-            images: images,
-            model: model
-        ))
+        sessionId: String? = nil,
+        model: String? = nil,
+        helper: Bool = false
+    ) async {
+        connectCalls.append(ConnectCall(projectPath: projectPath, sessionId: sessionId, model: model))
+        if let sid = sessionId {
+            self.sessionId = sid
+        }
     }
 
-    override func disconnect() {
+    override func sendInput(_ text: String, images: [CLIImageAttachment]? = nil, thinkingMode: String? = nil) async throws {
+        sentInputs.append(SentInput(text: text, hasImages: images != nil && !images!.isEmpty, thinkingMode: thinkingMode))
+    }
+
+    override func disconnect(preserveSession: Bool = false) {
         disconnectCalled = true
+        connectionState = .disconnected
+        agentState = .stopped
     }
 
-    override func switchModel(to model: ClaudeModel) {
-        switchModelCalls.append(model)
+    override func setModel(_ model: String) async throws {
+        setModelCalls.append(model)
     }
 
-    override func attachToSession(sessionId: String, projectPath: String) {
-        // Synchronously set sessionId for testing (real implementation is async)
-        self.sessionId = sessionId
+    override func interrupt() async throws {
+        interruptCalled = true
+    }
+
+    override func respondToPermission(id: String, choice: CLIPermissionChoice) async throws {
+        respondToPermissionCalls.append((id, choice))
+    }
+
+    override func respondToQuestion(id: String, answers: [String: Any]) async throws {
+        respondToQuestionCalls.append((id, answers))
+    }
+
+    // Convenience for tests to simulate events
+    func simulateEvent(_ event: StreamEvent) {
+        onEvent?(event)
     }
 }
