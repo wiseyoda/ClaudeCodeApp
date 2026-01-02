@@ -80,9 +80,13 @@ func groupMessagesForDisplay(_ messages: [ChatMessage]) -> [DisplayItem] {
         // Check for consecutive Read/Glob/Grep operations
         if message.role == .toolUse && isExploreToolType(message.content) {
             let group = extractExploredGroup(from: messages, startingAt: i)
-            result.append(.exploredFiles(group.group))
-            i = group.nextIndex
-            continue
+            // Only append if we successfully extracted files, otherwise fall through to single message
+            if !group.group.files.isEmpty {
+                result.append(.exploredFiles(group.group))
+                i = group.nextIndex
+                continue
+            }
+            // Fall through to render as regular single message if file extraction failed
         }
 
         // Check for Bash command with result

@@ -755,6 +755,19 @@ class CLIBridgeManager: ObservableObject {
         }
     }
 
+    /// Send pong response to server ping for keepalive
+    private func sendPong() {
+        Task {
+            guard let webSocket = webSocket else { return }
+            do {
+                try await webSocket.send(.string("{\"type\":\"pong\"}"))
+                log.debug("[WS] → Sent pong")
+            } catch {
+                log.error("[WS] Failed to send pong: \(error)")
+            }
+        }
+    }
+
     private func processServerMessage(_ message: CLIServerMessage) async {
         switch message {
         case .typeConnectedMessage(let payload):
@@ -800,6 +813,11 @@ class CLIBridgeManager: ObservableObject {
         case .typePongMessage:
             // Keepalive response - no action needed
             log.debug("Received pong from server")
+
+        case .typeServerPingMessage:
+            // Server ping - respond with pong for keepalive
+            log.debug("Received ping from server (via ServerMessage)")
+            sendPong()
 
         // Top-level control messages (not inside stream)
         case .typeStoppedMessage(let payload):
@@ -902,15 +920,20 @@ class CLIBridgeManager: ObservableObject {
         // Persist lastMessageId for reconnection
         persistLastMessageId(idString)
 
+        log.debug("[CLIBridge] Processing stream message type: \(String(describing: stored.message))")
+
         switch stored.message {
         case .typeAssistantStreamMessage(let assistantContent):
+            log.debug("[CLIBridge] Assistant message: isFinal=\(assistantContent.isFinal), content=\(assistantContent.content.prefix(100))")
             appendText(assistantContent.content, isFinal: assistantContent.isFinal)
 
         case .typeUserStreamMessage:
             // User message echo - ignore (we already have it locally)
+            log.debug("[CLIBridge] User message echo - ignoring")
             break
 
         case .typeSystemStreamMessage(let systemContent):
+            log.debug("[CLIBridge] System message: subtype=\(String(describing: systemContent.subtype))")
             // System messages with subtype "result" are displayable (e.g., greeting messages)
             if systemContent.subtype == SystemStreamMessage.Subtype.result {
                 onSystem?(systemContent.content)

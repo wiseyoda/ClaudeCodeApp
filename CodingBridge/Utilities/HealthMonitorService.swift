@@ -45,6 +45,9 @@ final class HealthMonitorService: ObservableObject {
     private var pollTimer: Timer?
     private var isPolling = false
 
+    /// When true, polling is suspended because WebSocket ping/pong handles keepalive
+    private var webSocketActive = false
+
     /// Base poll interval (30 seconds)
     private let basePollInterval: TimeInterval = 30
 
@@ -118,12 +121,33 @@ final class HealthMonitorService: ObservableObject {
     /// Resume polling after pause
     func resumePolling() {
         guard isPolling else { return }
+        guard !webSocketActive else {
+            log.debug("[Health] Not resuming - WebSocket is active")
+            return
+        }
         // Do immediate check and schedule next
         Task {
             await checkHealth()
         }
         scheduleNextPoll(interval: basePollInterval)
         log.debug("[Health] Resumed polling")
+    }
+
+    /// Notify that WebSocket connection is active (pauses polling - ping/pong handles keepalive)
+    func setWebSocketActive(_ active: Bool) {
+        let wasActive = webSocketActive
+        webSocketActive = active
+
+        if active && !wasActive {
+            // WebSocket connected - pause polling
+            pausePolling()
+            serverStatus = .connected  // Trust WebSocket connection
+            log.info("[Health] WebSocket active - pausing HTTP polling")
+        } else if !active && wasActive && isPolling {
+            // WebSocket disconnected - resume polling
+            resumePolling()
+            log.info("[Health] WebSocket inactive - resuming HTTP polling")
+        }
     }
 
     /// Force an immediate health check
@@ -313,6 +337,7 @@ extension HealthMonitorService {
         currentBackoffInterval = 5
         consecutiveFailures = 0
         testSession = nil
+        webSocketActive = false
     }
 
     /// Re-enable network observer after testing

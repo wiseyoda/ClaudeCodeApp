@@ -556,7 +556,11 @@ class CLIBridgeAdapter: ObservableObject {
         // Map CLIBridgeManager callbacks to adapter callbacks
 
         manager.onText = { [weak self] content, isFinal in
-            guard let self = self else { return }
+            guard let self = self else {
+                log.debug("[Adapter] onText: self is nil!")
+                return
+            }
+            log.debug("[Adapter] onText callback: isFinal=\(isFinal), content=\(content.prefix(50))")
             self.currentText = self.manager.currentText
             self.onText?(content)
 
@@ -566,11 +570,13 @@ class CLIBridgeAdapter: ObservableObject {
                 let textToCommit = self.currentText
                 self.manager.clearCurrentText()
                 self.currentText = ""
+                log.debug("[Adapter] Calling onTextCommit with: \(textToCommit.prefix(50))")
                 self.onTextCommit?(textToCommit)
             }
         }
 
         manager.onThinking = { [weak self] content in
+            log.debug("[Adapter] onThinking callback")
             self?.onThinking?(content)
         }
 
@@ -744,10 +750,14 @@ class CLIBridgeAdapter: ObservableObject {
                 switch state {
                 case .disconnected:
                     self.connectionState = .disconnected
+                    // Resume health polling when WebSocket disconnects
+                    HealthMonitorService.shared.setWebSocketActive(false)
                 case .connecting:
                     self.connectionState = .connecting
                 case .connected(let agentId):
                     self.connectionState = .connected(agentId: agentId)
+                    // Pause health polling - WebSocket ping/pong handles keepalive
+                    HealthMonitorService.shared.setWebSocketActive(true)
                 case .reconnecting(let attempt):
                     self.connectionState = .reconnecting(attempt: attempt)
                 }

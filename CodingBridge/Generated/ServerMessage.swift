@@ -22,6 +22,7 @@ public enum ServerMessage: Sendable, Codable, Hashable {
     case typeQueueClearedMessage(QueueClearedMessage)
     case typeQueuedMessage(QueuedMessage)
     case typeReconnectCompleteMessage(ReconnectCompleteMessage)
+    case typeServerPingMessage(ServerPingMessage)
     case typeSessionEventMessage(SessionEventMessage)
     case typeStoppedMessage(StoppedMessage)
     case typeStreamServerMessage(StreamServerMessage)
@@ -56,6 +57,8 @@ public enum ServerMessage: Sendable, Codable, Hashable {
         case .typeQueuedMessage(let value):
             try container.encode(value)
         case .typeReconnectCompleteMessage(let value):
+            try container.encode(value)
+        case .typeServerPingMessage(let value):
             try container.encode(value)
         case .typeSessionEventMessage(let value):
             try container.encode(value)
@@ -96,6 +99,8 @@ public enum ServerMessage: Sendable, Codable, Hashable {
             self = .typeQueuedMessage(value)
         } else if let value = try? container.decode(ReconnectCompleteMessage.self) {
             self = .typeReconnectCompleteMessage(value)
+        } else if let value = try? container.decode(ServerPingMessage.self) {
+            self = .typeServerPingMessage(value)
         } else if let value = try? container.decode(SessionEventMessage.self) {
             self = .typeSessionEventMessage(value)
         } else if let value = try? container.decode(StoppedMessage.self) {

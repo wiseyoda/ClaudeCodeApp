@@ -97,8 +97,18 @@ final class CLIBridgeSessionRepository: SessionRepository {
             cursor: offset > 0 ? String(offset) : nil
         )
 
+        // DEBUG: Log first session title to verify API response
+        if let first = response.sessions.first {
+            log.debug("[SessionRepo] First session title from API: '\(first.title ?? "nil")' lastUser: '\(first.lastUserMessage ?? "nil")'")
+        }
+
         // Convert CLISessionMetadata to ProjectSession
         let projectSessions = response.sessions.toProjectSessions()
+
+        // DEBUG: Log converted session
+        if let first = projectSessions.first {
+            log.debug("[SessionRepo] After toProjectSession: summary='\(first.summary ?? "nil")' lastUser='\(first.lastUserMessage ?? "nil")'")
+        }
 
         // Use the actual total from API if available, otherwise approximate
         let total = response.total ?? (projectSessions.count + (response.hasMore ? 1 : 0))

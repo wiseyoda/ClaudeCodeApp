@@ -133,6 +133,53 @@ private struct StatLabel: View {
     }
 }
 
+// MARK: - User Message Action Bar
+
+/// Action bar shown below user messages with copy button
+struct UserMessageActionBar: View {
+    let message: ChatMessage
+    let projectPath: String
+    let onCopy: () -> Void
+
+    @Environment(\.colorScheme) var colorScheme
+    @EnvironmentObject var settings: AppSettings
+    @State private var showCopied = false
+    @State private var copyResetTask: Task<Void, Never>?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Spacer()
+
+            // Copy button
+            Button {
+                onCopy()
+                HapticManager.light()
+                showCopied = true
+                // Cancel any existing reset task and start a new one
+                copyResetTask?.cancel()
+                copyResetTask = Task {
+                    try? await Task.sleep(nanoseconds: 1_500_000_000)
+                    guard !Task.isCancelled else { return }
+                    showCopied = false
+                }
+            } label: {
+                Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 14))
+                    .foregroundColor(showCopied ? CLITheme.green(for: colorScheme) : CLITheme.mutedText(for: colorScheme))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(showCopied ? "Copied" : "Copy message")
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 6)
+        .padding(.leading, 16)
+        .transition(AnyTransition.opacity.combined(with: .move(edge: .top)))
+        .onDisappear {
+            copyResetTask?.cancel()
+        }
+    }
+}
+
 #Preview {
     VStack {
         MessageActionBar(

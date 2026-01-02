@@ -9,6 +9,7 @@ import Foundation
 
 public enum ClientMessage: Sendable, Codable, Hashable {
     case typeCancelQueuedMessage(CancelQueuedMessage)
+    case typeClientPongMessage(ClientPongMessage)
     case typeInputMessage(InputMessage)
     case typeInterruptMessage(InterruptMessage)
     case typePermissionResponseMessage(PermissionResponseMessage)
@@ -26,6 +27,8 @@ public enum ClientMessage: Sendable, Codable, Hashable {
         var container = encoder.singleValueContainer()
         switch self {
         case .typeCancelQueuedMessage(let value):
+            try container.encode(value)
+        case .typeClientPongMessage(let value):
             try container.encode(value)
         case .typeInputMessage(let value):
             try container.encode(value)
@@ -58,6 +61,8 @@ public enum ClientMessage: Sendable, Codable, Hashable {
         let container = try decoder.singleValueContainer()
         if let value = try? container.decode(CancelQueuedMessage.self) {
             self = .typeCancelQueuedMessage(value)
+        } else if let value = try? container.decode(ClientPongMessage.self) {
+            self = .typeClientPongMessage(value)
         } else if let value = try? container.decode(InputMessage.self) {
             self = .typeInputMessage(value)
         } else if let value = try? container.decode(InterruptMessage.self) {

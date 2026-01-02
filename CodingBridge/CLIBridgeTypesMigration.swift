@@ -1125,21 +1125,23 @@ extension GetMessagesResponse {
     var hasMore: Bool { pagination.hasMore }
 
     /// Convert paginated messages to ChatMessages
+    /// Flattens all content blocks from each message into separate ChatMessages
     func toChatMessages() -> [ChatMessage] {
-        messages.compactMap { paginatedMessage in
-            paginatedMessage.toChatMessage()
+        messages.flatMap { paginatedMessage in
+            paginatedMessage.toChatMessages()
         }
     }
 }
 
 /// Convenience extension for PaginatedMessage
 extension PaginatedMessage {
-    /// Convert to ChatMessage
-    func toChatMessage() -> ChatMessage? {
+    /// Convert to multiple ChatMessages (one per content block)
+    /// Uses rawContent when available, falls back to message.content
+    func toChatMessages() -> [ChatMessage] {
         // Extract type from message dict
         guard let typeValue = message["type"],
               case .string(let typeStr) = typeValue else {
-            return nil
+            return []
         }
 
         // Determine role from message type
@@ -1155,14 +1157,26 @@ extension PaginatedMessage {
             role = .assistant
         }
 
-        // Extract content from message - could be string or from content array
+        // Parse timestamp
+        let dateFormatter = ISO8601DateFormatter()
+        dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let date = dateFormatter.date(from: timestamp) ?? Date()
+
+        // First try rawContent (has structured blocks with full tool_use/thinking info)
+        if let rawContent = rawContent, !rawContent.isEmpty {
+            let chatMessages = parseRawContentBlocks(rawContent, role: role, timestamp: date)
+            if !chatMessages.isEmpty {
+                return chatMessages
+            }
+        }
+
+        // Fall back to message.content
         var content = ""
         if let contentValue = message["content"] {
             switch contentValue {
             case .string(let str):
                 content = str
             case .array(let arr):
-                // Handle content blocks
                 content = arr.compactMap { block -> String? in
                     guard case .dictionary(let dict) = block,
                           let textValue = dict["text"],
@@ -1176,17 +1190,145 @@ extension PaginatedMessage {
             }
         }
 
-        // Parse timestamp
-        let dateFormatter = ISO8601DateFormatter()
-        dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let date = dateFormatter.date(from: timestamp) ?? Date()
+        // Skip empty messages
+        guard !content.isEmpty else { return [] }
 
-        return ChatMessage(
+        return [ChatMessage(
             id: UUID(),
             role: role,
             content: content,
             timestamp: date
-        )
+        )]
+    }
+
+    /// Convert to ChatMessage (returns first message only, for backwards compatibility)
+    func toChatMessage() -> ChatMessage? {
+        toChatMessages().first
+    }
+
+    /// Parse rawContent blocks into ChatMessages
+    /// Each block type (text, tool_use, thinking) becomes its own ChatMessage
+    private func parseRawContentBlocks(_ blocks: [JSONValue], role: ChatMessage.Role, timestamp: Date) -> [ChatMessage] {
+        var messages: [ChatMessage] = []
+
+        for block in blocks {
+            guard case .dictionary(let dict) = block,
+                  let typeValue = dict["type"],
+                  case .string(let blockType) = typeValue else {
+                continue
+            }
+
+            switch blockType {
+            case "text":
+                // Text block: {"type": "text", "text": "..."}
+                if let textValue = dict["text"],
+                   case .string(let text) = textValue,
+                   !text.isEmpty {
+                    messages.append(ChatMessage(
+                        id: UUID(),
+                        role: role,
+                        content: text,
+                        timestamp: timestamp
+                    ))
+                }
+
+            case "tool_use":
+                // Tool use block: {"type": "tool_use", "id": "...", "name": "Bash", "input": {...}}
+                if let nameValue = dict["name"],
+                   case .string(let name) = nameValue {
+                    // Format input as JSON-like string
+                    var inputStr = "{}"
+                    if let inputValue = dict["input"] {
+                        inputStr = formatJSONValue(inputValue)
+                    }
+                    messages.append(ChatMessage(
+                        id: UUID(),
+                        role: .toolUse,
+                        content: "\(name)(\(inputStr))",
+                        timestamp: timestamp
+                    ))
+                }
+
+            case "tool_result":
+                // Tool result block: {"type": "tool_result", "tool_use_id": "...", "content": "..."}
+                if let contentValue = dict["content"] {
+                    let resultText: String
+                    switch contentValue {
+                    case .string(let str):
+                        resultText = str
+                    case .array(let arr):
+                        // Content could be array of text blocks
+                        resultText = arr.compactMap { item -> String? in
+                            guard case .dictionary(let itemDict) = item,
+                                  let textVal = itemDict["text"],
+                                  case .string(let text) = textVal else {
+                                return nil
+                            }
+                            return text
+                        }.joined(separator: "\n")
+                    default:
+                        resultText = formatJSONValue(contentValue)
+                    }
+                    if !resultText.isEmpty {
+                        messages.append(ChatMessage(
+                            id: UUID(),
+                            role: .toolResult,
+                            content: resultText,
+                            timestamp: timestamp
+                        ))
+                    }
+                }
+
+            case "thinking":
+                // Thinking block: {"type": "thinking", "thinking": "..."}
+                if let thinkingValue = dict["thinking"],
+                   case .string(let thinking) = thinkingValue,
+                   !thinking.isEmpty {
+                    messages.append(ChatMessage(
+                        id: UUID(),
+                        role: .thinking,
+                        content: thinking,
+                        timestamp: timestamp
+                    ))
+                }
+
+            default:
+                // Unknown block type - skip
+                break
+            }
+        }
+
+        return messages
+    }
+
+    /// Format a JSONValue as valid JSON for parsing
+    /// String values are properly quoted and escaped so the output can be parsed by JSONSerialization
+    private func formatJSONValue(_ value: JSONValue) -> String {
+        switch value {
+        case .string(let str):
+            // Escape special characters and wrap in quotes for valid JSON
+            let escaped = str
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+                .replacingOccurrences(of: "\n", with: "\\n")
+                .replacingOccurrences(of: "\r", with: "\\r")
+                .replacingOccurrences(of: "\t", with: "\\t")
+            return "\"\(escaped)\""
+        case .int(let int):
+            return String(int)
+        case .double(let dbl):
+            return String(dbl)
+        case .bool(let bool):
+            return String(bool)
+        case .null:
+            return "null"
+        case .array(let arr):
+            let items = arr.map { formatJSONValue($0) }
+            return "[\(items.joined(separator: ", "))]"
+        case .dictionary(let dict):
+            let pairs = dict.map { "\"\($0.key)\": \(formatJSONValue($0.value))" }
+            return "{\(pairs.joined(separator: ", "))}"
+        }
     }
 }
 

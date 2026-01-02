@@ -1262,9 +1262,8 @@ class ChatViewModel: ObservableObject {
             let newStatus: GitStatus
             do {
                 let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
-                let projects = try await apiClient.fetchProjects()
-                if let cliProject = projects.first(where: { $0.path == project.path }),
-                   let git = cliProject.git {
+                let projectDetail = try await apiClient.getProjectDetail(projectPath: project.path)
+                if let git = projectDetail.git {
                     newStatus = git.toGitStatus
                 } else {
                     newStatus = .notGitRepo

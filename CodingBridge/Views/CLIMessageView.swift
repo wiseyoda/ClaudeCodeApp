@@ -135,8 +135,8 @@ struct CLIMessageView: View {
                     }
                 }
 
-                // Relative timestamp (skip for toolUse, assistant, error - they show time below content)
-                if message.role != .toolUse && message.role != .assistant && message.role != .error {
+                // Relative timestamp (skip for toolUse, assistant, error, user - they show time below content)
+                if message.role != .toolUse && message.role != .assistant && message.role != .error && message.role != .user {
                     Text(cachedTimestamp)
                         .font(.system(size: 10))
                         .foregroundColor(CLITheme.mutedText(for: colorScheme).opacity(0.7))
@@ -305,6 +305,66 @@ struct CLIMessageView: View {
             // Expanded action bar for error messages
             if message.role == .error && showActionBar && !message.content.isEmpty {
                 ErrorActionBar(content: message.content)
+            }
+
+            // Footer for user messages: timestamp + copy button + ellipsis
+            if message.role == .user && !message.content.isEmpty {
+                HStack(spacing: 6) {
+                    Text(cachedTimestamp)
+                        .font(.system(size: 10))
+                        .foregroundColor(CLITheme.mutedText(for: colorScheme).opacity(0.7))
+
+                    Button {
+                        HapticManager.light()
+                        UIPasteboard.general.string = message.content
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            showCopied = true
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                showCopied = false
+                            }
+                        }
+                    } label: {
+                        Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
+                            .font(.system(size: 9))
+                            .foregroundColor(
+                                showCopied
+                                    ? CLITheme.green(for: colorScheme)
+                                    : CLITheme.mutedText(for: colorScheme).opacity(0.6)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(showCopied ? "Copied" : "Copy message")
+
+                    Spacer()
+
+                    // Action bar toggle
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            showActionBar.toggle()
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 12))
+                            .foregroundColor(CLITheme.mutedText(for: colorScheme))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("More actions")
+                }
+                .padding(.leading, 16)
+                .padding(.top, 4)
+            }
+
+            // Expanded action bar for user messages
+            if message.role == .user && showActionBar && !message.content.isEmpty {
+                UserMessageActionBar(
+                    message: message,
+                    projectPath: projectPath ?? "",
+                    onCopy: {
+                        UIPasteboard.general.string = message.content
+                    }
+                )
             }
         }
         .padding(.vertical, 4)
