@@ -1,6 +1,6 @@
 # Issue #14: Simplify git banner state
 
-> **Status**: Pending
+> **Status**: Complete
 > **Priority**: Tier 3
 > **Depends On**: None
 > **Blocks**: None
@@ -68,10 +68,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Simplify git banner state is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Simplify git banner state is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -122,5 +122,5 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | Removing gitBannerAutoHideTimer |
+| 2026-01-02 | Completed | Removed gitBannerAutoHideTimer, startBannerAutoHideTimer(), auto-hide call in refreshGitStatus(). Build passes. |

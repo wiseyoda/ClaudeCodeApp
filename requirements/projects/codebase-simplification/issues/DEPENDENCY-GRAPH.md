@@ -15,17 +15,17 @@ This graph lists issue dependencies and a recommended execution order. Use it to
 9. #21 Centralize project path encode/decode ✅
 10. #22 Replace hard-coded path stripping in Project.title ✅
 11. #26 Reconfigure long-lived services on serverURL change ✅
-12. #24 Define a single permission resolution pipeline
+12. #24 Define a single permission resolution pipeline ✅
 13. #30 Update docs to match WebSocket streaming ✅
-14. #4 Eliminate extractFilePath() parsing
+14. #4 Eliminate extractFilePath() parsing ✅
 15. #6 Remove effectiveSessionToResume computed property ✅
-16. #7 Remove effectiveModelId/effectivePermissionMode indirection
-17. #8 Eliminate streamingMessageId/streamingMessageTimestamp
+16. #7 Remove effectiveModelId/effectivePermissionMode indirection ✅
+17. #8 Eliminate streamingMessageId/streamingMessageTimestamp ✅
 18. #10 Remove toolUseMap dictionary ✅
-19. #11 Remove subagentToolIds tracking
-20. #12 Remove pendingGitCommands tracking
-21. #13 Remove todoHideTimer auto-hide logic
-22. #14 Simplify git banner state
+19. #11 Remove subagentToolIds tracking ✅
+20. #12 Remove pendingGitCommands tracking ✅
+21. #13 Remove todoHideTimer auto-hide logic ✅
+22. #14 Simplify git banner state ✅
 23. #15 Remove ScrollStateManager
 24. #18 Inline groupMessagesForDisplay()
 25. #19 Remove message pruning
@@ -90,4 +90,5 @@ graph TD
 - #5 was marked "Won't Fix" after audit found no duplication - stores are intentionally separate
 - #16, #42, #43 are no longer blocked by #5 (dependencies removed)
 - cli-bridge issues (#33-#41) can be worked in parallel with iOS cleanup; they unblock several simplifications
-- Deferred items (#8, #15, #19) are sequenced later but may be skipped if not needed
+- Deferred items (#15, #19) are sequenced later but may be skipped if not needed
+- #8 was completed by converting @Published var to let/computed property (no more UUID regeneration)

@@ -1,6 +1,6 @@
 # Issue #8: Eliminate streamingMessageId/streamingMessageTimestamp
 
-> **Status**: Pending
+> **Status**: Complete (verified 2026-01-02)
 > **Priority**: Tier 4
 > **Depends On**: None
 > **Blocks**: None
@@ -69,10 +69,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Eliminate streamingMessageId/streamingMessageTimestamp is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Eliminate streamingMessageId/streamingMessageTimestamp is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -123,5 +123,6 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | Simplified streamingMessageId to constant, streamingMessageTimestamp to computed property |
+| 2026-01-02 | Completed | Build passes, tests updated, no behavior changes |
+| 2026-01-02 | Verified | Confirmed stable ID + computed timestamp usage in ChatView |

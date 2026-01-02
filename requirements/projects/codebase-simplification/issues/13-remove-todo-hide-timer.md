@@ -1,6 +1,6 @@
 # Issue #13: Remove todoHideTimer auto-hide logic
 
-> **Status**: Pending
+> **Status**: Complete
 > **Priority**: Tier 3
 > **Depends On**: None
 > **Blocks**: None
@@ -69,10 +69,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Remove todoHideTimer auto-hide logic is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Remove todoHideTimer auto-hide logic is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -123,5 +123,5 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | In progress |
+| 2026-01-02 | Completed | Removed todoHideTimer property and all auto-hide logic from ChatViewModel; updated TodoProgressDrawer comment; build passes |

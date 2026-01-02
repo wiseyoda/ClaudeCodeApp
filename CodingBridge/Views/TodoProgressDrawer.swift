@@ -5,7 +5,7 @@ import SwiftUI
 /// Floating drawer that shows real-time task progress from TodoWrite tool calls.
 /// - Collapsed: Shows "X/Y Tasks" chip with progress indicator
 /// - Expanded: Shows full todo list with status icons and progress bar
-/// - Auto-hides 15s after streaming completes, reappears when new todos arrive
+/// - Hidden when user sends a new message; reappears when new todos arrive
 struct TodoProgressDrawer: View {
     let todos: [TodoListView.TodoItem]
     @Binding var isExpanded: Bool

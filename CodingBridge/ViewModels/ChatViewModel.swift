@@ -40,13 +40,14 @@ class ChatViewModel: ObservableObject {
     @Published var sessionPermissionMode: PermissionMode?
     @Published var isReattachingSession = false
 
-    // MARK: - Streaming Message Cache
-    @Published var streamingMessageId = UUID()
-    @Published var streamingMessageTimestamp = Date()
+    // MARK: - Streaming Message Identity
+    // Stable ID for the streaming message view - only one streaming message exists at a time,
+    // so a constant UUID avoids unnecessary @Published overhead and view invalidation
+    let streamingMessageId = UUID()
+    // Timestamp for streaming message display - uses processingStartTime when available
+    var streamingMessageTimestamp: Date { processingStartTime ?? Date() }
 
     // MARK: - Tool Use Tracking (internal state, no UI updates needed)
-    /// Tool IDs created while a subagent was active - not @Published as changes don't affect UI
-    var subagentToolIds: Set<String> = []
     /// Stores committed text for message creation in onComplete (adapter clears currentText on commit)
     var committedText: String?
 
@@ -63,10 +64,6 @@ class ChatViewModel: ObservableObject {
     var hasPromptedCleanup = false
     /// Background task for periodic git refresh - not @Published, managed internally
     var gitRefreshTask: Task<Void, Never>?
-    /// Timer to auto-hide banner after 5 seconds
-    var gitBannerAutoHideTimer: Task<Void, Never>?
-    /// Tracks pending Bash commands that are git operations (for refresh after result)
-    var pendingGitCommands: Set<String> = []
 
     // MARK: - Model State
     @Published var currentModel: ClaudeModel?
@@ -132,8 +129,6 @@ class ChatViewModel: ObservableObject {
     @Published var currentTodos: [TodoListView.TodoItem] = []
     @Published var isTodoDrawerExpanded = false
     @Published var showTodoDrawer = false
-    /// Timer to auto-hide todo drawer - not @Published, managed internally
-    var todoHideTimer: Task<Void, Never>?
 
     // MARK: - Background Tasks (internal task management, not @Published)
     var disconnectTask: Task<Void, Never>?
@@ -339,14 +334,6 @@ class ChatViewModel: ObservableObject {
         // Cancel git refresh task
         gitRefreshTask?.cancel()
         gitRefreshTask = nil
-
-        // Cancel git banner auto-hide timer
-        gitBannerAutoHideTimer?.cancel()
-        gitBannerAutoHideTimer = nil
-
-        // Cancel todo hide timer
-        todoHideTimer?.cancel()
-        todoHideTimer = nil
 
         // Note: HealthMonitor is now managed at app level - no need to stop here
 
@@ -593,8 +580,6 @@ class ChatViewModel: ObservableObject {
         HapticManager.medium()
 
         // Hide todo drawer when user sends a new message
-        todoHideTimer?.cancel()
-        todoHideTimer = nil
         withAnimation(.easeOut(duration: 0.2)) {
             showTodoDrawer = false
             isTodoDrawerExpanded = false
@@ -641,7 +626,7 @@ class ChatViewModel: ObservableObject {
             text.isEmpty ? defaultPrompt : messageToSend,
             projectPath: project.path,
             resumeSessionId: manager.sessionId,
-            permissionMode: effectivePermissionMode,
+            permissionMode: effectivePermissionModeValue.rawValue,
             images: imagesToSend.isEmpty ? nil : imagesToSend,
             model: effectiveModelId
         )
@@ -687,7 +672,7 @@ class ChatViewModel: ObservableObject {
             userMessage.content,
             projectPath: project.path,
             resumeSessionId: manager.sessionId,
-            permissionMode: effectivePermissionMode,
+            permissionMode: effectivePermissionModeValue.rawValue,
             images: nil,  // TODO: Support retrying messages with images if needed
             model: effectiveModelId
         )
@@ -954,10 +939,10 @@ class ChatViewModel: ObservableObject {
             )
             messages.append(thinkingMsg)
 
-        case .toolStart(let id, let name, let input):
+        case .toolStart(_, let name, let input):
+            // Filter tools from subagent execution (except Task itself which we show)
             if manager.activeSubagent != nil && name != "Task" {
-                subagentToolIds.insert(id)
-                log.debug("[ChatViewModel] Tracking subagent tool: \(name) (id: \(id.prefix(8)))")
+                log.debug("[ChatViewModel] Filtering subagent tool: \(name)")
                 return
             }
 
@@ -970,12 +955,6 @@ class ChatViewModel: ObservableObject {
             )
             messages.append(toolMsg)
 
-            // Track Bash git commands for status refresh after completion
-            if name == "Bash" && isGitCommand(inputString) {
-                pendingGitCommands.insert(id)
-                log.debug("[ChatViewModel] Tracking git command: \(id.prefix(8))")
-            }
-
             if name == "TodoWrite" {
                 let content = "\(name)(\(inputString))"
                 if let todos = TodoListView.parseTodoContent(content), !todos.isEmpty {
@@ -985,21 +964,19 @@ class ChatViewModel: ObservableObject {
                         self.currentTodos = todos
                         self.showTodoDrawer = true
                     }
-                    todoHideTimer?.cancel()
-                    todoHideTimer = nil
                 }
             }
 
-        case .toolResult(let id, let tool, let output, _):
+        case .toolResult(_, let tool, let output, _):
             let toolName = tool
-            if subagentToolIds.contains(id) {
-                log.debug("[ChatViewModel] Filtering subagent tool result: \(toolName) (id: \(id.prefix(8)))")
-                subagentToolIds.remove(id)
+            // Filter tool results from subagent execution and Task tool itself
+            if manager.activeSubagent != nil && toolName != "Task" {
+                log.debug("[ChatViewModel] Filtering subagent tool result: \(toolName)")
                 return
             }
 
             if toolName == "Task" {
-                log.debug("[ChatViewModel] Filtering Task tool result (id: \(id.prefix(8)))")
+                log.debug("[ChatViewModel] Filtering Task tool result")
                 return
             }
 
@@ -1009,13 +986,6 @@ class ChatViewModel: ObservableObject {
                 timestamp: Date()
             )
             messages.append(resultMsg)
-
-            // Refresh git status after git command completes
-            if pendingGitCommands.contains(id) {
-                pendingGitCommands.remove(id)
-                log.debug("[ChatViewModel] Git command completed, refreshing status")
-                refreshGitStatus()
-            }
 
         case .system(let content):
             // System messages with subtype "result" are final response messages from Claude
@@ -1144,8 +1114,6 @@ class ChatViewModel: ObservableObject {
     // MARK: - Event Handlers
 
     private func handleStopped() {
-        subagentToolIds.removeAll()
-
         // Create assistant message from committed text
         if let text = committedText, !text.isEmpty {
             let executionTime: TimeInterval? = processingStartTime.map { Date().timeIntervalSince($0) }
@@ -1164,18 +1132,6 @@ class ChatViewModel: ObservableObject {
         processingStartTime = nil
 
         refreshGitStatus()
-
-        if showTodoDrawer && !currentTodos.isEmpty {
-            todoHideTimer?.cancel()
-            todoHideTimer = Task { [weak self] in
-                try? await Task.sleep(nanoseconds: 15_000_000_000)
-                guard let self, !Task.isCancelled else { return }
-                withAnimation(.easeOut(duration: 0.3)) {
-                    self.showTodoDrawer = false
-                    self.isTodoDrawerExpanded = false
-                }
-            }
-        }
 
         pruneMessagesIfNeeded()
         cleanupAfterProcessingComplete()
@@ -1441,39 +1397,14 @@ class ChatViewModel: ObservableObject {
                 showGitBanner = false
             } else {
                 showGitBanner = true
-                // Auto-hide banner after 5 seconds
-                self.startBannerAutoHideTimer()
             }
         }
     }
 
-    /// Show git banner and start auto-hide timer (for manual refresh from toolbar)
+    /// Show git banner and refresh status (for manual refresh from toolbar)
     func showGitBannerAndRefresh() {
         showGitBanner = true
         refreshGitStatus()
-    }
-
-    /// Start auto-hide timer for git banner (5 seconds)
-    private func startBannerAutoHideTimer() {
-        gitBannerAutoHideTimer?.cancel()
-        gitBannerAutoHideTimer = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 5_000_000_000) // 5 seconds
-            guard let self, !Task.isCancelled else { return }
-            withAnimation(.easeOut(duration: 0.3)) {
-                self.showGitBanner = false
-            }
-        }
-    }
-
-    /// Check if a Bash command input contains a git operation that affects status
-    private func isGitCommand(_ input: String) -> Bool {
-        let gitOperations = [
-            "git push", "git pull", "git commit", "git merge",
-            "git rebase", "git checkout", "git switch", "git restore",
-            "git reset", "git stash", "git fetch", "git add", "git rm"
-        ]
-        let lowercased = input.lowercased()
-        return gitOperations.contains { lowercased.contains($0) }
     }
 
     func refreshChatContent() async {
@@ -1577,7 +1508,7 @@ class ChatViewModel: ObservableObject {
             cleanupPrompt,
             projectPath: project.path,
             resumeSessionId: manager.sessionId,
-            permissionMode: effectivePermissionMode,
+            permissionMode: effectivePermissionModeValue.rawValue,
             images: nil,
             model: effectiveModelId
         )
@@ -1601,7 +1532,7 @@ class ChatViewModel: ObservableObject {
             commitPrompt,
             projectPath: project.path,
             resumeSessionId: manager.sessionId,
-            permissionMode: effectivePermissionMode,
+            permissionMode: effectivePermissionModeValue.rawValue,
             images: nil,
             model: effectiveModelId
         )
@@ -1625,7 +1556,7 @@ class ChatViewModel: ObservableObject {
             pushPrompt,
             projectPath: project.path,
             resumeSessionId: manager.sessionId,
-            permissionMode: effectivePermissionMode,
+            permissionMode: effectivePermissionModeValue.rawValue,
             images: nil,
             model: effectiveModelId
         )
@@ -1808,15 +1739,20 @@ class ChatViewModel: ObservableObject {
         return model.modelId
     }
 
+    /// Unified permission resolution using PermissionManager pipeline.
+    /// Resolution order (highest to lowest priority):
+    /// 1. Session override (per-session UI override)
+    /// 2. Local project override (iOS ProjectSettingsStore)
+    /// 3. Server project config (cli-bridge settings)
+    /// 4. Global app setting (iOS AppSettings)
+    /// 5. Server global default (cli-bridge config)
     var effectivePermissionModeValue: PermissionMode {
-        projectSettingsStore.effectivePermissionMode(
+        PermissionManager.shared.resolvePermissionMode(
             for: project.path,
-            globalMode: settings.globalPermissionMode
+            sessionOverride: sessionPermissionMode,
+            localProjectOverride: projectSettingsStore.permissionModeOverride(for: project.path),
+            globalAppSetting: settings.globalPermissionMode
         )
-    }
-
-    var effectivePermissionMode: String {
-        effectivePermissionModeValue.rawValue
     }
 
     // MARK: - Change Handlers
@@ -1856,9 +1792,6 @@ class ChatViewModel: ObservableObject {
     /// Cleanup transient state after a processing cycle completes.
     /// Called from onComplete to prevent accumulation of lingering tasks/state.
     private func cleanupAfterProcessingComplete() {
-        // Clear tool tracking state that may have grown during session
-        subagentToolIds.removeAll(keepingCapacity: true)
-
         // Ensure streaming state is reset
         manager.clearCurrentText()
     }
@@ -1875,11 +1808,8 @@ class ChatViewModel: ObservableObject {
 
     func handleProcessingChange(oldValue: Bool, isProcessing: Bool) {
         MessageStore.saveProcessingState(isProcessing, for: project.path)
-
-        if isProcessing && !oldValue {
-            streamingMessageId = UUID()
-            streamingMessageTimestamp = Date()
-        }
+        // Note: streamingMessageId is now a stable constant, and streamingMessageTimestamp
+        // is derived from processingStartTime, so no manual reset is needed here
     }
 
     func handleModelChange(oldModel: ClaudeModel, newModel: ClaudeModel) {

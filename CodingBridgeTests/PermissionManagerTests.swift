@@ -512,80 +512,140 @@ final class PermissionManagerTests: XCTestCase {
         XCTAssertEqual(manager.getAlwaysDenyList(for: projectPath), [])
     }
 
-    // MARK: - Resolution Logic
+    // MARK: - Resolution Logic (resolvePermissionMode)
 
-    func test_getEffectiveMode_sessionOverrideTakesPriority() async throws {
+    func test_resolvePermissionMode_sessionOverrideTakesPriority() async throws {
         let config = makeConfig(globalDefault: .default)
         let manager = try await makeManager(config: config)
 
-        let mode = manager.getEffectiveMode(for: projectPath, sessionOverride: .acceptEdits)
+        let mode = manager.resolvePermissionMode(for: projectPath, sessionOverride: .acceptEdits)
 
         XCTAssertEqual(mode, .acceptEdits)
     }
 
-    func test_getEffectiveMode_globalBypassOverridesAll() async throws {
+    func test_resolvePermissionMode_localProjectOverrideTakesPriorityOverServer() async throws {
         let config = makeConfig(
-            globalBypass: true,
             globalDefault: .default,
-            projects: [projectPath: ProjectPermissions(permissionMode: .acceptEdits)]
+            projects: [projectPath: ProjectPermissions(permissionMode: .default)]
         )
         let manager = try await makeManager(config: config)
 
-        let mode = manager.getEffectiveMode(for: projectPath)
+        let mode = manager.resolvePermissionMode(
+            for: projectPath,
+            localProjectOverride: .acceptEdits
+        )
 
-        XCTAssertEqual(mode, .bypassPermissions)
+        XCTAssertEqual(mode, .acceptEdits)
     }
 
-    func test_getEffectiveMode_projectBypassOverridesProjectMode() async throws {
+    func test_resolvePermissionMode_serverProjectConfigApplies() async throws {
+        let config = makeConfig(projects: [
+            projectPath: ProjectPermissions(permissionMode: .acceptEdits, bypassAll: false)
+        ])
+        let manager = try await makeManager(config: config)
+
+        let mode = manager.resolvePermissionMode(for: projectPath)
+
+        XCTAssertEqual(mode, .acceptEdits)
+    }
+
+    func test_resolvePermissionMode_serverProjectBypassOverridesProjectMode() async throws {
         let config = makeConfig(projects: [
             projectPath: ProjectPermissions(permissionMode: .acceptEdits, bypassAll: true)
         ])
         let manager = try await makeManager(config: config)
 
-        let mode = manager.getEffectiveMode(for: projectPath)
+        let mode = manager.resolvePermissionMode(for: projectPath)
 
         XCTAssertEqual(mode, .bypassPermissions)
     }
 
-    func test_getEffectiveMode_projectModeOverridesGlobalDefault() async throws {
-        let config = makeConfig(
-            globalDefault: .default,
-            projects: [projectPath: ProjectPermissions(permissionMode: .acceptEdits)]
-        )
+    func test_resolvePermissionMode_globalAppSettingApplies() async throws {
+        let config = makeConfig(globalDefault: .default)
         let manager = try await makeManager(config: config)
 
-        let mode = manager.getEffectiveMode(for: projectPath)
+        let mode = manager.resolvePermissionMode(
+            for: projectPath,
+            globalAppSetting: .acceptEdits
+        )
 
         XCTAssertEqual(mode, .acceptEdits)
     }
 
-    func test_getEffectiveMode_fallsBackToGlobalDefault() async throws {
+    func test_resolvePermissionMode_serverGlobalDefaultApplies() async throws {
         let config = makeConfig(globalDefault: .acceptEdits)
         let manager = try await makeManager(config: config)
 
-        let mode = manager.getEffectiveMode(for: projectPath)
+        let mode = manager.resolvePermissionMode(for: projectPath)
 
         XCTAssertEqual(mode, .acceptEdits)
     }
 
-    func test_getEffectiveMode_defaultWhenNoConfig() {
+    func test_resolvePermissionMode_serverGlobalBypassApplies() async throws {
+        let config = makeConfig(globalBypass: true, globalDefault: .default)
+        let manager = try await makeManager(config: config)
+
+        let mode = manager.resolvePermissionMode(for: projectPath)
+
+        XCTAssertEqual(mode, .bypassPermissions)
+    }
+
+    func test_resolvePermissionMode_fallsBackToGlobalAppSetting() async throws {
+        // No server config
         let manager = PermissionManager.makeForTesting(apiClient: nil)
 
-        let mode = manager.getEffectiveMode(for: projectPath)
+        let mode = manager.resolvePermissionMode(
+            for: projectPath,
+            globalAppSetting: .acceptEdits
+        )
+
+        XCTAssertEqual(mode, .acceptEdits)
+    }
+
+    func test_resolvePermissionMode_defaultWhenNoConfigOrSetting() {
+        let manager = PermissionManager.makeForTesting(apiClient: nil)
+
+        let mode = manager.resolvePermissionMode(for: projectPath)
 
         XCTAssertEqual(mode, .default)
     }
 
-    func test_getEffectiveMode_projectNotInConfig() async throws {
+    func test_resolvePermissionMode_projectNotInConfig() async throws {
         let config = makeConfig(
             globalDefault: .acceptEdits,
             projects: [otherProjectPath: ProjectPermissions(permissionMode: .bypassPermissions)]
         )
         let manager = try await makeManager(config: config)
 
-        let mode = manager.getEffectiveMode(for: projectPath)
+        let mode = manager.resolvePermissionMode(for: projectPath)
 
         XCTAssertEqual(mode, .acceptEdits)
+    }
+
+    func test_resolvePermissionMode_priorityOrder() async throws {
+        // Test full priority: session > local > server project > global app > server global
+        let config = makeConfig(
+            globalDefault: .default,
+            projects: [projectPath: ProjectPermissions(permissionMode: .default)]
+        )
+        let manager = try await makeManager(config: config)
+
+        // Session override wins over everything
+        let withSession = manager.resolvePermissionMode(
+            for: projectPath,
+            sessionOverride: .bypassPermissions,
+            localProjectOverride: .acceptEdits,
+            globalAppSetting: .default
+        )
+        XCTAssertEqual(withSession, .bypassPermissions)
+
+        // Local project override wins over server and global
+        let withLocal = manager.resolvePermissionMode(
+            for: projectPath,
+            localProjectOverride: .acceptEdits,
+            globalAppSetting: .default
+        )
+        XCTAssertEqual(withLocal, .acceptEdits)
     }
 
     // MARK: - Tool Approval

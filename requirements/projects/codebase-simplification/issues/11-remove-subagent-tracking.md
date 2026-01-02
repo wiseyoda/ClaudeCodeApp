@@ -1,6 +1,6 @@
 # Issue #11: Remove subagentToolIds tracking
 
-> **Status**: Pending
+> **Status**: Complete (verified 2026-01-02)
 > **Priority**: Tier 3
 > **Depends On**: #9
 > **Blocks**: None
@@ -68,10 +68,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Remove subagentToolIds tracking is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Remove subagentToolIds tracking is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -122,5 +122,6 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | Removed subagentToolIds Set and tracking |
+| 2026-01-02 | Completed | Simplified to filter based on manager.activeSubagent at event time; build passes |
+| 2026-01-02 | Verified | Confirmed no remaining subagentToolIds references and tests cover filtering |

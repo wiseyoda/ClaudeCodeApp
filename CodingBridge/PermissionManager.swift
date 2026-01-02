@@ -246,41 +246,6 @@ class PermissionManager: ObservableObject {
         return globalAppSetting
     }
 
-    /// Get effective permission mode for a project (legacy - consider using resolvePermissionMode)
-    /// Resolution order: session override > project bypass > project mode > global bypass > global default
-    func getEffectiveMode(
-        for projectPath: String,
-        sessionOverride: PermissionMode? = nil
-    ) -> PermissionMode {
-        // Session override takes highest priority
-        if let sessionMode = sessionOverride {
-            return sessionMode
-        }
-
-        guard let config = config else {
-            return .default
-        }
-
-        // Check global bypass
-        if config.global.bypassAll {
-            return .bypassPermissions
-        }
-
-        // Check project config
-        if let projectConfig = config.projects[projectPath] {
-            // Project-level bypass
-            if projectConfig.bypassAll == true {
-                return .bypassPermissions
-            }
-            // Project-level mode
-            if let mode = projectConfig.permissionMode {
-                return mode
-            }
-        }
-
-        // Fall back to global default
-        return config.global.defaultMode
-    }
 
     /// Get always-allow list for a project
     func getAlwaysAllowList(for projectPath: String) -> [String] {
@@ -296,11 +261,18 @@ class PermissionManager: ObservableObject {
     func shouldAutoApprove(
         tool: String,
         for projectPath: String,
-        sessionOverride: PermissionMode? = nil
+        sessionOverride: PermissionMode? = nil,
+        localProjectOverride: PermissionMode? = nil,
+        globalAppSetting: PermissionMode = .default
     ) -> Bool {
         let alwaysDeny = getAlwaysDenyList(for: projectPath)
         let alwaysAllow = getAlwaysAllowList(for: projectPath)
-        let effectiveMode = getEffectiveMode(for: projectPath, sessionOverride: sessionOverride)
+        let effectiveMode = resolvePermissionMode(
+            for: projectPath,
+            sessionOverride: sessionOverride,
+            localProjectOverride: localProjectOverride,
+            globalAppSetting: globalAppSetting
+        )
 
         return isToolAutoApproved(tool, mode: effectiveMode, alwaysAllow: alwaysAllow, alwaysDeny: alwaysDeny)
     }

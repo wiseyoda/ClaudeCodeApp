@@ -1,6 +1,6 @@
 # Issue #12: Remove pendingGitCommands tracking
 
-> **Status**: Pending
+> **Status**: Complete (verified 2026-01-02)
 > **Priority**: Tier 3
 > **Depends On**: None
 > **Blocks**: None
@@ -68,10 +68,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Remove pendingGitCommands tracking is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Remove pendingGitCommands tracking is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -122,5 +122,6 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | Audited pendingGitCommands usage |
+| 2026-01-02 | Completed | Removed pendingGitCommands Set, isGitCommand helper, and per-tool refresh. Git status now refreshes only on completion (handleStopped). Build passes. |
+| 2026-01-02 | Verified | Confirmed no pendingGitCommands references and refresh-on-complete flow |

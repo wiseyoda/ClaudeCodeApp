@@ -97,15 +97,6 @@ class ProjectSettingsStore: ObservableObject {
         updateSettings(for: projectPath, settings: currentSettings)
     }
 
-    /// Get the effective permission mode for a project
-    /// Takes into account both the project override and global setting
-    func effectivePermissionMode(for projectPath: String, globalMode: PermissionMode) -> PermissionMode {
-        if let override = permissionModeOverride(for: projectPath) {
-            return override
-        }
-        return globalMode
-    }
-
     /// Clear settings for a project (revert to global defaults)
     func clearSettings(for projectPath: String) {
         let encodedPath = ProjectPathEncoder.encode(projectPath)

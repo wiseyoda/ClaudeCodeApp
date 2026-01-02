@@ -27,11 +27,11 @@
 **Corrections to Claude assessment (verified in code)**
 - #4 extractFilePath has been replaced with ToolParser.extractParam() calls (Complete).
 - #6 effectiveSessionToResume has been removed; manager.sessionId used directly (Complete).
-- #7 effectiveModelId/effectivePermissionMode are still present in `CodingBridge/ViewModels/ChatViewModel.swift`.
+- #7 effectivePermissionMode String wrapper removed; effectiveModelId and effectivePermissionModeValue retained as resolution logic (Complete).
 - #18 groupMessagesForDisplay still lives in `CodingBridge/Views/CompactToolView.swift` and is used by `CodingBridge/ViewModels/ChatViewModel.swift`.
 
 **Keep-as-is guidance (defer until after streaming refactor)**
-- #8 streamingMessageId/streamingMessageTimestamp are still used by `CodingBridge/ChatView.swift`.
+- #8 streamingMessageId/streamingMessageTimestamp now use a stable ID + computed timestamp (Complete).
 - #15 ScrollStateManager provides streaming-safe debounce; reconsider after #9/#17.
 - #19 message pruning is tied to persistence/history safety; reconsider after #23.
 
@@ -49,7 +49,7 @@
 | 8 | #21 | Centralize project path encode/decode (preserve hyphens) | High | #1 | Complete | Created ProjectPathEncoder utility; migrated MessageStore to - encoding. |
 | 9 | #22 | Replace hard-coded path stripping in Project.title | Low | #21 | Complete | Removed hard-coded path prefix; name field is already basename. |
 | 10 | #26 | Reconfigure long-lived services on serverURL change | Medium | #21 | Complete | 5 services now auto-reconfigure via Combine publisher. |
-| 11 | #24 | Define a single permission resolution pipeline | Medium | #23/#26 | Planned | Global -> project -> session -> server. |
+| 11 | #24 | Define a single permission resolution pipeline | Medium | #23/#26 | Complete | ChatViewModel uses PermissionManager.resolvePermissionMode() for 5-level resolution. |
 | 12 | #16 | Consolidate sheet booleans into activeSheet enum | Low | - | Complete | 7 @Published booleans replaced with single ActiveSheet enum. |
 | 13 | #30 | Update docs to match WebSocket streaming; remove SSE/WebSocketManager refs | Medium | #1/#17 | Complete | Updated 9 files to reflect WebSocket architecture. |
 
@@ -61,12 +61,12 @@
 | #3 | Remove formatJSONValue() custom serializer | Low | #2 | Pending | Use JSONEncoder. |
 | #4 | Eliminate extractFilePath() parsing | Medium | - | Complete | Replaced with ToolParser.extractParam() calls. |
 | #6 | Remove effectiveSessionToResume computed property | Low | #23 | Complete | Removed; manager.sessionId used directly. |
-| #7 | Remove effectiveModelId/effectivePermissionMode indirection | Low | #23 | Pending | Still used by send flow. |
-| #8 | Eliminate streamingMessageId/timestamp | Low | - | Deferred | Revisit after streaming refactor. |
+| #7 | Remove effectiveModelId/effectivePermissionMode indirection | Low | #23 | Complete | Removed String wrapper; retained resolution logic. |
+| #8 | Eliminate streamingMessageId/timestamp | Low | - | Complete | Streaming identity now stable and computed. |
 | #10 | Remove toolUseMap dictionary | Low | #9 | Complete | Tool name now taken directly from StreamEvent. |
-| #11 | Remove subagentToolIds tracking | Low | #9 | Pending | Depends on StreamEvent consolidation. |
-| #12 | Remove pendingGitCommands tracking | Low | - | Pending | Consider refresh-on-complete only. |
-| #13 | Remove todoHideTimer auto-hide logic | Low | - | Pending | Manual dismiss only. |
+| #11 | Remove subagentToolIds tracking | Low | #9 | Complete | Removed Set tracking; filter based on activeSubagent at event time. |
+| #12 | Remove pendingGitCommands tracking | Low | - | Complete | Refresh git status on completion only. |
+| #13 | Remove todoHideTimer auto-hide logic | Low | - | Complete | Removed auto-hide timer; manual dismiss only. |
 | #14 | Simplify git banner state | Low | - | Pending | Remove auto-hide and cleanup flags. |
 | #15 | Remove ScrollStateManager | Medium | #9/#17 | Deferred | Streaming debounce still needed. |
 | #18 | Inline groupMessagesForDisplay() | Medium | - | Pending | Still in `CodingBridge/Views/CompactToolView.swift`. |

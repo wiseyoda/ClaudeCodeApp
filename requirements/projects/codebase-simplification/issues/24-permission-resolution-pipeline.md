@@ -1,6 +1,6 @@
 # Issue #24: Define a single permission resolution pipeline
 
-> **Status**: Pending
+> **Status**: Complete (verified 2026-01-02)
 > **Priority**: Tier 2
 > **Depends On**: #23/#26
 > **Blocks**: #31
@@ -71,10 +71,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Define a single permission resolution pipeline is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Define a single permission resolution pipeline is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -125,5 +125,6 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | Auditing current implementation |
+| 2026-01-02 | Completed | Implemented unified pipeline and updated call sites |
+| 2026-01-02 | Verified | Removed legacy `ProjectSettingsStore.effectivePermissionMode` path; build passes |

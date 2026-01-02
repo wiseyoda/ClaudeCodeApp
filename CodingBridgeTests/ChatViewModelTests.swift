@@ -305,15 +305,15 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.messages.first?.content.contains("Shell(") == true)
     }
 
-    func test_streamEvent_toolStart_tracksSubagentTool() {
+    func test_streamEvent_toolStart_filtersSubagentTool() {
         let (viewModel, manager, _, _) = makeFixture()
         viewModel.setupStreamEventHandler()
         manager.activeSubagent = CLISubagentStartContent(id: "subagent-1", description: "Task")
 
         manager.simulateEvent(.toolStart(id: "tool-2", name: "Shell", input: ["command": "ls"]))
 
+        // Subagent tool_use should be filtered (not added to messages)
         XCTAssertTrue(viewModel.messages.isEmpty)
-        XCTAssertTrue(viewModel.subagentToolIds.contains("tool-2"))
     }
 
     func test_streamEvent_toolResult_filtersSubagentResult() {
@@ -324,8 +324,8 @@ final class ChatViewModelTests: XCTestCase {
         manager.simulateEvent(.toolStart(id: "tool-3", name: "Shell", input: ["command": "ls"]))
         manager.simulateEvent(.toolResult(id: "tool-3", name: "Shell", output: "done", isError: false))
 
+        // Both subagent tool_use and tool_result should be filtered
         XCTAssertTrue(viewModel.messages.isEmpty)
-        XCTAssertFalse(viewModel.subagentToolIds.contains("tool-3"))
     }
 
     func test_streamEvent_toolResult_filtersTaskTool() {
@@ -519,15 +519,37 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.activeSessionId, "session-1")
     }
 
-    func test_handleProcessingChange_updatesStreamingMetadata() {
-        let (viewModel, _, _, _) = makeFixture()
-        let previousId = viewModel.streamingMessageId
-        let previousTimestamp = viewModel.streamingMessageTimestamp
+    func test_handleProcessingChange_savesProcessingState() {
+        let project = makeProject(path: "/tmp/project-processing-change")
+        let (viewModel, _, _, _) = makeFixture(project: project)
 
         viewModel.handleProcessingChange(oldValue: false, isProcessing: true)
 
-        XCTAssertNotEqual(viewModel.streamingMessageId, previousId)
-        XCTAssertTrue(viewModel.streamingMessageTimestamp >= previousTimestamp)
+        // Verify processing state is saved (used for session reattachment on app restart)
+        XCTAssertTrue(MessageStore.loadProcessingState(for: project.path))
+    }
+
+    func test_streamingMessageTimestamp_usesProcessingStartTime() {
+        let (viewModel, _, _, _) = makeFixture()
+
+        // Without processingStartTime, should return current time
+        let before = Date()
+        let timestamp1 = viewModel.streamingMessageTimestamp
+        XCTAssertTrue(timestamp1 >= before)
+
+        // With processingStartTime set, should return that time
+        let fixedTime = Date(timeIntervalSince1970: 1000)
+        viewModel.processingStartTime = fixedTime
+        XCTAssertEqual(viewModel.streamingMessageTimestamp, fixedTime)
+    }
+
+    func test_streamingMessageId_isStable() {
+        let (viewModel, _, _, _) = makeFixture()
+        let id1 = viewModel.streamingMessageId
+        let id2 = viewModel.streamingMessageId
+
+        // streamingMessageId should remain constant (not regenerated)
+        XCTAssertEqual(id1, id2)
     }
 
     func test_handleModelChange_callsSetModelWhenConnected() async {
