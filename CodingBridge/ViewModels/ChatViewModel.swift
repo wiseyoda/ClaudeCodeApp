@@ -531,4 +531,11 @@ class ChatViewModel: ObservableObject {
 
         return filtered
     }
+
+    // MARK: - Testable Methods (can be overridden in test subclasses)
+
+    /// Load session history - implementation in ChatViewModel+Sessions.swift
+    func loadSessionHistory(_ session: ProjectSession) {
+        loadSessionHistoryImpl(session)
+    }
 }

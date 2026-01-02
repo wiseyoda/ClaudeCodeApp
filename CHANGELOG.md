@@ -6,27 +6,59 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [Unreleased]
+## [0.7.0] - 2026-01-02
+
+**Codebase Simplification Release** - Major refactoring to reduce debugging friction and improve maintainability.
 
 ### Changed
 
-- Documentation: Reset ROADMAP to focus on simplification; archived phase summaries below.
-- Documentation: Triaged ISSUES into ROADMAP and reset ISSUES for new intake.
-- Documentation: Added codebase simplification issue set and dependency graph; linked from README.
+- **Architecture: StreamEvent Enum** (#9): Consolidated 49 WebSocket callbacks into a single typed `StreamEvent` enum
+- **Architecture: Remove CLIBridgeAdapter** (#17): Deleted ~800-line adapter layer; ChatViewModel now uses CLIBridgeManager directly
+- **Architecture: Remove CLIBridgeTypesMigration** (#1): Split 2,398-line migration file into focused `CLIBridgeAppTypes.swift` + `CLIBridgeExtensions.swift`
+- **Architecture: File Splits** (#42-45):
+  - `ChatViewModel.swift` split into 6 focused modules (1,909 lines total)
+  - `CLIBridgeManager.swift` split into 5 modules (1,286 lines total)
+  - `SSHManager.swift` split into 4 modules (1,445 lines total)
+  - `Models.swift` split into 10 focused files (1,715 lines total)
+- **State Management** (#7, #8, #11-14, #24): Simplified ChatViewModel state with single permission resolution pipeline
+- **Persistence** (#23, #25): Unified draft + processing persistence; deleted dead MessageQueuePersistence code
+- **UI State** (#16): Consolidated 7 sheet booleans into single `ActiveSheet` enum
+- **Path Encoding** (#21, #22): Centralized project path encoding with new `ProjectPathEncoder` utility
+- **Services** (#26): Auto-reconfigure 5 services on serverURL change via Combine publisher
+- **Generated Types**: Renamed API* to CLI* prefix for consistency
+- **Documentation** (#30): Updated all docs to reflect WebSocket streaming architecture
+
+### Removed
+
+- **CLIBridgeAdapter.swift** (~800 lines) - Direct manager access replaces adapter indirection
+- **CLIBridgeTypesMigration.swift** (~2,398 lines) - Split into focused files
+- **ScrollStateManager.swift** (~230 lines) - Native ScrollViewReader used instead
+- **DraftInputPersistence.swift** - Unified into MessageStore
+- **extractFilePath()** parsing (#4) - Replaced with ToolParser.extractParam()
+- **formatJSONValue()** custom serializer (#3) - Replaced with JSONEncoder
+- **effectiveSessionToResume** property (#6) - Use manager.sessionId directly
+- **toolUseMap dictionary** (#10) - Tool name from StreamEvent directly
+- **subagentToolIds tracking** (#11) - Filter based on activeSubagent at event time
+- **pendingGitCommands tracking** (#12) - Refresh on completion only
+- **todoHideTimer auto-hide** (#13) - Manual dismiss only
+- **gitBannerAutoHideTimer** (#14) - Manual dismiss only
+- **Client-side message deduplication** (#34) - Server guarantees idempotent replay
+- **Idle state client filter** (#38) - Server deduplicates
+
+### Added
+
+- **ExitPlanMode Approval UI** (#31): Sheet-based approval for plan mode exit with markdown preview
+- **Multi-repo Git Status** (#32): Aggregated status for monorepos via subrepo discovery
+- **ProjectPathEncoder** utility for consistent path encoding/decoding
+- **Typed error responses** (#41): CLIBridgeAPIError wraps NotFoundError, RateLimitError, ServerError
 
 ### Fixed
 
-- Fix duplicate foreground reconnect handling by removing redundant ChatView reconnect logic; CLIBridgeManager owns lifecycle reconnects. (#27)
-
-### Roadmap Archive (Phases 1-7)
-
-- Phase 1 Security Hardening - Complete (see releases 0.5.0-0.6.10).
-- Phase 2 Data Correctness - Complete (see 0.5.1).
-- Phase 3 Stability & Thread Safety - Complete (see 0.6.3-0.6.8).
-- Phase 4 Architecture Refactoring - Complete (see 0.6.3).
-- Phase 5 Performance & Polish - Complete (see 0.6.3-0.6.8).
-- Phase 6 iOS 26 Adoption - Complete (see 0.6.6).
-- Phase 7 Test Coverage - Complete (see 0.5.1 and later).
+- Duplicate foreground reconnect handling; CLIBridgeManager owns lifecycle reconnects (#27)
+- ISO8601 date parsing simplified to single fractional seconds formatter (#40)
+- Model ID handling uses modelAlias from server (#36)
+- Tool input uses inputDescription when available (#37)
+- Session counts from GET /projects response (#33, #39)
 
 ---
 
@@ -673,6 +705,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Highlights                                             |
 | ------- | ------------------------------------------------------ |
+| 0.7.0   | **Codebase Simplification** - 45 issues, ~4K lines removed |
 | 0.6.10  | Generated API types (90+), Firebase docs, type renames |
 | 0.6.9   | Firebase gitignore, CLIIntegrity types update          |
 | 0.6.8   | History hardening, List scroll performance, audit fixes|

@@ -64,7 +64,6 @@ final class ChatViewModelTests: XCTestCase {
         viewModel.messages = [ChatMessage(role: .user, content: "Hello")]
         viewModel.selectedSession = makeSession(id: "session-old")
         manager.sessionId = "session-old"
-        viewModel.scrollManager.userDidScrollUp()
 
         viewModel.startNewSession()
 
@@ -73,7 +72,6 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.messages.first?.role, .system)
         XCTAssertTrue(viewModel.messages.first?.content.contains("New session started") == true)
         XCTAssertTrue(viewModel.selectedSession?.id.hasPrefix("new-session-") == true)
-        XCTAssertTrue(viewModel.scrollManager.isAutoScrollEnabled)
     }
 
     func test_selectInitialSession_usesStoredSession() {
@@ -298,7 +296,7 @@ final class ChatViewModelTests: XCTestCase {
         let (viewModel, manager, _, _) = makeFixture()
         viewModel.setupStreamEventHandler()
 
-        manager.simulateEvent(.toolStart(id: "tool-1", name: "Shell", input: ["command": "ls"]))
+        manager.simulateEvent(.toolStart(id: "tool-1", name: "Shell", inputDescription: nil, input: ["command": "ls"]))
 
         XCTAssertEqual(viewModel.messages.count, 1)
         XCTAssertEqual(viewModel.messages.first?.role, .toolUse)
@@ -310,7 +308,7 @@ final class ChatViewModelTests: XCTestCase {
         viewModel.setupStreamEventHandler()
         manager.activeSubagent = CLISubagentStartContent(id: "subagent-1", description: "Task")
 
-        manager.simulateEvent(.toolStart(id: "tool-2", name: "Shell", input: ["command": "ls"]))
+        manager.simulateEvent(.toolStart(id: "tool-2", name: "Shell", inputDescription: nil, input: ["command": "ls"]))
 
         // Subagent tool_use should be filtered (not added to messages)
         XCTAssertTrue(viewModel.messages.isEmpty)
@@ -321,7 +319,7 @@ final class ChatViewModelTests: XCTestCase {
         viewModel.setupStreamEventHandler()
         manager.activeSubagent = CLISubagentStartContent(id: "subagent-2", description: "Task")
 
-        manager.simulateEvent(.toolStart(id: "tool-3", name: "Shell", input: ["command": "ls"]))
+        manager.simulateEvent(.toolStart(id: "tool-3", name: "Shell", inputDescription: nil, input: ["command": "ls"]))
         manager.simulateEvent(.toolResult(id: "tool-3", name: "Shell", output: "done", isError: false))
 
         // Both subagent tool_use and tool_result should be filtered

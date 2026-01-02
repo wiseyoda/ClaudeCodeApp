@@ -71,14 +71,11 @@ extension ChatViewModel {
 
         if let sessionId = manager.sessionId {
             do {
-                let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
-                let response = try await apiClient.fetchInitialMessages(
-                    projectPath: project.path,
+                let history = try await fetchHistoryMessages(
                     sessionId: sessionId,
                     limit: settings.historyLimit.rawValue
                 )
-                // Convert using unified format, reverse from desc to chronological
-                let historyMessages = Array(response.toChatMessages().reversed())
+                let historyMessages = history.messages
                 if !historyMessages.isEmpty {
                     messages = historyMessages
                     refreshDisplayMessagesCache()

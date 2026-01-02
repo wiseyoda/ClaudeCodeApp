@@ -145,7 +145,55 @@ extension ChatViewModel {
         loadSessionHistory(session)
     }
 
-    func loadSessionHistory(_ session: ProjectSession) {
+    func fetchHistoryMessages(
+        sessionId: String,
+        limit: Int
+    ) async throws -> (messages: [ChatMessage], total: Int, hasMore: Bool) {
+        let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
+        let maxLimit = CLIBridgeAPIClient.maxMessagesLimit
+        let initialLimit = min(limit, maxLimit)
+        var offset = 0
+
+        var response = try await apiClient.fetchMessages(
+            projectPath: project.path,
+            sessionId: sessionId,
+            limit: initialLimit,
+            offset: offset,
+            order: "desc",
+            includeRawContent: true
+        )
+
+        var paginatedMessages = response.messages
+        let total = response.total
+        var hasMore = response.hasMore
+        offset += response.messages.count
+
+        if limit > maxLimit {
+            log.debug("[ChatViewModel] History limit \(limit) exceeds API max \(maxLimit); loading multiple pages")
+        }
+
+        while paginatedMessages.count < limit, hasMore {
+            if Task.isCancelled { break }
+            let remaining = min(limit - paginatedMessages.count, maxLimit)
+            response = try await apiClient.fetchMessages(
+                projectPath: project.path,
+                sessionId: sessionId,
+                limit: remaining,
+                offset: offset,
+                order: "desc",
+                includeRawContent: true
+            )
+            if response.messages.isEmpty { break }
+            paginatedMessages.append(contentsOf: response.messages)
+            hasMore = response.hasMore
+            offset += response.messages.count
+        }
+
+        let historyMessages = paginatedMessages.compactMap { $0.toChatMessage() }
+        return (Array(historyMessages.reversed()), total, hasMore)
+    }
+
+    func loadSessionHistoryImpl(_ session: ProjectSession) {
         // Cancel any existing history load to prevent race conditions when switching sessions rapidly
         historyLoadTask?.cancel()
 
@@ -160,14 +208,7 @@ extension ChatViewModel {
                 let limit = settings.historyLimit.rawValue
                 log.debug("[ChatViewModel] Loading session history via unified API for: \(session.id) (limit: \(limit))")
 
-                let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
-
-                // Use the paginated messages endpoint with unified StoredMessage format
-                let response = try await apiClient.fetchInitialMessages(
-                    projectPath: project.path,
-                    sessionId: session.id,
-                    limit: limit
-                )
+                let history = try await fetchHistoryMessages(sessionId: session.id, limit: limit)
 
                 // Check if task was cancelled or session changed while loading
                 guard !Task.isCancelled, selectedSession?.id == targetSessionId else {
@@ -177,9 +218,7 @@ extension ChatViewModel {
 
                 // Token usage is tracked via StreamEvents when messages arrive
 
-                // Convert StoredMessages to ChatMessages using unified helper
-                // Response is in "desc" order (newest first), reverse for chronological display
-                let historyMessages = Array(response.toChatMessages().reversed())
+                let historyMessages = history.messages
 
                 if historyMessages.isEmpty {
                     if let lastMsg = session.lastAssistantMessage {
@@ -187,7 +226,7 @@ extension ChatViewModel {
                     }
                 } else {
                     messages = historyMessages
-                    log.debug("[ChatViewModel] Loaded \(historyMessages.count) messages via unified API (total: \(response.total), hasMore: \(response.hasMore))")
+                    log.debug("[ChatViewModel] Loaded \(historyMessages.count) messages via unified API (total: \(history.total), hasMore: \(history.hasMore))")
                 }
                 isLoadingHistory = false
                 refreshDisplayMessagesCache()

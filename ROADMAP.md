@@ -1,107 +1,130 @@
 # CodingBridge Roadmap
 
-> Focused simplification plan for the iOS client.
+> Forward-looking development plan for the iOS client.
 >
 > **Completed work** lives in [CHANGELOG.md](CHANGELOG.md); this roadmap lists open work only.
 
 ---
 
-## Current Focus: Simplification Program (Reset)
+## Simplification Program: COMPLETE
 
-### Goals
-- Reduce debugging time by removing legacy layers and duplication.
-- Simplify state and persistence so behavior is predictable and testable.
-- Align documentation with the real runtime architecture (WebSocket + REST + SSH).
+**Released in v0.7.0** (2026-01-02) - All 45 simplification issues resolved (1 marked "Won't Fix" after audit).
 
-### Assessment Summary (Validated)
-- Claude's score tables and pros/cons are not in the repo; add them when available.
+The codebase simplification project achieved its goals:
+- Removed ~4,000 lines of legacy code (adapters, migration layers, duplicate paths)
+- Consolidated 49 WebSocket callbacks into single StreamEvent enum
+- Split large files into focused modules (ChatViewModel, CLIBridgeManager, SSHManager, Models)
+- Unified persistence and permission resolution pipelines
+- Updated documentation to match WebSocket streaming architecture
 
-**Top Priority (all 5-star across impact, simplification, iOS practices)**
+See [CHANGELOG.md](CHANGELOG.md) v0.7.0 for complete details.
 
-| # | Item | Lines Saved |
-|---|------|-------------|
-| #9 | WebSocket callbacks -> StreamEvent enum | 49 callbacks -> 1 |
-| #17 | Remove CLIBridgeAdapter layer | ~1,002 lines |
-| #1 | Remove CLIBridgeTypesMigration | ~2,398 lines |
+---
 
-**Corrections to Claude assessment (verified in code)**
-- #4 extractFilePath has been replaced with ToolParser.extractParam() calls (Complete).
-- #6 effectiveSessionToResume has been removed; manager.sessionId used directly (Complete).
-- #7 effectivePermissionMode String wrapper removed; effectiveModelId and effectivePermissionModeValue retained as resolution logic (Complete).
-- #18 groupMessagesForDisplay inlined as computed property in ChatViewModel; function remains in CompactToolView.swift with DisplayItem types (Complete).
+## Current Focus: Stabilization
 
-**Keep-as-is guidance (defer until after streaming refactor)**
-- #8 streamingMessageId/streamingMessageTimestamp now use a stable ID + computed timestamp (Complete).
-- #15 ScrollStateManager removed (Complete) - ChatView already used native ScrollViewReader.
-- #19 message pruning removed (Complete) - persistence now handles limits via MessageStore.saveMessages.
+No new feature work scheduled. Focus areas:
+- Bug fixes as reported in [ISSUES.md](ISSUES.md)
+- Performance monitoring and optimization
+- Test coverage improvements
 
-### Plan of Record (Dependency Chain)
+---
 
-| Order | # | Task | Impact | Depends On | Status | Notes |
-|-------|---|------|--------|------------|--------|-------|
-| 1 | #9 | WebSocket callbacks -> StreamEvent enum | High | - | Complete | Legacy callbacks removed; StreamEvent-only callbacks. |
-| 2 | #17 | Remove CLIBridgeAdapter layer | High | #9 | Complete | ~800 lines deleted, ChatViewModel uses manager directly. |
-| 3 | #1 | Remove CLIBridgeTypesMigration | High | #17 | Complete | Split into CLIBridgeAppTypes.swift + CLIBridgeExtensions.swift. |
-| 4 | #27 | Consolidate network/lifecycle/reconnect logic; remove sleep-based connects | High | #17 | Complete | Removed duplicate ChatView reconnect handler; rely on CLIBridgeManager lifecycle observers. |
-| 5 | #23 | Unify draft + processing persistence | High | #27 | Complete | Deleted DraftInputPersistence.swift; unified global recovery in MessageStore. |
-| 6 | #25 | Finish or remove MessageQueuePersistence | Medium | #23 | Complete | Deleted dead code; recovery state handled by MessageStore. |
-| 7 | #5 | Consolidate stores into one persistence layer | Medium | #23/#25 | Won't Fix | Audit found no duplication; stores are intentionally separate. |
-| 8 | #21 | Centralize project path encode/decode (preserve hyphens) | High | #1 | Complete | Created ProjectPathEncoder utility; migrated MessageStore to - encoding. |
-| 9 | #22 | Replace hard-coded path stripping in Project.title | Low | #21 | Complete | Removed hard-coded path prefix; name field is already basename. |
-| 10 | #26 | Reconfigure long-lived services on serverURL change | Medium | #21 | Complete | 5 services now auto-reconfigure via Combine publisher. |
-| 11 | #24 | Define a single permission resolution pipeline | Medium | #23/#26 | Complete | ChatViewModel uses PermissionManager.resolvePermissionMode() for 5-level resolution. |
-| 12 | #16 | Consolidate sheet booleans into activeSheet enum | Low | - | Complete | 7 @Published booleans replaced with single ActiveSheet enum. |
-| 13 | #30 | Update docs to match WebSocket streaming; remove SSE/WebSocketManager refs | Medium | #1/#17 | Complete | Updated 9 files to reflect WebSocket architecture. |
+## Future Considerations
 
-### Backlog (Unscheduled or Parallel)
+Items for potential future development (not prioritized):
 
-| # | Task | Impact | Depends On | Status | Notes |
-|---|------|--------|------------|--------|-------|
-| #2 | Simplify PaginatedMessage.toChatMessage() | Medium | #1 | Complete | Removed rawContent parsing path; now uses typed StreamMessage directly (25 lines saved). |
-| #3 | Remove formatJSONValue() custom serializer | Low | #2 | Complete | Replaced with JSONEncoder (19 lines saved). |
-| #4 | Eliminate extractFilePath() parsing | Medium | - | Complete | Replaced with ToolParser.extractParam() calls. |
-| #6 | Remove effectiveSessionToResume computed property | Low | #23 | Complete | Removed; manager.sessionId used directly. |
-| #7 | Remove effectiveModelId/effectivePermissionMode indirection | Low | #23 | Complete | Removed String wrapper; retained resolution logic. |
-| #8 | Eliminate streamingMessageId/timestamp | Low | - | Complete | Streaming identity now stable and computed. |
-| #10 | Remove toolUseMap dictionary | Low | #9 | Complete | Tool name now taken directly from StreamEvent. |
-| #11 | Remove subagentToolIds tracking | Low | #9 | Complete | Removed Set tracking; filter based on activeSubagent at event time. |
-| #12 | Remove pendingGitCommands tracking | Low | - | Complete | Refresh git status on completion only. |
-| #13 | Remove todoHideTimer auto-hide logic | Low | - | Complete | Removed auto-hide timer; manual dismiss only. |
-| #14 | Simplify git banner state | Low | - | Pending | Remove auto-hide and cleanup flags. |
-| #15 | Remove ScrollStateManager | Medium | #9/#17 | Complete | Deleted ScrollStateManager (230 lines); ChatView uses native ScrollViewReader. |
-| #18 | Inline groupMessagesForDisplay() | Medium | - | Complete | Now computed property in ChatViewModel; function in CompactToolView.swift. |
-| #19 | Remove message pruning | Low | #23 | Complete | Removed pruneMessagesIfNeeded() and 2 call sites. |
-| #20 | Simplify slash command handling | Low | - | Complete | Replaced switch with registry pattern. |
-| #28 | Gate ToolTestView/dev tools behind DEBUG or feature flag | Low | - | Complete | ToolTestView and ContentView dev tool button wrapped in #if DEBUG. |
-| #29 | Standardize SSHManager ownership | Medium | - | Complete | Removed unused singleton; per-view instance is correct pattern. |
-
-### cli-bridge Feature Requests / Issues
-
-| # | Task | Impact | Depends On | Status | Notes |
-|---|------|--------|------------|--------|-------|
-| #31 | Exit Plan Mode approval UI | Medium | #9/#24 | Pending | Based on Issue #22; match CLI flow. |
-| #32 | Multi-repo/monorepo git status aggregation | Low | - | Pending | Based on Issue #18; needs subrepo discovery strategy. |
-| #33 | Batch session counts API (cli-bridge) | Medium | - | Complete | Session counts populated from GET /projects response; N+1 calls eliminated. |
-| #34 | Idempotent reconnection protocol | Medium | - | Complete | Removed client-side deduplication; server guarantees no duplicate replay. |
-| #35 | Typed StreamMessage in paginated responses | Medium | - | Complete | PaginatedMessage uses typed StreamMessage field; cli-bridge change deployed. |
-| #36 | Normalize model ID handling (echo alias) | Medium | - | Complete | Uses modelAlias from server; no heuristic matching needed. |
-| #37 | Typed tool input (no JSONValue dict) | Medium | - | Complete | Uses inputDescription when available; fallback to JSON serialization. |
-| #38 | Fix duplicate idle state messages | Low | - | Complete | Removed client-side idle state filter; server now deduplicates. |
-| #39 | Include session count in project list response | Medium | - | Complete | Duplicate of #33; sessionCount from GET /projects used. |
-| #40 | Standardize ISO8601 with fractional seconds | Low | - | Complete | Simplified to single fractional seconds formatter; removed dual parser fallback. |
-| #41 | Document error responses in OpenAPI schema | Low | - | Complete | CLIBridgeAPIError now wraps typed errors (NotFoundError, RateLimitError, ServerError, etc.). |
-
-### Refactor Opportunities (Post-simplification)
-
-| # | Task | Impact | Depends On | Status | Notes |
-|---|------|--------|------------|--------|-------|
-| #42 | Split ChatViewModel into focused modules | Low | #17 | Complete | Split into 5 extension files; main file reduced to 534 lines. |
-| #43 | Split Models.swift into model + persistence files | Medium | #1 | Complete | Split into 9 focused files (5 models, 3 persistence, 1 utility). |
-| #44 | Split SSHManager into key/file/git modules | Medium | - | Complete | Split into 4 files: core (726), Connection (240), Files (167), Git (312). |
-| #45 | Split CLIBridgeManager into connection + stream handler | Medium | #9/#17 | Complete | Split into 5 files: core (496), Connection (233), Lifecycle (125), Messages (85), Stream (387). |
+| Area | Description |
+|------|-------------|
+| Background Processing | Message queuing while agent is busy (see requirements/projects/message-queuing/) |
+| Push Notifications | Background task completion alerts via APNs/FCM |
+| Offline Support | Queue actions for sync when connectivity returns |
+| Test Coverage | Expand unit and integration test suites |
 
 ---
 
 ## Completed Work
 
-Phases 1-7 and release milestones are recorded in [CHANGELOG.md](CHANGELOG.md). This roadmap is forward-looking only.
+All historical milestones and phase completions are documented in [CHANGELOG.md](CHANGELOG.md).
+
+### Simplification Issue Summary (v0.7.0)
+
+<details>
+<summary>45 issues completed (click to expand)</summary>
+
+#### Core Architecture (High Impact)
+
+| # | Task | Notes |
+|---|------|-------|
+| #1 | Remove CLIBridgeTypesMigration | Split into CLIBridgeAppTypes.swift + CLIBridgeExtensions.swift |
+| #9 | WebSocket callbacks -> StreamEvent enum | 49 callbacks consolidated to 1 |
+| #17 | Remove CLIBridgeAdapter layer | ~800 lines deleted |
+| #27 | Consolidate reconnect logic | CLIBridgeManager owns lifecycle |
+
+#### State Management
+
+| # | Task | Notes |
+|---|------|-------|
+| #7 | Remove effectiveModelId/effectivePermissionMode indirection | Retained resolution logic only |
+| #8 | Eliminate streamingMessageId/timestamp | Stable ID + computed timestamp |
+| #16 | Consolidate sheet booleans | Single ActiveSheet enum |
+| #24 | Permission resolution pipeline | 5-level resolution via PermissionManager |
+
+#### Persistence
+
+| # | Task | Notes |
+|---|------|-------|
+| #5 | Consolidate stores | Won't Fix - stores intentionally separate |
+| #21 | Centralize path encoding | ProjectPathEncoder utility |
+| #23 | Unify draft + processing persistence | Deleted DraftInputPersistence.swift |
+| #25 | Remove MessageQueuePersistence | Deleted dead code |
+
+#### Code Cleanup
+
+| # | Task | Notes |
+|---|------|-------|
+| #2 | Simplify PaginatedMessage.toChatMessage() | 25 lines saved |
+| #3 | Remove formatJSONValue() | Replaced with JSONEncoder |
+| #4 | Eliminate extractFilePath() | Use ToolParser.extractParam() |
+| #6 | Remove effectiveSessionToResume | Use manager.sessionId directly |
+| #10 | Remove toolUseMap dictionary | Tool name from StreamEvent |
+| #11 | Remove subagentToolIds tracking | Filter at event time |
+| #12 | Remove pendingGitCommands tracking | Refresh on completion only |
+| #13 | Remove todoHideTimer | Manual dismiss only |
+| #14 | Simplify git banner state | Removed auto-hide timer |
+| #15 | Remove ScrollStateManager | 230 lines deleted |
+| #18 | Inline groupMessagesForDisplay() | Now computed property |
+| #19 | Remove message pruning | MessageStore handles limits |
+| #20 | Simplify slash command handling | Registry pattern |
+| #22 | Fix Project.title path stripping | Use name field directly |
+| #26 | Service reconfiguration on serverURL change | Combine publisher |
+| #28 | Gate dev tools behind DEBUG | ToolTestView wrapped |
+| #29 | Standardize SSHManager ownership | Per-view instance pattern |
+| #30 | Update docs for WebSocket | 9 files updated |
+
+#### cli-bridge Integration
+
+| # | Task | Notes |
+|---|------|-------|
+| #31 | Exit Plan Mode approval UI | Sheet with markdown preview |
+| #32 | Multi-repo git status | Subrepo discovery API |
+| #33 | Batch session counts | GET /projects includes counts |
+| #34 | Idempotent reconnection | Server guarantees no duplicates |
+| #35 | Typed StreamMessage | PaginatedMessage uses typed field |
+| #36 | Normalize model ID | Uses modelAlias from server |
+| #37 | Typed tool input | Uses inputDescription when available |
+| #38 | Fix duplicate idle state | Server deduplicates |
+| #39 | Session count in project list | Duplicate of #33 |
+| #40 | ISO8601 fractional seconds | Single formatter |
+| #41 | OpenAPI error responses | Typed error wrappers |
+
+#### File Splits
+
+| # | Task | Notes |
+|---|------|-------|
+| #42 | Split ChatViewModel | 6 focused modules |
+| #43 | Split Models.swift | 10 focused files |
+| #44 | Split SSHManager | 4 modules |
+| #45 | Split CLIBridgeManager | 5 modules |
+
+</details>

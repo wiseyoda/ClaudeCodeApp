@@ -6,8 +6,8 @@ import Foundation
 extension CLIBridgeManager {
     // MARK: - Connection Management
 
-    /// Connect to cli-bridge and start a new agent
-    func connect(
+    /// Connect implementation - called from main class
+    func connectImpl(
         projectPath: String,
         sessionId: String? = nil,
         model: String? = nil,
@@ -107,9 +107,9 @@ extension CLIBridgeManager {
         }
     }
 
-    /// Disconnect from the server
+    /// Disconnect implementation - called from main class
     /// - Parameter preserveSession: If true, keeps sessionId for reconnection (default: false)
-    func disconnect(preserveSession: Bool = false) {
+    func disconnectImpl(preserveSession: Bool = false) {
         setIsManualDisconnect(true)
 
         cancelReconnectTask()

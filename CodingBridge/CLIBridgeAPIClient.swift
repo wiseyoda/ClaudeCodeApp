@@ -34,6 +34,9 @@ class CLIBridgeAPIClient: ObservableObject {
     /// Default total time for the entire resource transfer (seconds)
     static let defaultResourceTimeout: TimeInterval = 120
 
+    /// Maximum messages allowed per paginated messages request
+    static let maxMessagesLimit: Int = 100
+
     /// Shared URLSession with configured timeouts for API requests
     private static let configuredSession: URLSession = {
         let config = URLSessionConfiguration.default

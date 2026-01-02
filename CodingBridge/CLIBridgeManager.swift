@@ -381,6 +381,49 @@ class CLIBridgeManager: ObservableObject {
     func emit(_ event: StreamEvent) {
         onEvent?(event)
     }
+
+    // MARK: - Testable Methods (can be overridden in test subclasses)
+    // These methods are defined here rather than in extensions to allow override in tests
+
+    /// Connect to cli-bridge - implementation in CLIBridgeManager+Connection.swift
+    func connect(
+        projectPath: String,
+        sessionId: String? = nil,
+        model: String? = nil,
+        helper: Bool = false
+    ) async {
+        await connectImpl(projectPath: projectPath, sessionId: sessionId, model: model, helper: helper)
+    }
+
+    /// Disconnect from cli-bridge - implementation in CLIBridgeManager+Connection.swift
+    func disconnect(preserveSession: Bool = false) {
+        disconnectImpl(preserveSession: preserveSession)
+    }
+
+    /// Send input message - implementation in CLIBridgeManager+Messages.swift
+    func sendInput(_ text: String, images: [CLIImageAttachment]? = nil, thinkingMode: String? = nil) async throws {
+        try await sendInputImpl(text, images: images, thinkingMode: thinkingMode)
+    }
+
+    /// Set model - implementation in CLIBridgeManager+Messages.swift
+    func setModel(_ model: String) async throws {
+        try await setModelImpl(model)
+    }
+
+    /// Interrupt current operation - implementation in CLIBridgeManager+Messages.swift
+    func interrupt() async throws {
+        try await interruptImpl()
+    }
+
+    /// Respond to permission request - implementation in CLIBridgeManager+Messages.swift
+    func respondToPermission(id: String, choice: CLIPermissionChoice) async throws {
+        try await respondToPermissionImpl(id: id, choice: choice)
+    }
+
+    /// Respond to question - implementation in CLIBridgeManager+Messages.swift
+    func respondToQuestion(id: String, answers: [String: Any]) async throws {
+        try await respondToQuestionImpl(id: id, answers: answers)
+    }
 }
 
 // MARK: - DEBUG Test Helpers
