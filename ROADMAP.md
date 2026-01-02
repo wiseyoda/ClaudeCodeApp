@@ -39,7 +39,7 @@
 
 | Order | # | Task | Impact | Depends On | Status | Notes |
 |-------|---|------|--------|------------|--------|-------|
-| 1 | #9 | WebSocket callbacks -> StreamEvent enum | High | - | Planned | Unlocks #17. |
+| 1 | #9 | WebSocket callbacks -> StreamEvent enum | High | - | Complete | Legacy callbacks retained for test compat. |
 | 2 | #17 | Remove CLIBridgeAdapter layer | High | #9 | Planned | Keeps event mapping out of ChatViewModel. |
 | 3 | #1 | Remove CLIBridgeTypesMigration | High | #17 | Planned | After adapter removal to reduce dual type shims. |
 | 4 | #27 | Consolidate network/lifecycle/reconnect logic; remove sleep-based connects | High | #17 | Planned | Reduce duplicate reconnect paths. |

@@ -146,6 +146,201 @@ public struct AnyCodableValue: Codable, Equatable, Hashable, Sendable {
 public typealias AnyCodable = AnyCodableValue
 
 // ============================================================================
+// MARK: - StreamEvent (Unified Event Enum)
+// ============================================================================
+// Single enum consolidating all CLIBridgeManager/Adapter callbacks into one type.
+// Replaces ~49 separate callback closures with one `onEvent: ((StreamEvent) -> Void)?`
+
+/// Unified event type emitted by CLIBridgeManager
+/// Consumers switch on this enum instead of registering multiple callbacks
+public enum StreamEvent: Sendable {
+    // MARK: - Content Events (from streaming)
+
+    /// Assistant text content (streaming or final)
+    /// - Parameters:
+    ///   - text: The text content
+    ///   - isFinal: True if this is the final text (not a streaming delta)
+    case text(String, isFinal: Bool)
+
+    /// Extended thinking content
+    case thinking(String)
+
+    /// Tool invocation started
+    /// - Parameters:
+    ///   - id: Tool use ID for correlation with result
+    ///   - name: Tool name (e.g., "Read", "Bash", "Edit")
+    ///   - input: Tool input parameters
+    case toolStart(id: String, name: String, input: [String: Any])
+
+    /// Tool execution completed
+    /// - Parameters:
+    ///   - id: Tool use ID matching the toolStart
+    ///   - name: Tool name
+    ///   - output: Tool output/result
+    ///   - isError: True if the tool failed
+    case toolResult(id: String, name: String, output: String, isError: Bool)
+
+    /// System message from Claude
+    case system(String)
+
+    /// User message (echoed back for history)
+    case user(String)
+
+    /// Progress update for long-running operations
+    case progress(CLIProgressContent)
+
+    /// Token usage update
+    case usage(CLIUsageContent)
+
+    // MARK: - Agent State Events
+
+    /// Agent state changed
+    case stateChanged(CLIAgentState)
+
+    /// Agent stopped (completed, aborted, or errored)
+    /// - Parameters:
+    ///   - reason: Why the agent stopped
+    case stopped(reason: String)
+
+    /// Model changed (either requested or server-assigned)
+    case modelChanged(model: String)
+
+    /// Permission mode changed
+    case permissionModeChanged(mode: String)
+
+    // MARK: - Session Events
+
+    /// Connected to a session (new or resumed)
+    /// - Parameters:
+    ///   - sessionId: The session UUID
+    ///   - agentId: The agent ID
+    ///   - model: Current model
+    case connected(sessionId: String, agentId: String, model: String)
+
+    /// Session event (created, updated, deleted)
+    case sessionEvent(CLISessionEvent)
+
+    /// History messages received (on reconnect or load)
+    case history(CLIHistoryPayload)
+
+    // MARK: - Interactive Events
+
+    /// Permission request from agent
+    case permissionRequest(CLIPermissionRequest)
+
+    /// Question from agent requiring user response
+    case questionRequest(CLIQuestionRequest)
+
+    // MARK: - Subagent Events
+
+    /// Subagent (Task agent) started
+    case subagentStart(CLISubagentStartContent)
+
+    /// Subagent completed
+    case subagentComplete(CLISubagentCompleteContent)
+
+    // MARK: - Queue Events
+
+    /// Input was queued (agent busy)
+    /// - Parameter position: Queue position (1 = next)
+    case inputQueued(position: Int)
+
+    /// Queue was cleared
+    case queueCleared
+
+    // MARK: - Connection Events
+
+    /// Connection was replaced by another client
+    case connectionReplaced
+
+    /// Reconnecting to session
+    /// - Parameters:
+    ///   - attempt: Current attempt number
+    ///   - delay: Delay before this attempt
+    case reconnecting(attempt: Int, delay: TimeInterval)
+
+    /// Reconnection completed successfully
+    case reconnectComplete(CLIReconnectCompletePayload)
+
+    /// Connection error
+    case connectionError(ConnectionError)
+
+    /// Network status changed
+    case networkStatusChanged(isOnline: Bool)
+
+    /// Cursor was evicted (another session took over)
+    case cursorEvicted(CLICursorEvictedPayload)
+
+    /// Cursor is invalid (session expired or corrupted)
+    case cursorInvalid(CLICursorInvalidPayload)
+
+    // MARK: - Error Events
+
+    /// Error from server or protocol
+    case error(CLIErrorPayload)
+}
+
+// MARK: - StreamEvent Convenience Extensions
+
+extension StreamEvent {
+    /// Whether this event represents an error condition
+    public var isError: Bool {
+        switch self {
+        case .error, .connectionError:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Whether this event is transient (doesn't need to be persisted)
+    public var isTransient: Bool {
+        switch self {
+        case .progress, .usage, .stateChanged, .reconnecting,
+             .networkStatusChanged, .inputQueued, .queueCleared:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Human-readable event type for logging
+    public var eventType: String {
+        switch self {
+        case .text: return "text"
+        case .thinking: return "thinking"
+        case .toolStart: return "tool_start"
+        case .toolResult: return "tool_result"
+        case .system: return "system"
+        case .user: return "user"
+        case .progress: return "progress"
+        case .usage: return "usage"
+        case .stateChanged: return "state_changed"
+        case .stopped: return "stopped"
+        case .modelChanged: return "model_changed"
+        case .permissionModeChanged: return "permission_mode_changed"
+        case .connected: return "connected"
+        case .sessionEvent: return "session_event"
+        case .history: return "history"
+        case .permissionRequest: return "permission_request"
+        case .questionRequest: return "question_request"
+        case .subagentStart: return "subagent_start"
+        case .subagentComplete: return "subagent_complete"
+        case .inputQueued: return "input_queued"
+        case .queueCleared: return "queue_cleared"
+        case .connectionReplaced: return "connection_replaced"
+        case .reconnecting: return "reconnecting"
+        case .reconnectComplete: return "reconnect_complete"
+        case .connectionError: return "connection_error"
+        case .networkStatusChanged: return "network_status_changed"
+        case .cursorEvicted: return "cursor_evicted"
+        case .cursorInvalid: return "cursor_invalid"
+        case .error: return "error"
+        }
+    }
+}
+
+// ============================================================================
 // MARK: - App-Specific Agent State
 // ============================================================================
 // Extended agent state that includes app-local states (starting, stopped)
@@ -260,12 +455,20 @@ public enum ConnectionError: Error, LocalizedError {
         switch error.code {
         case "connection_replaced":
             return .connectionReplaced
+        case "agent_not_found":
+            return .agentTimedOut
         case "session_not_found":
             return .sessionNotFound
         case "session_expired":
             return .sessionExpired
         case "session_invalid", "cursor_invalid":
             return .sessionInvalid
+        case "max_agents_reached":
+            return .serverAtCapacity
+        case "queue_full":
+            return .queueFull
+        case "rate_limited":
+            return .rateLimited(Int(error.retryAfter ?? 0))
         case "authentication_failed":
             return .authenticationFailed
         default:

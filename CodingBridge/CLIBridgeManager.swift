@@ -105,66 +105,13 @@ class CLIBridgeManager: ObservableObject {
     /// Progress for long-running tool
     @Published var toolProgress: CLIProgressContent?
 
-    // MARK: - Callbacks
+    // MARK: - Unified Event Callback
+    //
+    // Single callback that emits all stream events via StreamEvent enum.
+    // Consumers switch on StreamEvent cases.
 
-    /// Called when streaming text arrives
-    var onText: ((String, Bool) -> Void)?  // (content, isFinal)
-
-    /// Called when thinking/reasoning block arrives
-    var onThinking: ((String) -> Void)?
-
-    /// Called when tool starts executing
-    var onToolStart: ((String, String, [String: Any]) -> Void)?  // (id, tool, input)
-
-    /// Called when tool completes
-    var onToolResult: ((String, String, String, Bool) -> Void)?  // (id, tool, output, success)
-
-    /// Called when agent stops
-    var onStopped: ((String) -> Void)?  // reason
-
-    /// Called on error
-    var onError: ((CLIErrorPayload) -> Void)?
-
-    /// Called when session is created/connected
-    var onSessionConnected: ((String) -> Void)?  // sessionId
-
-    /// Called when model changes
-    var onModelChanged: ((String) -> Void)?
-
-    /// Called when permission is needed
-    var onPermissionRequest: ((CLIPermissionRequest) -> Void)?
-
-    /// Called when question is asked
-    var onQuestionRequest: ((CLIQuestionRequest) -> Void)?
-
-    /// Called when permission mode changes (server confirmation)
-    var onPermissionModeChanged: ((String) -> Void)?
-
-    /// Called when session event occurs (for session list updates)
-    var onSessionEvent: ((CLISessionEvent) -> Void)?
-
-    /// Called when history is received (session resume)
-    var onHistory: ((CLIHistoryPayload) -> Void)?
-
-    /// Called when subagent starts
-    var onSubagentStart: ((CLISubagentStartContent) -> Void)?
-
-    /// Called when subagent completes
-    var onSubagentComplete: ((CLISubagentCompleteContent) -> Void)?
-
-    /// Called when system message arrives (subtype: "result")
-    var onSystem: ((String) -> Void)?
-
-    // MARK: - History Hardening Callbacks
-
-    /// Called when cursor is evicted from server memory (fall back to REST API)
-    var onCursorEvicted: ((CLICursorEvictedPayload) -> Void)?
-
-    /// Called when cursor ID is invalid
-    var onCursorInvalid: ((CLICursorInvalidPayload) -> Void)?
-
-    /// Called when reconnect completes with missed message info
-    var onReconnectComplete: ((CLIReconnectCompletePayload) -> Void)?
+    /// Unified event callback - emits all stream events
+    var onEvent: ((StreamEvent) -> Void)?
 
     // MARK: - Private State
 
@@ -213,20 +160,6 @@ class CLIBridgeManager: ObservableObject {
 
     /// Notification observers for lifecycle events
     private var lifecycleObservers: [NSObjectProtocol] = []
-
-    // MARK: - Lifecycle Callbacks
-
-    /// Called when connection is replaced by another client
-    var onConnectionReplaced: (() -> Void)?
-
-    /// Called when reconnection will be attempted
-    var onReconnecting: ((Int, TimeInterval) -> Void)?  // (attempt, delay)
-
-    /// Called when a connection error occurs
-    var onConnectionError: ((ConnectionError) -> Void)?
-
-    /// Called when network status changes
-    var onNetworkStatusChanged: ((Bool) -> Void)?  // isAvailable
 
     // MARK: - Initialization
 
@@ -312,7 +245,7 @@ class CLIBridgeManager: ObservableObject {
 
                 if self.isNetworkAvailable != wasAvailable {
                     log.debug("[CLIBridge] Network status changed: \(self.isNetworkAvailable ? "available" : "unavailable")")
-                    self.onNetworkStatusChanged?(self.isNetworkAvailable)
+                    self.emit(.networkStatusChanged(isOnline: self.isNetworkAvailable))
 
                     // Network restored - attempt reconnect if we were disconnected
                     if self.isNetworkAvailable && !wasAvailable {
@@ -413,7 +346,7 @@ class CLIBridgeManager: ObservableObject {
         guard isNetworkAvailable else {
             log.warning("[CLIBridge] No network available")
             lastError = "No network connection"
-            onConnectionError?(.networkUnavailable)
+            emit(.connectionError(.networkUnavailable))
             return
         }
 
@@ -435,7 +368,7 @@ class CLIBridgeManager: ObservableObject {
             lastError = "Invalid server URL"
             connectionState = .disconnected
             agentState = .stopped
-            onConnectionError?(.invalidServerURL)
+            emit(.connectionError(.invalidServerURL))
             return
         }
 
@@ -540,30 +473,7 @@ class CLIBridgeManager: ObservableObject {
 
     /// Clear all callbacks to prevent retain cycles
     private func clearCallbacks() {
-        onText = nil
-        onThinking = nil
-        onToolStart = nil
-        onToolResult = nil
-        onStopped = nil
-        onError = nil
-        onSessionConnected = nil
-        onModelChanged = nil
-        onPermissionRequest = nil
-        onQuestionRequest = nil
-        onPermissionModeChanged = nil
-        onSessionEvent = nil
-        onHistory = nil
-        onSubagentStart = nil
-        onSubagentComplete = nil
-        onSystem = nil
-        onConnectionReplaced = nil
-        onReconnecting = nil
-        onConnectionError = nil
-        onNetworkStatusChanged = nil
-        // History hardening callbacks
-        onCursorEvicted = nil
-        onCursorInvalid = nil
-        onReconnectComplete = nil
+        onEvent = nil
     }
 
     /// Disconnect but preserve session for later reconnection
@@ -786,26 +696,28 @@ class CLIBridgeManager: ObservableObject {
             handleQuestionRequest(request)
 
         case .typeSessionEventMessage(let event):
-            onSessionEvent?(event)
+            emit(.sessionEvent(event))
 
         case .typeHistoryMessage(let payload):
-            onHistory?(payload)
+            emit(.history(payload))
 
         case .typeModelChangedMessage(let payload):
             currentModel = payload.model
-            onModelChanged?(payload.model)
+            emit(.modelChanged(model: payload.model))
 
         case .typePermissionModeChangedMessage(let payload):
             log.debug("Permission mode changed to: \(payload.mode)")
-            onPermissionModeChanged?(payload.mode.rawValue)
+            emit(.permissionModeChanged(mode: payload.mode.rawValue))
 
         case .typeQueuedMessage(let payload):
             isInputQueued = true
             queuePosition = payload.position
+            emit(.inputQueued(position: payload.position))
 
         case .typeQueueClearedMessage:
             isInputQueued = false
             queuePosition = 0
+            emit(.queueCleared)
 
         case .typeErrorMessage(let payload):
             handleError(WsErrorMessage(from: payload))
@@ -824,27 +736,27 @@ class CLIBridgeManager: ObservableObject {
             agentState = .idle
             activeSubagent = nil  // Clear in case subagent_complete wasn't received
             toolProgress = nil
-            onStopped?(payload.reason.rawValue)
+            emit(.stopped(reason: payload.reason.rawValue))
 
         case .typeInterruptedMessage:
             agentState = .idle
             activeSubagent = nil  // Clear in case subagent_complete wasn't received
             toolProgress = nil
-            onStopped?("interrupted")
+            emit(.stopped(reason: "interrupted"))
 
         // History hardening: cursor/reconnect messages
         case .typeCursorEvictedMessage(let payload):
             log.warning("[CLIBridge] Cursor evicted, lastMessageId=\(payload.lastMessageId), recommendation=\(payload.recommendation)")
-            onCursorEvicted?(payload)
+            emit(.cursorEvicted(payload))
 
         case .typeCursorInvalidMessage(let payload):
             log.warning("[CLIBridge] Invalid cursor, lastMessageId=\(payload.lastMessageId), recommendation=\(payload.recommendation)")
-            onCursorInvalid?(payload)
+            emit(.cursorInvalid(payload))
 
         case .typeReconnectCompleteMessage(let payload):
             log.info("[CLIBridge] Reconnect complete: \(payload.missedCount) messages replayed from \(payload.fromMessageId)")
             reconnectAttempt = 0  // Reset on successful reconnect
-            onReconnectComplete?(payload)
+            emit(.reconnectComplete(payload))
         }
     }
 
@@ -863,7 +775,7 @@ class CLIBridgeManager: ObservableObject {
             log.debug("[CLIBridge] Loaded lastMessageId: \(lastMessageId!)")
         }
 
-        onSessionConnected?(sessionIdStr)
+        emit(.connected(sessionId: sessionIdStr, agentId: payload.agentId, model: payload.model))
         log.info("Connected to cli-bridge: agent=\(payload.agentId), session=\(sessionIdStr), model=\(payload.model)")
     }
 
@@ -936,36 +848,39 @@ class CLIBridgeManager: ObservableObject {
             log.debug("[CLIBridge] System message: subtype=\(String(describing: systemContent.subtype))")
             // System messages with subtype "result" are displayable (e.g., greeting messages)
             if systemContent.subtype == SystemStreamMessage.Subtype.result {
-                onSystem?(systemContent.content)
+                emit(.system(systemContent.content))
             }
             // "init" and "progress" subtypes are internal status updates - ignore
 
         case .typeThinkingStreamMessage(let thinkingContent):
             // Use thinking property for compatibility, fall back to content
-            onThinking?(thinkingContent.thinking ?? thinkingContent.content)
+            let content = thinkingContent.thinking ?? thinkingContent.content
+            emit(.thinking(content))
 
         case .typeToolUseStreamMessage(let toolContent):
             lastMessageId = toolContent.id
             agentState = .executing
             toolProgress = nil
             let input = toolContent.input.mapValues { $0.value }
-            onToolStart?(toolContent.id, toolContent.name, input)
+            emit(.toolStart(id: toolContent.id, name: toolContent.name, input: input))
 
         case .typeToolResultStreamMessage(let resultContent):
             lastMessageId = resultContent.id
             agentState = .thinking
             toolProgress = nil
-            onToolResult?(resultContent.id, resultContent.tool, resultContent.output, resultContent.success)
+            emit(.toolResult(id: resultContent.id, name: resultContent.tool, output: resultContent.output, isError: !resultContent.success))
 
         case .typeProgressStreamMessage(let progressContent):
             // Only update progress if NOT waiting for user input or permission approval
             // (server continues sending progress while waiting, but we want to hide the banner)
             if agentState != .waitingInput && agentState != .waitingPermission {
                 toolProgress = progressContent
+                emit(.progress(progressContent))
             }
 
         case .typeUsageStreamMessage(let usageContent):
             tokenUsage = usageContent
+            emit(.usage(usageContent))
 
         case .typeStateStreamMessage(let stateContent):
             let newState = CLIAgentState(from: stateContent.state)
@@ -976,14 +891,15 @@ class CLIBridgeManager: ObservableObject {
             }
             agentState = newState
             currentTool = stateContent.tool  // Track tool name for StatusBubbleView
+            emit(.stateChanged(newState))
 
         case .typeSubagentStartStreamMessage(let subagentContent):
             activeSubagent = subagentContent
-            onSubagentStart?(subagentContent)
+            emit(.subagentStart(subagentContent))
 
         case .typeSubagentCompleteStreamMessage(let subagentContent):
             activeSubagent = nil
-            onSubagentComplete?(subagentContent)
+            emit(.subagentComplete(subagentContent))
 
         case .typeQuestionMessage(let request):
             // Question came via stream wrapper - handle same as top-level
@@ -999,19 +915,19 @@ class CLIBridgeManager: ObservableObject {
         pendingPermission = request
         agentState = .waitingPermission
         toolProgress = nil  // Clear progress - tool is waiting for approval, not running
-        onPermissionRequest?(request)
+        emit(.permissionRequest(request))
     }
 
     private func handleQuestionRequest(_ request: CLIQuestionRequest) {
         pendingQuestion = request
         agentState = .waitingInput
         toolProgress = nil  // Clear progress - tool is waiting for input, not running
-        onQuestionRequest?(request)
+        emit(.questionRequest(request))
     }
 
     private func handleError(_ payload: CLIErrorPayload) {
         lastError = payload.message
-        onError?(payload)
+        emit(.error(payload))
 
         // Create typed connection error
         let connectionError = ConnectionError.from(payload)
@@ -1021,8 +937,8 @@ class CLIBridgeManager: ObservableObject {
             switch code {
             case .connectionReplaced:
                 log.warning("[CLIBridge] Connection replaced by another client")
-                onConnectionReplaced?()
-                onConnectionError?(connectionError)
+                emit(.connectionReplaced)
+                emit(.connectionError(connectionError))
                 // Don't auto-reconnect - let user decide
                 disconnect(preserveSession: true)
 
@@ -1030,7 +946,7 @@ class CLIBridgeManager: ObservableObject {
                 log.info("[CLIBridge] Agent not found (timed out), can reconnect with sessionId")
                 currentAgentId = nil
                 agentState = .stopped
-                onConnectionError?(connectionError)
+                emit(.connectionError(connectionError))
                 // Agent timed out but session still exists on disk
                 // User can reconnect with same sessionId to continue
 
@@ -1041,11 +957,11 @@ class CLIBridgeManager: ObservableObject {
                 sessionId = nil
                 pendingSessionId = nil
                 agentState = .stopped
-                onConnectionError?(connectionError)
+                emit(.connectionError(connectionError))
 
             case .rateLimited:
                 log.warning("[CLIBridge] Rate limited, retry after \(payload.retryAfter ?? 60)s")
-                onConnectionError?(connectionError)
+                emit(.connectionError(connectionError))
                 // Schedule retry if we have a session
                 if let retryAfter = payload.retryAfter {
                     scheduleRetry(after: TimeInterval(retryAfter))
@@ -1053,14 +969,14 @@ class CLIBridgeManager: ObservableObject {
 
             case .maxAgentsReached:
                 log.warning("[CLIBridge] Server at capacity")
-                onConnectionError?(connectionError)
+                emit(.connectionError(connectionError))
 
             case .queueFull:
                 isInputQueued = false
-                onConnectionError?(connectionError)
+                emit(.connectionError(connectionError))
 
             default:
-                onConnectionError?(connectionError)
+                emit(.connectionError(connectionError))
             }
         }
     }
@@ -1095,7 +1011,7 @@ class CLIBridgeManager: ObservableObject {
         // Check network availability
         guard isNetworkAvailable else {
             log.debug("[CLIBridge] No network, will reconnect when restored")
-            onConnectionError?(.networkUnavailable)
+            emit(.connectionError(.networkUnavailable))
             return
         }
 
@@ -1106,7 +1022,7 @@ class CLIBridgeManager: ObservableObject {
             } else {
                 log.error("[CLIBridge] Max reconnection attempts reached")
                 agentState = .stopped
-                onConnectionError?(.reconnectFailed)
+                emit(.connectionError(.reconnectFailed))
             }
         }
     }
@@ -1123,7 +1039,7 @@ class CLIBridgeManager: ObservableObject {
         log.info("[CLIBridge] Reconnecting in \(String(format: "%.1f", delay))s (attempt \(reconnectAttempt)/\(maxReconnectAttempts))")
 
         // Notify delegate
-        onReconnecting?(reconnectAttempt, delay)
+        emit(.reconnecting(attempt: reconnectAttempt, delay: delay))
 
         reconnectTask = Task {
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
@@ -1135,6 +1051,16 @@ class CLIBridgeManager: ObservableObject {
         }
     }
 
+    // MARK: - Event Emission
+    //
+    // Helper to emit StreamEvent via unified callback
+
+    /// Emit a StreamEvent to the unified callback
+    @inline(__always)
+    private func emit(_ event: StreamEvent) {
+        onEvent?(event)
+    }
+
     // MARK: - Text Handling
 
     /// Process assistant text message
@@ -1142,7 +1068,7 @@ class CLIBridgeManager: ObservableObject {
     private func appendText(_ text: String, isFinal: Bool) {
         // Server sends complete text (delta=false), just set it directly
         currentText = text
-        onText?(text, isFinal)
+        emit(.text(text, isFinal: isFinal))
     }
 
     /// Clear current text (call when starting new message)

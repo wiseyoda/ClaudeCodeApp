@@ -1,6 +1,6 @@
 # Issue #9: WebSocket callbacks -> StreamEvent enum
 
-> **Status**: Pending
+> **Status**: Complete
 > **Priority**: Tier 1
 > **Depends On**: None
 > **Blocks**: #10/#11/#15/#17/#31/#45
@@ -70,10 +70,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] WebSocket callbacks -> StreamEvent enum is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] WebSocket callbacks -> StreamEvent enum is implemented as described
+- [x] Legacy callbacks removed (Manager + tests migrated to StreamEvent)
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -124,5 +124,48 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Phase 1: StreamEvent enum and dual-emit in CLIBridgeManager | Complete |
+| 2026-01-02 | Phase 2: CLIBridgeAdapter migration to onEvent | Complete |
+| 2026-01-02 | Phase 3: ChatViewModel migration | Skipped (not needed) |
+| 2026-01-02 | Phase 4: Legacy callback removal | Complete |
+
+### Phase 1 Details (Complete)
+
+**Files Changed:**
+- `CLIBridgeTypesMigration.swift` - Added StreamEvent enum (28 cases, ~180 lines)
+- `CLIBridgeManager.swift` - Added onEvent callback and dual-emit at all event points
+
+**StreamEvent Cases:**
+- Content: text, thinking, toolStart, toolResult, system, user, progress, usage
+- Agent: stateChanged, stopped, modelChanged, permissionModeChanged
+- Session: connected, sessionEvent, history
+- Interactive: permissionRequest, questionRequest
+- Subagent: subagentStart, subagentComplete
+- Queue: inputQueued, queueCleared
+- Connection: connectionReplaced, reconnecting, reconnectComplete, connectionError, networkStatusChanged
+- Cursor: cursorEvicted, cursorInvalid
+- Error: error
+
+**Build:** Verified passing
+
+### Phase 2 Details (Complete)
+
+**Files Changed:**
+- `CLIBridgeAdapter.swift` - Replaced 20+ individual callback assignments with single `onEvent` handler
+
+**Before:** ~187 lines of individual callback setup (`manager.onText = { ... }`, `manager.onThinking = { ... }`, etc.)
+**After:** Single `handleStreamEvent(_ event: StreamEvent)` method with switch statement
+
+**Build:** Verified passing
+
+### Phase 3 Details (Skipped)
+
+ChatViewModel migration was not needed because CLIBridgeAdapter's external interface (callbacks it exposes to ChatViewModel) remained unchanged. The adapter still exposes `onText`, `onToolUse`, etc. to its consumers.
+
+### Phase 4 Details (Complete)
+
+Legacy callbacks in `CLIBridgeManager.swift` were removed after migrating tests to use `onEvent`. `CLIBridgeManagerTests.swift` and `CLIBridgeAdapterTests.swift` now emit and assert `StreamEvent` values directly.
+
+### Summary
+
+The core simplification goal (49 callbacks → 1 unified StreamEvent enum) is complete. CLIBridgeAdapter uses a single `onEvent` callback instead of 20+ individual assignments, and CLIBridgeManager no longer exposes legacy callbacks.

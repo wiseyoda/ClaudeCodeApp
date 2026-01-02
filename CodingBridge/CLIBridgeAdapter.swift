@@ -553,36 +553,42 @@ class CLIBridgeAdapter: ObservableObject {
     // MARK: - Private Helpers
 
     private func setupCallbacks() {
-        // Map CLIBridgeManager callbacks to adapter callbacks
+        // Use unified StreamEvent callback from CLIBridgeManager
+        // This replaces ~20 individual callback assignments with a single switch
+        manager.onEvent = { [weak self] event in
+            guard let self = self else { return }
+            self.handleStreamEvent(event)
+        }
+    }
 
-        manager.onText = { [weak self] content, isFinal in
-            guard let self = self else {
-                log.debug("[Adapter] onText: self is nil!")
-                return
-            }
-            log.debug("[Adapter] onText callback: isFinal=\(isFinal), content=\(content.prefix(50))")
-            self.currentText = self.manager.currentText
-            self.onText?(content)
+    // MARK: - StreamEvent Handler
+
+    /// Handle all stream events from CLIBridgeManager via unified callback
+    /// This switch statement replaces the individual callback assignments
+    private func handleStreamEvent(_ event: StreamEvent) {
+        switch event {
+        // MARK: Content Events
+        case .text(let content, let isFinal):
+            log.debug("[Adapter] StreamEvent.text: isFinal=\(isFinal), content=\(content.prefix(50))")
+            currentText = manager.currentText
+            onText?(content)
 
             if isFinal {
                 // Capture text and clear BEFORE callback to prevent streaming view showing same text
                 // SwiftUI may render immediately after messages.append(), so currentText must be empty
-                let textToCommit = self.currentText
-                self.manager.clearCurrentText()
-                self.currentText = ""
+                let textToCommit = currentText
+                manager.clearCurrentText()
+                currentText = ""
                 log.debug("[Adapter] Calling onTextCommit with: \(textToCommit.prefix(50))")
-                self.onTextCommit?(textToCommit)
+                onTextCommit?(textToCommit)
             }
-        }
 
-        manager.onThinking = { [weak self] content in
-            log.debug("[Adapter] onThinking callback")
-            self?.onThinking?(content)
-        }
+        case .thinking(let content):
+            log.debug("[Adapter] StreamEvent.thinking")
+            onThinking?(content)
 
-        manager.onToolStart = { [weak self] id, tool, input in
+        case .toolStart(let id, let name, let input):
             // Convert input dict to JSON string for compatibility
-            // First, recursively convert to ensure all values are JSON-serializable
             let sanitizedInput = Self.sanitizeForJSON(input)
             let inputString: String
             if let data = try? JSONSerialization.data(withJSONObject: sanitizedInput),
@@ -592,37 +598,60 @@ class CLIBridgeAdapter: ObservableObject {
                 // Fallback: try to produce a JSON-like string manually
                 inputString = Self.toJSONLikeString(input)
             }
-            self?.onToolUse?(id, tool, inputString)
-        }
+            onToolUse?(id, name, inputString)
 
-        manager.onToolResult = { [weak self] id, tool, output, success in
-            self?.onToolResult?(id, tool, output)
-        }
+        case .toolResult(let id, let name, let output, _):
+            onToolResult?(id, name, output)
 
-        manager.onStopped = { [weak self] reason in
-            self?.isProcessing = false
-            self?.onComplete?(self?.sessionId)
-        }
+        case .system(let content):
+            onSystem?(content)
 
-        manager.onError = { [weak self] error in
-            self?.lastError = error.message
-            self?.onError?(error.message)
-        }
+        case .user:
+            // User message echo - ignore (we already have it locally)
+            break
 
-        manager.onSessionConnected = { [weak self] sessionId in
-            guard let self = self else { return }
-            self.sessionId = sessionId
-            self.onSessionCreated?(sessionId)
+        case .progress(let content):
+            onProgress?(content)
+
+        case .usage:
+            // Token usage is handled via Combine observation on manager.$tokenUsage
+            break
+
+        // MARK: Agent State Events
+        case .stateChanged:
+            // Agent state is handled via Combine observation on manager.$agentState
+            break
+
+        case .stopped:
+            isProcessing = false
+            onComplete?(sessionId)
+
+        case .modelChanged(let modelId):
+            let model = parseModelFromId(modelId)
+            currentModel = model
+            currentModelId = modelId
+            onModelChanged?(model, modelId)
+
+        case .permissionModeChanged(let mode):
+            if let permMode = PermissionMode(rawValue: mode) {
+                sessionPermissionMode = permMode
+                log.debug("[CLIBridgeAdapter] Permission mode changed: \(mode)")
+            }
+
+        // MARK: Session Events
+        case .connected(let sessionIdValue, _, _):
+            sessionId = sessionIdValue
+            onSessionCreated?(sessionIdValue)
 
             // Check if server model matches desired model, switch if needed
-            let desiredModelId = self.resolveModelId()
-            let serverModelId = self.manager.currentModel
+            let desiredModelId = resolveModelId()
+            let serverModelId = manager.currentModel
             log.debug("[CLIBridgeAdapter] Session connected - server model: \(serverModelId ?? "nil"), desired: \(desiredModelId ?? "nil")")
 
             // If server is using a different model, send set_model to switch
             if let desired = desiredModelId,
                let server = serverModelId,
-               !self.modelsMatch(server: server, desired: desired) {
+               !modelsMatch(server: server, desired: desired) {
                 log.info("[CLIBridgeAdapter] Model mismatch - switching to \(desired)")
                 Task {
                     do {
@@ -632,19 +661,15 @@ class CLIBridgeAdapter: ObservableObject {
                     }
                 }
             }
-        }
 
-        manager.onModelChanged = { [weak self] modelId in
-            guard let self = self else { return }
-            let model = self.parseModelFromId(modelId)
-            self.currentModel = model
-            self.currentModelId = modelId
-            self.onModelChanged?(model, modelId)
-        }
+        case .sessionEvent(let event):
+            onSessionEvent?(event)
 
-        manager.onPermissionRequest = { [weak self] request in
-            guard let self = self else { return }
+        case .history(let payload):
+            onHistory?(payload)
 
+        // MARK: Interactive Events
+        case .permissionRequest(let request):
             // Convert to ApprovalRequest for compatibility
             let approval = ApprovalRequest(
                 id: request.id,
@@ -652,12 +677,10 @@ class CLIBridgeAdapter: ObservableObject {
                 input: request.input.mapValues { $0.value },
                 receivedAt: Date()
             )
-            self.pendingApproval = approval
-            self.onApprovalRequest?(approval)
-        }
+            pendingApproval = approval
+            onApprovalRequest?(approval)
 
-        manager.onQuestionRequest = { [weak self] request in
-            guard let self = self else { return }
+        case .questionRequest(let request):
             // Convert to AskUserQuestionData for compatibility (uses existing Models.swift types)
             // Preserve the request ID for respondToQuestion API call
             let questions = request.questions.map { q in
@@ -670,73 +693,67 @@ class CLIBridgeAdapter: ObservableObject {
             }
             let data = AskUserQuestionData(requestId: request.id, questions: questions)
             // Set published property (like pendingApproval) for reliable UI binding
-            self.pendingQuestion = data
-            self.onAskUserQuestion?(data)
-        }
+            pendingQuestion = data
+            onAskUserQuestion?(data)
 
-        // Subagent callbacks
-        manager.onSubagentStart = { [weak self] content in
-            self?.activeSubagent = content
-            self?.onSubagentStart?(content)
-        }
+        // MARK: Subagent Events
+        case .subagentStart(let content):
+            activeSubagent = content
+            onSubagentStart?(content)
 
-        manager.onSubagentComplete = { [weak self] content in
-            self?.activeSubagent = nil
-            self?.onSubagentComplete?(content)
-        }
+        case .subagentComplete(let content):
+            activeSubagent = nil
+            onSubagentComplete?(content)
 
-        // Session event callback (for real-time session list updates)
-        manager.onSessionEvent = { [weak self] event in
-            self?.onSessionEvent?(event)
-        }
+        // MARK: Queue Events
+        case .inputQueued(let position):
+            onInputQueued?(position)
 
-        // History callback (for session resume/replay)
-        manager.onHistory = { [weak self] payload in
-            self?.onHistory?(payload)
-        }
+        case .queueCleared:
+            onQueueCleared?()
 
-        // System message callback (for greeting messages with subtype "result")
-        manager.onSystem = { [weak self] content in
-            self?.onSystem?(content)
-        }
-
-        // Connection lifecycle callbacks
-        manager.onConnectionReplaced = { [weak self] in
+        // MARK: Connection Events
+        case .connectionReplaced:
             log.warning("[CLIBridgeAdapter] Connection replaced by another client")
-            self?.onConnectionReplaced?()
-        }
+            onConnectionReplaced?()
 
-        manager.onReconnecting = { [weak self] attempt, delay in
+        case .reconnecting(let attempt, let delay):
             log.info("[CLIBridgeAdapter] Reconnecting: attempt \(attempt), delay \(delay)s")
-            self?.onReconnecting?(attempt, delay)
-        }
+            onReconnecting?(attempt, delay)
 
-        manager.onConnectionError = { [weak self] error in
+        case .reconnectComplete:
+            // Reconnect completed successfully - state is synced via Combine
+            break
+
+        case .connectionError(let error):
             log.error("[CLIBridgeAdapter] Connection error: \(error.localizedDescription)")
-            self?.onConnectionError?(error)
+            onConnectionError?(error)
 
             // Trigger session recovery for session-related errors
             // This resets selectedSession to prevent invalid-session-ID loops
             switch error {
             case .sessionNotFound, .sessionInvalid:
-                self?.onSessionRecovered?()
+                onSessionRecovered?()
             default:
                 break
             }
-        }
 
-        manager.onNetworkStatusChanged = { [weak self] isAvailable in
+        case .networkStatusChanged(let isAvailable):
             log.debug("[CLIBridgeAdapter] Network status: \(isAvailable ? "available" : "unavailable")")
-            self?.onNetworkStatusChanged?(isAvailable)
-        }
+            onNetworkStatusChanged?(isAvailable)
 
-        // Permission mode changed callback
-        manager.onPermissionModeChanged = { [weak self] mode in
-            guard let self = self else { return }
-            if let permMode = PermissionMode(rawValue: mode) {
-                self.sessionPermissionMode = permMode
-                log.debug("[CLIBridgeAdapter] Permission mode changed: \(mode)")
-            }
+        case .cursorEvicted:
+            // Cursor evicted - handled at manager level
+            break
+
+        case .cursorInvalid:
+            // Cursor invalid - handled at manager level
+            break
+
+        // MARK: Error Events
+        case .error(let payload):
+            lastError = payload.message
+            onError?(payload.message)
         }
     }
 

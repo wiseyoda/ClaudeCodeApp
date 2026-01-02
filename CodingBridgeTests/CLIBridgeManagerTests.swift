@@ -360,7 +360,8 @@ final class CLIBridgeManagerTests: XCTestCase {
     func test_parseMessage_thinkingCallsCallback() async {
         let (manager, _, _) = makeManager()
         let expectation = expectation(description: "thinking callback")
-        manager.onThinking = { content in
+        manager.onEvent = { event in
+            guard case .thinking(let content) = event else { return }
             XCTAssertEqual(content, "Thinking...")
             expectation.fulfill()
         }
@@ -373,7 +374,8 @@ final class CLIBridgeManagerTests: XCTestCase {
     func test_parseMessage_toolUseCallsCallback() async {
         let (manager, _, _) = makeManager()
         let expectation = expectation(description: "tool start")
-        manager.onToolStart = { id, tool, input in
+        manager.onEvent = { event in
+            guard case .toolStart(let id, let tool, let input) = event else { return }
             XCTAssertEqual(id, "tool-1")
             XCTAssertEqual(tool, "Bash")
             XCTAssertEqual(input["command"] as? String, "ls")
@@ -396,11 +398,12 @@ final class CLIBridgeManagerTests: XCTestCase {
     func test_parseMessage_toolResultCallsCallback() async {
         let (manager, _, _) = makeManager()
         let expectation = expectation(description: "tool result")
-        manager.onToolResult = { id, tool, output, success in
+        manager.onEvent = { event in
+            guard case .toolResult(let id, let tool, let output, let isError) = event else { return }
             XCTAssertEqual(id, "tool-1")
             XCTAssertEqual(tool, "Bash")
             XCTAssertEqual(output, "done")
-            XCTAssertTrue(success)
+            XCTAssertFalse(isError)
             expectation.fulfill()
         }
 
@@ -500,13 +503,14 @@ final class CLIBridgeManagerTests: XCTestCase {
     func test_parseMessage_errorCallsCallback() async {
         let (manager, _, _) = makeManager()
         let expectation = expectation(description: "error callback")
-        manager.onError = { payload in
+        manager.onEvent = { event in
+            guard case .error(let payload) = event else { return }
             XCTAssertEqual(payload.message, "Boom")
             expectation.fulfill()
         }
 
         let payload = CLIErrorPayload(
-            code: "AGENT_ERROR",
+            code: "agent_error",
             message: "Boom",
             recoverable: true,
             retryable: nil,
@@ -522,7 +526,8 @@ final class CLIBridgeManagerTests: XCTestCase {
     func test_parseMessage_stoppedCallsCallback() async {
         let (manager, _, _) = makeManager()
         let expectation = expectation(description: "stopped callback")
-        manager.onStopped = { reason in
+        manager.onEvent = { event in
+            guard case .stopped(let reason) = event else { return }
             XCTAssertEqual(reason, "done")
             expectation.fulfill()
         }
@@ -537,7 +542,8 @@ final class CLIBridgeManagerTests: XCTestCase {
     func test_parseMessage_subagentStartCallsCallback() async {
         let (manager, _, _) = makeManager()
         let expectation = expectation(description: "subagent start")
-        manager.onSubagentStart = { content in
+        manager.onEvent = { event in
+            guard case .subagentStart(let content) = event else { return }
             XCTAssertEqual(content.id, "sub-1")
             expectation.fulfill()
         }
@@ -553,7 +559,8 @@ final class CLIBridgeManagerTests: XCTestCase {
         let (manager, _, _) = makeManager()
         manager.activeSubagent = SubagentStartStreamMessage(type: .subagentStart, id: "sub-1", description: "Helper")
         let expectation = expectation(description: "subagent complete")
-        manager.onSubagentComplete = { content in
+        manager.onEvent = { event in
+            guard case .subagentComplete(let content) = event else { return }
             XCTAssertEqual(content.id, "sub-1")
             expectation.fulfill()
         }
@@ -569,8 +576,9 @@ final class CLIBridgeManagerTests: XCTestCase {
         let (manager, _, _) = makeManager()
         let expectation = expectation(description: "session event")
         let testSessionId = UUID()
-        manager.onSessionEvent = { event in
-            XCTAssertEqual(event.sessionId, testSessionId)
+        manager.onEvent = { event in
+            guard case .sessionEvent(let sessionEvent) = event else { return }
+            XCTAssertEqual(sessionEvent.sessionId, testSessionId)
             expectation.fulfill()
         }
 
@@ -583,7 +591,8 @@ final class CLIBridgeManagerTests: XCTestCase {
     func test_parseMessage_historyCallsCallback() async {
         let (manager, _, _) = makeManager()
         let expectation = expectation(description: "history")
-        manager.onHistory = { payload in
+        manager.onEvent = { event in
+            guard case .history(let payload) = event else { return }
             XCTAssertEqual(payload.hasMore, false)
             expectation.fulfill()
         }
@@ -625,7 +634,8 @@ final class CLIBridgeManagerTests: XCTestCase {
         manager.test_isManualDisconnect = false
         manager.test_setNetworkAvailable(true)
         let expectation = expectation(description: "reconnect failed")
-        manager.onConnectionError = { error in
+        manager.onEvent = { event in
+            guard case .connectionError(let error) = event else { return }
             guard case .reconnectFailed = error else {
                 XCTFail("Expected .reconnectFailed, got \(error)")
                 return
@@ -646,7 +656,8 @@ final class CLIBridgeManagerTests: XCTestCase {
         let expectation = expectation(description: "reconnecting")
         var capturedDelay: TimeInterval = 0
         var capturedAttempt = 0
-        manager.onReconnecting = { attempt, delay in
+        manager.onEvent = { event in
+            guard case .reconnecting(let attempt, let delay) = event else { return }
             capturedAttempt = attempt
             capturedDelay = delay
             expectation.fulfill()
@@ -669,7 +680,8 @@ final class CLIBridgeManagerTests: XCTestCase {
         manager.test_setNetworkAvailable(true)
         let expectation = expectation(description: "no reconnect")
         expectation.isInverted = true
-        manager.onReconnecting = { _, _ in
+        manager.onEvent = { event in
+            guard case .reconnecting = event else { return }
             expectation.fulfill()
         }
 
@@ -861,7 +873,8 @@ final class CLIBridgeManagerTests: XCTestCase {
         // Server now only sends complete messages (delta=false)
         let (manager, _, _) = makeManager()
         let expectation = expectation(description: "onText")
-        manager.onText = { content, isFinal in
+        manager.onEvent = { event in
+            guard case .text(let content, let isFinal) = event else { return }
             XCTAssertEqual(content, "Hi")
             XCTAssertTrue(isFinal)  // Always final now
             expectation.fulfill()
@@ -875,7 +888,8 @@ final class CLIBridgeManagerTests: XCTestCase {
     func test_onThinking_calledWithContent() async {
         let (manager, _, _) = makeManager()
         let expectation = expectation(description: "onThinking")
-        manager.onThinking = { content in
+        manager.onEvent = { event in
+            guard case .thinking(let content) = event else { return }
             XCTAssertEqual(content, "Reasoning")
             expectation.fulfill()
         }
@@ -888,7 +902,8 @@ final class CLIBridgeManagerTests: XCTestCase {
     func test_onToolStart_calledWithIdToolInput() async {
         let (manager, _, _) = makeManager()
         let expectation = expectation(description: "onToolStart")
-        manager.onToolStart = { id, tool, input in
+        manager.onEvent = { event in
+            guard case .toolStart(let id, let tool, let input) = event else { return }
             XCTAssertEqual(id, "tool-1")
             XCTAssertEqual(tool, "Bash")
             XCTAssertEqual(input["command"] as? String, "ls")
@@ -909,11 +924,12 @@ final class CLIBridgeManagerTests: XCTestCase {
     func test_onToolResult_calledWithIdToolOutputSuccess() async {
         let (manager, _, _) = makeManager()
         let expectation = expectation(description: "onToolResult")
-        manager.onToolResult = { id, tool, output, success in
+        manager.onEvent = { event in
+            guard case .toolResult(let id, let tool, let output, let isError) = event else { return }
             XCTAssertEqual(id, "tool-1")
             XCTAssertEqual(tool, "Bash")
             XCTAssertEqual(output, "done")
-            XCTAssertTrue(success)
+            XCTAssertFalse(isError)
             expectation.fulfill()
         }
 
@@ -933,7 +949,8 @@ final class CLIBridgeManagerTests: XCTestCase {
     func test_onStopped_calledWithReason() async {
         let (manager, _, _) = makeManager()
         let expectation = expectation(description: "onStopped")
-        manager.onStopped = { reason in
+        manager.onEvent = { event in
+            guard case .stopped(let reason) = event else { return }
             XCTAssertEqual(reason, "interrupted")
             expectation.fulfill()
         }
@@ -946,7 +963,8 @@ final class CLIBridgeManagerTests: XCTestCase {
     func test_onError_calledWithPayload() async {
         let (manager, _, _) = makeManager()
         let expectation = expectation(description: "onError")
-        manager.onError = { payload in
+        manager.onEvent = { event in
+            guard case .error(let payload) = event else { return }
             XCTAssertEqual(payload.message, "Oops")
             expectation.fulfill()
         }
@@ -967,7 +985,8 @@ final class CLIBridgeManagerTests: XCTestCase {
     func test_onSessionConnected_calledWithSessionId() async {
         let (manager, _, _) = makeManager()
         let expectation = expectation(description: "onSessionConnected")
-        manager.onSessionConnected = { sessionId in
+        manager.onEvent = { event in
+            guard case .connected(let sessionId, _, _) = event else { return }
             XCTAssertEqual(sessionId, "session-1")
             expectation.fulfill()
         }
@@ -987,7 +1006,8 @@ final class CLIBridgeManagerTests: XCTestCase {
     func test_onModelChanged_calledWithModelId() async {
         let (manager, _, _) = makeManager()
         let expectation = expectation(description: "onModelChanged")
-        manager.onModelChanged = { model in
+        manager.onEvent = { event in
+            guard case .modelChanged(let model) = event else { return }
             XCTAssertEqual(model, "claude-3")
             expectation.fulfill()
         }
@@ -1016,7 +1036,8 @@ final class CLIBridgeManagerTests: XCTestCase {
         let (manager, session, _) = makeManager(serverURL: "http://bad url")
         manager.test_setNetworkAvailable(true)
         let expectation = expectation(description: "invalid url")
-        manager.onConnectionError = { error in
+        manager.onEvent = { event in
+            guard case .connectionError(let error) = event else { return }
             guard case .invalidServerURL = error else {
                 XCTFail("Expected .invalidServerURL, got \(error)")
                 return
@@ -1043,7 +1064,8 @@ final class CLIBridgeManagerTests: XCTestCase {
         let expectation = expectation(description: "reconnecting")
         var capturedDelay: TimeInterval = 0
         var capturedAttempt = 0
-        manager.onReconnecting = { attempt, delay in
+        manager.onEvent = { event in
+            guard case .reconnecting(let attempt, let delay) = event else { return }
             capturedAttempt = attempt
             capturedDelay = delay
             expectation.fulfill()
@@ -1064,7 +1086,8 @@ final class CLIBridgeManagerTests: XCTestCase {
         let (manager, session, _) = makeManager()
         manager.test_setNetworkAvailable(false)
         let expectation = expectation(description: "network unavailable")
-        manager.onConnectionError = { error in
+        manager.onEvent = { event in
+            guard case .connectionError(let error) = event else { return }
             guard case .networkUnavailable = error else {
                 XCTFail("Expected .networkUnavailable, got \(error)")
                 return
@@ -1133,7 +1156,8 @@ final class CLIBridgeManagerTests: XCTestCase {
         manager.test_setPendingConnection(projectPath: "/tmp/project", sessionId: "session-1", model: nil, helper: false)
         let reconnectExpectation = expectation(description: "reconnecting")
         var delay: TimeInterval = 0
-        manager.onReconnecting = { _, capturedDelay in
+        manager.onEvent = { event in
+            guard case .reconnecting(_, let capturedDelay) = event else { return }
             delay = capturedDelay
             reconnectExpectation.fulfill()
         }
@@ -1229,7 +1253,8 @@ final class CLIBridgeManagerTests: XCTestCase {
         manager.test_setPendingConnection(projectPath: "/tmp/project", sessionId: "session-1", model: nil, helper: false)
         manager.test_setNetworkAvailable(true)
         let expectation = expectation(description: "reconnecting")
-        manager.onReconnecting = { _, _ in
+        manager.onEvent = { event in
+            guard case .reconnecting = event else { return }
             expectation.fulfill()
         }
 
@@ -1244,17 +1269,14 @@ final class CLIBridgeManagerTests: XCTestCase {
     func test_sendInput_serverError500_propagatesError() async throws {
         let (manager, _, _) = makeManager()
         let expectation = expectation(description: "server error")
-        manager.onConnectionError = { error in
-            guard case .serverError(_, let message, _) = error else {
-                XCTFail("Expected .serverError, got \(error)")
-                return
-            }
-            XCTAssertEqual(message, "Server error")
+        manager.onEvent = { event in
+            guard case .error(let payload) = event else { return }
+            XCTAssertEqual(payload.message, "Server error")
             expectation.fulfill()
         }
 
         let payload = CLIErrorPayload(
-            code: "AGENT_ERROR",
+            code: "agent_error",
             message: "Server error",
             recoverable: false,
             retryable: nil,
@@ -1272,7 +1294,8 @@ final class CLIBridgeManagerTests: XCTestCase {
         manager.test_setPendingConnection(projectPath: "/tmp/project", sessionId: "session-1", model: nil, helper: false)
         manager.agentState = .executing
         let expectation = expectation(description: "session invalid")
-        manager.onConnectionError = { error in
+        manager.onEvent = { event in
+            guard case .connectionError(let error) = event else { return }
             guard case .sessionInvalid = error else {
                 XCTFail("Expected .sessionInvalid, got \(error)")
                 return
@@ -1281,7 +1304,7 @@ final class CLIBridgeManagerTests: XCTestCase {
         }
 
         let payload = CLIErrorPayload(
-            code: "SESSION_INVALID",
+            code: "session_invalid",
             message: "Unauthorized",
             recoverable: false,
             retryable: nil,
@@ -1300,7 +1323,8 @@ final class CLIBridgeManagerTests: XCTestCase {
         manager.sessionId = "session-1"
         manager.test_setPendingConnection(projectPath: "/tmp/project", sessionId: "session-1", model: nil, helper: false)
         let errorExpectation = expectation(description: "rate limited")
-        manager.onConnectionError = { error in
+        manager.onEvent = { event in
+            guard case .connectionError(let error) = event else { return }
             guard case .rateLimited(let retryAfter) = error else {
                 XCTFail("Expected .rateLimited, got \(error)")
                 return
@@ -1314,7 +1338,7 @@ final class CLIBridgeManagerTests: XCTestCase {
         }
 
         let payload = CLIErrorPayload(
-            code: "RATE_LIMITED",
+            code: "rate_limited",
             message: "Too many",
             recoverable: true,
             retryable: true,

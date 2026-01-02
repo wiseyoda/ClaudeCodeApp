@@ -265,7 +265,7 @@ final class CLIBridgeAdapterTests: XCTestCase {
             toolExpectation.fulfill()
         }
 
-        manager.onToolStart?("tool-1", "Test", input)
+        manager.onEvent?(.toolStart(id: "tool-1", name: "Test", input: input))
 
         wait(for: [toolExpectation], timeout: 1)
         return inputString
@@ -1042,7 +1042,7 @@ final class CLIBridgeAdapterTests: XCTestCase {
             commitExpectation.fulfill()
         }
 
-        manager.onText?("Final", true)
+        manager.onEvent?(.text("Final", isFinal: true))
 
         wait(for: [commitExpectation], timeout: 1)
         XCTAssertEqual(committedText, "Final")
@@ -1060,7 +1060,7 @@ final class CLIBridgeAdapterTests: XCTestCase {
             toolExpectation.fulfill()
         }
 
-        manager.onToolStart?("tool-1", "Test", ["custom": CustomValue("CustomValue")])
+        manager.onEvent?(.toolStart(id: "tool-1", name: "Test", input: ["custom": CustomValue("CustomValue")]))
 
         wait(for: [toolExpectation], timeout: 1)
         XCTAssertNotNil(inputString)
@@ -1175,7 +1175,7 @@ final class CLIBridgeAdapterTests: XCTestCase {
             input: ["command": JSONValue.string("ls -la")],
             options: [.allow, .deny]
         )
-        manager.onPermissionRequest?(request)
+        manager.onEvent?(.permissionRequest(request))
 
         wait(for: [approvalExpectation], timeout: 1)
         XCTAssertEqual(adapter.pendingApproval?.id, "perm-1")
@@ -1197,7 +1197,7 @@ final class CLIBridgeAdapterTests: XCTestCase {
             multiSelect: false
         )
         let request = QuestionMessage(type: .question, id: "question-1", questions: [question])
-        manager.onQuestionRequest?(request)
+        manager.onEvent?(.questionRequest(request))
 
         wait(for: [questionExpectation], timeout: 1)
         XCTAssertEqual(adapter.pendingQuestion?.requestId, "question-1")
@@ -1214,8 +1214,8 @@ final class CLIBridgeAdapterTests: XCTestCase {
 
         let start = SubagentStartStreamMessage(type: .subagentStart, id: "agent-1", description: "Run")
         let complete = SubagentCompleteStreamMessage(type: .subagentComplete, id: "agent-1", summary: "Done")
-        manager.onSubagentStart?(start)
-        manager.onSubagentComplete?(complete)
+        manager.onEvent?(.subagentStart(start))
+        manager.onEvent?(.subagentComplete(complete))
 
         wait(for: [startExpectation, completeExpectation], timeout: 1)
         XCTAssertNil(adapter.activeSubagent)
@@ -1237,8 +1237,8 @@ final class CLIBridgeAdapterTests: XCTestCase {
             metadata: nil
         )
         let history = CLIHistoryPayload(type: .history, messages: [], hasMore: false, cursor: nil)
-        manager.onSessionEvent?(event)
-        manager.onHistory?(history)
+        manager.onEvent?(.sessionEvent(event))
+        manager.onEvent?(.history(history))
 
         wait(for: [eventExpectation, historyExpectation], timeout: 1)
     }
@@ -1255,10 +1255,10 @@ final class CLIBridgeAdapterTests: XCTestCase {
         adapter.onConnectionError = { _ in errorExpectation.fulfill() }
         adapter.onNetworkStatusChanged = { _ in networkExpectation.fulfill() }
 
-        manager.onConnectionReplaced?()
-        manager.onReconnecting?(2, 1.5)
-        manager.onConnectionError?(.networkUnavailable)
-        manager.onNetworkStatusChanged?(false)
+        manager.onEvent?(.connectionReplaced)
+        manager.onEvent?(.reconnecting(attempt: 2, delay: 1.5))
+        manager.onEvent?(.connectionError(.networkUnavailable))
+        manager.onEvent?(.networkStatusChanged(isOnline: false))
 
         wait(for: [replacedExpectation, reconnectExpectation, errorExpectation, networkExpectation], timeout: 1)
     }
@@ -1267,7 +1267,7 @@ final class CLIBridgeAdapterTests: XCTestCase {
         let manager = MockCLIBridgeManager()
         let adapter = CLIBridgeAdapter(manager: manager)
 
-        manager.onPermissionModeChanged?("acceptEdits")
+        manager.onEvent?(.permissionModeChanged(mode: "acceptEdits"))
 
         XCTAssertEqual(adapter.sessionPermissionMode, .acceptEdits)
     }
@@ -1382,7 +1382,7 @@ final class CLIBridgeAdapterTests: XCTestCase {
             sessionExpectation.fulfill()
         }
 
-        manager.onSessionConnected?("session-10")
+        manager.onEvent?(.connected(sessionId: "session-10", agentId: "agent-1", model: "opus"))
 
         await fulfillment(of: [manager.setModelExpectation!, sessionExpectation], timeout: 1)
         XCTAssertEqual(adapter.sessionId, "session-10")
@@ -1396,7 +1396,7 @@ final class CLIBridgeAdapterTests: XCTestCase {
         manager.currentModel = "sonnet"
         _ = CLIBridgeAdapter(settings: settings, manager: manager)
 
-        manager.onSessionConnected?("session-11")
+        manager.onEvent?(.connected(sessionId: "session-11", agentId: "agent-1", model: "sonnet"))
 
         XCTAssertTrue(manager.setModelCalls.isEmpty)
     }
@@ -1408,7 +1408,7 @@ final class CLIBridgeAdapterTests: XCTestCase {
         manager.currentModel = "claude-sonnet-4-20250514"
         _ = CLIBridgeAdapter(settings: settings, manager: manager)
 
-        manager.onSessionConnected?("session-11")
+        manager.onEvent?(.connected(sessionId: "session-11", agentId: "agent-1", model: "claude-sonnet-4-20250514"))
 
         XCTAssertTrue(manager.setModelCalls.isEmpty)
     }
@@ -1421,7 +1421,7 @@ final class CLIBridgeAdapterTests: XCTestCase {
         manager.currentModel = "claude-sonnet-4-20250514"
         _ = CLIBridgeAdapter(settings: settings, manager: manager)
 
-        manager.onSessionConnected?("session-12")
+        manager.onEvent?(.connected(sessionId: "session-12", agentId: "agent-1", model: "claude-sonnet-4-20250514"))
 
         XCTAssertTrue(manager.setModelCalls.isEmpty)
     }
@@ -1438,7 +1438,7 @@ final class CLIBridgeAdapterTests: XCTestCase {
             modelExpectation.fulfill()
         }
 
-        manager.onModelChanged?("claude-3-5-haiku-20241022")
+        manager.onEvent?(.modelChanged(model: "claude-3-5-haiku-20241022"))
 
         wait(for: [modelExpectation], timeout: 1)
         XCTAssertEqual(adapter.currentModel, .haiku)
@@ -1450,7 +1450,7 @@ final class CLIBridgeAdapterTests: XCTestCase {
         let manager = MockCLIBridgeManager()
         let adapter = CLIBridgeAdapter(manager: manager)
 
-        manager.onModelChanged?("claude-opus-4-5-20251101")
+        manager.onEvent?(.modelChanged(model: "claude-opus-4-5-20251101"))
 
         XCTAssertEqual(adapter.currentModel, .opus)
     }
@@ -1459,7 +1459,7 @@ final class CLIBridgeAdapterTests: XCTestCase {
         let manager = MockCLIBridgeManager()
         let adapter = CLIBridgeAdapter(manager: manager)
 
-        manager.onModelChanged?("claude-sonnet-4-20250514")
+        manager.onEvent?(.modelChanged(model: "claude-sonnet-4-20250514"))
 
         XCTAssertEqual(adapter.currentModel, .sonnet)
     }
@@ -1468,7 +1468,7 @@ final class CLIBridgeAdapterTests: XCTestCase {
         let manager = MockCLIBridgeManager()
         let adapter = CLIBridgeAdapter(manager: manager)
 
-        manager.onModelChanged?("claude-unknown-1")
+        manager.onEvent?(.modelChanged(model: "claude-unknown-1"))
 
         XCTAssertEqual(adapter.currentModel, .custom)
     }
