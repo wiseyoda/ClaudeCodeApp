@@ -1,5 +1,6 @@
 import SwiftUI
 
+#if DEBUG
 /// Test harness for tool message rendering
 /// Loads test fixtures from JSON and displays each message type for visual verification
 struct ToolTestView: View {
@@ -447,3 +448,4 @@ enum LocalJSONValue: Codable {
         .environmentObject(AppSettings())
         .preferredColorScheme(.dark)
 }
+#endif

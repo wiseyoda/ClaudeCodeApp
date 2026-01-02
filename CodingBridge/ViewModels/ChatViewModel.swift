@@ -16,7 +16,6 @@ class ChatViewModel: ObservableObject {
     // MARK: - Managers
     let manager: CLIBridgeManager
     let ideasStore: IdeasStore
-    let scrollManager = ScrollStateManager()
     let sessionStore = SessionStore.shared
     let projectSettingsStore = ProjectSettingsStore.shared
 
@@ -139,7 +138,6 @@ class ChatViewModel: ObservableObject {
     // MARK: - Display Messages Cache
     // Note: @Published wrapper triggers view re-render when cache is refreshed
     @Published private var cachedDisplayMessages: [ChatMessage] = []
-    @Published private var cachedGroupedDisplayItems: [DisplayItem] = []
     private var displayMessagesInvalidationKey: Int = 0
 
     // MARK: - Initialization
@@ -372,7 +370,6 @@ class ChatViewModel: ObservableObject {
 
         // Clear UI state
         messages = []
-        scrollManager.reset()
         MessageStore.clearMessages(for: project.path)
         MessageStore.clearSessionId(for: project.path)
         sessionStore.clearActiveSessionId(for: project.path)
@@ -492,7 +489,6 @@ class ChatViewModel: ObservableObject {
 
         messages = []
         isLoadingHistory = true
-        scrollManager.reset()
 
         // Capture session ID to check for staleness after async operations
         let targetSessionId = session.id
@@ -534,7 +530,7 @@ class ChatViewModel: ObservableObject {
                 isLoadingHistory = false
                 refreshDisplayMessagesCache()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-                    self?.scrollManager.forceScrollToBottom()
+                    self?.scrollToBottomTrigger = true
                 }
             } catch {
                 // Check if cancelled before showing error
@@ -547,7 +543,7 @@ class ChatViewModel: ObservableObject {
                 isLoadingHistory = false
                 refreshDisplayMessagesCache()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
-                    self?.scrollManager.forceScrollToBottom()
+                    self?.scrollToBottomTrigger = true
                 }
             }
         }
@@ -682,53 +678,65 @@ class ChatViewModel: ObservableObject {
 
     // MARK: - Slash Commands
 
+    /// Slash command handler closure type
+    /// - Parameters:
+    ///   - arg: Optional argument string (text after command)
+    /// - Returns: true if command was fully handled, false to pass through to server
+    typealias SlashCommandHandler = (_ arg: String?) -> Bool
+
+    /// Registry of slash commands mapping command name to handler
+    private lazy var slashCommandRegistry: [String: SlashCommandHandler] = [
+        "/clear": { [weak self] _ in
+            self?.handleClearCommand()
+            return true
+        },
+        "/help": { [weak self] _ in
+            self?.showingHelpSheet = true
+            return true
+        },
+        "/exit": { [weak self] _ in
+            self?.manager.disconnect()
+            return true
+        },
+        "/init": { [weak self] _ in
+            self?.addSystemMessage("Initializing project with Claude...")
+            return false
+        },
+        "/new": { [weak self] _ in
+            self?.handleNewSessionCommand()
+            return true
+        },
+        "/resume": { [weak self] arg in
+            self?.handleResumeCommand(arg: arg) ?? true
+        },
+        "/model": { [weak self] arg in
+            self?.handleModelCommand(arg: arg) ?? true
+        },
+        "/compact": { [weak self] _ in
+            self?.addSystemMessage("Sending compact request to server...")
+            return false
+        },
+        "/status": { [weak self] _ in
+            self?.showStatusInfo()
+            return true
+        },
+    ]
+
     func handleSlashCommand(_ command: String) -> Bool {
         let parts = command.split(separator: " ", maxSplits: 1)
         let cmd = String(parts.first ?? "").lowercased()
         let arg = parts.count > 1 ? String(parts[1]).trimmingCharacters(in: .whitespaces) : nil
 
-        switch cmd {
-        case "/clear":
-            handleClearCommand()
-            return true
-
-        case "/help":
-            showingHelpSheet = true
-            return true
-
-        case "/exit":
-            manager.disconnect()
-            return true
-
-        case "/init":
-            addSystemMessage("Initializing project with Claude...")
-            return false
-
-        case "/new":
-            handleNewSessionCommand()
-            return true
-
-        case "/resume":
-            return handleResumeCommand(arg: arg)
-
-        case "/model":
-            return handleModelCommand(arg: arg)
-
-        case "/compact":
-            addSystemMessage("Sending compact request to server...")
-            return false
-
-        case "/status":
-            showStatusInfo()
-            return true
-
-        default:
-            if cmd.hasPrefix("/") {
-                addSystemMessage("Unknown command: \(cmd). Type /help for available commands.")
-                return true
-            }
-            return false
+        if let handler = slashCommandRegistry[cmd] {
+            return handler(arg)
         }
+
+        // Unknown command starting with /
+        if cmd.hasPrefix("/") {
+            addSystemMessage("Unknown command: \(cmd). Type /help for available commands.")
+            return true
+        }
+        return false
     }
 
     /// Handle /resume command with optional session ID argument
@@ -823,7 +831,6 @@ class ChatViewModel: ObservableObject {
 
         // Clear UI state
         messages = []
-        scrollManager.reset()
         MessageStore.clearMessages(for: project.path)
         MessageStore.clearSessionId(for: project.path)
         sessionStore.clearActiveSessionId(for: project.path)
@@ -855,7 +862,6 @@ class ChatViewModel: ObservableObject {
 
         // Clear UI state
         messages = []
-        scrollManager.reset()
         MessageStore.clearMessages(for: project.path)
         MessageStore.clearSessionId(for: project.path)
         sessionStore.clearActiveSessionId(for: project.path)
@@ -1133,7 +1139,6 @@ class ChatViewModel: ObservableObject {
 
         refreshGitStatus()
 
-        pruneMessagesIfNeeded()
         cleanupAfterProcessingComplete()
     }
 
@@ -1171,8 +1176,6 @@ class ChatViewModel: ObservableObject {
         let historyMessages = payload.toChatMessages()
         if !historyMessages.isEmpty {
             messages.insert(contentsOf: historyMessages, at: 0)
-            // Prune after inserting history to stay within limit
-            pruneMessagesIfNeeded()
             refreshDisplayMessagesCache()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
                 self?.scrollToBottomTrigger = true
@@ -1298,8 +1301,9 @@ class ChatViewModel: ObservableObject {
         cachedDisplayMessages
     }
 
+    /// Grouped display items for the chat view - computed inline from cached display messages
     var groupedDisplayItems: [DisplayItem] {
-        cachedGroupedDisplayItems
+        groupMessagesForDisplay(cachedDisplayMessages)
     }
 
     private var currentDisplayMessagesKey: Int {
@@ -1319,7 +1323,6 @@ class ChatViewModel: ObservableObject {
         guard newKey != displayMessagesInvalidationKey else { return }
         displayMessagesInvalidationKey = newKey
         cachedDisplayMessages = computeDisplayMessages()
-        cachedGroupedDisplayItems = groupMessagesForDisplay(cachedDisplayMessages)
     }
 
     private func computeDisplayMessages() -> [ChatMessage] {
@@ -1770,23 +1773,6 @@ class ChatViewModel: ObservableObject {
         // Cache refresh is guarded by invalidation key, so call is cheap if key unchanged
         // But we still want to refresh to pick up new messages for display
         refreshDisplayMessagesCache()
-    }
-
-    // MARK: - Message Pruning
-
-    /// Prunes the messages array to maintain performance during long streaming sessions.
-    /// Uses a buffer above the history limit to avoid pruning on every single message.
-    private func pruneMessagesIfNeeded() {
-        let limit = settings.historyLimit.rawValue
-        // Use 20% buffer above limit before pruning to avoid constant array resizing
-        let pruneThreshold = limit + max(20, limit / 5)
-
-        guard messages.count > pruneThreshold else { return }
-
-        // Prune down to the limit
-        let oldCount = messages.count
-        messages = Array(messages.suffix(limit))
-        log.debug("[ChatViewModel] Pruned messages from \(oldCount) to \(messages.count)")
     }
 
     /// Cleanup transient state after a processing cycle completes.

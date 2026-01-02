@@ -28,12 +28,12 @@
 - #4 extractFilePath has been replaced with ToolParser.extractParam() calls (Complete).
 - #6 effectiveSessionToResume has been removed; manager.sessionId used directly (Complete).
 - #7 effectivePermissionMode String wrapper removed; effectiveModelId and effectivePermissionModeValue retained as resolution logic (Complete).
-- #18 groupMessagesForDisplay still lives in `CodingBridge/Views/CompactToolView.swift` and is used by `CodingBridge/ViewModels/ChatViewModel.swift`.
+- #18 groupMessagesForDisplay inlined as computed property in ChatViewModel; function remains in CompactToolView.swift with DisplayItem types (Complete).
 
 **Keep-as-is guidance (defer until after streaming refactor)**
 - #8 streamingMessageId/streamingMessageTimestamp now use a stable ID + computed timestamp (Complete).
-- #15 ScrollStateManager provides streaming-safe debounce; reconsider after #9/#17.
-- #19 message pruning is tied to persistence/history safety; reconsider after #23.
+- #15 ScrollStateManager removed (Complete) - ChatView already used native ScrollViewReader.
+- #19 message pruning removed (Complete) - persistence now handles limits via MessageStore.saveMessages.
 
 ### Plan of Record (Dependency Chain)
 
@@ -68,11 +68,11 @@
 | #12 | Remove pendingGitCommands tracking | Low | - | Complete | Refresh git status on completion only. |
 | #13 | Remove todoHideTimer auto-hide logic | Low | - | Complete | Removed auto-hide timer; manual dismiss only. |
 | #14 | Simplify git banner state | Low | - | Pending | Remove auto-hide and cleanup flags. |
-| #15 | Remove ScrollStateManager | Medium | #9/#17 | Deferred | Streaming debounce still needed. |
-| #18 | Inline groupMessagesForDisplay() | Medium | - | Pending | Still in `CodingBridge/Views/CompactToolView.swift`. |
-| #19 | Remove message pruning | Low | #23 | Deferred | Keep until persistence is unified. |
-| #20 | Simplify slash command handling | Low | - | Pending | Replace switch with registry. |
-| #28 | Gate ToolTestView/dev tools behind DEBUG or feature flag | Low | - | Pending | Avoid production exposure. |
+| #15 | Remove ScrollStateManager | Medium | #9/#17 | Complete | Deleted ScrollStateManager (230 lines); ChatView uses native ScrollViewReader. |
+| #18 | Inline groupMessagesForDisplay() | Medium | - | Complete | Now computed property in ChatViewModel; function in CompactToolView.swift. |
+| #19 | Remove message pruning | Low | #23 | Complete | Removed pruneMessagesIfNeeded() and 2 call sites. |
+| #20 | Simplify slash command handling | Low | - | Complete | Replaced switch with registry pattern. |
+| #28 | Gate ToolTestView/dev tools behind DEBUG or feature flag | Low | - | Complete | ToolTestView and ContentView dev tool button wrapped in #if DEBUG. |
 | #29 | Standardize SSHManager ownership | Medium | - | Pending | Align singleton vs per-view usage. |
 
 ### cli-bridge Feature Requests / Issues

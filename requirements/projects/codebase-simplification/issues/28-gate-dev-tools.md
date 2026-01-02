@@ -1,6 +1,6 @@
 # Issue #28: Gate ToolTestView/dev tools behind DEBUG
 
-> **Status**: Pending
+> **Status**: Complete (verified 2026-01-02)
 > **Priority**: Tier 3
 > **Depends On**: None
 > **Blocks**: None
@@ -69,10 +69,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Gate ToolTestView/dev tools behind DEBUG is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Gate ToolTestView/dev tools behind DEBUG is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -123,5 +123,6 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | In Progress |
+| 2026-01-02 | Completed | All acceptance criteria verified. ToolTestView.swift wrapped in #if DEBUG, ContentView.swift toolbar button and sheet wrapped in #if DEBUG, @State variable wrapped in #if DEBUG. |
+| 2026-01-02 | Verified | Build passes; dev tools only available in DEBUG builds. |

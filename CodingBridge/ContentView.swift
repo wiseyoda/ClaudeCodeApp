@@ -17,7 +17,9 @@ struct ContentView: View {
     @State private var projectToDelete: Project?
     @State private var showGlobalSearch = false
     @State private var showCommands = false
+    #if DEBUG
     @State private var showToolTestHarness = false
+    #endif
     @ObservedObject private var sessionStore = SessionStore.shared
     private var commandStore = CommandStore.shared
     @ObservedObject private var archivedStore = ArchivedProjectsStore.shared
@@ -239,6 +241,7 @@ struct ContentView: View {
                             .foregroundColor(CLITheme.secondaryText(for: colorScheme))
                     }
                 }
+                #if DEBUG
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
                         showToolTestHarness = true
@@ -248,6 +251,7 @@ struct ContentView: View {
                     }
                     .accessibilityLabel("Dev Tools")
                 }
+                #endif
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button {
                         Task {
@@ -263,10 +267,12 @@ struct ContentView: View {
                     }
                 }
             }
+            #if DEBUG
             .sheet(isPresented: $showToolTestHarness) {
                 ToolTestView()
                     .environmentObject(settings)
             }
+            #endif
         }
     }
 

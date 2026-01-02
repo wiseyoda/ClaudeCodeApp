@@ -1,6 +1,6 @@
 # Issue #15: Remove ScrollStateManager
 
-> **Status**: Pending
+> **Status**: Complete (verified 2026-01-02)
 > **Priority**: Tier 4
 > **Depends On**: #9/#17
 > **Blocks**: None
@@ -69,10 +69,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Remove ScrollStateManager is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Remove ScrollStateManager is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -123,5 +123,6 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | In Progress |
+| 2026-01-02 | Completed | All acceptance criteria verified, build passes. Deleted ScrollStateManager.swift (230 lines) and ScrollStateManagerTests.swift (66 lines). Replaced scrollManager calls in ChatViewModel with scrollToBottomTrigger. ChatView already used native ScrollViewReader. |
+| 2026-01-02 | Verified | Confirmed ScrollStateManager references are fully removed |

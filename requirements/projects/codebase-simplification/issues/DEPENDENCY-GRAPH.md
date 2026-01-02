@@ -26,11 +26,11 @@ This graph lists issue dependencies and a recommended execution order. Use it to
 20. #12 Remove pendingGitCommands tracking ✅
 21. #13 Remove todoHideTimer auto-hide logic ✅
 22. #14 Simplify git banner state ✅
-23. #15 Remove ScrollStateManager
-24. #18 Inline groupMessagesForDisplay()
-25. #19 Remove message pruning
-26. #20 Simplify slash command handling
-27. #28 Gate ToolTestView/dev tools behind DEBUG
+23. #15 Remove ScrollStateManager ✅
+24. #18 Inline groupMessagesForDisplay() ✅
+25. #19 Remove message pruning ✅
+26. #20 Simplify slash command handling ✅
+27. #28 Gate ToolTestView/dev tools behind DEBUG ✅
 28. #29 Standardize SSHManager ownership
 29. #31 Exit Plan Mode approval UI
 30. #32 Multi-repo/monorepo git status aggregation
@@ -90,5 +90,5 @@ graph TD
 - #5 was marked "Won't Fix" after audit found no duplication - stores are intentionally separate
 - #16, #42, #43 are no longer blocked by #5 (dependencies removed)
 - cli-bridge issues (#33-#41) can be worked in parallel with iOS cleanup; they unblock several simplifications
-- Deferred items (#15, #19) are sequenced later but may be skipped if not needed
+- #15 completed - ChatView already used native ScrollViewReader; ScrollStateManager was unused indirection
 - #8 was completed by converting @Published var to let/computed property (no more UUID regeneration)
