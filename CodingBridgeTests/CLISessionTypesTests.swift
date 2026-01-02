@@ -208,7 +208,7 @@ final class CLISessionTypesTests: XCTestCase {
         {"label": "Yes", "description": "Preferred"}
         """
 
-        let option = try decode(APIQuestionOption.self, from: json)
+        let option = try decode(CLIQuestionOption.self, from: json)
 
         XCTAssertEqual(option.label, "Yes")
         XCTAssertEqual(option.description, "Preferred")
@@ -219,7 +219,7 @@ final class CLISessionTypesTests: XCTestCase {
         {"label": "No", "description": null}
         """
 
-        let option = try decode(APIQuestionOption.self, from: json)
+        let option = try decode(CLIQuestionOption.self, from: json)
 
         XCTAssertEqual(option.label, "No")
         XCTAssertNil(option.description)
@@ -230,7 +230,7 @@ final class CLISessionTypesTests: XCTestCase {
         {"label": "Maybe"}
         """
 
-        let option = try decode(APIQuestionOption.self, from: json)
+        let option = try decode(CLIQuestionOption.self, from: json)
 
         XCTAssertEqual(option.label, "Maybe")
         XCTAssertNil(option.description)

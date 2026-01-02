@@ -18,23 +18,23 @@ public struct AgentDetail: Sendable, Codable, Hashable {
         case recovering = "recovering"
         case stopped = "stopped"
     }
-    public enum APIPermissionMode: String, Sendable, Codable, CaseIterable {
+    public enum PermissionMode: String, Sendable, Codable, CaseIterable {
         case _default = "default"
         case acceptedits = "acceptEdits"
         case bypasspermissions = "bypassPermissions"
     }
     /** Agent ID */
     public var id: String
-    /** APIProject path */
+    /** Project path */
     public var projectPath: String
     /** Session ID */
     public var sessionId: String
-    /** APIModel ID */
+    /** Model ID */
     public var model: String
     /** Agent state */
     public var state: State
     /** Permission mode */
-    public var permissionMode: APIPermissionMode
+    public var permissionMode: PermissionMode
     /** Is helper agent */
     public var isHelper: Bool
     /** Creation timestamp */
@@ -48,7 +48,7 @@ public struct AgentDetail: Sendable, Codable, Hashable {
     /** Has queued user input */
     public var hasQueuedInput: Bool
 
-    public init(id: String, projectPath: String, sessionId: String, model: String, state: State, permissionMode: APIPermissionMode, isHelper: Bool, createdAt: Date, lastActivityAt: Date, hasPendingPermission: Bool, hasPendingQuestion: Bool, hasQueuedInput: Bool) {
+    public init(id: String, projectPath: String, sessionId: String, model: String, state: State, permissionMode: PermissionMode, isHelper: Bool, createdAt: Date, lastActivityAt: Date, hasPendingPermission: Bool, hasPendingQuestion: Bool, hasQueuedInput: Bool) {
         self.id = id
         self.projectPath = projectPath
         self.sessionId = sessionId

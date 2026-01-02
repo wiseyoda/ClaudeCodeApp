@@ -9,7 +9,7 @@ import Foundation
 
 public struct ProjectCreateErrorResponse: Sendable, Codable, Hashable {
 
-    /** APIError code */
+    /** Error code */
     public var error: ProjectCreateErrorCode
     /** Human-readable error message */
     public var message: String?

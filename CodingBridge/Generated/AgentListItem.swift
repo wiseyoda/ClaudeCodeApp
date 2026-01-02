@@ -20,11 +20,11 @@ public struct AgentListItem: Sendable, Codable, Hashable {
     }
     /** Agent ID */
     public var id: String
-    /** APIProject path */
+    /** Project path */
     public var projectPath: String
     /** Session ID */
     public var sessionId: String
-    /** APIModel ID */
+    /** Model ID */
     public var model: String
     /** Agent state */
     public var state: State

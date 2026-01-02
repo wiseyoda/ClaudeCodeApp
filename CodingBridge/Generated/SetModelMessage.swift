@@ -13,7 +13,7 @@ public struct SetModelMessage: Sendable, Codable, Hashable {
         case setModel = "set_model"
     }
     public var type: ModelType
-    /** APIModel ID to switch to */
+    /** Model ID to switch to */
     public var model: String
 
     public init(type: ModelType, model: String) {

@@ -11,7 +11,7 @@ public struct SearchResult: Sendable, Codable, Hashable {
 
     /** Session ID */
     public var sessionId: UUID
-    /** APIProject path */
+    /** Project path */
     public var projectPath: String
     /** Matching content snippets with context */
     public var snippets: [SearchSnippet]

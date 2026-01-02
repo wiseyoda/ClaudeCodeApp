@@ -9,7 +9,7 @@ import Foundation
 
 public struct InvalidateTokenResponse: Sendable, Codable, Hashable {
 
-    /** Invalidation success indicator */
+    /** Invalidation success indicator (always true) */
     public var success: Bool
 
     public init(success: Bool) {

@@ -17,7 +17,7 @@ public struct StartMessage: Sendable, Codable, Hashable {
     public var projectPath: String
     /** Resume existing session by UUID */
     public var sessionId: UUID?
-    /** APIModel override */
+    /** Model override */
     public var model: String?
     /** Enable helper mode for quick queries */
     public var helper: Bool?

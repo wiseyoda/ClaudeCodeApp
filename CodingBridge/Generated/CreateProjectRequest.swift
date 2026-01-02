@@ -10,7 +10,7 @@ import Foundation
 public struct CreateProjectRequest: Sendable, Codable, Hashable {
 
     public static let nameRule = StringRule(minLength: 1, maxLength: nil, pattern: nil)
-    /** APIProject name (used as directory name) */
+    /** Project name (used as directory name) */
     public var name: String
     /** Base directory to create project in (defaults to repos path) */
     public var baseDir: String?

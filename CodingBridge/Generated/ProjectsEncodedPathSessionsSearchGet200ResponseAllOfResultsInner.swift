@@ -11,7 +11,7 @@ public struct ProjectsEncodedPathSessionsSearchGet200ResponseAllOfResultsInner: 
 
     /** Matched session ID */
     public var sessionId: String
-    /** APIProject path */
+    /** Project path */
     public var projectPath: String
     /** Matched text snippets */
     public var snippets: [ProjectsEncodedPathSessionsSearchGet200ResponseAllOfResultsInnerAllOfSnippetsInner]

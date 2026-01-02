@@ -14,13 +14,13 @@ public struct PaginationError: Sendable, Codable, Hashable {
         case cursorExpired = "CURSOR_EXPIRED"
         case invalidParams = "INVALID_PARAMS"
     }
-    /** APIError code */
+    /** Error code */
     public var code: Code
     /** The cursor ID that caused the error */
     public var cursorId: String?
     /** Maximum cursor age in seconds */
     public var maxAge: Int?
-    /** APIError message */
+    /** Error message */
     public var message: String?
 
     public init(code: Code, cursorId: String? = nil, maxAge: Int? = nil, message: String? = nil) {

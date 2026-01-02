@@ -176,27 +176,27 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(settings.effectiveSSHHost, "")
     }
 
-    // MARK: - Effective Permission Mode Tests
+    // MARK: - Global Permission Mode Tests
 
-    func test_effectivePermissionMode_returnsBypassWhenBypassEnabled() {
+    func test_globalPermissionMode_bypassSerializesCorrectly() {
         let settings = AppSettings()
         settings.globalPermissionMode = .bypassPermissions
 
-        XCTAssertEqual(settings.effectivePermissionMode, "bypassPermissions")
+        XCTAssertEqual(settings.globalPermissionMode.rawValue, "bypassPermissions")
     }
 
-    func test_effectivePermissionMode_returnsDefaultForDefaultMode() {
+    func test_globalPermissionMode_defaultSerializesCorrectly() {
         let settings = AppSettings()
         settings.globalPermissionMode = .default
 
-        XCTAssertEqual(settings.effectivePermissionMode, "default")
+        XCTAssertEqual(settings.globalPermissionMode.rawValue, "default")
     }
 
-    func test_effectivePermissionMode_returnsAcceptEditsForAcceptEditsMode() {
+    func test_globalPermissionMode_acceptEditsSerializesCorrectly() {
         let settings = AppSettings()
         settings.globalPermissionMode = .acceptEdits
 
-        XCTAssertEqual(settings.effectivePermissionMode, "acceptEdits")
+        XCTAssertEqual(settings.globalPermissionMode.rawValue, "acceptEdits")
     }
 
     // MARK: - Push Notification Settings Tests

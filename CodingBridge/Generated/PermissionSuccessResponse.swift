@@ -9,7 +9,7 @@ import Foundation
 
 public struct PermissionSuccessResponse: Sendable, Codable, Hashable {
 
-    /** Operation success indicator */
+    /** Operation success indicator (always true) */
     public var success: Bool
 
     public init(success: Bool) {

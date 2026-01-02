@@ -9,7 +9,7 @@ import Foundation
 
 public struct FileErrorResponse: Sendable, Codable, Hashable {
 
-    /** APIError code */
+    /** Error code */
     public var error: FileErrorCode
     /** True if file is binary (for BINARY_FILE error) */
     public var isBinary: Bool?

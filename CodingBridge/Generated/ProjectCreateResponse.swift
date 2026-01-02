@@ -9,7 +9,7 @@ import Foundation
 
 public struct ProjectCreateResponse: Sendable, Codable, Hashable {
 
-    /** Operation succeeded */
+    /** Operation succeeded (always true) */
     public var success: Bool
     /** Absolute path to the created project */
     public var path: String

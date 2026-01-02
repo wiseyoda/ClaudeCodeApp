@@ -6,13 +6,12 @@ import Foundation
 // and unified event handling.
 
 // ============================================================================
-// MARK: - Type Aliases (Backward Compatibility)
+// MARK: - Type Aliases (Convenience)
 // ============================================================================
-// These aliases map old CLI* names to the generated types for backward compatibility.
-// New code should use the generated types directly.
+// These aliases provide CLI-prefixed names for generated response wrappers.
+// New code can use generated types directly when clearer.
 
 // Project Types
-public typealias CLIProject = APIProject
 public typealias CLIProjectList = ProjectListResponse
 
 // Session Types
@@ -34,7 +33,6 @@ public typealias CLIBulkOperationResponse = BulkOperationResult
 // File Types
 public typealias CLIFileListResponse = DirectoryListing
 public typealias CLIFileContentResponse = FileContent
-public typealias CLIFileEntry = APIFileEntry
 
 // Search Types
 public typealias CLISearchResponse = SearchResponse
@@ -50,13 +48,10 @@ public typealias CLILiveActivityRegisterRequest = RegisterLiveActivityRequest
 public typealias CLILiveActivityRegisterResponse = RegisterLiveActivityResponse
 
 // Git Types
-public typealias CLIGitStatus = APIGitStatus
 // Note: CLISubRepoInfo is defined in CLIBridgeAPIClient.swift as a custom struct
 
-// Permission Types (backward compatibility)
+// Permission Types
 public typealias CLIPermissionChoice = PermissionResponseMessage.Choice
-public typealias CLIPermissionMode = SetPermissionModeMessage.Mode
-public typealias CLIImageAttachment = APIImageAttachment
 public typealias CLIPermissionRequest = PermissionRequestMessage
 public typealias CLIQuestionRequest = QuestionMessage
 
@@ -871,13 +866,13 @@ public struct CLIStoredMessage: Codable, Identifiable, Hashable, Sendable {
 public struct CLIProjectDetail: Codable, Equatable {
   public let path: String
   public let name: String?
-  public let git: APIGitStatus?
+  public let git: CLIGitStatus?
   public let sessionCount: Int?
   public let lastUsed: String?
   public let structure: CLIProjectStructure?
   public let readme: String?
 
-  public init(path: String, name: String? = nil, git: APIGitStatus? = nil, sessionCount: Int? = nil, lastUsed: String? = nil, structure: CLIProjectStructure? = nil, readme: String? = nil) {
+  public init(path: String, name: String? = nil, git: CLIGitStatus? = nil, sessionCount: Int? = nil, lastUsed: String? = nil, structure: CLIProjectStructure? = nil, readme: String? = nil) {
     self.path = path
     self.name = name
     self.git = git

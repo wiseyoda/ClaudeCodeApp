@@ -94,27 +94,27 @@ extension StartMessage {
 
 /// Convenience initializers for InputMessage (doesn't require `type` parameter)
 extension InputMessage {
-  public init(text: String, images: [APIImageAttachment]? = nil, messageId: String? = nil, thinkingMode: String? = nil) {
+  public init(text: String, images: [CLIImageAttachment]? = nil, messageId: String? = nil, thinkingMode: String? = nil) {
     self.init(type: .input, text: text, images: images, messageId: messageId, thinkingMode: thinkingMode)
   }
 
-  /// Convenience init that accepts app's ImageAttachment type and converts to APIImageAttachment
+  /// Convenience init that accepts app's ImageAttachment type and converts to CLIImageAttachment
   init(text: String, images: [ImageAttachment]?, messageId: String? = nil, thinkingMode: String? = nil) {
-    let apiImages = images?.compactMap { $0.toAPIImageAttachment() }
-    self.init(type: .input, text: text, images: apiImages, messageId: messageId, thinkingMode: thinkingMode)
+    let cliImages = images?.compactMap { $0.toCLIImageAttachment() }
+    self.init(type: .input, text: text, images: cliImages, messageId: messageId, thinkingMode: thinkingMode)
   }
 }
 
-/// Extension to convert app's ImageAttachment to generated APIImageAttachment
+/// Extension to convert app's ImageAttachment to generated CLIImageAttachment
 extension ImageAttachment {
-  /// Convert to APIImageAttachment for sending over the wire
-  func toAPIImageAttachment() -> APIImageAttachment? {
+  /// Convert to CLIImageAttachment for sending over the wire
+  func toCLIImageAttachment() -> CLIImageAttachment? {
     switch uploadState {
     case .uploaded(let refId):
-      return APIImageAttachment(type: .reference, id: refId, mimeType: mimeType)
+      return CLIImageAttachment(type: .reference, id: refId, mimeType: mimeType)
     case .inline:
       let base64 = dataForSending.base64EncodedString()
-      return APIImageAttachment(type: .base64, data: base64, mimeType: mimeType)
+      return CLIImageAttachment(type: .base64, data: base64, mimeType: mimeType)
     default:
       // Image not ready to send
       return nil
@@ -485,10 +485,10 @@ extension WsErrorMessage {
 }
 
 // ============================================================================
-// MARK: - APIImageAttachment Extensions
+// MARK: - CLIImageAttachment Extensions
 // ============================================================================
 
-extension APIImageAttachment {
+extension CLIImageAttachment {
   /// Create a reference-type attachment (for uploaded images)
   public init(referenceId: String) {
     self.init(type: .reference, id: referenceId)
@@ -1152,7 +1152,7 @@ extension ProjectsEncodedPathSessionsSearchGet200ResponseAllOfResultsInner {
 // MARK: - File/Directory Extensions
 // ============================================================================
 
-extension APIFileEntry: Identifiable {
+extension CLIFileEntry: Identifiable {
   public var id: String { name }
 
   /// Whether this entry is a directory
@@ -1304,7 +1304,7 @@ extension FileContent {
 // MARK: - Project/Git Extensions
 // ============================================================================
 
-extension APIGitStatus {
+extension CLIGitStatus {
   /// Remote URL (not provided by API, return nil)
   public var remoteUrl: String? {
     // The API doesn't provide remote URL, derive from tracking branch if available

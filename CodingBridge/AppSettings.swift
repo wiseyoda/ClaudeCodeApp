@@ -417,12 +417,6 @@ class AppSettings: ObservableObject {
         }
     }
 
-    /// The effective permission mode to send to server
-    /// Returns the global permission mode as a string for server communication
-    var effectivePermissionMode: String {
-        globalPermissionMode.rawValue
-    }
-
     var baseURL: URL? {
         URL(string: serverURL)
     }

@@ -9,7 +9,7 @@ import Foundation
 
 public struct PushTestResponse: Sendable, Codable, Hashable {
 
-    /** Indicates a notification would be sent */
+    /** Indicates a notification would be sent (always true) */
     public var wouldSend: Bool
     /** The payload that would be sent */
     public var payload: [String: JSONValue]

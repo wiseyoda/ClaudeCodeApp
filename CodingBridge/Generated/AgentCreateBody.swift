@@ -14,7 +14,7 @@ public struct AgentCreateBody: Sendable, Codable, Hashable {
     public var projectPath: String
     /** Session ID to resume (optional) */
     public var sessionId: UUID?
-    /** APIModel alias (opus, sonnet, haiku) */
+    /** Model alias (opus, sonnet, haiku) */
     public var model: String?
     /** Create as helper agent (non-interactive) */
     public var helper: Bool?

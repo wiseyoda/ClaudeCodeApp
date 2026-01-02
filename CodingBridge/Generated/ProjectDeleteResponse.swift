@@ -9,7 +9,7 @@ import Foundation
 
 public struct ProjectDeleteResponse: Sendable, Codable, Hashable {
 
-    /** APIProject deleted successfully */
+    /** Project deleted successfully (always true) */
     public var success: Bool
 
     public init(success: Bool) {

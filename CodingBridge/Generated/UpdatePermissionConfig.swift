@@ -10,11 +10,11 @@ import Foundation
 public struct UpdatePermissionConfig: Sendable, Codable, Hashable {
 
     /** Global settings to update */
-    public var global: APIGlobalPermissions?
-    /** APIProject settings to update (merged with existing) */
-    public var projects: [String: APIProjectPermissions]?
+    public var global: CLIGlobalPermissions?
+    /** Project settings to update (merged with existing) */
+    public var projects: [String: CLIProjectPermissions]?
 
-    public init(global: APIGlobalPermissions? = nil, projects: [String: APIProjectPermissions]? = nil) {
+    public init(global: CLIGlobalPermissions? = nil, projects: [String: CLIProjectPermissions]? = nil) {
         self.global = global
         self.projects = projects
     }

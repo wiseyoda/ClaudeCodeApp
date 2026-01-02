@@ -9,7 +9,7 @@ import Foundation
 
 public struct RegisterLiveActivityResponse: Sendable, Codable, Hashable {
 
-    /** Registration success indicator */
+    /** Registration success indicator (always true) */
     public var success: Bool
     /** Registered activity token ID */
     public var activityTokenId: String

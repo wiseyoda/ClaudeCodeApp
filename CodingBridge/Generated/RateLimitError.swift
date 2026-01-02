@@ -12,7 +12,7 @@ public struct RateLimitError: Sendable, Codable, Hashable {
     public enum ModelError: String, Sendable, Codable, CaseIterable {
         case rateLimited = "RATE_LIMITED"
     }
-    /** APIError type */
+    /** Error type */
     public var error: ModelError
     /** Human-readable error description */
     public var message: String

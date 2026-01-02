@@ -4,7 +4,7 @@ import SwiftUI
 // MARK: - Permission Mode Enum
 
 /// Permission modes matching cli-bridge spec
-/// Maps to SetPermissionModeMessage.Mode (via CLIPermissionMode) for WebSocket communication
+/// Maps to CLIPermissionMode and SetPermissionModeMessage.Mode for WebSocket communication
 enum PermissionMode: String, Codable, CaseIterable, Equatable {
     case `default` = "default"
     case acceptEdits = "acceptEdits"

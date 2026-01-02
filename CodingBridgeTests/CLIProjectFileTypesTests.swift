@@ -4,7 +4,7 @@ import XCTest
 final class CLIProjectFileTypesTests: XCTestCase {
     // MARK: - Helper Methods
 
-    /// Creates a CLIGitStatus (APIGitStatus) matching the new generated type signature
+    /// Creates a CLIGitStatus matching the generated type signature
     private func makeGitStatus(
         branch: String = "main",
         isClean: Bool = true,
@@ -29,10 +29,10 @@ final class CLIProjectFileTypesTests: XCTestCase {
         )
     }
 
-    /// Creates a CLIFileEntry (APIFileEntry) matching the new generated type signature
+    /// Creates a CLIFileEntry matching the generated type signature
     private func makeFileEntry(
         name: String = "file.txt",
-        type: APIFileEntryType = .file,
+        type: CLIFileEntryType = .file,
         size: Int? = nil,
         modified: String = "2024-12-31T11:22:33Z"
     ) -> CLIFileEntry {

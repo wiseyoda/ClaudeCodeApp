@@ -9,7 +9,7 @@ import Foundation
 
 public struct RegisterFcmResponse: Sendable, Codable, Hashable {
 
-    /** Registration success indicator */
+    /** Registration success indicator (always true) */
     public var success: Bool
     /** Registered token ID */
     public var tokenId: String

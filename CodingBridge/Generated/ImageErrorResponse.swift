@@ -9,9 +9,9 @@ import Foundation
 
 public struct ImageErrorResponse: Sendable, Codable, Hashable {
 
-    /** APIError message */
+    /** Error message */
     public var error: String
-    /** APIError code */
+    /** Error code */
     public var code: ImageErrorCode
 
     public init(error: String, code: ImageErrorCode) {

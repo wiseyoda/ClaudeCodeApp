@@ -186,7 +186,67 @@ class PermissionManager: ObservableObject {
 
     // MARK: - Resolution Logic
 
-    /// Get effective permission mode for a project
+    /// Unified permission resolution pipeline
+    ///
+    /// Resolution order (highest to lowest priority):
+    /// 1. Session override - per-session UI override (temporary)
+    /// 2. Local project override - iOS ProjectSettingsStore (per-device)
+    /// 3. Server project config - cli-bridge project settings (shared across devices)
+    /// 4. Global app setting - iOS AppSettings.globalPermissionMode (per-device)
+    /// 5. Server global default - cli-bridge global config (shared across devices)
+    ///
+    /// - Parameters:
+    ///   - projectPath: The project path to resolve permissions for
+    ///   - sessionOverride: Optional per-session override from UI
+    ///   - localProjectOverride: Optional override from ProjectSettingsStore
+    ///   - globalAppSetting: The global setting from AppSettings
+    /// - Returns: The effective PermissionMode after resolution
+    func resolvePermissionMode(
+        for projectPath: String,
+        sessionOverride: PermissionMode? = nil,
+        localProjectOverride: PermissionMode? = nil,
+        globalAppSetting: PermissionMode = .default
+    ) -> PermissionMode {
+        // 1. Session override takes highest priority (temporary per-session)
+        if let sessionMode = sessionOverride {
+            return sessionMode
+        }
+
+        // 2. Local project override (iOS device-specific)
+        if let localOverride = localProjectOverride {
+            return localOverride
+        }
+
+        // 3. Server project config (shared across devices)
+        if let serverConfig = config {
+            if let projectConfig = serverConfig.projects[projectPath] {
+                if projectConfig.bypassAll == true {
+                    return .bypassPermissions
+                }
+                if let mode = projectConfig.permissionMode {
+                    return mode
+                }
+            }
+        }
+
+        // 4. Global app setting (iOS device-specific)
+        if globalAppSetting != .default {
+            return globalAppSetting
+        }
+
+        // 5. Server global default (shared across devices)
+        if let serverConfig = config {
+            if serverConfig.global.bypassAll {
+                return .bypassPermissions
+            }
+            return serverConfig.global.defaultMode
+        }
+
+        // Ultimate fallback
+        return globalAppSetting
+    }
+
+    /// Get effective permission mode for a project (legacy - consider using resolvePermissionMode)
     /// Resolution order: session override > project bypass > project mode > global bypass > global default
     func getEffectiveMode(
         for projectPath: String,

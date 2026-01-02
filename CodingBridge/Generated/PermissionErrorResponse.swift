@@ -9,7 +9,7 @@ import Foundation
 
 public struct PermissionErrorResponse: Sendable, Codable, Hashable {
 
-    /** APIError message */
+    /** Error message */
     public var error: String
 
     public init(error: String) {

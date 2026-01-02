@@ -9,7 +9,7 @@ import Foundation
 
 public struct SearchErrorResponse: Sendable, Codable, Hashable {
 
-    /** APIError code */
+    /** Error code */
     public var error: SearchErrorCode
     /** Human-readable error message */
     public var message: String

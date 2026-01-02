@@ -20,7 +20,7 @@ public struct SessionEventMessage: Sendable, Codable, Hashable {
     public var type: ModelType
     /** Event type */
     public var action: Action
-    /** APIProject path */
+    /** Project path */
     public var projectPath: String
     /** Session ID */
     public var sessionId: UUID

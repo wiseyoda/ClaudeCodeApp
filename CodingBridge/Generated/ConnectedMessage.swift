@@ -22,7 +22,7 @@ public struct ConnectedMessage: Sendable, Codable, Hashable {
     public var sessionId: UUID
     /** Active model (alias or full ID) */
     public var model: String
-    /** APIModel alias echoed back from client request (e.g., 'sonnet', 'opus', 'haiku') */
+    /** Model alias echoed back from client request (e.g., 'sonnet', 'opus', 'haiku') */
     public var modelAlias: String?
     /** Server version */
     public var version: String

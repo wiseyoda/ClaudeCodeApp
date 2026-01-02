@@ -497,7 +497,7 @@ class CLIBridgeManager: ObservableObject {
     // MARK: - Message Sending
 
     /// Send user input to the agent
-    func sendInput(_ text: String, images: [APIImageAttachment]? = nil, thinkingMode: String? = nil) async throws {
+    func sendInput(_ text: String, images: [CLIImageAttachment]? = nil, thinkingMode: String? = nil) async throws {
         let payload = InputMessage(text: text, images: images, thinkingMode: thinkingMode)
         try await send(.input(payload))
         if agentState == .idle {
@@ -545,8 +545,9 @@ class CLIBridgeManager: ObservableObject {
 
     /// Set permission mode for the agent
     /// - Parameter mode: "default", "acceptEdits", or "bypassPermissions"
-    func setPermissionMode(_ mode: SetPermissionModeMessage.Mode) async throws {
-        try await send(.setPermissionMode(SetPermissionModeMessage(mode: mode)))
+    func setPermissionMode(_ mode: CLIPermissionMode) async throws {
+        let mappedMode = SetPermissionModeMessage.Mode(rawValue: mode.rawValue) ?? ._default
+        try await send(.setPermissionMode(SetPermissionModeMessage(mode: mappedMode)))
     }
 
     /// Cancel queued input

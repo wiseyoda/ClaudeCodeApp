@@ -12,7 +12,7 @@ public struct ServerError: Sendable, Codable, Hashable {
     public enum ModelError: String, Sendable, Codable, CaseIterable {
         case serverError = "SERVER_ERROR"
     }
-    /** APIError type */
+    /** Error type */
     public var error: ModelError
     /** Human-readable error description */
     public var message: String

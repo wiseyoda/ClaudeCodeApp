@@ -489,7 +489,7 @@ final class CLIBridgeManagerTests: XCTestCase {
                 QuestionItem(
                     question: "Ready?",
                     header: "Status",
-                    options: [APIQuestionOption(label: "Yes", description: nil)],
+                    options: [CLIQuestionOption(label: "Yes", description: nil)],
                     multiSelect: false
                 )
             ]
@@ -1115,7 +1115,7 @@ final class CLIBridgeManagerTests: XCTestCase {
                 QuestionItem(
                     question: "Proceed?",
                     header: "Confirm",
-                    options: [APIQuestionOption(label: "Yes", description: nil)],
+                    options: [CLIQuestionOption(label: "Yes", description: nil)],
                     multiSelect: false
                 )
             ]

@@ -9,7 +9,7 @@ import Foundation
 
 public struct PushErrorResponse: Sendable, Codable, Hashable {
 
-    /** APIError code */
+    /** Error code */
     public var error: String
     /** Human-readable error message */
     public var message: String

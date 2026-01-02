@@ -13,7 +13,7 @@ public struct ErrorMessage: Sendable, Codable, Hashable {
         case error = "error"
     }
     public var type: ModelType
-    /** APIError code */
+    /** Error code */
     public var code: String
     /** Human-readable description */
     public var message: String

@@ -12,7 +12,7 @@ public struct NotFoundError: Sendable, Codable, Hashable {
     public enum ModelError: String, Sendable, Codable, CaseIterable {
         case notFound = "NOT_FOUND"
     }
-    /** APIError type */
+    /** Error type */
     public var error: ModelError
     /** Human-readable error description */
     public var message: String
