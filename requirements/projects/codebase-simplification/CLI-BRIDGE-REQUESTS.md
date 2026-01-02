@@ -9,15 +9,15 @@
 3. Update this document with the issue number once filed
 4. Link the cli-bridge issue in the related simplification issue file
 
-## Pending Requests
+## Request Summary
 
-These are extracted from ROADMAP.md items #31-#41 and need to be filed as GitHub issues.
+🎉 **All cli-bridge requests are complete!** All 11 requests from ROADMAP.md items #31-#41 have been filed, verified, and closed.
 
 | # | Request | Impact | Status | GitHub Issue |
 |---|---------|--------|--------|--------------|
-| #31 | Exit Plan Mode approval UI | Medium | Pending | - |
-| #32 | Multi-repo/monorepo git status aggregation | Low | Pending | - |
-| #33 | Batch session counts API | Medium | Pending | - |
+| #31 | Exit Plan Mode approval UI | Medium | ✅ **Completed** | [cli-bridge#29](https://github.com/wiseyoda/cli-bridge/issues/29) |
+| #32 | Multi-repo/monorepo git status aggregation | Low | ✅ **Completed** | [cli-bridge#30](https://github.com/wiseyoda/cli-bridge/issues/30) |
+| #33 | Batch session counts API | Medium | ✅ **Completed** | [cli-bridge#31](https://github.com/wiseyoda/cli-bridge/issues/31) |
 | #34 | Idempotent reconnection protocol | Medium | **Completed** | [cli-bridge#20](https://github.com/wiseyoda/cli-bridge/issues/20) |
 | #35 | Typed StreamMessage in paginated responses | Medium | **Completed** | [cli-bridge#21](https://github.com/wiseyoda/cli-bridge/issues/21) |
 | #36 | Normalize model ID handling (echo alias) | Medium | **Completed** | [cli-bridge#17](https://github.com/wiseyoda/cli-bridge/issues/17) |
@@ -77,35 +77,71 @@ Track status of filed issues here:
 | [#18](https://github.com/wiseyoda/cli-bridge/issues/18) | ✅ Closed | Session count in project list - already implemented |
 | [#20](https://github.com/wiseyoda/cli-bridge/issues/20) | ✅ Closed | Idempotent reconnection - protocol documented |
 | [#21](https://github.com/wiseyoda/cli-bridge/issues/21) | ✅ Closed | Typed paginated messages - `StreamMessageSchema` used |
+| [#29](https://github.com/wiseyoda/cli-bridge/issues/29) | ✅ Closed | ExitPlanMode - documented in protocol.md, works via permission system |
+| [#30](https://github.com/wiseyoda/cli-bridge/issues/30) | ✅ Closed | Subrepos endpoint - documented in protocol.md, fully implemented |
+| [#31](https://github.com/wiseyoda/cli-bridge/issues/31) | ✅ Closed | Session counts - verified in `GET /projects` response |
 
-## Unfiled Requests
+## Implementation Reference
 
-These still need to be filed:
+All cli-bridge requests have been completed and documented. Reference for iOS implementation:
 
-### #31 - Exit Plan Mode Approval UI
+### #31 - Exit Plan Mode Approval UI ✅
 
-**Summary**: Provide a way to approve/reject plan mode exit via the API
+**Documentation**: `specifications/reference/protocol.md` → "ExitPlanMode Handling"
 
-**Context**: When Claude enters plan mode and wants to exit, the CLI shows a confirmation. The iOS client needs an equivalent approval flow.
+**How it works**:
+1. Claude calls `ExitPlanMode` tool with plan content
+2. cli-bridge sends `permission_request` with `tool: "ExitPlanMode"` and `input: { plan: "..." }`
+3. iOS renders plan markdown and shows Approve/Reject buttons
+4. iOS sends `permission_response` with `choice: "allow"` or `"deny"`
 
-**iOS Workaround**: Currently handled ad-hoc, needs formal API support.
+**Example message:**
+```json
+{
+  "type": "permission",
+  "id": "perm_xyz789",
+  "tool": "ExitPlanMode",
+  "input": { "plan": "## Implementation Plan\n\n1. Create component..." },
+  "options": ["allow", "deny", "always"]
+}
+```
 
 ---
 
-### #32 - Multi-repo Git Status Aggregation
+### #32 - Multi-repo Git Status Aggregation ✅
 
-**Summary**: Aggregate git status across monorepo subprojects
+**Documentation**: `specifications/reference/protocol.md` → "Sub-Repositories"
 
-**Context**: Some projects have multiple git repositories. iOS client wants to show unified git status.
+**Endpoints:**
+```
+GET /projects/{encodedPath}/subrepos?maxDepth=2
+POST /projects/{encodedPath}/subrepos/{relativePath}/pull
+```
 
-**iOS Workaround**: Individual git status calls per subrepo.
+**Example response:**
+```json
+{
+  "subrepos": [{
+    "relativePath": "packages/core",
+    "git": { "branch": "main", "ahead": 0, "behind": 2, ... }
+  }]
+}
+```
 
 ---
 
-### #33 - Batch Session Counts API
+### #33 - Batch Session Counts ✅
 
-**Summary**: Get session counts for multiple projects in one request
+**Solution**: `GET /projects` already includes `sessionCount` for each project.
 
-**Context**: Home screen shows session counts for all projects. Currently requires N API calls.
+**Example:**
+```json
+{
+  "projects": [
+    { "name": "my-app", "sessionCount": 5, ... },
+    { "name": "other-app", "sessionCount": 12, ... }
+  ]
+}
+```
 
-**iOS Workaround**: Fire parallel requests, cache aggressively.
+**iOS Action**: Single API call to `GET /projects` provides all session counts - no N+1 problem.

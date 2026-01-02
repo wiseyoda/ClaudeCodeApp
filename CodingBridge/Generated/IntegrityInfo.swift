@@ -7,7 +7,6 @@
 
 import Foundation
 
-/** Data integrity information */
 public struct IntegrityInfo: Sendable, Codable, Hashable {
 
     /** Total lines processed from history file */

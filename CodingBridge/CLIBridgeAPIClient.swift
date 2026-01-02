@@ -63,7 +63,7 @@ class CLIBridgeAPIClient: ObservableObject {
 
     /// Get detailed information about a single project
     func getProjectDetail(projectPath: String) async throws -> CLIProjectDetail {
-        let encodedPath = encodeProjectPath(projectPath)
+        let encodedPath = ProjectPathEncoder.encode(projectPath)
         return try await get("/projects/\(encodedPath)")
     }
 
@@ -87,7 +87,7 @@ class CLIBridgeAPIClient: ObservableObject {
         archivedOnly: Bool = false,
         parentSessionId: String? = nil
     ) async throws -> CLISessionsResponse {
-        let encodedPath = encodeProjectPath(projectPath)
+        let encodedPath = ProjectPathEncoder.encode(projectPath)
         var queryItems: [URLQueryItem] = [
             URLQueryItem(name: "limit", value: String(limit))
         ]
@@ -113,26 +113,26 @@ class CLIBridgeAPIClient: ObservableObject {
 
     /// Fetch a single session
     func fetchSession(projectPath: String, sessionId: String) async throws -> CLISessionMetadata {
-        let encodedPath = encodeProjectPath(projectPath)
+        let encodedPath = ProjectPathEncoder.encode(projectPath)
         return try await get("/projects/\(encodedPath)/sessions/\(sessionId)")
     }
 
     /// Rename a session (set custom title)
     func renameSession(projectPath: String, sessionId: String, title: String?) async throws {
-        let encodedPath = encodeProjectPath(projectPath)
+        let encodedPath = ProjectPathEncoder.encode(projectPath)
         let body = CLIRenameSessionRequest(title: title)
         let _: EmptyResponse = try await put("/projects/\(encodedPath)/sessions/\(sessionId)", body: body)
     }
 
     /// Delete a session
     func deleteSession(projectPath: String, sessionId: String) async throws {
-        let encodedPath = encodeProjectPath(projectPath)
+        let encodedPath = ProjectPathEncoder.encode(projectPath)
         try await delete("/projects/\(encodedPath)/sessions/\(sessionId)")
     }
 
     /// Delete sessions older than specified days
     func deleteSessions(projectPath: String, olderThanDays: Int) async throws -> CLIBulkDeleteResponse {
-        let encodedPath = encodeProjectPath(projectPath)
+        let encodedPath = ProjectPathEncoder.encode(projectPath)
         let queryItems = [
             URLQueryItem(name: "filter", value: "older_than"),
             URLQueryItem(name: "days", value: String(olderThanDays))
@@ -159,7 +159,7 @@ class CLIBridgeAPIClient: ObservableObject {
         projectPath: String,
         source: CLISessionMetadata.SessionSource? = nil
     ) async throws -> CLISessionCountResponse {
-        let encodedPath = encodeProjectPath(projectPath)
+        let encodedPath = ProjectPathEncoder.encode(projectPath)
         var queryItems: [URLQueryItem] = []
 
         if let source = source {
@@ -186,7 +186,7 @@ class CLIBridgeAPIClient: ObservableObject {
         limit: Int = 20,
         offset: Int = 0
     ) async throws -> CLISessionSearchResponse {
-        let encodedPath = encodeProjectPath(projectPath)
+        let encodedPath = ProjectPathEncoder.encode(projectPath)
         var queryItems: [URLQueryItem] = [
             URLQueryItem(name: "q", value: query)
         ]
@@ -209,7 +209,7 @@ class CLIBridgeAPIClient: ObservableObject {
     ///   - sessionId: Session ID to archive
     /// - Returns: Updated session metadata with archivedAt timestamp
     func archiveSession(projectPath: String, sessionId: String) async throws -> CLISessionMetadata {
-        let encodedPath = encodeProjectPath(projectPath)
+        let encodedPath = ProjectPathEncoder.encode(projectPath)
         return try await post("/projects/\(encodedPath)/sessions/\(sessionId)/archive")
     }
 
@@ -219,7 +219,7 @@ class CLIBridgeAPIClient: ObservableObject {
     ///   - sessionId: Session ID to unarchive
     /// - Returns: Updated session metadata with archivedAt cleared
     func unarchiveSession(projectPath: String, sessionId: String) async throws -> CLISessionMetadata {
-        let encodedPath = encodeProjectPath(projectPath)
+        let encodedPath = ProjectPathEncoder.encode(projectPath)
         return try await post("/projects/\(encodedPath)/sessions/\(sessionId)/unarchive")
     }
 
@@ -237,7 +237,7 @@ class CLIBridgeAPIClient: ObservableObject {
         limit: Int = 50,
         offset: Int = 0
     ) async throws -> CLISessionsResponse {
-        let encodedPath = encodeProjectPath(projectPath)
+        let encodedPath = ProjectPathEncoder.encode(projectPath)
         var queryItems: [URLQueryItem] = []
 
         if limit != 50 {
@@ -267,7 +267,7 @@ class CLIBridgeAPIClient: ObservableObject {
         action: String,
         customTitle: String? = nil
     ) async throws -> CLIBulkOperationResponse {
-        let encodedPath = encodeProjectPath(projectPath)
+        let encodedPath = ProjectPathEncoder.encode(projectPath)
         // Convert String sessionIds to UUIDs
         let uuids = sessionIds.compactMap { UUID(uuidString: $0) }
         guard uuids.count == sessionIds.count else {
@@ -305,7 +305,7 @@ class CLIBridgeAPIClient: ObservableObject {
         order: String? = nil,
         includeRawContent: Bool? = nil
     ) async throws -> CLIPaginatedMessagesResponse {
-        let encodedPath = encodeProjectPath(projectPath)
+        let encodedPath = ProjectPathEncoder.encode(projectPath)
         let request = CLIPaginatedMessagesRequest(
             limit: limit,
             offset: offset,
@@ -380,7 +380,7 @@ class CLIBridgeAPIClient: ObservableObject {
         excludeThinking: Bool = false,
         includeStructuredContent: Bool = false
     ) async throws -> CLIExportResponse {
-        let encodedPath = encodeProjectPath(projectPath)
+        let encodedPath = ProjectPathEncoder.encode(projectPath)
         var queryItems = [
             URLQueryItem(name: "format", value: format.rawValue)
         ]
@@ -422,14 +422,14 @@ class CLIBridgeAPIClient: ObservableObject {
 
     /// List files in a directory
     func listFiles(projectPath: String, directory: String = "/") async throws -> CLIFileListResponse {
-        let encodedPath = encodeProjectPath(projectPath)
+        let encodedPath = ProjectPathEncoder.encode(projectPath)
         let queryItems = [URLQueryItem(name: "dir", value: directory)]
         return try await get("/projects/\(encodedPath)/files", queryItems: queryItems)
     }
 
     /// Read file content
     func readFile(projectPath: String, filePath: String) async throws -> CLIFileContentResponse {
-        let encodedPath = encodeProjectPath(projectPath)
+        let encodedPath = ProjectPathEncoder.encode(projectPath)
         // URL encode the file path for the URL
         let encodedFilePath = filePath.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? filePath
         return try await get("/projects/\(encodedPath)/files/\(encodedFilePath)")
@@ -610,7 +610,7 @@ class CLIBridgeAPIClient: ObservableObject {
 
     /// Delete a project
     func deleteProject(projectPath: String, deleteFiles: Bool = false) async throws {
-        let encodedPath = encodeProjectPath(projectPath)
+        let encodedPath = ProjectPathEncoder.encode(projectPath)
         var queryItems: [URLQueryItem] = []
         if deleteFiles {
             queryItems.append(URLQueryItem(name: "deleteFiles", value: "true"))
@@ -620,13 +620,13 @@ class CLIBridgeAPIClient: ObservableObject {
 
     /// Git pull for a project
     func gitPull(projectPath: String) async throws -> CLIGitPullResponse {
-        let encodedPath = encodeProjectPath(projectPath)
+        let encodedPath = ProjectPathEncoder.encode(projectPath)
         return try await post("/projects/\(encodedPath)/git/pull")
     }
 
     /// Discover sub-repositories in a project
     func discoverSubRepos(projectPath: String, maxDepth: Int = 2) async throws -> [CLISubRepoInfo] {
-        let encodedPath = encodeProjectPath(projectPath)
+        let encodedPath = ProjectPathEncoder.encode(projectPath)
         let queryItems = [URLQueryItem(name: "maxDepth", value: String(maxDepth))]
         let response: CLISubReposResponse = try await get("/projects/\(encodedPath)/subrepos", queryItems: queryItems)
         return response.subrepos
@@ -634,17 +634,12 @@ class CLIBridgeAPIClient: ObservableObject {
 
     /// Git pull for a sub-repository
     func pullSubRepo(projectPath: String, relativePath: String) async throws -> CLIGitPullResponse {
-        let encodedPath = encodeProjectPath(projectPath)
+        let encodedPath = ProjectPathEncoder.encode(projectPath)
         let encodedRelative = relativePath.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? relativePath
         return try await post("/projects/\(encodedPath)/subrepos/\(encodedRelative)/pull")
     }
 
     // MARK: - Private Helpers
-
-    private func encodeProjectPath(_ path: String) -> String {
-        // Convert /home/dev/project → -home-dev-project
-        return path.replacingOccurrences(of: "/", with: "-")
-    }
 
     private func buildURL(_ endpoint: String, queryItems: [URLQueryItem]? = nil) -> URL? {
         let urlString = serverURL + endpoint

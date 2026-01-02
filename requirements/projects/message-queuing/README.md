@@ -45,7 +45,7 @@ The app is considered "busy" (queuing active) when ANY of these are true:
 
 **Backend**: Does NOT support concurrent message processing. Single-stream model expects one message at a time with response before next.
 
-**Existing Code**: `CLIBridgeManager.swift` and `MessageQueuePersistence.swift` handle message sending. Queuing logic can be added to support user-facing message queuing.
+**Existing Code**: `CLIBridgeManager.swift` handles message sending. (Note: `MessageQueuePersistence.swift` was removed in codebase simplification #25 as it was dead code - queuing would need to be implemented from scratch.)
 
 **Current Behavior**: UI completely blocks input via `isProcessing` flag. Need to change this to allow input that queues instead.
 

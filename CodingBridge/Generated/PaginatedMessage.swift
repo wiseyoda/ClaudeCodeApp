@@ -13,12 +13,12 @@ public struct PaginatedMessage: Sendable, Codable, Hashable {
     public var id: String
     /** Message timestamp */
     public var timestamp: String
-    /** Message content with type and content fields */
-    public var message: [String: JSONValue]
-    /** Structured content blocks */
-    public var rawContent: [JSONValue]?
+    /** Typed message content (discriminated union on 'type' field) */
+    public var message: StreamMessage
+    /** Structured content blocks (text, tool_use, tool_result) */
+    public var rawContent: [ContentBlock]?
 
-    public init(id: String, timestamp: String, message: [String: JSONValue], rawContent: [JSONValue]? = nil) {
+    public init(id: String, timestamp: String, message: StreamMessage, rawContent: [ContentBlock]? = nil) {
         self.id = id
         self.timestamp = timestamp
         self.message = message

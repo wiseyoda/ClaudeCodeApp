@@ -167,12 +167,12 @@ struct Project: Codable, Identifiable, Hashable {
         lhs.path == rhs.path
     }
 
-    // For display, prefer displayName, then name cleaned up
+    /// Display title: prefer server displayName, otherwise use name (which is already the basename)
     var title: String {
         if let display = displayName, !display.isEmpty {
             return display
         }
-        return name.replacingOccurrences(of: "-home-dev-workspace-", with: "")
+        return name
     }
 
     /// Total session count (from API metadata or bundled sessions count)
@@ -443,10 +443,26 @@ class MessageStore {
     }
 
     private static func projectDirectory(for projectPath: String) -> URL {
-        let safeKey = projectPath
+        // Use standardized encoding (- for /)
+        let safeKey = ProjectPathEncoder.encode(projectPath)
+        let dir = messagesDirectory.appendingPathComponent(safeKey, isDirectory: true)
+
+        // Migration: check for old encoding (_) and move to new (-) if needed
+        let oldKey = projectPath
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: " ", with: "_")
-        let dir = messagesDirectory.appendingPathComponent(safeKey, isDirectory: true)
+        if oldKey != safeKey {
+            let oldDir = messagesDirectory.appendingPathComponent(oldKey, isDirectory: true)
+            var isDir: ObjCBool = false
+            if FileManager.default.fileExists(atPath: oldDir.path, isDirectory: &isDir), isDir.boolValue {
+                // Old directory exists, migrate to new location
+                if !FileManager.default.fileExists(atPath: dir.path) {
+                    try? FileManager.default.moveItem(at: oldDir, to: dir)
+                    log.info("[MessageStore] Migrated messages from \(oldKey) to \(safeKey)")
+                }
+            }
+        }
+
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }

@@ -18,7 +18,9 @@ public struct GetMessagesResponse: Sendable, Codable, Hashable {
     public var messages: [PaginatedMessage]
     public var pagination: GetMessagesResponsePagination
     public var filters: GetMessagesResponseFilters
+    /** Data integrity information */
     public var integrity: IntegrityInfo?
+    /** Pagination error details */
     public var error: PaginationError?
 
     public init(apiVersion: ApiVersion, messages: [PaginatedMessage], pagination: GetMessagesResponsePagination, filters: GetMessagesResponseFilters, integrity: IntegrityInfo? = nil, error: PaginationError? = nil) {

@@ -1,9 +1,9 @@
 # Issue #5: Consolidate stores into a single persistence layer
 
-> **Status**: Pending
+> **Status**: Won't Fix (verified 2026-01-02)
 > **Priority**: Tier 2
 > **Depends On**: #23/#25
-> **Blocks**: #16/#42/#43
+> **Blocks**: #16/#42/#43 (unblocked - see Resolution below)
 
 ---
 
@@ -11,112 +11,72 @@
 
 Implement roadmap task: Consolidate stores into a single persistence layer.
 
-## Problem
+## Resolution: Won't Fix
 
-Current implementation adds indirection or duplication, which slows debugging and makes behavior harder to reason about. This issue removes the extra layer without changing user-visible behavior.
+**Date**: 2026-01-02
 
-## Solution
+After completing issues #23 and #25, a comprehensive audit was performed on all persistence stores in the codebase. The conclusion is that **further consolidation would add abstraction without removing complexity**, violating the core principle of the simplification project.
 
-Apply the roadmap change directly, delete the legacy path, and update call sites to use the simplified flow. Keep behavior identical while reducing code paths.
+### Audit Findings
+
+| Store | Persistence | Scope | Purpose |
+|-------|-------------|-------|---------|
+| MessageStore | File | Per-project | Chat messages, drafts, session IDs |
+| BookmarkStore | File | Global | Cross-session bookmarks |
+| ArchivedProjectsStore | UserDefaults | Global | Hidden project paths |
+| CommandStore | File | Global | Saved commands |
+| IdeasStore | File | Per-project | Ideas per project |
+| SessionStore | API | N/A | API-backed, no local persistence |
+| ProjectSettingsStore | File | Global | Per-project overrides |
+| SearchHistoryStore | UserDefaults | Global | Search queries |
+| StatusMessageStore | UserDefaults | Global | Message collection progress |
+| ErrorAnalyticsStore | File | Global | Error tracking |
+| ErrorStore | Memory | Global | In-memory error display |
+
+### Why Consolidation Is Not Needed
+
+1. **No state duplication exists** - Each store manages a distinct concern
+2. **Issues #23/#25 already resolved the actual problems**:
+   - #23 unified draft + processing persistence into MessageStore
+   - #25 deleted MessageQueuePersistence dead code
+3. **Different scopes require different approaches**:
+   - Per-project stores use path-encoded filenames
+   - Global stores use single files
+   - API-backed stores have no local persistence
+4. **Current architecture follows iOS best practices**:
+   - Codable for serialization
+   - Documents directory for file storage
+   - Background queues for thread safety
+5. **A "unified layer" would add indirection**:
+   - New abstraction over working code
+   - More complexity, not less
+   - Risk of bugs in stable code
+
+### Impact on Dependent Issues
+
+The blocked issues (#16, #42, #43) are **not actually blocked** by this decision:
+
+- **#16 (activeSheet enum)**: UI state consolidation, unrelated to persistence
+- **#42 (Split ChatViewModel)**: Can proceed without persistence changes
+- **#43 (Split Models.swift)**: Can split files without unifying persistence
+
+These issues should be unblocked in the dependency graph.
 
 ---
 
-## Scope
+## Original Problem Statement
 
-### In Scope
+Current implementation adds indirection or duplication, which slows debugging and makes behavior harder to reason about.
 
-- Apply the Consolidate stores into a single persistence layer change in the listed files
-- Remove or replace the legacy path
-
-### Out of Scope
-
-- New features or UX changes
-- Unrelated refactors outside this task
-
----
-
-## Implementation
-
-### Files to Modify
-
-| File | Change |
-|---|---|
-| CodingBridge/Models.swift | Move MessageStore/BookmarkStore into unified persistence |
-| CodingBridge/CommandStore.swift | Migrate storage to persistence layer |
-| CodingBridge/IdeasStore.swift | Migrate storage to persistence layer |
-
-### Files to Delete
-
-| File | Reason |
-|---|---|
-| None | N/A |
-
-### Steps
-
-1. **Audit**
-   - Review current implementation and usage
-   - Confirm dependent call sites
-
-2. **Implement**
-   - Apply the simplification change
-   - Update references and remove old code paths
-
-3. **Verify**
-   - Build passes: `xcodebuild -project CodingBridge.xcodeproj -scheme CodingBridge -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'`
-   - No new warnings
-   - App launches and basic functionality works
+**Finding**: After #23/#25, there is no remaining indirection or duplication in persistence. The stores are intentionally separate because they serve different purposes.
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] Consolidate stores into a single persistence layer is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
-
----
-
-## Verification Commands
-
-```bash
-# Build verification
-xcodebuild -project CodingBridge.xcodeproj -scheme CodingBridge \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=26.2'
-
-# Custom verification command if applicable
-rg -n "MessageStore" CodingBridge
-
-# Line count verification (if removing code)
-# wc -l path/to/file.swift
-```
-
----
-
-## Risks & Mitigations
-
-| Risk | Mitigation |
-|------|------------|
-| Behavior regression from deleted paths | Keep behavior tests/manual checks and verify builds |
-| Missed references after cleanup | Use `rg` to confirm symbol removal and update all call sites |
-
----
-
-## Notes
-
-None.
-
----
-
-## Assessment (from ROADMAP.md)
-
-| Impact | Simplification | iOS Best Practices |
-|--------|----------------|-------------------|
-| 3/5 | 3/5 | 3/5 |
-
-**Rationale:**
-- Impact: Medium per roadmap
-- Simplification: reduces indirection and duplicate paths
+- [x] Audit completed - stores reviewed
+- [x] No actionable consolidation identified
+- [x] Decision documented with rationale
 
 ---
 
@@ -124,5 +84,6 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Comprehensive audit of all stores | 11 stores identified, no duplication found |
+| 2026-01-02 | Marked Won't Fix | Adding abstraction would violate simplification goals |
+| 2026-01-02 | Verified | Dependencies removed and roadmap aligned |

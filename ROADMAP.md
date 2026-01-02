@@ -44,13 +44,13 @@
 | 3 | #1 | Remove CLIBridgeTypesMigration | High | #17 | Complete | Split into CLIBridgeAppTypes.swift + CLIBridgeExtensions.swift. |
 | 4 | #27 | Consolidate network/lifecycle/reconnect logic; remove sleep-based connects | High | #17 | Complete | Removed duplicate ChatView reconnect handler; rely on CLIBridgeManager lifecycle observers. |
 | 5 | #23 | Unify draft + processing persistence | High | #27 | Complete | Deleted DraftInputPersistence.swift; unified global recovery in MessageStore. |
-| 6 | #25 | Finish or remove MessageQueuePersistence | Medium | #23 | Planned | Either wire queue or delete it. |
-| 7 | #5 | Consolidate stores into one persistence layer | Medium | #23/#25 | Planned | Avoid state duplication. |
-| 8 | #16 | Consolidate sheet booleans into activeSheet enum | Low | #5 | Planned | Reduce UI state sprawl. |
-| 9 | #21 | Centralize project path encode/decode (preserve hyphens) | High | #1 | Planned | Fix path ambiguity across API layers. |
-| 10 | #22 | Replace hard-coded path stripping in Project.title | Low | #21 | Planned | Use basename or server displayName. |
-| 11 | #26 | Reconfigure long-lived services on serverURL change | Medium | #21 | Planned | Avoid stale serverURL in stores/services. |
-| 12 | #24 | Define a single permission resolution pipeline | Medium | #23/#26 | Planned | Global -> project -> session -> server. |
+| 6 | #25 | Finish or remove MessageQueuePersistence | Medium | #23 | Complete | Deleted dead code; recovery state handled by MessageStore. |
+| 7 | #5 | Consolidate stores into one persistence layer | Medium | #23/#25 | Won't Fix | Audit found no duplication; stores are intentionally separate. |
+| 8 | #21 | Centralize project path encode/decode (preserve hyphens) | High | #1 | Complete | Created ProjectPathEncoder utility; migrated MessageStore to - encoding. |
+| 9 | #22 | Replace hard-coded path stripping in Project.title | Low | #21 | Complete | Removed hard-coded path prefix; name field is already basename. |
+| 10 | #26 | Reconfigure long-lived services on serverURL change | Medium | #21 | Planned | Avoid stale serverURL in stores/services. |
+| 11 | #24 | Define a single permission resolution pipeline | Medium | #23/#26 | Planned | Global -> project -> session -> server. |
+| 12 | #16 | Consolidate sheet booleans into activeSheet enum | Low | - | Planned | Reduce UI state sprawl. |
 | 13 | #30 | Update docs to match WebSocket streaming; remove SSE/WebSocketManager refs | Medium | #1/#17 | Planned | Align docs with code. |
 
 ### Backlog (Unscheduled or Parallel)
@@ -95,8 +95,8 @@
 
 | # | Task | Impact | Depends On | Status | Notes |
 |---|------|--------|------------|--------|-------|
-| #42 | Split ChatViewModel into focused modules | Low | #17/#5 | Pending | ~1641 lines; revisit after streaming/persistence cleanup. |
-| #43 | Split Models.swift into model + persistence files | Medium | #5 | Pending | ~1103 lines; aligns with store consolidation. |
+| #42 | Split ChatViewModel into focused modules | Low | #17 | Pending | ~1641 lines; revisit after streaming/persistence cleanup. |
+| #43 | Split Models.swift into model + persistence files | Medium | #1 | Pending | ~1103 lines; aligns with store consolidation. |
 | #44 | Split SSHManager into key/file/git modules | Medium | - | Pending | ~1401 lines; depends on ownership decision (#29). |
 | #45 | Split CLIBridgeManager into connection + stream handler | Medium | #9/#17 | Pending | ~1237 lines; reduce churn risk. |
 

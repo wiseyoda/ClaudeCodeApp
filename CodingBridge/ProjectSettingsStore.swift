@@ -74,13 +74,13 @@ class ProjectSettingsStore: ObservableObject {
 
     /// Get settings for a project (creates default if none exist)
     func settings(for projectPath: String) -> ProjectSettings {
-        let encodedPath = encodeProjectPath(projectPath)
+        let encodedPath = ProjectPathEncoder.encode(projectPath)
         return projectSettings[encodedPath] ?? ProjectSettings()
     }
 
     /// Update settings for a project
     func updateSettings(for projectPath: String, settings: ProjectSettings) {
-        let encodedPath = encodeProjectPath(projectPath)
+        let encodedPath = ProjectPathEncoder.encode(projectPath)
         projectSettings[encodedPath] = settings
         save()
     }
@@ -108,7 +108,7 @@ class ProjectSettingsStore: ObservableObject {
 
     /// Clear settings for a project (revert to global defaults)
     func clearSettings(for projectPath: String) {
-        let encodedPath = encodeProjectPath(projectPath)
+        let encodedPath = ProjectPathEncoder.encode(projectPath)
         projectSettings.removeValue(forKey: encodedPath)
         save()
     }
@@ -123,13 +123,6 @@ class ProjectSettingsStore: ObservableObject {
         var currentSettings = settings(for: projectPath)
         currentSettings.enableSubrepoDiscovery = enabled
         updateSettings(for: projectPath, settings: currentSettings)
-    }
-
-    // MARK: - Private Helpers
-
-    private func encodeProjectPath(_ path: String) -> String {
-        // Encode project path: /path/to/project -> -path-to-project
-        return path.replacingOccurrences(of: "/", with: "-")
     }
 
     // MARK: - Persistence

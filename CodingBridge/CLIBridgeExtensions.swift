@@ -1018,6 +1018,23 @@ extension SessionMetadata {
   }
 }
 
+extension SessionEventMessageMetadata {
+  /// Convert to ProjectSession for UI display
+  func toProjectSession() -> ProjectSession {
+    let summaryText = customTitle ?? title ?? summary
+    return ProjectSession(
+      id: id.uuidString,
+      projectPath: projectPath,
+      summary: summaryText,
+      lastActivity: CLIDateFormatter.string(from: lastActivityAt),
+      messageCount: messageCount,
+      lastUserMessage: nil,
+      lastAssistantMessage: nil,
+      archivedAt: archivedAt.map { CLIDateFormatter.string(from: $0) }
+    )
+  }
+}
+
 extension Array where Element == SessionMetadata {
   /// Convert array of SessionMetadata to ProjectSession array
   func toProjectSessions() -> [ProjectSession] {
@@ -1350,92 +1367,76 @@ extension GetMessagesResponse {
 
 extension PaginatedMessage {
   /// Convert to a single ChatMessage
-  /// Checks rawContent first block to determine type, falls back to message.content
+  /// Checks rawContent first block to determine type, falls back to message content
   func toChatMessage() -> ChatMessage? {
-    guard let typeValue = message["type"],
-          case .string(let typeStr) = typeValue else {
-      return nil
-    }
-
-    // Parse timestamp
-    let dateFormatter = ISO8601DateFormatter()
-    dateFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    let date = dateFormatter.date(from: timestamp) ?? Date()
+    let date = CLIDateFormatter.parseDate(timestamp) ?? Date()
 
     // Check rawContent first block for type (tool_use, thinking, tool_result, text)
-    if let rawContent = rawContent,
-       let firstBlock = rawContent.first,
-       case .dictionary(let dict) = firstBlock,
-       let blockTypeValue = dict["type"],
-       case .string(let blockType) = blockTypeValue {
+    if let firstBlock = rawContent?.first {
+      switch firstBlock {
+      case .typeToolUseBlock(let block):
+        let inputString = formatJSONValue(.dictionary(block.input))
+        let displayContent = inputString == "{}" ? block.name : "\(block.name)(\(inputString))"
+        return ChatMessage(id: UUID(), role: .toolUse, content: displayContent, timestamp: date)
 
-      switch blockType {
-      case "tool_use":
-        if let nameValue = dict["name"], case .string(let name) = nameValue {
-          var inputStr = "{}"
-          if let inputValue = dict["input"] {
-            inputStr = formatJSONValue(inputValue)
-          }
-          return ChatMessage(id: UUID(), role: .toolUse, content: "\(name)(\(inputStr))", timestamp: date)
+      case .typeToolResultBlock(let block):
+        guard !block.content.isEmpty else { return nil }
+        let role: ChatMessage.Role = block.isError == true ? .error : .toolResult
+        return ChatMessage(id: UUID(), role: role, content: block.content, timestamp: date)
+
+      case .typeThinkingBlock(let block):
+        guard !block.thinking.isEmpty else { return nil }
+        return ChatMessage(id: UUID(), role: .thinking, content: block.thinking, timestamp: date)
+
+      case .typeTextBlock(let block):
+        guard !block.text.isEmpty else { return nil }
+        let role: ChatMessage.Role
+        switch message {
+        case .typeUserStreamMessage:
+          role = .user
+        case .typeSystemStreamMessage:
+          role = .system
+        default:
+          role = .assistant
         }
-
-      case "tool_result":
-        if let contentValue = dict["content"] {
-          let resultText: String
-          switch contentValue {
-          case .string(let str): resultText = str
-          case .array(let arr):
-            resultText = arr.compactMap { item -> String? in
-              guard case .dictionary(let d) = item, let t = d["text"], case .string(let s) = t else { return nil }
-              return s
-            }.joined(separator: "\n")
-          default: resultText = formatJSONValue(contentValue)
-          }
-          guard !resultText.isEmpty else { return nil }
-          return ChatMessage(id: UUID(), role: .toolResult, content: resultText, timestamp: date)
-        }
-
-      case "thinking":
-        if let thinkingValue = dict["thinking"], case .string(let thinking) = thinkingValue, !thinking.isEmpty {
-          return ChatMessage(id: UUID(), role: .thinking, content: thinking, timestamp: date)
-        }
-
-      case "text":
-        if let textValue = dict["text"], case .string(let text) = textValue, !text.isEmpty {
-          let role: ChatMessage.Role = typeStr == "user" ? .user : .assistant
-          return ChatMessage(id: UUID(), role: role, content: text, timestamp: date)
-        }
-
-      default:
-        break
+        return ChatMessage(id: UUID(), role: role, content: block.text, timestamp: date)
       }
     }
 
-    // Fall back to message.content
-    var content = ""
-    if let contentValue = message["content"] {
-      switch contentValue {
-      case .string(let str): content = str
-      case .array(let arr):
-        content = arr.compactMap { block -> String? in
-          guard case .dictionary(let d) = block, let t = d["text"], case .string(let s) = t else { return nil }
-          return s
-        }.joined(separator: "\n")
-      default: break
-      }
+    // Fall back to typed message content
+    switch message {
+    case .typeUserStreamMessage(let user):
+      guard !user.content.isEmpty else { return nil }
+      return ChatMessage(id: UUID(), role: .user, content: user.content, timestamp: date)
+
+    case .typeAssistantStreamMessage(let assistant):
+      if assistant.delta == true { return nil }
+      guard !assistant.content.isEmpty else { return nil }
+      return ChatMessage(id: UUID(), role: .assistant, content: assistant.content, timestamp: date)
+
+    case .typeSystemStreamMessage(let system):
+      if system.subtype != nil { return nil }
+      guard !system.content.isEmpty else { return nil }
+      return ChatMessage(id: UUID(), role: .system, content: system.content, timestamp: date)
+
+    case .typeToolUseStreamMessage(let toolUse):
+      let inputString = formatJSONValue(.dictionary(toolUse.input))
+      let displayContent = inputString == "{}" ? toolUse.name : "\(toolUse.name)(\(inputString))"
+      return ChatMessage(id: UUID(), role: .toolUse, content: displayContent, timestamp: date)
+
+    case .typeToolResultStreamMessage(let toolResult):
+      guard !toolResult.output.isEmpty else { return nil }
+      let role: ChatMessage.Role = toolResult.isError == true || !toolResult.success ? .error : .toolResult
+      return ChatMessage(id: UUID(), role: role, content: toolResult.output, timestamp: date)
+
+    case .typeThinkingStreamMessage(let thinking):
+      let content = thinking.thinking ?? thinking.content
+      guard !content.isEmpty else { return nil }
+      return ChatMessage(id: UUID(), role: .thinking, content: content, timestamp: date)
+
+    default:
+      return nil
     }
-
-    guard !content.isEmpty else { return nil }
-
-    let role: ChatMessage.Role
-    switch typeStr {
-    case "user": role = .user
-    case "assistant": role = .assistant
-    case "system", "result": role = .system
-    default: role = .assistant
-    }
-
-    return ChatMessage(id: UUID(), role: role, content: content, timestamp: date)
   }
 
   /// Format a JSONValue as valid JSON for parsing

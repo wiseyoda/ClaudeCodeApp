@@ -181,9 +181,6 @@ final class BackgroundManager: ObservableObject {
     }
 
     private func saveCurrentState() async {
-        // Save pending messages
-        await MessageQueuePersistence.shared.save()
-
         // Save recovery state via unified MessageStore API
         MessageStore.saveGlobalRecoveryState(
             wasProcessing: true,

@@ -2,7 +2,7 @@
 
 > **Status**: Pending
 > **Priority**: Tier 3
-> **Depends On**: #17/#5
+> **Depends On**: #17
 > **Blocks**: None
 
 ---

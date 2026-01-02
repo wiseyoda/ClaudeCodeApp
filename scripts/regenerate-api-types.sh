@@ -90,14 +90,14 @@ done
 # - ImageAttachment: App has ImageAttachment in Models/ImageAttachment.swift
 # - PermissionConfig: App has PermissionConfig in PermissionTypes.swift
 # Note: Using perl for word boundary support (BSD sed on macOS doesn't support \b)
-CONFLICTING_TYPES="Project|GitStatus|ThinkingMode|Model|Error|SubRepo|FileEntry|PermissionMode|GlobalPermissions|FileEntryType|QuestionOption|ProjectPermissions|ImageAttachment|PermissionConfig"
+CONFLICTING_TYPES="Project|GitStatus|ThinkingMode|Model|Error|SubRepo|FileEntry|PermissionMode|GlobalPermissions|FileEntryType|QuestionOption|ProjectPermissions|ImageAttachment|PermissionConfig|ValidationError"
 
 for f in "$MODELS_DIR"/*.swift; do
   perl -i -pe "s/\b($CONFLICTING_TYPES)\b/API\$1/g" "$f"
 done
 
 # Rename conflicting files
-for type in Project GitStatus ThinkingMode Model Error SubRepo FileEntry PermissionMode GlobalPermissions FileEntryType QuestionOption ProjectPermissions ImageAttachment PermissionConfig; do
+for type in Project GitStatus ThinkingMode Model Error SubRepo FileEntry PermissionMode GlobalPermissions FileEntryType QuestionOption ProjectPermissions ImageAttachment PermissionConfig ValidationError; do
   if [ -f "$MODELS_DIR/${type}.swift" ]; then
     mv "$MODELS_DIR/${type}.swift" "$MODELS_DIR/API${type}.swift"
   fi

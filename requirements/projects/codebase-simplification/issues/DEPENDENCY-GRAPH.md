@@ -4,16 +4,16 @@ This graph lists issue dependencies and a recommended execution order. Use it to
 
 ## Recommended Order
 
-1. #9 WebSocket callbacks -> StreamEvent enum
-2. #17 Remove CLIBridgeAdapter layer
-3. #1 Remove CLIBridgeTypesMigration
-4. #27 Consolidate network/lifecycle/reconnect logic
-5. #23 Unify draft + processing persistence
-6. #25 Finish or remove MessageQueuePersistence
-7. #5 Consolidate stores into a single persistence layer
+1. #9 WebSocket callbacks -> StreamEvent enum ✅
+2. #17 Remove CLIBridgeAdapter layer ✅
+3. #1 Remove CLIBridgeTypesMigration ✅
+4. #27 Consolidate network/lifecycle/reconnect logic ✅
+5. #23 Unify draft + processing persistence ✅
+6. #25 Finish or remove MessageQueuePersistence ✅
+7. #5 Consolidate stores into a single persistence layer ❌ (Won't Fix)
 8. #16 Consolidate sheet booleans into activeSheet enum
-9. #21 Centralize project path encode/decode
-10. #22 Replace hard-coded path stripping in Project.title
+9. #21 Centralize project path encode/decode ✅
+10. #22 Replace hard-coded path stripping in Project.title ✅
 11. #26 Reconfigure long-lived services on serverURL change
 12. #24 Define a single permission resolution pipeline
 13. #30 Update docs to match WebSocket streaming
@@ -59,9 +59,6 @@ graph TD
   I1["#1 Remove CLIBridgeTypesMigration"] --> I30["#30 Update docs to match WebSocket streaming"]
   I1["#1 Remove CLIBridgeTypesMigration"] --> I43["#43 Split Models.swift into model + persistence files"]
   I2["#2 Simplify PaginatedMessage.toChatMessage()"] --> I3["#3 Remove formatJSONValue() custom serializer"]
-  I5["#5 Consolidate stores into a single persistence layer"] --> I16["#16 Consolidate sheet booleans into activeSheet enum"]
-  I5["#5 Consolidate stores into a single persistence layer"] --> I42["#42 Split ChatViewModel into focused modules"]
-  I5["#5 Consolidate stores into a single persistence layer"] --> I43["#43 Split Models.swift into model + persistence files"]
   I9["#9 WebSocket callbacks -> StreamEvent enum"] --> I10["#10 Remove toolUseMap dictionary"]
   I9["#9 WebSocket callbacks -> StreamEvent enum"] --> I11["#11 Remove subagentToolIds tracking"]
   I9["#9 WebSocket callbacks -> StreamEvent enum"] --> I15["#15 Remove ScrollStateManager"]
@@ -76,14 +73,11 @@ graph TD
   I17["#17 Remove CLIBridgeAdapter layer"] --> I45["#45 Split CLIBridgeManager into connection + stream handler"]
   I21["#21 Centralize project path encode/decode"] --> I22["#22 Replace hard-coded path stripping in Project.title"]
   I21["#21 Centralize project path encode/decode"] --> I26["#26 Reconfigure long-lived services on serverURL change"]
-  I23["#23 Unify draft + processing persistence"] --> I5["#5 Consolidate stores into a single persistence layer"]
   I23["#23 Unify draft + processing persistence"] --> I6["#6 Remove effectiveSessionToResume computed property"]
   I23["#23 Unify draft + processing persistence"] --> I7["#7 Remove effectiveModelId/effectivePermissionMode indirection"]
   I23["#23 Unify draft + processing persistence"] --> I19["#19 Remove message pruning"]
   I23["#23 Unify draft + processing persistence"] --> I24["#24 Define a single permission resolution pipeline"]
-  I23["#23 Unify draft + processing persistence"] --> I25["#25 Finish or remove MessageQueuePersistence"]
   I24["#24 Define a single permission resolution pipeline"] --> I31["#31 Exit Plan Mode approval UI"]
-  I25["#25 Finish or remove MessageQueuePersistence"] --> I5["#5 Consolidate stores into a single persistence layer"]
   I26["#26 Reconfigure long-lived services on serverURL change"] --> I24["#24 Define a single permission resolution pipeline"]
   I27["#27 Consolidate network/lifecycle/reconnect logic"] --> I23["#23 Unify draft + processing persistence"]
   I27["#27 Consolidate network/lifecycle/reconnect logic"] --> I45["#45 Split CLIBridgeManager into connection + stream handler"]
@@ -93,5 +87,7 @@ graph TD
 
 ## Notes
 
-- cli-bridge issues (#33-#41) can be worked in parallel with iOS cleanup; they unblock several simplifications.
-- Deferred items (#8, #15, #19) are sequenced later but may be skipped if not needed.
+- #5 was marked "Won't Fix" after audit found no duplication - stores are intentionally separate
+- #16, #42, #43 are no longer blocked by #5 (dependencies removed)
+- cli-bridge issues (#33-#41) can be worked in parallel with iOS cleanup; they unblock several simplifications
+- Deferred items (#8, #15, #19) are sequenced later but may be skipped if not needed

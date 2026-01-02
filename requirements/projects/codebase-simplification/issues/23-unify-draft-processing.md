@@ -1,6 +1,6 @@
 # Issue #23: Unify draft + processing persistence
 
-> **Status**: Complete
+> **Status**: Complete (verified 2026-01-02)
 > **Priority**: Tier 1
 > **Depends On**: #27
 > **Blocks**: #5/#6/#7/#19/#24/#25
@@ -42,7 +42,6 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 | File | Change |
 |---|---|
 | CodingBridge/Models.swift | Consolidate MessageStore persistence |
-| CodingBridge/Persistence/DraftInputPersistence.swift | Migrate to shared store |
 | CodingBridge/Managers/BackgroundManager.swift | Use unified persistence |
 | CodingBridge/CodingBridgeApp.swift | Update background save/recover |
 
@@ -127,3 +126,4 @@ None.
 |------|--------|---------|
 | 2026-01-02 | Started implementation | Audited current state; DraftInputPersistence unused |
 | 2026-01-02 | Completed | Deleted DraftInputPersistence.swift, added global recovery state to MessageStore, updated BackgroundManager to use unified API |
+| 2026-01-02 | Verified | Confirmed removal and that BackgroundManager tests already use MessageStore API |

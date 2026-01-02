@@ -19,13 +19,16 @@ public struct ToolUseStreamMessage: Sendable, Codable, Hashable {
     public var name: String
     /** Tool parameters */
     public var input: [String: JSONValue]
+    /** Human-readable description of tool input (e.g., 'Run command: ls -la') */
+    public var inputDescription: String?
     public var result: ToolResultInline?
 
-    public init(type: ModelType, id: String, name: String, input: [String: JSONValue], result: ToolResultInline? = nil) {
+    public init(type: ModelType, id: String, name: String, input: [String: JSONValue], inputDescription: String? = nil, result: ToolResultInline? = nil) {
         self.type = type
         self.id = id
         self.name = name
         self.input = input
+        self.inputDescription = inputDescription
         self.result = result
     }
 
@@ -34,6 +37,7 @@ public struct ToolUseStreamMessage: Sendable, Codable, Hashable {
         case id
         case name
         case input
+        case inputDescription
         case result
     }
 
@@ -45,6 +49,7 @@ public struct ToolUseStreamMessage: Sendable, Codable, Hashable {
         try container.encode(id, forKey: .id)
         try container.encode(name, forKey: .name)
         try container.encode(input, forKey: .input)
+        try container.encodeIfPresent(inputDescription, forKey: .inputDescription)
         try container.encodeIfPresent(result, forKey: .result)
     }
 }

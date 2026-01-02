@@ -785,9 +785,10 @@ class CLIBridgeManager: ObservableObject {
 
     private func handleConnected(_ payload: ConnectedMessage) {
         let sessionIdStr = payload.sessionId.uuidString
+        let modelValue = payload.modelAlias ?? payload.model
         currentAgentId = payload.agentId
         sessionId = sessionIdStr
-        currentModel = payload.model
+        currentModel = modelValue
         protocolVersion = payload.protocolVersion.rawValue
         connectionState = .connected(agentId: payload.agentId)
         agentState = .idle
@@ -798,8 +799,8 @@ class CLIBridgeManager: ObservableObject {
             log.debug("[CLIBridge] Loaded lastMessageId: \(lastMessageId!)")
         }
 
-        emit(.connected(sessionId: sessionIdStr, agentId: payload.agentId, model: payload.model))
-        log.info("Connected to cli-bridge: agent=\(payload.agentId), session=\(sessionIdStr), model=\(payload.model)")
+        emit(.connected(sessionId: sessionIdStr, agentId: payload.agentId, model: modelValue))
+        log.info("Connected to cli-bridge: agent=\(payload.agentId), session=\(sessionIdStr), model=\(modelValue)")
     }
 
     // MARK: - History Hardening: LastMessageId Persistence

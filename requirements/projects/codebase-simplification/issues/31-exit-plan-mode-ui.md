@@ -104,15 +104,21 @@ rg -n "ExitPlanMode" CodingBridge
 
 ## cli-bridge Dependency
 
-**Change Required**: Support plan mode exit semantics in tool flow (if not already)
+**Change Required**: ✅ None - already works via permission system
 
 **API Impact**:
 - Endpoint: `WebSocket/streaming tool events`
-- Change: Expose plan exit metadata if needed
+- ExitPlanMode comes through as `permission_request` with `tool: "ExitPlanMode"` and `input: { plan: "..." }`
 
-**GitHub Issue**: N/A - create if backend changes required
+**GitHub Issue**: [cli-bridge#29](https://github.com/wiseyoda/cli-bridge/issues/29) ✅ Closed
 
-**Status**: Pending cli-bridge
+**Status**: ✅ Complete - documented in `specifications/reference/protocol.md`
+
+**iOS Implementation**:
+1. Detect `tool === "ExitPlanMode"` in permission request handler
+2. Render `input.plan` as markdown
+3. Show Approve/Reject buttons
+4. Send `permission_response` with `choice: "allow"` or `"deny"`
 
 ---
 

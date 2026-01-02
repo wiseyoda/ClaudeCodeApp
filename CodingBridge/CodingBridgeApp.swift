@@ -198,9 +198,6 @@ struct CodingBridgeApp: App {
         // Pause health monitoring to avoid background network activity
         HealthMonitorService.shared.pausePolling()
 
-        // Save any pending messages
-        await MessageQueuePersistence.shared.save()
-
         // Check if we have an active processing task
         let taskState = BackgroundManager.shared.currentTaskState
         let wasProcessing = taskState?.status.requiresUserAction == true || (taskState != nil)

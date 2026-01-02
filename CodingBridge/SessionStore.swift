@@ -104,7 +104,7 @@ final class SessionStore: ObservableObject {
         }
 
         // Convert project path to encoded project name for API
-        let projectName = encodeProjectPath(projectPath)
+        let projectName = ProjectPathEncoder.encode(projectPath)
 
         isLoading[projectPath] = true
         errorByProject.removeValue(forKey: projectPath)
@@ -141,7 +141,7 @@ final class SessionStore: ObservableObject {
         guard hasMore(for: projectPath) else { return }
         guard isLoading[projectPath] != true else { return }
 
-        let projectName = encodeProjectPath(projectPath)
+        let projectName = ProjectPathEncoder.encode(projectPath)
         let currentCount = sessionsByProject[projectPath]?.count ?? 0
 
         isLoading[projectPath] = true
@@ -176,7 +176,7 @@ final class SessionStore: ObservableObject {
     func deleteSession(_ session: ProjectSession, for projectPath: String) async -> Bool {
         guard let repository = repository else { return false }
 
-        let projectName = encodeProjectPath(projectPath)
+        let projectName = ProjectPathEncoder.encode(projectPath)
 
         // Update local state immediately for responsive UI
         if var sessions = sessionsByProject[projectPath] {
@@ -337,10 +337,10 @@ final class SessionStore: ObservableObject {
     /// Handle session update from WebSocket push
     func handleSessionsUpdated(projectName: String, sessionId: String, action: String) async {
         // Find project path from encoded name
-        // The projectName is already encoded (e.g., "-home-dev-workspace-project")
+        // The projectName is already encoded (e.g., "-Users-me-project")
         // We need to find which loaded project matches
         let matchingPath = sessionsByProject.keys.first { path in
-            encodeProjectPath(path) == projectName
+            ProjectPathEncoder.encode(path) == projectName
         }
 
         guard let projectPath = matchingPath else { return }
@@ -403,13 +403,6 @@ final class SessionStore: ObservableObject {
         }
     }
 
-    // MARK: - Helpers
-
-    /// Encode project path to project name format used by API
-    /// /home/dev/workspace/ClaudeCodeApp → -home-dev-workspace-ClaudeCodeApp
-    private func encodeProjectPath(_ path: String) -> String {
-        path.replacingOccurrences(of: "/", with: "-")
-    }
 }
 
 // MARK: - Bulk Operations
@@ -533,7 +526,7 @@ extension SessionStore {
             return
         }
 
-        let projectName = encodeProjectPath(projectPath)
+        let projectName = ProjectPathEncoder.encode(projectPath)
 
         do {
             let counts = try await repository.getSessionCount(projectName: projectName, source: nil)
@@ -579,7 +572,7 @@ extension SessionStore {
             return
         }
 
-        let projectName = encodeProjectPath(projectPath)
+        let projectName = ProjectPathEncoder.encode(projectPath)
         isSearching[projectPath] = true
 
         do {
@@ -626,7 +619,7 @@ extension SessionStore {
             return false
         }
 
-        let projectName = encodeProjectPath(projectPath)
+        let projectName = ProjectPathEncoder.encode(projectPath)
 
         // Optimistic update - remove from list immediately
         var backup: [ProjectSession]?
@@ -665,7 +658,7 @@ extension SessionStore {
             return false
         }
 
-        let projectName = encodeProjectPath(projectPath)
+        let projectName = ProjectPathEncoder.encode(projectPath)
 
         do {
             let metadata = try await repository.unarchiveSession(projectName: projectName, sessionId: session.id)
@@ -696,7 +689,7 @@ extension SessionStore {
             return (0, sessionIds.count)
         }
 
-        let projectName = encodeProjectPath(projectPath)
+        let projectName = ProjectPathEncoder.encode(projectPath)
 
         do {
             let result = try await repository.bulkOperation(
@@ -735,7 +728,7 @@ extension SessionStore {
             return (0, sessionIds.count)
         }
 
-        let projectName = encodeProjectPath(projectPath)
+        let projectName = ProjectPathEncoder.encode(projectPath)
 
         do {
             let result = try await repository.bulkOperation(

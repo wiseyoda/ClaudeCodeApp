@@ -7,7 +7,6 @@
 
 import Foundation
 
-/** Pagination error details */
 public struct PaginationError: Sendable, Codable, Hashable {
 
     public enum Code: String, Sendable, Codable, CaseIterable {

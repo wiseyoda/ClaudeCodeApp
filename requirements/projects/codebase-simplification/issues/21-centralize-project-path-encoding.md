@@ -1,6 +1,6 @@
 # Issue #21: Centralize project path encode/decode
 
-> **Status**: Pending
+> **Status**: Complete (verified 2026-01-02)
 > **Priority**: Tier 1
 > **Depends On**: #1
 > **Blocks**: #22/#26
@@ -70,10 +70,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Centralize project path encode/decode is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Centralize project path encode/decode is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -124,5 +124,6 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | Audit complete |
+| 2026-01-02 | Completed | ProjectPathEncoder unified across call sites |
+| 2026-01-02 | Verified | Remaining helpers removed; docs aligned |

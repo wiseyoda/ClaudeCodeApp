@@ -20,18 +20,21 @@ public struct ConnectedMessage: Sendable, Codable, Hashable {
     public var agentId: String
     /** Claude session UUID */
     public var sessionId: UUID
-    /** Active model */
+    /** Active model (alias or full ID) */
     public var model: String
+    /** APIModel alias echoed back from client request (e.g., 'sonnet', 'opus', 'haiku') */
+    public var modelAlias: String?
     /** Server version */
     public var version: String
     /** Protocol version for client compatibility */
     public var protocolVersion: ProtocolVersion
 
-    public init(type: ModelType, agentId: String, sessionId: UUID, model: String, version: String, protocolVersion: ProtocolVersion) {
+    public init(type: ModelType, agentId: String, sessionId: UUID, model: String, modelAlias: String? = nil, version: String, protocolVersion: ProtocolVersion) {
         self.type = type
         self.agentId = agentId
         self.sessionId = sessionId
         self.model = model
+        self.modelAlias = modelAlias
         self.version = version
         self.protocolVersion = protocolVersion
     }
@@ -41,6 +44,7 @@ public struct ConnectedMessage: Sendable, Codable, Hashable {
         case agentId
         case sessionId
         case model
+        case modelAlias
         case version
         case protocolVersion
     }
@@ -53,6 +57,7 @@ public struct ConnectedMessage: Sendable, Codable, Hashable {
         try container.encode(agentId, forKey: .agentId)
         try container.encode(sessionId, forKey: .sessionId)
         try container.encode(model, forKey: .model)
+        try container.encodeIfPresent(modelAlias, forKey: .modelAlias)
         try container.encode(version, forKey: .version)
         try container.encode(protocolVersion, forKey: .protocolVersion)
     }

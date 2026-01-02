@@ -1,6 +1,6 @@
 # Issue #25: Finish or remove MessageQueuePersistence
 
-> **Status**: Pending
+> **Status**: Complete (verified 2026-01-02)
 > **Priority**: Tier 2
 > **Depends On**: #23
 > **Blocks**: #5
@@ -41,7 +41,6 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 | File | Change |
 |---|---|
-| CodingBridge/Persistence/MessageQueuePersistence.swift | Wire enqueue/load or delete |
 | CodingBridge/Managers/BackgroundManager.swift | Use queue consistently |
 | CodingBridge/CodingBridgeApp.swift | Use queue on background |
 
@@ -49,7 +48,7 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 | File | Reason |
 |---|---|
-| None | N/A |
+| CodingBridge/Persistence/MessageQueuePersistence.swift | Dead code - enqueue() never called, recovery now handled by MessageStore |
 
 ### Steps
 
@@ -70,10 +69,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Finish or remove MessageQueuePersistence is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Finish or remove MessageQueuePersistence is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -104,7 +103,23 @@ rg -n "MessageQueuePersistence" CodingBridge
 
 ## Notes
 
-None.
+**Decision**: Delete rather than wire up.
+
+**Audit findings**:
+1. `MessageQueuePersistence.save()` was called from `CodingBridgeApp.swift` and `BackgroundManager.swift`
+2. `pendingMessages` array was always empty because `enqueue()` was never called anywhere
+3. `load()` was never called to restore messages
+4. With #23 completed, `MessageStore` now handles all recovery state via `saveGlobalRecoveryState()` and `clearGlobalRecoveryState()`
+5. The file was 128 lines of dead code
+
+**Changes made**:
+- Deleted `CodingBridge/Persistence/MessageQueuePersistence.swift` (128 lines)
+- Removed empty `save()` call from `CodingBridgeApp.handleEnterBackground()` (3 lines)
+- Removed empty `save()` call from `BackgroundManager.saveCurrentState()` (3 lines)
+- Removed `MessageQueuePersistence` tests from `PersistenceTests.swift` (108 lines)
+- Removed `Persistence/` folder reference from `project.pbxproj`
+
+**Total lines removed**: ~265 lines
 
 ---
 
@@ -124,5 +139,6 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | Audited usage - found MessageQueuePersistence was dead code |
+| 2026-01-02 | Completed | Deleted MessageQueuePersistence.swift, updated callers to no-op, updated tests |
+| 2026-01-02 | Verified | Confirmed MessageQueuePersistence removal, no remaining references |

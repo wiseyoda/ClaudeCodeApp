@@ -103,15 +103,26 @@ rg -n "subrepo" CodingBridge
 
 ## cli-bridge Dependency
 
-**Change Required**: Optional: expose subrepo status summary endpoints
+**Change Required**: ✅ None - endpoint already exists
 
 **API Impact**:
-- Endpoint: `GET /projects/:id/subrepos`
-- Change: Add status aggregation if missing
+- Endpoint: `GET /projects/{encodedPath}/subrepos?maxDepth=2`
+- Returns all nested git repos with their status
+- Also: `POST /projects/{encodedPath}/subrepos/{relativePath}/pull`
 
-**GitHub Issue**: N/A - create if needed
+**GitHub Issue**: [cli-bridge#30](https://github.com/wiseyoda/cli-bridge/issues/30) ✅ Closed
 
-**Status**: N/A
+**Status**: ✅ Complete - documented in `specifications/reference/protocol.md`
+
+**Example response:**
+```json
+{
+  "subrepos": [{
+    "relativePath": "packages/core",
+    "git": { "branch": "main", "ahead": 0, "behind": 2, ... }
+  }]
+}
+```
 
 ---
 

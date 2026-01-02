@@ -24,9 +24,9 @@ public struct SessionEventMessage: Sendable, Codable, Hashable {
     public var projectPath: String
     /** Session ID */
     public var sessionId: UUID
-    public var metadata: SessionMetadata?
+    public var metadata: SessionEventMessageMetadata?
 
-    public init(type: ModelType, action: Action, projectPath: String, sessionId: UUID, metadata: SessionMetadata? = nil) {
+    public init(type: ModelType, action: Action, projectPath: String, sessionId: UUID, metadata: SessionEventMessageMetadata? = nil) {
         self.type = type
         self.action = action
         self.projectPath = projectPath

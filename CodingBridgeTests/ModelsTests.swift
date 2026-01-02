@@ -7,7 +7,7 @@ final class ModelsTests: XCTestCase {
 
     func testProjectTitleWithDisplayName() {
         let project = Project(
-            name: "-home-dev-workspace-MyProject",
+            name: "MyProject",
             path: "/home/dev/workspace/MyProject",
             displayName: "My Project",
             fullPath: nil,
@@ -20,7 +20,7 @@ final class ModelsTests: XCTestCase {
 
     func testProjectTitleWithoutDisplayName() {
         let project = Project(
-            name: "-home-dev-workspace-MyProject",
+            name: "MyProject",
             path: "/home/dev/workspace/MyProject",
             displayName: nil,
             fullPath: nil,
@@ -28,13 +28,12 @@ final class ModelsTests: XCTestCase {
             sessionMeta: nil
         )
 
-        // Should strip the prefix
         XCTAssertEqual(project.title, "MyProject")
     }
 
     func testProjectTitleWithEmptyDisplayName() {
         let project = Project(
-            name: "-home-dev-workspace-TestApp",
+            name: "TestApp",
             path: "/home/dev/workspace/TestApp",
             displayName: "",
             fullPath: nil,

@@ -98,10 +98,7 @@ class IdeasStore {
             try? fileManager.createDirectory(at: ideasDirURL, withIntermediateDirectories: true)
         }
 
-        // Encode project path: /path/to/project → -path-to-project
-        let encodedPath = projectPath
-            .replacingOccurrences(of: "/", with: "-")
-
+        let encodedPath = ProjectPathEncoder.encode(projectPath)
         return ideasDirURL.appendingPathComponent("\(encodedPath).json")
     }
 

@@ -7,7 +7,7 @@ import Foundation
 protocol SessionRepository {
     /// Fetch sessions for a project with pagination
     /// - Parameters:
-    ///   - projectName: The encoded project name (e.g., "-home-dev-workspace-ClaudeCodeApp")
+    ///   - projectName: The encoded project name (e.g., "-Users-me-ClaudeCodeApp")
     ///   - limit: Maximum sessions to return
     ///   - offset: Pagination offset
     /// - Returns: SessionsResponse containing sessions, hasMore flag, and total count
@@ -83,13 +83,8 @@ final class CLIBridgeSessionRepository: SessionRepository {
         self.settings = settings
     }
 
-    /// Convert encoded project name back to path
-    private func projectPath(from projectName: String) -> String {
-        projectName.replacingOccurrences(of: "-", with: "/")
-    }
-
     func fetchSessions(projectName: String, limit: Int = 100, offset: Int = 0) async throws -> SessionsResponse {
-        let projectPath = projectPath(from: projectName)
+        let projectPath = ProjectPathEncoder.decode(projectName)
 
         let response = try await apiClient.fetchSessions(
             projectPath: projectPath,
@@ -121,7 +116,7 @@ final class CLIBridgeSessionRepository: SessionRepository {
     }
 
     func deleteSession(projectName: String, sessionId: String) async throws {
-        let projectPath = projectPath(from: projectName)
+        let projectPath = ProjectPathEncoder.decode(projectName)
         try await apiClient.deleteSession(
             projectPath: projectPath,
             sessionId: sessionId
@@ -131,7 +126,7 @@ final class CLIBridgeSessionRepository: SessionRepository {
     // MARK: - New Session Management Methods
 
     func getSessionCount(projectName: String, source: CLISessionMetadata.SessionSource?) async throws -> CLISessionCountResponse {
-        let projectPath = projectPath(from: projectName)
+        let projectPath = ProjectPathEncoder.decode(projectName)
         return try await apiClient.getSessionCount(
             projectPath: projectPath,
             source: source
@@ -139,7 +134,7 @@ final class CLIBridgeSessionRepository: SessionRepository {
     }
 
     func searchSessions(projectName: String, query: String, limit: Int, offset: Int) async throws -> CLISessionSearchResponse {
-        let projectPath = projectPath(from: projectName)
+        let projectPath = ProjectPathEncoder.decode(projectName)
         return try await apiClient.searchSessions(
             projectPath: projectPath,
             query: query,
@@ -149,7 +144,7 @@ final class CLIBridgeSessionRepository: SessionRepository {
     }
 
     func archiveSession(projectName: String, sessionId: String) async throws -> CLISessionMetadata {
-        let projectPath = projectPath(from: projectName)
+        let projectPath = ProjectPathEncoder.decode(projectName)
         return try await apiClient.archiveSession(
             projectPath: projectPath,
             sessionId: sessionId
@@ -157,7 +152,7 @@ final class CLIBridgeSessionRepository: SessionRepository {
     }
 
     func unarchiveSession(projectName: String, sessionId: String) async throws -> CLISessionMetadata {
-        let projectPath = projectPath(from: projectName)
+        let projectPath = ProjectPathEncoder.decode(projectName)
         return try await apiClient.unarchiveSession(
             projectPath: projectPath,
             sessionId: sessionId
@@ -165,7 +160,7 @@ final class CLIBridgeSessionRepository: SessionRepository {
     }
 
     func bulkOperation(projectName: String, sessionIds: [String], action: String, customTitle: String?) async throws -> CLIBulkOperationResponse {
-        let projectPath = projectPath(from: projectName)
+        let projectPath = ProjectPathEncoder.decode(projectName)
         return try await apiClient.bulkSessionOperation(
             projectPath: projectPath,
             sessionIds: sessionIds,
