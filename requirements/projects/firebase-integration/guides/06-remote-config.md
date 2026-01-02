@@ -77,7 +77,7 @@ Add to Xcode project:
     <!-- Timeouts -->
     <key>api_timeout_seconds</key>
     <integer>30</integer>
-    <key>sse_reconnect_delay_ms</key>
+    <key>websocket_reconnect_delay_ms</key>
     <integer>1000</integer>
 
     <!-- Version Control -->
@@ -187,8 +187,8 @@ class RemoteConfigManager: ObservableObject {
         TimeInterval(remoteConfig["api_timeout_seconds"].numberValue.intValue)
     }
 
-    var sseReconnectDelay: TimeInterval {
-        TimeInterval(remoteConfig["sse_reconnect_delay_ms"].numberValue.intValue) / 1000.0
+    var websocketReconnectDelay: TimeInterval {
+        TimeInterval(remoteConfig["websocket_reconnect_delay_ms"].numberValue.intValue) / 1000.0
     }
 
     // MARK: - Version Control

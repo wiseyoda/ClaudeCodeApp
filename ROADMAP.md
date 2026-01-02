@@ -25,8 +25,8 @@
 | #1 | Remove CLIBridgeTypesMigration | ~2,398 lines |
 
 **Corrections to Claude assessment (verified in code)**
-- #4 extractFilePath is still present in `CodingBridge/Views/CompactToolView.swift`.
-- #6 effectiveSessionToResume is still present in `CodingBridge/ViewModels/ChatViewModel.swift`.
+- #4 extractFilePath has been replaced with ToolParser.extractParam() calls (Complete).
+- #6 effectiveSessionToResume has been removed; manager.sessionId used directly (Complete).
 - #7 effectiveModelId/effectivePermissionMode are still present in `CodingBridge/ViewModels/ChatViewModel.swift`.
 - #18 groupMessagesForDisplay still lives in `CodingBridge/Views/CompactToolView.swift` and is used by `CodingBridge/ViewModels/ChatViewModel.swift`.
 
@@ -59,11 +59,11 @@
 |---|------|--------|------------|--------|-------|
 | #2 | Simplify PaginatedMessage.toChatMessage() | Medium | #1 | Pending | Should be done after type cleanup. |
 | #3 | Remove formatJSONValue() custom serializer | Low | #2 | Pending | Use JSONEncoder. |
-| #4 | Eliminate extractFilePath() parsing | Medium | - | Pending | Still in `CodingBridge/Views/CompactToolView.swift`. |
-| #6 | Remove effectiveSessionToResume computed property | Low | #23 | Pending | Still used by send flow. |
+| #4 | Eliminate extractFilePath() parsing | Medium | - | Complete | Replaced with ToolParser.extractParam() calls. |
+| #6 | Remove effectiveSessionToResume computed property | Low | #23 | Complete | Removed; manager.sessionId used directly. |
 | #7 | Remove effectiveModelId/effectivePermissionMode indirection | Low | #23 | Pending | Still used by send flow. |
 | #8 | Eliminate streamingMessageId/timestamp | Low | - | Deferred | Revisit after streaming refactor. |
-| #10 | Remove toolUseMap dictionary | Low | #9 | Pending | Depends on StreamEvent consolidation. |
+| #10 | Remove toolUseMap dictionary | Low | #9 | Complete | Tool name now taken directly from StreamEvent. |
 | #11 | Remove subagentToolIds tracking | Low | #9 | Pending | Depends on StreamEvent consolidation. |
 | #12 | Remove pendingGitCommands tracking | Low | - | Pending | Consider refresh-on-complete only. |
 | #13 | Remove todoHideTimer auto-hide logic | Low | - | Pending | Manual dismiss only. |

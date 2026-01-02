@@ -15,9 +15,9 @@
 - `CodingBridge.xcodeproj`: Xcode project entry point.
 
 ## Key Files & Architecture
-- `WebSocketManager.swift`: streaming, reconnection, session events.
+- `CLIBridgeManager.swift`: WebSocket streaming, reconnection, session events.
 - `SSHManager.swift`: terminal, file ops, git via Citadel.
-- `SessionStore.swift` + `SessionRepository.swift` + `APIClient.swift`: session state and data layer (Clean Architecture).
+- `SessionStore.swift` + `SessionRepository.swift` + `CLIBridgeAPIClient.swift`: session state and data layer (Clean Architecture).
 - `ChatView.swift`, `ContentView.swift`, `TerminalView.swift`, `UserQuestionsView.swift`: primary UI flows.
 - `Models.swift`, `AppSettings.swift`, `ClaudeHelper.swift`, `IdeasStore.swift`, `CommandStore.swift`, `BookmarkStore.swift`: models, settings, helpers, persistence.
 

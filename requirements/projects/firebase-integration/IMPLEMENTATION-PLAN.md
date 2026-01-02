@@ -529,7 +529,7 @@ If dSYM uploads fail:
     <!-- Backend Configuration -->
     <key>api_timeout_seconds</key>
     <integer>30</integer>
-    <key>sse_reconnect_delay_ms</key>
+    <key>websocket_reconnect_delay_ms</key>
     <integer>1000</integer>
 </dict>
 </plist>

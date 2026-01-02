@@ -1,6 +1,6 @@
 # Issue #30: Update docs to match WebSocket streaming
 
-> **Status**: Complete
+> **Status**: Complete (verified 2026-01-02)
 > **Priority**: Tier 2
 > **Depends On**: #1/#17
 > **Blocks**: None
@@ -50,10 +50,14 @@ Update all .md files in requirements/ and root to reflect the actual code archit
 | requirements/OVERVIEW.md | SSE -> WebSocket, add v0.7.0 resolved section |
 | requirements/BACKEND.md | SSE -> WebSocket, update troubleshooting |
 | requirements/SESSIONS.md | SSE -> WebSocket |
+| README.md | SSE -> WebSocket, remove CLIBridgeAdapter references |
+| AGENTS.md | WebSocketManager -> CLIBridgeManager, APIClient -> CLIBridgeAPIClient |
 | requirements/projects/message-queuing/ARCHITECTURE.md | SSE -> WebSocket, CLIBridgeAdapter -> CLIBridgeManager |
 | requirements/projects/message-queuing/IMPLEMENTATION-PLAN.md | CLIBridgeAdapter -> CLIBridgeManager |
 | requirements/projects/firebase-integration/guides/01-firebase-console.md | sse_reconnect -> websocket_reconnect |
 | requirements/projects/firebase-integration/guides/06-remote-config.md | sse_reconnect -> websocket_reconnect |
+| requirements/projects/firebase-integration/IMPLEMENTATION-PLAN.md | sse_reconnect -> websocket_reconnect |
+| requirements/projects/firebase-integration/REVIEW-NOTES.md | sse_reconnect -> websocket_reconnect |
 
 ### Files to Delete
 
@@ -137,6 +141,7 @@ None.
 |------|--------|---------|
 | 2026-01-02 | Started implementation | Identified 9 files with outdated references |
 | 2026-01-02 | Completed | Updated ARCHITECTURE.md, CLAUDE.md, OVERVIEW.md, BACKEND.md, SESSIONS.md, message-queuing docs, firebase-integration docs |
+| 2026-01-02 | Verified | README and remaining docs aligned to WebSocket streaming |
 
 ## Changes Made
 
@@ -185,3 +190,16 @@ None.
 
 ### requirements/projects/firebase-integration/guides/06-remote-config.md
 - Updated sse_reconnect_delay_ms to websocket_reconnect_delay_ms
+
+### requirements/projects/firebase-integration/IMPLEMENTATION-PLAN.md
+- Updated sse_reconnect_delay_ms to websocket_reconnect_delay_ms
+
+### requirements/projects/firebase-integration/REVIEW-NOTES.md
+- Updated sse_reconnect_delay_ms to websocket_reconnect_delay_ms
+
+### README.md
+- Updated backend description, diagram, component table, and endpoints to WebSocket
+- Removed CLIBridgeAdapter reference
+
+### AGENTS.md
+- Updated key file references to CLIBridgeManager and CLIBridgeAPIClient

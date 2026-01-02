@@ -1,6 +1,6 @@
 # Issue #6: Remove effectiveSessionToResume computed property
 
-> **Status**: Pending
+> **Status**: Complete (verified 2026-01-02)
 > **Priority**: Tier 3
 > **Depends On**: #23
 > **Blocks**: None
@@ -68,10 +68,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Remove effectiveSessionToResume computed property is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Remove effectiveSessionToResume computed property is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -122,5 +122,6 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | Audited effectiveSessionToResume: 13-line computed property with fallback from manager.sessionId to selectedSession.id with ephemeral filter |
+| 2026-01-02 | Completed | Removed property and 4 unit tests; replaced 5 call sites with direct manager.sessionId usage; build passes |
+| 2026-01-02 | Verified | Confirmed no remaining effectiveSessionToResume references |

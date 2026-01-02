@@ -154,7 +154,7 @@ Control Claude's reasoning depth with 5 levels:
 
 ### Backend Setup
 
-The app connects to [cli-bridge](https://github.com/anthropics/claude-code/tree/main/packages/cli-bridge), which provides a REST API with SSE streaming for Claude Code. See [requirements/BACKEND.md](requirements/BACKEND.md) for setup instructions.
+The app connects to [cli-bridge](https://github.com/anthropics/claude-code/tree/main/packages/cli-bridge), which provides a REST API with WebSocket streaming for Claude Code. See [requirements/BACKEND.md](requirements/BACKEND.md) for setup instructions.
 
 Quick start:
 
@@ -199,7 +199,7 @@ curl -s http://localhost:3100/health
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │   iOS App       │────▶│   cli-bridge    │────▶│ Claude Code CLI │
-│   (SwiftUI)     │ SSE │    (Deno)       │     │                 │
+│   (SwiftUI)     │ WS  │    (Deno)       │     │                 │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
         │                       │
         └───── Tailscale ───────┘
@@ -210,8 +210,7 @@ curl -s http://localhost:3100/health
 
 | Component             | Purpose                                          |
 | --------------------- | ------------------------------------------------ |
-| `CLIBridgeManager`    | Core REST API client with SSE streaming          |
-| `CLIBridgeAdapter`    | Callback-style interface for chat integration    |
+| `CLIBridgeManager`    | Core REST API client with WebSocket streaming    |
 | `CLIBridgeAPIClient`  | HTTP client for health, projects, sessions       |
 | `SessionStore`        | Centralized session state with pagination        |
 | `SessionRepository`   | Session data access (API + Mock for testing)     |
@@ -238,7 +237,7 @@ curl -s http://localhost:3100/health
 | `GlobalSearchView`   | Cross-session search               |
 | `IdeasDrawerSheet`   | Ideas management with FAB          |
 
-## SSE Events
+## WebSocket Stream Events
 
 | Event Type     | Direction    | Description                    |
 | -------------- | ------------ | ------------------------------ |
@@ -251,12 +250,12 @@ curl -s http://localhost:3100/health
 
 **REST Endpoints:**
 
-| Endpoint                  | Method | Description              |
-| ------------------------- | ------ | ------------------------ |
-| `/health`                 | GET    | Health check             |
-| `/agents`                 | POST   | Create agent session     |
-| `/agents/:id/message`     | POST   | Send message (SSE stream)|
-| `/agents/:id/abort`       | POST   | Abort current request    |
+| Endpoint                  | Method | Description                               |
+| ------------------------- | ------ | ----------------------------------------- |
+| `/health`                 | GET    | Health check                              |
+| `/agents`                 | POST   | Create agent session                      |
+| `/ws/agents/:id`          | WS     | WebSocket stream (send messages, events)  |
+| `/agents/:id/abort`       | POST   | Abort current request                     |
 
 ## Testing
 

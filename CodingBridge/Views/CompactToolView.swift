@@ -147,9 +147,22 @@ private func extractExploredGroup(from messages: [ChatMessage], startingAt start
 
         // Continue grouping explore toolUse messages
         if msg.role == .toolUse && isExploreToolType(msg.content) {
-            if let path = extractFilePath(from: msg.content) {
-                let toolType = CLITheme.ToolType.from(msg.content)
-                let isPattern = msg.content.hasPrefix("Grep")  // Grep uses search patterns, not file paths
+            let toolType = CLITheme.ToolType.from(msg.content)
+            let isPattern = msg.content.hasPrefix("Grep")  // Grep uses search patterns, not file paths
+            // Use ToolParser to extract the appropriate key based on tool type
+            let path: String? = {
+                switch toolType {
+                case .read:
+                    return ToolParser.extractParam(from: msg.content, key: "file_path")
+                case .grep:
+                    return ToolParser.extractParam(from: msg.content, key: "pattern")
+                case .glob:
+                    return ToolParser.extractParam(from: msg.content, key: "pattern")
+                default:
+                    return ToolParser.extractParam(from: msg.content, key: "path")
+                }
+            }()
+            if let path = path {
                 files.append(ExploredGroup.ExploredFile(path: path, toolType: toolType, hasError: false, isSearchPattern: isPattern))
             }
             i += 1
@@ -314,29 +327,6 @@ private func parseSearchResults(from content: String) -> [WebSearchGroup.SearchR
 }
 
 // MARK: - Parameter Extraction Helpers
-
-/// Extract file path from tool content
-private func extractFilePath(from content: String) -> String? {
-    // Try JSON format first: Read({"file_path": "..."})
-    if let jsonStart = content.firstIndex(of: "{"),
-       let jsonEnd = content.lastIndex(of: "}") {
-        let jsonString = String(content[jsonStart...jsonEnd])
-        if let data = jsonString.data(using: .utf8),
-           let dict = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            // Read uses file_path, Glob/Grep use path or pattern
-            if let path = dict["file_path"] as? String {
-                return path
-            }
-            if let pattern = dict["pattern"] as? String {
-                return pattern
-            }
-            if let path = dict["path"] as? String {
-                return path
-            }
-        }
-    }
-    return nil
-}
 
 /// Extract command from Bash tool content
 private func extractCommand(from content: String) -> String? {

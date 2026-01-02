@@ -224,7 +224,7 @@ Events use bucketed values for better dashboard filtering:
 | `max_message_history` | Number | 50 | Config |
 | `session_timeout_minutes` | Number | 30 | Config |
 | `api_timeout_seconds` | Number | 30 | Config |
-| `sse_reconnect_delay_ms` | Number | 1000 | Config |
+| `websocket_reconnect_delay_ms` | Number | 1000 | Config |
 
 ---
 

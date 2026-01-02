@@ -59,34 +59,6 @@ final class ChatViewModelTests: XCTestCase {
 
     // MARK: - Session Management
 
-    func test_effectiveSessionToResume_prefersWsManagerSessionId() {
-        let (viewModel, manager, _, _) = makeFixture()
-        manager.sessionId = "session-ws"
-        viewModel.selectedSession = makeSession(id: "session-selected")
-
-        XCTAssertEqual(viewModel.effectiveSessionToResume, "session-ws")
-    }
-
-    func test_effectiveSessionToResume_nilForEphemeralSelectedSession() {
-        let (viewModel, _, _, _) = makeFixture()
-        viewModel.selectedSession = makeSession(id: "new-session-123")
-
-        XCTAssertNil(viewModel.effectiveSessionToResume)
-    }
-
-    func test_effectiveSessionToResume_returnsSelectedSessionId() {
-        let (viewModel, _, _, _) = makeFixture()
-        viewModel.selectedSession = makeSession(id: "session-123")
-
-        XCTAssertEqual(viewModel.effectiveSessionToResume, "session-123")
-    }
-
-    func test_effectiveSessionToResume_nilWhenNoSession() {
-        let (viewModel, _, _, _) = makeFixture()
-
-        XCTAssertNil(viewModel.effectiveSessionToResume)
-    }
-
     func test_startNewSession_resetsStateAndAddsWelcome() {
         let (viewModel, manager, _, _) = makeFixture()
         viewModel.messages = [ChatMessage(role: .user, content: "Hello")]

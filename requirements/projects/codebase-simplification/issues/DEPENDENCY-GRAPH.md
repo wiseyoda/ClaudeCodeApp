@@ -16,12 +16,12 @@ This graph lists issue dependencies and a recommended execution order. Use it to
 10. #22 Replace hard-coded path stripping in Project.title ✅
 11. #26 Reconfigure long-lived services on serverURL change ✅
 12. #24 Define a single permission resolution pipeline
-13. #30 Update docs to match WebSocket streaming
+13. #30 Update docs to match WebSocket streaming ✅
 14. #4 Eliminate extractFilePath() parsing
-15. #6 Remove effectiveSessionToResume computed property
+15. #6 Remove effectiveSessionToResume computed property ✅
 16. #7 Remove effectiveModelId/effectivePermissionMode indirection
 17. #8 Eliminate streamingMessageId/streamingMessageTimestamp
-18. #10 Remove toolUseMap dictionary
+18. #10 Remove toolUseMap dictionary ✅
 19. #11 Remove subagentToolIds tracking
 20. #12 Remove pendingGitCommands tracking
 21. #13 Remove todoHideTimer auto-hide logic

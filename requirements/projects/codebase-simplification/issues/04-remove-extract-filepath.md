@@ -1,6 +1,6 @@
 # Issue #4: Eliminate extractFilePath() parsing
 
-> **Status**: Pending
+> **Status**: Complete
 > **Priority**: Tier 2
 > **Depends On**: None
 > **Blocks**: None
@@ -68,10 +68,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Eliminate extractFilePath() parsing is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Eliminate extractFilePath() parsing is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -122,5 +122,6 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | Replaced extractFilePath() with ToolParser.extractParam() calls |
+| 2026-01-02 | Completed | All acceptance criteria verified, build passes, 10 lines net reduction |
+| 2026-01-02 | Verified | Confirmed no extractFilePath() references remain in the repo |

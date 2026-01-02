@@ -45,8 +45,6 @@ class ChatViewModel: ObservableObject {
     @Published var streamingMessageTimestamp = Date()
 
     // MARK: - Tool Use Tracking (internal state, no UI updates needed)
-    /// Maps tool_use_id to tool name for result filtering - not @Published as changes don't affect UI
-    var toolUseMap: [String: String] = [:]
     /// Tool IDs created while a subagent was active - not @Published as changes don't affect UI
     var subagentToolIds: Set<String> = []
     /// Stores committed text for message creation in onComplete (adapter clears currentText on commit)
@@ -382,20 +380,6 @@ class ChatViewModel: ObservableObject {
         return baseSessions.filterForDisplay(projectPath: project.path, activeSessionId: activeId)
     }
 
-    /// Compute session ID to resume, filtering out ephemeral sessions
-    var effectiveSessionToResume: String? {
-        if let sessionId = manager.sessionId {
-            return sessionId
-        }
-        if let session = selectedSession {
-            if session.id.hasPrefix("new-session-") {
-                return nil
-            }
-            return session.id
-        }
-        return nil
-    }
-
     func startNewSession() {
         log.debug("[ChatViewModel] Starting new session - clearing state and reconnecting")
 
@@ -644,10 +628,9 @@ class ChatViewModel: ObservableObject {
         processingStartTime = Date()
 
         let messageToSend = text
-        let sessionToResume = effectiveSessionToResume
 
-        if let sid = sessionToResume {
-            log.debug("[ChatViewModel] Sending message with sessionToResume: \(sid.prefix(8))...")
+        if let sid = manager.sessionId {
+            log.debug("[ChatViewModel] Sending message with sessionId: \(sid.prefix(8))...")
         } else {
             log.debug("[ChatViewModel] Sending message with NO session ID - new session will be created")
         }
@@ -657,7 +640,7 @@ class ChatViewModel: ObservableObject {
         sendToManager(
             text.isEmpty ? defaultPrompt : messageToSend,
             projectPath: project.path,
-            resumeSessionId: sessionToResume,
+            resumeSessionId: manager.sessionId,
             permissionMode: effectivePermissionMode,
             images: imagesToSend.isEmpty ? nil : imagesToSend,
             model: effectiveModelId
@@ -703,7 +686,7 @@ class ChatViewModel: ObservableObject {
         sendToManager(
             userMessage.content,
             projectPath: project.path,
-            resumeSessionId: effectiveSessionToResume,
+            resumeSessionId: manager.sessionId,
             permissionMode: effectivePermissionMode,
             images: nil,  // TODO: Support retrying messages with images if needed
             model: effectiveModelId
@@ -972,8 +955,6 @@ class ChatViewModel: ObservableObject {
             messages.append(thinkingMsg)
 
         case .toolStart(let id, let name, let input):
-            toolUseMap[id] = name
-
             if manager.activeSubagent != nil && name != "Task" {
                 subagentToolIds.insert(id)
                 log.debug("[ChatViewModel] Tracking subagent tool: \(name) (id: \(id.prefix(8)))")
@@ -1010,8 +991,7 @@ class ChatViewModel: ObservableObject {
             }
 
         case .toolResult(let id, let tool, let output, _):
-            let toolName = toolUseMap[id] ?? tool
-
+            let toolName = tool
             if subagentToolIds.contains(id) {
                 log.debug("[ChatViewModel] Filtering subagent tool result: \(toolName) (id: \(id.prefix(8)))")
                 subagentToolIds.remove(id)
@@ -1164,7 +1144,6 @@ class ChatViewModel: ObservableObject {
     // MARK: - Event Handlers
 
     private func handleStopped() {
-        toolUseMap.removeAll()
         subagentToolIds.removeAll()
 
         // Create assistant message from committed text
@@ -1597,7 +1576,7 @@ class ChatViewModel: ObservableObject {
         sendToManager(
             cleanupPrompt,
             projectPath: project.path,
-            resumeSessionId: effectiveSessionToResume,
+            resumeSessionId: manager.sessionId,
             permissionMode: effectivePermissionMode,
             images: nil,
             model: effectiveModelId
@@ -1621,7 +1600,7 @@ class ChatViewModel: ObservableObject {
         sendToManager(
             commitPrompt,
             projectPath: project.path,
-            resumeSessionId: effectiveSessionToResume,
+            resumeSessionId: manager.sessionId,
             permissionMode: effectivePermissionMode,
             images: nil,
             model: effectiveModelId
@@ -1645,7 +1624,7 @@ class ChatViewModel: ObservableObject {
         sendToManager(
             pushPrompt,
             projectPath: project.path,
-            resumeSessionId: effectiveSessionToResume,
+            resumeSessionId: manager.sessionId,
             permissionMode: effectivePermissionMode,
             images: nil,
             model: effectiveModelId
@@ -1877,8 +1856,7 @@ class ChatViewModel: ObservableObject {
     /// Cleanup transient state after a processing cycle completes.
     /// Called from onComplete to prevent accumulation of lingering tasks/state.
     private func cleanupAfterProcessingComplete() {
-        // Clear tool tracking maps that may have grown during session
-        toolUseMap.removeAll(keepingCapacity: true)
+        // Clear tool tracking state that may have grown during session
         subagentToolIds.removeAll(keepingCapacity: true)
 
         // Ensure streaming state is reset
