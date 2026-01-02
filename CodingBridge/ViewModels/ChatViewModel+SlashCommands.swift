@@ -174,7 +174,7 @@ extension ChatViewModel {
         let ephemeralSession = ProjectSession(
             id: "new-session-\(UUID().uuidString)",
             summary: "New Session",
-            lastActivity: ISO8601DateFormatter().string(from: Date()),
+            lastActivity: CLIDateFormatter.string(from: Date()),
             messageCount: 0,
             lastUserMessage: nil,
             lastAssistantMessage: nil
@@ -205,7 +205,7 @@ extension ChatViewModel {
         let ephemeralSession = ProjectSession(
             id: "new-session-\(UUID().uuidString)",
             summary: "New Session",
-            lastActivity: ISO8601DateFormatter().string(from: Date()),
+            lastActivity: CLIDateFormatter.string(from: Date()),
             messageCount: 0,
             lastUserMessage: nil,
             lastAssistantMessage: nil

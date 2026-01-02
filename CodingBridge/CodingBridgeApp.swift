@@ -5,7 +5,10 @@ import UIKit
 
 // MARK: - App Delegate for Orientation Control, Background Tasks, and Push Notifications
 
-class AppDelegate: NSObject, @preconcurrency UIApplicationDelegate {
+class AppDelegate: NSObject, UIApplicationDelegate {
+    private struct RemoteNotificationPayload: @unchecked Sendable {
+        let userInfo: [AnyHashable: Any]
+    }
     /// Controls which orientations are allowed. Updated by AppSettings.lockToPortrait
     static var orientationLock: UIInterfaceOrientationMask = .portrait
 
@@ -39,7 +42,14 @@ class AppDelegate: NSObject, @preconcurrency UIApplicationDelegate {
     }
 
     // MARK: - Background Push Handling
-    func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any]) async -> UIBackgroundFetchResult {
+    nonisolated func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any]) async -> UIBackgroundFetchResult {
+        let payload = RemoteNotificationPayload(userInfo: userInfo)
+        return await handleRemoteNotification(payload)
+    }
+
+    @MainActor
+    private func handleRemoteNotification(_ payload: RemoteNotificationPayload) async -> UIBackgroundFetchResult {
+        let userInfo = payload.userInfo
         log.info("[Push] Received remote notification in background")
 
         // Handle push notification

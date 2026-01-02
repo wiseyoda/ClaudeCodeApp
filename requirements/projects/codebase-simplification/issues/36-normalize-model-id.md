@@ -1,6 +1,6 @@
 # Issue #36: Normalize model ID handling (echo alias)
 
-> **Status**: Pending
+> **Status**: Complete (verified 2026-01-02)
 > **Priority**: Tier 2
 > **Depends On**: None
 > **Blocks**: None
@@ -69,10 +69,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Normalize model ID handling (echo alias) is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Normalize model ID handling (echo alias) is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -137,5 +137,16 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Verified implementation | Implementation already complete via prior work |
+| 2026-01-02 | Completed | All acceptance criteria verified, build passes |
+| 2026-01-02 | Verified | Confirmed modelAlias is used and heuristic matching is absent |
+
+## Implementation Notes
+
+The model ID normalization was already implemented:
+
+1. **CLIBridgeManager+Stream.swift line 274** - Uses `payload.modelAlias ?? payload.model` to prefer the server-echoed alias
+2. **ClaudeModel.modelId** - Returns simple aliases ("opus", "sonnet", "haiku") that are sent to the server
+3. **No heuristic matching** - No code exists to parse full model IDs (like "claude-sonnet-4-5-20250929") back to aliases
+
+The cli-bridge server echoes back `modelAlias` in `ConnectedMessage`, which the iOS client now uses directly. This eliminates any need for heuristic pattern matching on the client side.

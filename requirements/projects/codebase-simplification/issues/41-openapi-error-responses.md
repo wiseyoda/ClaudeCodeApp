@@ -1,6 +1,6 @@
 # Issue #41: Document error responses in OpenAPI
 
-> **Status**: Pending
+> **Status**: Complete (verified 2026-01-02)
 > **Priority**: Tier 3
 > **Depends On**: None
 > **Blocks**: None
@@ -68,10 +68,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Document error responses in OpenAPI is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Document error responses in OpenAPI is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -136,5 +136,6 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | Added 5 new error cases to CLIBridgeAPIError that wrap generated OpenAPI types |
+| 2026-01-02 | Completed | Build passes, all error handling now uses typed errors from server responses |
+| 2026-01-02 | Verified | Confirmed CLIBridgeAPIClient decodes typed error responses |

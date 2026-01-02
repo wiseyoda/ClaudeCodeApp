@@ -35,14 +35,14 @@ This graph lists issue dependencies and a recommended execution order. Use it to
 29. #31 Exit Plan Mode approval UI ✅
 30. #32 Multi-repo/monorepo git status aggregation ✅
 31. #33 Batch session counts API ✅
-32. #34 Idempotent reconnection protocol (unblocked)
-33. #35 Typed StreamMessage in paginated responses (unblocked)
-34. #36 Normalize model ID handling (echo alias) (unblocked)
-35. #37 Typed tool input instead of JSONValue dict (unblocked)
-36. #38 Fix duplicate idle state messages (unblocked)
-37. #39 Include session count in project list response (unblocked)
-38. #40 Standardize ISO8601 with fractional seconds (unblocked)
-39. #41 Document error responses in OpenAPI (unblocked)
+32. #34 Idempotent reconnection protocol ✅
+33. #35 Typed StreamMessage in paginated responses ✅
+34. #36 Normalize model ID handling (echo alias) ✅
+35. #37 Typed tool input instead of JSONValue dict ✅
+36. #38 Fix duplicate idle state messages ✅
+37. #39 Include session count in project list response ✅
+38. #40 Standardize ISO8601 with fractional seconds ✅
+39. #41 Document error responses in OpenAPI ✅
 40. #2 Simplify PaginatedMessage.toChatMessage() ✅
 41. #3 Remove formatJSONValue() custom serializer ✅
 42. #42 Split ChatViewModel into focused modules ✅

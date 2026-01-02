@@ -72,33 +72,24 @@ typealias ConnectionState = CLIConnectionState
 // MARK: - Date Formatters
 // ============================================================================
 
-/// Shared ISO8601 date formatters to avoid creating multiple instances
+/// Shared ISO8601 date formatter for cli-bridge API dates
+/// cli-bridge always emits dates with fractional seconds (e.g., "2024-01-15T10:30:00.123Z")
 public enum CLIDateFormatter {
-  /// Formatter with fractional seconds (e.g., "2024-01-15T10:30:00.123Z")
-  public static let iso8601WithFractionalSeconds: ISO8601DateFormatter = {
+  /// Formatter with fractional seconds - the only format cli-bridge uses
+  public static let formatter: ISO8601DateFormatter = {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return formatter
   }()
 
-  /// Formatter without fractional seconds (e.g., "2024-01-15T10:30:00Z")
-  public static let iso8601: ISO8601DateFormatter = {
-    let formatter = ISO8601DateFormatter()
-    formatter.formatOptions = [.withInternetDateTime]
-    return formatter
-  }()
-
-  /// Parse a date string, trying fractional seconds first, then without
+  /// Parse an ISO8601 date string with fractional seconds
   public static func parseDate(_ dateString: String) -> Date? {
-    if let date = iso8601WithFractionalSeconds.date(from: dateString) {
-      return date
-    }
-    return iso8601.date(from: dateString)
+    formatter.date(from: dateString)
   }
 
   /// Format a date to ISO8601 string with fractional seconds
   public static func string(from date: Date) -> String {
-    iso8601WithFractionalSeconds.string(from: date)
+    formatter.string(from: date)
   }
 }
 
@@ -393,8 +384,9 @@ public enum StreamEvent: Sendable {
   /// - Parameters:
   ///   - id: Tool use ID for correlation with result
   ///   - name: Tool name (e.g., "Read", "Bash", "Edit")
-  ///   - input: Tool input parameters
-  case toolStart(id: String, name: String, input: [String: JSONValue])
+  ///   - inputDescription: Human-readable description of input (e.g., "Run command: ls -la")
+  ///   - input: Tool input parameters (fallback if inputDescription not available)
+  case toolStart(id: String, name: String, inputDescription: String?, input: [String: JSONValue])
 
   /// Tool execution completed
   /// - Parameters:

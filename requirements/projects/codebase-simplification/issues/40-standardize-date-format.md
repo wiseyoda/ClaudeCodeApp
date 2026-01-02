@@ -1,6 +1,6 @@
 # Issue #40: Standardize ISO8601 with fractional seconds
 
-> **Status**: Pending
+> **Status**: Complete (verified 2026-01-02)
 > **Priority**: Tier 3
 > **Depends On**: None
 > **Blocks**: None
@@ -41,7 +41,9 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 | File | Change |
 |---|---|
-| CodingBridge/CLIBridgeTypesMigration.swift | Remove dual date parser |
+| CodingBridge/CLIBridgeAppTypes.swift | Remove fallback `iso8601` formatter; simplify `parseDate()` to single formatter |
+| CodingBridge/SessionStore.swift | Replace local dual formatters with `CLIDateFormatter.parseDate()` |
+| CodingBridge/CLIBridgeExtensions.swift | Replace local formatter with `CLIDateFormatter.string(from:)` |
 
 ### Files to Delete
 
@@ -68,10 +70,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Standardize ISO8601 with fractional seconds is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Standardize ISO8601 with fractional seconds is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -136,5 +138,6 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | Identified dual formatter in CLIBridgeAppTypes.swift and duplicates in SessionStore, CLIBridgeExtensions |
+| 2026-01-02 | Completed | Simplified to single fractional seconds formatter; removed 19 lines; build passes |
+| 2026-01-02 | Verified | Replaced remaining ISO8601DateFormatter usage in ChatViewModel with CLIDateFormatter |

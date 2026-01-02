@@ -133,12 +133,6 @@ class CLIBridgeManager: ObservableObject {
     private var pendingModel: String?
     private var pendingHelper: Bool = false
 
-    // MARK: - History Hardening: Message Deduplication
-
-    /// Set of received message IDs for deduplication
-    private var receivedMessageIds: Set<String> = []
-    private let maxDeduplicationEntries = 1000
-
     /// UserDefaults key prefix for lastMessageId persistence
     private static let lastMessageIdPrefix = "cli_bridge_last_message_"
 
@@ -308,25 +302,6 @@ class CLIBridgeManager: ObservableObject {
     // Last message ID
     func getLastMessageId() -> String? { lastMessageId }
     func setLastMessageId(_ id: String) { lastMessageId = id }
-
-    // Message deduplication
-    func hasReceivedMessage(_ id: String) -> Bool {
-        receivedMessageIds.contains(id)
-    }
-
-    func addReceivedMessage(_ id: String) {
-        if receivedMessageIds.count >= maxDeduplicationEntries {
-            if let first = receivedMessageIds.first {
-                receivedMessageIds.remove(first)
-            }
-        }
-        receivedMessageIds.insert(id)
-    }
-
-    /// Clear deduplication cache (call when starting new session)
-    func clearDeduplicationCache() {
-        receivedMessageIds.removeAll()
-    }
 
     // LastMessageId persistence
     func persistLastMessageId(_ id: String) {

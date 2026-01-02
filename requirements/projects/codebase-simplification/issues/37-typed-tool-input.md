@@ -1,6 +1,6 @@
 # Issue #37: Typed tool input instead of JSONValue dict
 
-> **Status**: Pending
+> **Status**: Complete (verified 2026-01-02)
 > **Priority**: Tier 2
 > **Depends On**: None
 > **Blocks**: None
@@ -69,10 +69,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Typed tool input instead of JSONValue dict is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Typed tool input instead of JSONValue dict is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -137,5 +137,6 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | In progress |
+| 2026-01-02 | Completed | All acceptance criteria verified, build passes |
+| 2026-01-02 | Verified | Confirmed tool events prefer inputDescription with JSONValue fallback for legacy parsing |

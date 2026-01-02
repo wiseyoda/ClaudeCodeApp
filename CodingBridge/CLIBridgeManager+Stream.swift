@@ -175,19 +175,8 @@ extension CLIBridgeManager {
     // MARK: - Stream Message Handling
 
     func handleStreamMessage(_ stored: CLIStoredMessage) {
-        let idString = stored.idString
-
-        // History hardening: Deduplication - skip if we've already processed this message
-        if hasReceivedMessage(idString) {
-            log.debug("[CLIBridge] Skipping duplicate message: \(idString)")
-            return
-        }
-
-        // Add to deduplication set (with size limit)
-        addReceivedMessage(idString)
-
-        // Persist lastMessageId for reconnection
-        persistLastMessageId(idString)
+        // Persist lastMessageId for reconnection (server guarantees no duplicate replay)
+        persistLastMessageId(stored.idString)
 
         log.debug("[CLIBridge] Processing stream message type: \(String(describing: stored.message))")
 
@@ -218,7 +207,7 @@ extension CLIBridgeManager {
             setLastMessageId(toolContent.id)
             agentState = .executing
             toolProgress = nil
-            emit(.toolStart(id: toolContent.id, name: toolContent.name, input: toolContent.input))
+            emit(.toolStart(id: toolContent.id, name: toolContent.name, inputDescription: toolContent.inputDescription, input: toolContent.input))
 
         case .typeToolResultStreamMessage(let resultContent):
             setLastMessageId(resultContent.id)
@@ -240,11 +229,7 @@ extension CLIBridgeManager {
 
         case .typeStateStreamMessage(let stateContent):
             let newState = CLIAgentState(from: stateContent.state)
-            // Skip duplicate state updates (cli-bridge may send idle twice at end of turn)
-            if agentState == newState && currentTool == stateContent.tool {
-                log.debug("[CLIBridge] Skipping duplicate state: \(stateContent.state)")
-                return
-            }
+            // cli-bridge#15: Server now deduplicates state messages, no client filter needed
             agentState = newState
             currentTool = stateContent.tool  // Track tool name for StatusBubbleView
             emit(.stateChanged(newState))

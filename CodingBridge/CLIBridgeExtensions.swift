@@ -976,16 +976,15 @@ extension SessionMetadata {
 
   /// Convert to ProjectSession for UI display
   func toProjectSession() -> ProjectSession {
-    let dateFormatter = ISO8601DateFormatter()
-    return ProjectSession(
+    ProjectSession(
       id: id.uuidString,
       projectPath: projectPath,
       summary: customTitle ?? title,
-      lastActivity: dateFormatter.string(from: lastActivityAt),
+      lastActivity: CLIDateFormatter.string(from: lastActivityAt),
       messageCount: messageCount,
       lastUserMessage: lastUserMessage,
       lastAssistantMessage: lastAssistantMessage,
-      archivedAt: archivedAt.map { dateFormatter.string(from: $0) }
+      archivedAt: archivedAt.map { CLIDateFormatter.string(from: $0) }
     )
   }
 

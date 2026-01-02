@@ -35,15 +35,15 @@ extension ChatViewModel {
             )
             messages.append(thinkingMsg)
 
-        case .toolStart(_, let name, let input):
+        case .toolStart(_, let name, let inputDescription, let input):
             // Filter tools from subagent execution (except Task itself which we show)
             if manager.activeSubagent != nil && name != "Task" {
                 log.debug("[ChatViewModel] Filtering subagent tool: \(name)")
                 return
             }
 
-            // Convert input dict to JSON string
-            let inputString = Self.toJSONString(input)
+            // Use typed inputDescription if available, otherwise fall back to JSON serialization
+            let inputString = inputDescription ?? Self.toJSONString(input)
             let toolMsg = ChatMessage(
                 role: .toolUse,
                 content: "\(name)(\(inputString))",
@@ -250,7 +250,7 @@ extension ChatViewModel {
         let newSession = ProjectSession(
             id: sessionId,
             summary: summary,
-            lastActivity: ISO8601DateFormatter().string(from: Date()),
+            lastActivity: CLIDateFormatter.string(from: Date()),
             messageCount: 1,
             lastUserMessage: summary,
             lastAssistantMessage: nil
@@ -292,7 +292,7 @@ extension ChatViewModel {
             let ephemeralSession = ProjectSession(
                 id: "new-session-\(UUID().uuidString)",
                 summary: "New Session",
-                lastActivity: ISO8601DateFormatter().string(from: Date()),
+                lastActivity: CLIDateFormatter.string(from: Date()),
                 messageCount: 0,
                 lastUserMessage: nil,
                 lastAssistantMessage: nil

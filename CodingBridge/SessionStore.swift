@@ -486,20 +486,11 @@ extension SessionStore {
         let sessions = sessionsByProject[projectPath] ?? []
         let activeId = activeSessionIds[projectPath]
 
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
         return sessions.filter { session in
             if session.id == activeId { return false }
             guard let activityStr = session.lastActivity else { return true }
-            if let activityDate = formatter.date(from: activityStr) {
-                return activityDate < date
-            }
-            formatter.formatOptions = [.withInternetDateTime]
-            if let activityDate = formatter.date(from: activityStr) {
-                return activityDate < date
-            }
-            return true
+            guard let activityDate = CLIDateFormatter.parseDate(activityStr) else { return true }
+            return activityDate < date
         }.count
     }
 
@@ -525,23 +516,14 @@ extension SessionStore {
         let sessions = sessionsByProject[projectPath] ?? []
         let activeId = activeSessionIds[projectPath]
 
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-
         let toDelete = sessions.filter { session in
             // Never delete active session
             if session.id == activeId { return false }
 
             // Parse last activity date
             guard let activityStr = session.lastActivity else { return true }
-            if let activityDate = formatter.date(from: activityStr) {
-                return activityDate < date
-            }
-            formatter.formatOptions = [.withInternetDateTime]
-            if let activityDate = formatter.date(from: activityStr) {
-                return activityDate < date
-            }
-            return true
+            guard let activityDate = CLIDateFormatter.parseDate(activityStr) else { return true }
+            return activityDate < date
         }
 
         var deleted = 0

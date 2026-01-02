@@ -1,6 +1,6 @@
 # Issue #39: Include session count in project list response
 
-> **Status**: Pending
+> **Status**: Complete (verified 2026-01-02)
 > **Priority**: Tier 2
 > **Depends On**: None
 > **Blocks**: None
@@ -69,10 +69,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Include session count in project list response is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Include session count in project list response is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -111,13 +111,16 @@ rg -n "sessionCount" CodingBridge
 
 **GitHub Issue**: https://github.com/wiseyoda/cli-bridge/issues/18
 
-**Status**: Unblocked (cli-bridge changes complete in feature/codebase-simplification)
+**Status**: Complete - sessionCount is returned in GET /projects response
 
 ---
 
 ## Notes
 
-None.
+This issue is effectively a duplicate of Issue #33 (Batch session counts API). The implementation was completed as part of Issue #33, which:
+- Added `populateCountsFromProjects()` to SessionStore to extract sessionCount from projects
+- Modified ContentView.loadProjects() to call `sessionStore.populateCountsFromProjects(cliProjects)`
+- Removed the N+1 `loadAllSessionCounts()` function that made individual API calls per project
 
 ---
 
@@ -137,5 +140,17 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Verified implementation | Already complete via Issue #33 |
+| 2026-01-02 | Build verification | Build passes with no warnings |
+| 2026-01-02 | Marked Complete | No additional code changes needed - work done in Issue #33 |
+| 2026-01-02 | Verified | Confirmed sessionCount is used from GET /projects without N+1 calls |
+
+## Changes Made
+
+**No changes needed** - This work was completed as part of Issue #33 (Batch session counts API).
+
+### Verification
+- `CLIProject` already has `sessionCount: Int?` field (generated from cli-bridge OpenAPI spec)
+- `ContentView.loadProjects()` uses `cliProject.sessionCount` to create `ProjectSessionMeta`
+- `SessionStore.populateCountsFromProjects()` populates counts from batch response
+- No N+1 API calls for session counts - all counts come from single GET /projects call

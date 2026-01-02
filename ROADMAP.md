@@ -81,15 +81,15 @@
 |---|------|--------|------------|--------|-------|
 | #31 | Exit Plan Mode approval UI | Medium | #9/#24 | Pending | Based on Issue #22; match CLI flow. |
 | #32 | Multi-repo/monorepo git status aggregation | Low | - | Pending | Based on Issue #18; needs subrepo discovery strategy. |
-| #33 | Batch session counts API (cli-bridge) | Medium | - | Pending | Based on Issue #36; backend request. |
-| #34 | Idempotent reconnection protocol | Medium | - | Pending | Reduces client dedupe; [cli-bridge#20](https://github.com/wiseyoda/cli-bridge/issues/20). |
-| #35 | Typed StreamMessage in paginated responses | Medium | - | Pending | Unblocks #2; [cli-bridge#21](https://github.com/wiseyoda/cli-bridge/issues/21). |
-| #36 | Normalize model ID handling (echo alias) | Medium | - | Pending | Removes heuristic matching; [cli-bridge#17](https://github.com/wiseyoda/cli-bridge/issues/17). |
-| #37 | Typed tool input (no JSONValue dict) | Medium | - | Pending | Simplifies tool parsing; [cli-bridge#16](https://github.com/wiseyoda/cli-bridge/issues/16). |
-| #38 | Fix duplicate idle state messages | Low | - | Pending | Remove client-side skip; [cli-bridge#15](https://github.com/wiseyoda/cli-bridge/issues/15). |
-| #39 | Include session count in project list response | Medium | - | Pending | Alternative to #33; [cli-bridge#18](https://github.com/wiseyoda/cli-bridge/issues/18). |
-| #40 | Standardize ISO8601 with fractional seconds | Low | - | Pending | Simplify date parsing; [cli-bridge#13](https://github.com/wiseyoda/cli-bridge/issues/13). |
-| #41 | Document error responses in OpenAPI schema | Low | - | Pending | Enable typed errors; [cli-bridge#14](https://github.com/wiseyoda/cli-bridge/issues/14). |
+| #33 | Batch session counts API (cli-bridge) | Medium | - | Complete | Session counts populated from GET /projects response; N+1 calls eliminated. |
+| #34 | Idempotent reconnection protocol | Medium | - | Complete | Removed client-side deduplication; server guarantees no duplicate replay. |
+| #35 | Typed StreamMessage in paginated responses | Medium | - | Complete | PaginatedMessage uses typed StreamMessage field; cli-bridge change deployed. |
+| #36 | Normalize model ID handling (echo alias) | Medium | - | Complete | Uses modelAlias from server; no heuristic matching needed. |
+| #37 | Typed tool input (no JSONValue dict) | Medium | - | Complete | Uses inputDescription when available; fallback to JSON serialization. |
+| #38 | Fix duplicate idle state messages | Low | - | Complete | Removed client-side idle state filter; server now deduplicates. |
+| #39 | Include session count in project list response | Medium | - | Complete | Duplicate of #33; sessionCount from GET /projects used. |
+| #40 | Standardize ISO8601 with fractional seconds | Low | - | Complete | Simplified to single fractional seconds formatter; removed dual parser fallback. |
+| #41 | Document error responses in OpenAPI schema | Low | - | Complete | CLIBridgeAPIError now wraps typed errors (NotFoundError, RateLimitError, ServerError, etc.). |
 
 ### Refactor Opportunities (Post-simplification)
 

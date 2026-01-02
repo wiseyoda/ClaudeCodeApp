@@ -399,7 +399,7 @@ class CLIBridgeAPIClient: ObservableObject {
         request.httpMethod = "GET"
 
         let (data, response) = try await session.data(for: request)
-        try validateResponse(response)
+        try validateResponse(response, data: data)
 
         // cli-bridge returns raw content, not JSON
         guard let content = String(data: data, encoding: .utf8) else {
@@ -495,7 +495,7 @@ class CLIBridgeAPIClient: ObservableObject {
         request.httpBody = body
 
         let (data, response) = try await session.data(for: request)
-        try validateResponse(response)
+        try validateResponse(response, data: data)
         return try Self.jsonDecoder.decode(CLIImageUploadResponse.self, from: data)
     }
 
@@ -666,7 +666,7 @@ class CLIBridgeAPIClient: ObservableObject {
         log.debug("[API] GET \(url.absoluteString)")
         let (data, response) = try await session.data(for: request)
         log.debug("[API] GET \(endpoint) completed in \(String(format: "%.0f", (CFAbsoluteTimeGetCurrent() - start) * 1000))ms")
-        try validateResponse(response)
+        try validateResponse(response, data: data)
         return try Self.jsonDecoder.decode(T.self, from: data)
     }
 
@@ -680,7 +680,7 @@ class CLIBridgeAPIClient: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         let (data, response) = try await session.data(for: request)
-        try validateResponse(response)
+        try validateResponse(response, data: data)
         return try Self.jsonDecoder.decode(T.self, from: data)
     }
 
@@ -701,7 +701,7 @@ class CLIBridgeAPIClient: ObservableObject {
         request.httpBody = try Self.jsonEncoder.encode(body)
 
         let (data, response) = try await session.data(for: request)
-        try validateResponse(response)
+        try validateResponse(response, data: data)
         return try Self.jsonDecoder.decode(T.self, from: data)
     }
 
@@ -717,7 +717,7 @@ class CLIBridgeAPIClient: ObservableObject {
         request.httpBody = try Self.jsonEncoder.encode(body)
 
         let (data, response) = try await session.data(for: request)
-        try validateResponse(response)
+        try validateResponse(response, data: data)
         return try Self.jsonDecoder.decode(T.self, from: data)
     }
 
@@ -729,8 +729,8 @@ class CLIBridgeAPIClient: ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "DELETE"
 
-        let (_, response) = try await session.data(for: request)
-        try validateResponse(response)
+        let (data, response) = try await session.data(for: request)
+        try validateResponse(response, data: data)
     }
 
     private func delete<T: Decodable>(_ endpoint: String, queryItems: [URLQueryItem]? = nil) async throws -> T {
@@ -743,7 +743,7 @@ class CLIBridgeAPIClient: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
 
         let (data, response) = try await session.data(for: request)
-        try validateResponse(response)
+        try validateResponse(response, data: data)
         return try Self.jsonDecoder.decode(T.self, from: data)
     }
 
@@ -764,11 +764,11 @@ class CLIBridgeAPIClient: ObservableObject {
         request.httpBody = try Self.jsonEncoder.encode(body)
 
         let (data, response) = try await session.data(for: request)
-        try validateResponse(response)
+        try validateResponse(response, data: data)
         return try Self.jsonDecoder.decode(T.self, from: data)
     }
 
-    private func validateResponse(_ response: URLResponse) throws {
+    private func validateResponse(_ response: URLResponse, data: Data? = nil) throws {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw CLIBridgeAPIError.invalidResponse
         }
@@ -777,20 +777,45 @@ class CLIBridgeAPIClient: ObservableObject {
         case 200...299:
             return
         case 400:
+            // Try to parse as validation error from OpenAPI schema
+            if let data = data,
+               let validationError = try? Self.jsonDecoder.decode(CLIValidationError.self, from: data) {
+                throw CLIBridgeAPIError.validationError(validationError)
+            }
             throw CLIBridgeAPIError.badRequest
         case 401:
             throw CLIBridgeAPIError.unauthorized
         case 403:
             throw CLIBridgeAPIError.forbidden
         case 404:
+            // Try to parse as NotFoundError from OpenAPI schema
+            if let data = data,
+               let notFoundError = try? Self.jsonDecoder.decode(NotFoundError.self, from: data) {
+                throw CLIBridgeAPIError.notFoundError(notFoundError)
+            }
             throw CLIBridgeAPIError.notFound
         case 429:
-            // Extract rate limit info from headers
+            // Try to parse as RateLimitError from OpenAPI schema
+            if let data = data,
+               let rateLimitError = try? Self.jsonDecoder.decode(RateLimitError.self, from: data) {
+                throw CLIBridgeAPIError.rateLimitError(rateLimitError)
+            }
+            // Fallback to extracting rate limit info from headers
             let rateLimitInfo = RateLimitInfo.from(httpResponse)
             throw CLIBridgeAPIError.rateLimitedWithRetry(rateLimitInfo)
         case 500...599:
+            // Try to parse as ServerError from OpenAPI schema
+            if let data = data,
+               let serverError = try? Self.jsonDecoder.decode(ServerError.self, from: data) {
+                throw CLIBridgeAPIError.internalServerError(serverError)
+            }
             throw CLIBridgeAPIError.serverError(httpResponse.statusCode)
         default:
+            // Try to parse as generic CLIError
+            if let data = data,
+               let genericError = try? Self.jsonDecoder.decode(CLIError.self, from: data) {
+                throw CLIBridgeAPIError.genericError(genericError)
+            }
             throw CLIBridgeAPIError.unexpectedStatus(httpResponse.statusCode)
         }
     }
@@ -861,11 +886,17 @@ class CLIBridgeAPIClient: ObservableObject {
                 return (true, info?.retryAfter, "Rate limited")
             case .rateLimited:
                 return (true, nil, "Rate limited")
+            case .rateLimitError(let error):
+                // Use retry delay from typed error response
+                return (true, Double(error.retryAfter), "Rate limited: \(error.message)")
             case .serverError(let code):
                 // 5xx errors are retryable
                 return (true, nil, "Server error (\(code))")
+            case .internalServerError(let error):
+                // Typed server error is also retryable
+                return (true, nil, "Server error: \(error.message)")
             default:
-                // 4xx errors (badRequest, unauthorized, forbidden, notFound) are not retryable
+                // 4xx errors (badRequest, unauthorized, forbidden, notFound, validationError, etc.) are not retryable
                 return (false, nil, "")
             }
         }
@@ -1116,6 +1147,12 @@ enum CLIBridgeAPIError: LocalizedError {
     case unexpectedStatus(Int)
     case decodingError(Error)
     case endpointNotAvailable(String)
+    // Generated error types from OpenAPI schema
+    case validationError(CLIValidationError)
+    case notFoundError(NotFoundError)
+    case rateLimitError(RateLimitError)
+    case internalServerError(ServerError)
+    case genericError(CLIError)
 
     var errorDescription: String? {
         switch self {
@@ -1148,6 +1185,39 @@ enum CLIBridgeAPIError: LocalizedError {
             return "Failed to decode response: \(error.localizedDescription)"
         case .endpointNotAvailable(let message):
             return message
+        // Generated error types provide rich error messages from server
+        case .validationError(let error):
+            return error.message
+        case .notFoundError(let error):
+            return error.message
+        case .rateLimitError(let error):
+            return error.message
+        case .internalServerError(let error):
+            return error.message
+        case .genericError(let error):
+            return error.error
+        }
+    }
+
+    /// Extract retry delay for rate limit errors
+    var retryAfter: TimeInterval? {
+        switch self {
+        case .rateLimitedWithRetry(let info):
+            return info?.retryAfter
+        case .rateLimitError(let error):
+            return TimeInterval(error.retryAfter)
+        default:
+            return nil
+        }
+    }
+
+    /// Check if this is a not found error (useful for pattern matching)
+    var isNotFound: Bool {
+        switch self {
+        case .notFound, .notFoundError:
+            return true
+        default:
+            return false
         }
     }
 }

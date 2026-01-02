@@ -1,6 +1,6 @@
 # Issue #34: Idempotent reconnection protocol
 
-> **Status**: Pending
+> **Status**: Complete (verified 2026-01-02)
 > **Priority**: Tier 2
 > **Depends On**: None
 > **Blocks**: None
@@ -68,10 +68,10 @@ Apply the roadmap change directly, delete the legacy path, and update call sites
 
 ## Acceptance Criteria
 
-- [ ] Idempotent reconnection protocol is implemented as described
-- [ ] Legacy paths are removed or no longer used
-- [ ] Build passes with no new warnings
-- [ ] No user-visible behavior changes
+- [x] Idempotent reconnection protocol is implemented as described
+- [x] Legacy paths are removed or no longer used
+- [x] Build passes with no new warnings
+- [x] No user-visible behavior changes
 
 ---
 
@@ -136,5 +136,6 @@ None.
 
 | Date | Action | Outcome |
 |------|--------|---------|
-| YYYY-MM-DD | Started implementation | Pending |
-| YYYY-MM-DD | Completed | Pending |
+| 2026-01-02 | Started implementation | Removed client-side deduplication |
+| 2026-01-02 | Completed | Removed receivedMessageIds Set, hasReceivedMessage(), addReceivedMessage(), clearDeduplicationCache() - 22 lines removed |
+| 2026-01-02 | Verified | Confirmed reconnection dedupe cache is fully removed |

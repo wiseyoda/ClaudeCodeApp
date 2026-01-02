@@ -82,7 +82,8 @@ class PermissionManager: ObservableObject {
         } catch {
             isLoading = false
             // If server doesn't support permissions endpoint, use default config
-            if case CLIBridgeAPIError.notFound = error {
+            // Handle both legacy .notFound and new typed .notFoundError
+            if let apiError = error as? CLIBridgeAPIError, apiError.isNotFound {
                 let defaultConfig = PermissionConfig()
                 self.config = defaultConfig
                 return defaultConfig
