@@ -41,6 +41,10 @@ extension ChatViewModel {
                 return
             }
 
+            // Flush any pending streaming text BEFORE appending tool message
+            // This ensures correct ordering: assistant text -> tool -> tool result
+            flushPendingStreamingText()
+
             // Always include JSON input for proper parsing by ToolParser
             // inputDescription is human-readable but ToolParser.extractParam needs JSON format
             let jsonInput = Self.toJSONString(input)
@@ -50,6 +54,7 @@ extension ChatViewModel {
                 timestamp: timestamp
             )
             messages.append(toolMsg)
+            refreshDisplayMessagesCache()
 
             if name == "TodoWrite" {
                 let content = "\(name)(\(jsonInput))"
@@ -82,6 +87,7 @@ extension ChatViewModel {
                 timestamp: timestamp
             )
             messages.append(resultMsg)
+            refreshDisplayMessagesCache()
 
         case .system(let content):
             handleSystemResultMessage(content)
@@ -96,6 +102,7 @@ extension ChatViewModel {
         case .stateChanged(let newState):
             if newState.isProcessing {
                 hasFinalizedCurrentResponse = false
+                flushedTextLength = 0
             }
             if newState == .idle {
                 finalizeStreamingMessageIfNeeded()
@@ -215,14 +222,21 @@ extension ChatViewModel {
         let tokenCount = manager.tokenUsage?.totalTokens
 
         if let index = lastAssistantMessageIndexForCurrentResponse() {
+            // Update existing message (may have been created by flushPendingStreamingText)
             let existing = messages[index]
-            let updated = updatedMessage(
-                existing,
+            messages[index] = ChatMessage(
+                id: existing.id,
+                role: existing.role,
                 content: finalText,
+                timestamp: existing.timestamp,
+                isStreaming: false,  // Mark as finalized, not streaming
+                imageData: existing.imageData,
+                imagePath: existing.imagePath,
                 executionTime: executionTime ?? existing.executionTime,
                 tokenCount: tokenCount ?? existing.tokenCount
             )
-            messages[index] = updated
+            // Force cache invalidation since we updated a message in-place
+            displayCacheVersion += 1
         } else {
             let assistantMessage = ChatMessage(
                 role: .assistant,
@@ -248,15 +262,45 @@ extension ChatViewModel {
         guard !trimmed.isEmpty else { return }
 
         if let index = lastAssistantMessageIndexForCurrentResponse() {
-            if messages[index].content == content {
+            // Update existing message with final content and mark as not streaming
+            let existing = messages[index]
+            if messages[index].content == content && !existing.isStreaming {
                 log.debug("[ChatViewModel] Skipping duplicate system/result message")
             } else {
-                let existing = messages[index]
-                messages[index] = updatedMessage(existing, content: content)
+                messages[index] = ChatMessage(
+                    id: existing.id,
+                    role: existing.role,
+                    content: content,
+                    timestamp: existing.timestamp,
+                    isStreaming: false,  // Mark as finalized
+                    imageData: existing.imageData,
+                    imagePath: existing.imagePath,
+                    executionTime: existing.executionTime,
+                    tokenCount: existing.tokenCount
+                )
+                // Force cache invalidation since we updated a message in-place
+                displayCacheVersion += 1
             }
-        } else if let lastAssistant = messages.last(where: { $0.role == .assistant }),
-                  lastAssistant.content == content {
-            log.debug("[ChatViewModel] Skipping duplicate system/result message")
+        } else if let lastAssistantIndex = messages.lastIndex(where: { $0.role == .assistant }) {
+            let lastAssistant = messages[lastAssistantIndex]
+            if lastAssistant.content == content && !lastAssistant.isStreaming {
+                log.debug("[ChatViewModel] Skipping duplicate system/result message")
+            } else {
+                // Update the last assistant message with final content
+                messages[lastAssistantIndex] = ChatMessage(
+                    id: lastAssistant.id,
+                    role: lastAssistant.role,
+                    content: content,
+                    timestamp: lastAssistant.timestamp,
+                    isStreaming: false,
+                    imageData: lastAssistant.imageData,
+                    imagePath: lastAssistant.imagePath,
+                    executionTime: lastAssistant.executionTime,
+                    tokenCount: lastAssistant.tokenCount
+                )
+                // Force cache invalidation since we updated a message in-place
+                displayCacheVersion += 1
+            }
         } else {
             let systemMsg = ChatMessage(
                 role: .assistant,
@@ -267,6 +311,8 @@ extension ChatViewModel {
         }
 
         committedText = content
+        // Mark as finalized to prevent duplicate from handleStopped (GH#6 fix)
+        hasFinalizedCurrentResponse = true
         refreshDisplayMessagesCache()
     }
 
@@ -274,6 +320,45 @@ extension ChatViewModel {
         guard let start = processingStartTime else { return nil }
         return messages.lastIndex { message in
             message.role == .assistant && message.timestamp >= start
+        }
+    }
+
+    /// Flush any pending streaming text to a message before tool events
+    /// This ensures assistant text appears BEFORE tools in the message list
+    private func flushPendingStreamingText() {
+        let currentText = manager.currentText
+        guard currentText.count > flushedTextLength else { return }
+
+        // Get only the new text since last flush
+        let pendingText = String(currentText.dropFirst(flushedTextLength))
+        guard !pendingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+
+        // Create or update assistant message with pending text
+        let didAppend: Bool
+        if let index = lastAssistantMessageIndexForCurrentResponse() {
+            // Update existing message with accumulated text
+            let existing = messages[index]
+            messages[index] = updatedMessage(existing, content: currentText)
+            // Force cache invalidation since we updated a message in-place
+            displayCacheVersion += 1
+            didAppend = false
+        } else {
+            // Create new assistant message
+            let assistantMsg = ChatMessage(
+                role: .assistant,
+                content: currentText,
+                timestamp: streamingMessageTimestamp,
+                isStreaming: true
+            )
+            messages.append(assistantMsg)
+            didAppend = true
+        }
+
+        flushedTextLength = currentText.count
+
+        // Only refresh cache manually for updates (appends trigger onChange which refreshes)
+        if !didAppend {
+            refreshDisplayMessagesCache()
         }
     }
 
@@ -341,28 +426,30 @@ extension ChatViewModel {
     func handleConnectionError(_ error: ConnectionError) {
         HapticManager.error()
 
-        // Handle session-related errors specially
+        // Handle session-related errors with full state reset
         switch error {
         case .sessionNotFound, .sessionInvalid, .sessionExpired:
+            log.warning("[ChatViewModel] Session error: \(error)")
+
+            // Show user-facing error banner
+            ErrorStore.shared.post(AppError.sessionExpired)
+
+            // Full state reset - clear everything related to the session
+            selectedSession = nil
+            MessageStore.clearSessionId(for: project.path)
+            sessionStore.clearActiveSessionId(for: project.path)
+
+            // Add system message for context
             let recoveryMsg = ChatMessage(
                 role: .system,
-                content: "Previous session expired. Starting fresh session.",
+                content: "Previous session is no longer available. Your next message will start a new session.",
                 timestamp: Date()
             )
             messages.append(recoveryMsg)
-            MessageStore.clearSessionId(for: project.path)
 
-            // Reset selectedSession to ephemeral to prevent invalid-session-ID loop
-            let ephemeralSession = ProjectSession(
-                id: "new-session-\(UUID().uuidString)",
-                summary: "New Session",
-                lastActivity: CLIDateFormatter.string(from: Date()),
-                messageCount: 0,
-                lastUserMessage: nil,
-                lastAssistantMessage: nil
-            )
-            selectedSession = ephemeralSession
-            sessionStore.clearActiveSessionId(for: project.path)
+            // Clear processing state
+            cleanupAfterProcessingComplete()
+            processingStartTime = nil
             return
         default:
             break

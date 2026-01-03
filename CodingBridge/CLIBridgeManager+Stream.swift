@@ -264,6 +264,8 @@ extension CLIBridgeManager {
         let modelValue = payload.modelAlias ?? payload.model
         setCurrentAgentId(payload.agentId)
         sessionId = sessionIdStr
+        // Sync pendingSessionId so reconnection uses the confirmed session
+        updatePendingSessionId(sessionIdStr)
         currentModel = modelValue
         protocolVersion = payload.protocolVersion.rawValue
         connectionState = .connected(agentId: payload.agentId)

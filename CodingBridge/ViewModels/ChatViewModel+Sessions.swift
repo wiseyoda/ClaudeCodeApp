@@ -226,6 +226,9 @@ extension ChatViewModel {
         // Cancel any existing history load to prevent race conditions when switching sessions rapidly
         historyLoadTask?.cancel()
 
+        // Save previous messages for recovery on failure (GH#3 fix)
+        let previousMessages = messages
+
         messages = []
         isLoadingHistory = true
 
@@ -266,9 +269,9 @@ extension ChatViewModel {
                 // Check if cancelled before showing error
                 guard !Task.isCancelled else { return }
                 log.debug("[ChatViewModel] Failed to load session history: \(error)")
-                if let lastMsg = session.lastAssistantMessage {
-                    messages.append(ChatMessage(role: .assistant, content: lastMsg, timestamp: Date()))
-                }
+
+                // Restore previous messages on failure to prevent data loss (GH#3 fix)
+                messages = previousMessages
                 messages.append(ChatMessage(role: .system, content: "Could not load history: \(error.localizedDescription)", timestamp: Date()))
                 isLoadingHistory = false
                 refreshDisplayMessagesCache()

@@ -13,7 +13,14 @@ extension ChatViewModel {
     var isAborting: Bool { false }
     var isConnected: Bool { manager.connectionState.isConnected }
     var isReattaching: Bool { isReattachingSession }
-    var currentStreamingText: String { manager.currentText }
+    var currentStreamingText: String {
+        // Only show text that hasn't been flushed to messages yet
+        let fullText = manager.currentText
+        guard flushedTextLength > 0 && flushedTextLength < fullText.count else {
+            return flushedTextLength > 0 ? "" : fullText
+        }
+        return String(fullText.dropFirst(flushedTextLength))
+    }
     var tokenUsage: TokenUsage? {
         guard let usage = manager.tokenUsage else { return nil }
         return TokenUsage(
@@ -110,6 +117,7 @@ extension ChatViewModel {
             }
         }
         hasFinalizedCurrentResponse = false
+        flushedTextLength = 0
         processingStartTime = Date()
     }
 
@@ -130,22 +138,29 @@ extension ChatViewModel {
     // MARK: - Message Sending Helpers
 
     private func resolvedResumeSessionId(_ explicit: String?, projectPath: String) -> String? {
-        let isEphemeralSelection = selectedSession?.id.hasPrefix("new-session-") ?? false
-        var candidates: [String?] = [
-            explicit,
-            manager.sessionId,
-            selectedSession?.id,
-            sessionStore.activeSessionId(for: projectPath)
-        ]
-        if !isEphemeralSelection {
-            candidates.append(MessageStore.loadSessionId(for: projectPath))
+        // Simplified session resolution with clear priority:
+        // 1. Explicit parameter (from manager.sessionId when connected)
+        // 2. Currently selected session (user's UI selection)
+        // 3. nil = create new session
+
+        log.debug("[SessionID] Resolving: explicit=\(explicit?.prefix(8) ?? "nil"), selectedSession=\(selectedSession?.id.prefix(8) ?? "nil"), manager.sessionId=\(manager.sessionId?.prefix(8) ?? "nil")")
+
+        // Priority 1: Explicit parameter (if valid UUID)
+        if let explicit = explicit, UUID(uuidString: explicit) != nil {
+            log.debug("[SessionID] Using explicit: \(explicit.prefix(8))...")
+            return explicit
         }
 
-        for candidate in candidates {
-            if let value = candidate, UUID(uuidString: value) != nil {
-                return value
-            }
+        // Priority 2: Currently selected session (unless ephemeral)
+        if let selected = selectedSession?.id,
+           !selected.hasPrefix("new-session-"),
+           UUID(uuidString: selected) != nil {
+            log.debug("[SessionID] Using selectedSession: \(selected.prefix(8))...")
+            return selected
         }
+
+        // Priority 3: No session - will create new
+        log.debug("[SessionID] No valid session ID found, will create new session")
         return nil
     }
 

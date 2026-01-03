@@ -260,6 +260,7 @@ class CLIBridgeManager: ObservableObject {
     func getPendingModel() -> String? { pendingModel }
     func getPendingHelper() -> Bool { pendingHelper }
     func clearPendingSessionId() { pendingSessionId = nil }
+    func updatePendingSessionId(_ sessionId: String) { pendingSessionId = sessionId }
     func clearPendingConnection() {
         pendingProjectPath = nil
         pendingSessionId = nil

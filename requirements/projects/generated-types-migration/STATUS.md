@@ -1,6 +1,6 @@
 # Generated Types Migration Status
 
-> Last updated: 2026-01-01
+> Last updated: 2026-01-03
 
 ## Prerequisites
 
@@ -19,13 +19,13 @@
 
 | Phase | Status | Description |
 |-------|--------|-------------|
-| 1. Regenerate | ✅ Complete | Regenerate with complete spec (143 types) |
-| 2. Typealiases | ✅ Complete | Created 84 typealiases |
-| 3. CLIBridgeManager | ✅ Complete | Added compatibility extensions |
-| 4. CLIBridgeAPIClient | ✅ Complete | Added API response typealiases |
-| 5. Views/Stores | ✅ Complete | All types have typealiases |
-| 6. Remove Types | ⏸️ Deferred | Infrastructure ready, needs code updates |
-| 7. Clean Up | ✅ Complete | Documentation updated |
+| 1. Regenerate | ✅ Complete | Regenerated from OpenAPI (157 types in `CodingBridge/Generated/`) |
+| 2. Typealiases | ✅ Complete | CLI* aliases centralized in `CLIBridgeAppTypes.swift` (31 total) |
+| 3. CLIBridgeManager | ✅ Complete | Uses generated `ServerMessage`/`ClientMessage` and stream handling |
+| 4. CLIBridgeAPIClient | ⏳ In Progress | Still uses custom CLI* request/response wrappers |
+| 5. Views/Stores | ⏳ In Progress | UI still consumes CLI* wrappers (`CLIStreamContent`, `CLIStoredMessage`) |
+| 6. Remove Types | ⏳ In Progress | Hand-written protocol wrappers remain in app/API client layers |
+| 7. Clean Up | ⏳ In Progress | Docs and migration notes still need updates |
 
 ---
 
@@ -33,27 +33,31 @@
 
 | Metric | Before | Target | Current |
 |--------|--------|--------|---------|
-| Generated types | 96 | 110+ | 143 |
-| Hand-written types | 75 | 0 | 75 |
-| `CLIBridgeTypes.swift` lines | 2500 | 0 | 2500 |
-| Typealiases created | 3 | 75+ | 84 |
+| Generated types | 96 | 110+ | 157 |
+| Hand-written CLI* types (app + API client) | 75 | 0 | 36 |
+| `CLIBridgeTypes.swift` lines | 2500 | 0 | 0 |
+| Typealiases created | 3 | As needed | 31 |
 
 ---
 
 ## Blockers
 
-None! All prerequisites complete.
+None. Remaining work is code migration, not external dependencies.
+
+---
+
+## Revisit Checklist
+
+- Dedicated refactor window available (touches many call sites).
+- WebSocket + REST integration tests can be run against a stable backend.
+- OpenAPI spec has been stable for at least one release cycle.
+- No imminent UI/feature release that would amplify regression risk.
 
 ---
 
 ## Notes
 
-- Initial migration infrastructure created (2026-01-01)
-- Completed Phases 1-5, all infrastructure in place
-- 143 generated types (up from 96)
-- 84 typealiases bridging CLI* names to generated types
-- Compatibility extensions for smooth transition
-- Phase 6 deferred: Generated types have different enum case names
-  - e.g., `.input(payload)` vs `.typeInputMessage(payload)`
-  - Full switch requires updating case names throughout codebase
-  - Infrastructure is ready, can migrate file-by-file as needed
+- `CLIBridgeTypes.swift` is removed; app-specific and compatibility types live in `CLIBridgeAppTypes.swift`
+- `CLIStreamContent`/`CLIStoredMessage` remain as custom wrappers over generated `StreamMessage`/`StoredMessage`
+- `CLIBridgeAPIClient.swift` still defines CLI* request/response structs (e.g., projects/sessions/metrics)
+- Generated enum case names (`.type*`) still require call-site updates to remove wrappers

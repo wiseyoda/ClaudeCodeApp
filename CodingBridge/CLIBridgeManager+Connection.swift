@@ -13,8 +13,26 @@ extension CLIBridgeManager {
         model: String? = nil,
         helper: Bool = false
     ) async {
-        guard !connectionState.isConnected && !connectionState.isConnecting else {
-            log.debug("Already connected or connecting")
+        // Handle session switching while already connected
+        if connectionState.isConnected {
+            let currentSession = self.sessionId
+            let requestedSession = sessionId
+
+            // If switching to a different session, disconnect first then reconnect
+            if let requested = requestedSession, requested != currentSession {
+                log.debug("[CLIBridge] Session switch: \(currentSession?.prefix(8) ?? "nil") → \(requested.prefix(8))")
+                disconnectImpl(preserveSession: false)
+                // Fall through to connect with new session
+            } else {
+                // Same session or no session specified - already connected
+                log.debug("[CLIBridge] Already connected to requested session")
+                return
+            }
+        }
+
+        // Guard against concurrent connection attempts
+        guard !connectionState.isConnecting else {
+            log.debug("[CLIBridge] Already connecting, ignoring duplicate request")
             return
         }
 
@@ -61,6 +79,8 @@ extension CLIBridgeManager {
             model: model,
             helper: helper
         )
+
+        log.debug("[CLIBridge] Sending start message - projectPath: \(projectPath), sessionId: \(sessionId?.prefix(8) ?? "nil (new session)"), model: \(model ?? "default")")
 
         do {
             try await send(.start(startPayload))
@@ -163,10 +183,15 @@ extension CLIBridgeManager {
     func reconnectWithExistingSession() {
         guard let projectPath = getPendingProjectPath() else { return }
 
+        // Prefer pendingSessionId (user's intent) over sessionId (may be stale after disconnect)
+        let sessionToReconnect = getPendingSessionId() ?? sessionId
+
+        log.debug("[CLIBridge] Reconnecting to session: \(sessionToReconnect?.prefix(8) ?? "new")")
+
         Task {
             await connect(
                 projectPath: projectPath,
-                sessionId: sessionId ?? getPendingSessionId(),
+                sessionId: sessionToReconnect,
                 model: getPendingModel(),
                 helper: getPendingHelper()
             )

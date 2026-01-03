@@ -23,6 +23,10 @@ struct ChatView: View {
     @FocusState private var isInputFocused: Bool
     @State private var autoScrollWorkItem: DispatchWorkItem?
     @State private var lastStreamingAutoScrollTime: Date = .distantPast
+    /// Tracks when messages array was last modified - used to prevent scroll during rapid updates
+    @State private var lastMessageChangeTime: Date = .distantPast
+    /// Minimum time since last message change before scrolling is safe
+    private let scrollSettlingTime: TimeInterval = 0.15
 
     private let streamingAutoScrollThrottle: TimeInterval = 0.12
 
@@ -422,9 +426,20 @@ struct ChatView: View {
             // Auto-scroll when new messages arrive (if enabled)
             // PERF: Delay scroll to let List's UICollectionView finish updating
             .onChange(of: viewModel.messages.count) { oldCount, newCount in
+                // Track when messages changed to prevent scroll during rapid updates
+                lastMessageChangeTime = Date()
+
                 if settings.autoScrollEnabled && !viewModel.showScrollToBottom {
-                    // Longer delay when loading many messages (history load)
-                    let delay = (newCount - oldCount) > 5 ? 0.3 : 0.1
+                    // Longer delay when loading many messages or during processing
+                    // During processing, list items change rapidly (streaming indicator, tool messages)
+                    let delay: TimeInterval
+                    if (newCount - oldCount) > 5 {
+                        delay = 0.4  // History load - extra time for large batch
+                    } else if viewModel.isProcessing {
+                        delay = 0.25  // During streaming - extra time for UI to settle
+                    } else {
+                        delay = 0.15  // Normal - still cautious
+                    }
                     scheduleScrollToBottom(
                         proxy,
                         delay: delay,
@@ -439,13 +454,19 @@ struct ChatView: View {
                 let now = Date()
                 if now.timeIntervalSince(lastStreamingAutoScrollTime) >= streamingAutoScrollThrottle {
                     lastStreamingAutoScrollTime = now
-                    scheduleScrollToBottom(proxy, delay: 0.05, animated: false)
+                    // Use longer delay during streaming to avoid scroll conflicts
+                    scheduleScrollToBottom(proxy, delay: 0.1, animated: false)
                 }
+            }
+            // Track when processing state changes - affects streaming indicator visibility
+            .onChange(of: viewModel.isProcessing) { _, _ in
+                // Processing state change means list structure may change (streaming indicator)
+                lastMessageChangeTime = Date()
             }
             // Explicit scroll trigger (used when sending messages - always scrolls)
             .onChange(of: viewModel.scrollToBottomTrigger) { _, shouldScroll in
                 if shouldScroll {
-                    scheduleScrollToBottom(proxy, delay: 0.15, animated: true)
+                    scheduleScrollToBottom(proxy, delay: 0.2, animated: true)
                     viewModel.scrollToBottomTrigger = false
                     viewModel.showScrollToBottom = false
                 }
@@ -499,8 +520,9 @@ struct ChatView: View {
             .font(settings.scaledFont(.body))
             .padding(.vertical, 4)
             .id("reattaching")
-        } else if viewModel.currentStreamingText.isEmpty {
-            // StatusBubbleView now rendered in statusAndInputView (fixed position)
+        } else if viewModel.hasFinalizedCurrentResponse || viewModel.currentStreamingText.isEmpty {
+            // Hide when finalized (message is now in the list) or when empty
+            // Checking hasFinalizedCurrentResponse first prevents visual flash during transition
             EmptyView()
                 .id("statusBubble")
         } else {
@@ -613,7 +635,17 @@ struct ChatView: View {
         animated: Bool
     ) {
         autoScrollWorkItem?.cancel()
-        let workItem = DispatchWorkItem {
+        let workItem = DispatchWorkItem { [self] in
+            // Safety check: ensure list has settled before scrolling
+            // This prevents crash when UICollectionView is mid-update
+            let timeSinceLastChange = Date().timeIntervalSince(lastMessageChangeTime)
+            if timeSinceLastChange < scrollSettlingTime {
+                // List is still updating - reschedule with remaining settling time
+                let remainingDelay = scrollSettlingTime - timeSinceLastChange + 0.05
+                scheduleScrollToBottom(proxy, delay: remainingDelay, animated: animated)
+                return
+            }
+
             if animated {
                 withAnimation(.easeOut(duration: 0.15)) {
                     proxy.scrollTo("bottomAnchor")

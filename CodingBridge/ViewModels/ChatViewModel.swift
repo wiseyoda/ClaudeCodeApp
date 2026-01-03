@@ -58,6 +58,8 @@ class ChatViewModel: ObservableObject {
     var committedText: String?
     /// Tracks whether the current response has been committed to messages
     var hasFinalizedCurrentResponse = false
+    /// Tracks how much streaming text has been flushed to messages (for correct tool ordering)
+    var flushedTextLength = 0
 
     // MARK: - Search State
     @Published var isSearching = false
@@ -146,6 +148,10 @@ class ChatViewModel: ObservableObject {
     // Note: @Published wrapper triggers view re-render when cache is refreshed
     @Published private var cachedDisplayMessages: [ChatMessage] = []
     private var displayMessagesInvalidationKey: Int = 0
+    /// Version counter to force cache invalidation when messages are updated in-place
+    /// (hash key only tracks count and last message, so updates to middle messages need this)
+    /// Internal access for use in extensions
+    var displayCacheVersion: Int = 0
 
     // MARK: - Initialization
 
@@ -396,6 +402,7 @@ class ChatViewModel: ObservableObject {
         let defaultPrompt = imagesToSend.count == 1 ? "What is this image?" : "What are these images?"
         committedText = nil  // Clear before new message cycle
         hasFinalizedCurrentResponse = false
+        flushedTextLength = 0
         sendToManager(
             text.isEmpty ? defaultPrompt : messageToSend,
             projectPath: project.path,
@@ -441,6 +448,7 @@ class ChatViewModel: ObservableObject {
         scrollToBottomTrigger = true
         processingStartTime = Date()
         hasFinalizedCurrentResponse = false
+        flushedTextLength = 0
 
         // Resend the user message
         sendToManager(
@@ -488,6 +496,7 @@ class ChatViewModel: ObservableObject {
         hasher.combine(messages.count)
         hasher.combine(messages.last?.id)
         hasher.combine(messages.last?.content)
+        hasher.combine(displayCacheVersion)  // Force invalidation when messages updated in-place
         hasher.combine(searchText)
         hasher.combine(messageFilter)
         hasher.combine(settings.showThinkingBlocks)

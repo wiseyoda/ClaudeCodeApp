@@ -146,6 +146,21 @@ Control Claude's reasoning depth with 5 levels:
 - A running [cli-bridge](https://github.com/anthropics/claude-code/tree/main/packages/cli-bridge) backend
 - Network access to the backend (via Tailscale or local network)
 
+## Dependencies
+
+Swift Packages:
+- Citadel (SSH)
+- Highlightr (syntax highlighting)
+
+System Frameworks (used by iOS 26 features):
+- ActivityKit
+- AppIntents
+- CoreSpotlight
+- UniformTypeIdentifiers
+- WidgetKit
+
+Build configuration details: `requirements/projects/ui-redesign/BUILD-CONFIG.md`
+
 ## Project Docs
 
 - Codebase simplification issues: `requirements/projects/codebase-simplification/issues/README.md`
