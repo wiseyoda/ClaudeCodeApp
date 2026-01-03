@@ -22,6 +22,8 @@ struct ChatMessage: Identifiable, Equatable, Codable {
         case toolResult
         case resultSuccess
         case thinking  // For reasoning/thinking blocks
+        case localCommand  // For slash commands like /exit, /clear, /bump
+        case localCommandStdout  // For command output (e.g., "See ya!")
     }
 
     init(

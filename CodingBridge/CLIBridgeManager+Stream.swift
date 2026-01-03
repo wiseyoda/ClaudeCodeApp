@@ -209,13 +209,13 @@ extension CLIBridgeManager {
             setLastMessageId(toolContent.id)
             agentState = .executing
             toolProgress = nil
-            emit(.toolStart(id: toolContent.id, name: toolContent.name, inputDescription: toolContent.inputDescription, input: toolContent.input))
+            emit(.toolStart(id: toolContent.id, name: toolContent.name, inputDescription: toolContent.inputDescription, input: toolContent.input, timestamp: stored.timestamp))
 
         case .typeToolResultStreamMessage(let resultContent):
             setLastMessageId(resultContent.id)
             agentState = .thinking
             toolProgress = nil
-            emit(.toolResult(id: resultContent.id, name: resultContent.tool, output: resultContent.output, isError: !resultContent.success))
+            emit(.toolResult(id: resultContent.id, name: resultContent.tool, output: resultContent.output, isError: !resultContent.success, timestamp: stored.timestamp))
 
         case .typeProgressStreamMessage(let progressContent):
             // Only update progress if NOT waiting for user input or permission approval
@@ -234,6 +234,9 @@ extension CLIBridgeManager {
             // cli-bridge#15: Server now deduplicates state messages, no client filter needed
             agentState = newState
             currentTool = stateContent.tool  // Track tool name for StatusBubbleView
+            if newState == .idle {
+                activeSubagent = nil
+            }
             emit(.stateChanged(newState))
 
         case .typeSubagentStartStreamMessage(let subagentContent):

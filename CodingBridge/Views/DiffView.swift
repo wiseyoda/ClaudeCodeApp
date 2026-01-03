@@ -30,14 +30,26 @@ struct DiffView: View {
     @State private var expandedSections: Set<UUID> = []
 
     /// Cached diff lines - computed once on appear/input change to avoid recalculation on every render
-    @State private var cachedDiffLines: [DiffLine] = []
+    @State private var cachedDiffLines: [DiffLine]
     /// Track input hash to detect when diff needs recomputation
-    @State private var inputHash: Int = 0
+    @State private var inputHash: Int
 
-    private let contextLines = 2  // Lines of context around changes
+    private static let contextLines = 2  // Lines of context around changes
 
     /// Compute stable hash of inputs to detect changes
     private var currentInputHash: Int {
+        Self.inputHash(oldString: oldString, newString: newString)
+    }
+
+    init(oldString: String, newString: String) {
+        self.oldString = oldString
+        self.newString = newString
+        let initialLines = Self.computeDiff(oldString: oldString, newString: newString)
+        _cachedDiffLines = State(initialValue: initialLines)
+        _inputHash = State(initialValue: Self.inputHash(oldString: oldString, newString: newString))
+    }
+
+    private static func inputHash(oldString: String, newString: String) -> Int {
         var hasher = Hasher()
         hasher.combine(oldString)
         hasher.combine(newString)
@@ -87,6 +99,10 @@ struct DiffView: View {
 
     /// Compute line-by-line diff using simple LCS-based approach
     private func computeDiff() -> [DiffLine] {
+        Self.computeDiff(oldString: oldString, newString: newString)
+    }
+
+    private static func computeDiff(oldString: String, newString: String) -> [DiffLine] {
         // Normalize indentation for mobile readability (normalize together for consistent indent)
         let rawOldLines = oldString.components(separatedBy: "\n")
         let rawNewLines = newString.components(separatedBy: "\n")
@@ -162,7 +178,7 @@ struct DiffView: View {
     }
 
     /// Collapse long runs of unchanged context lines
-    private func collapseContext(_ lines: [DiffLine]) -> [DiffLine] {
+    private static func collapseContext(_ lines: [DiffLine]) -> [DiffLine] {
         guard lines.count > 10 else { return lines }
 
         var result: [DiffLine] = []
@@ -186,7 +202,7 @@ struct DiffView: View {
     }
 
     /// Convert a run of context lines, collapsing if too long
-    private func flushContextRun(_ run: [DiffLine]) -> [DiffLine] {
+    private static func flushContextRun(_ run: [DiffLine]) -> [DiffLine] {
         if run.count <= contextLines * 2 + 1 {
             return run
         }
@@ -216,7 +232,7 @@ struct DiffView: View {
     /// 1. Convert tabs to 2 spaces
     /// 2. Strip common leading whitespace
     /// 3. Compress remaining indentation (4 spaces → 2 spaces per level)
-    private func normalizeIndentationTogether(_ oldLines: [String], _ newLines: [String]) -> ([String], [String]) {
+    private static func normalizeIndentationTogether(_ oldLines: [String], _ newLines: [String]) -> ([String], [String]) {
         // Convert tabs to 2 spaces
         let oldTabNorm = oldLines.map { $0.replacingOccurrences(of: "\t", with: "  ") }
         let newTabNorm = newLines.map { $0.replacingOccurrences(of: "\t", with: "  ") }

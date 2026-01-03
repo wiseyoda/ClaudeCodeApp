@@ -397,7 +397,7 @@ final class CLIBridgeManagerTests: XCTestCase {
         let (manager, _, _) = makeManager()
         let expectation = expectation(description: "tool start")
         manager.onEvent = { event in
-            guard case .toolStart(let id, let tool, _, let input) = event else { return }
+            guard case .toolStart(let id, let tool, _, let input, _) = event else { return }
             XCTAssertEqual(id, "tool-1")
             XCTAssertEqual(tool, "Bash")
             XCTAssertEqual(input["command"]?.stringValue, "ls")
@@ -421,7 +421,7 @@ final class CLIBridgeManagerTests: XCTestCase {
         let (manager, _, _) = makeManager()
         let expectation = expectation(description: "tool result")
         manager.onEvent = { event in
-            guard case .toolResult(let id, let tool, let output, let isError) = event else { return }
+            guard case .toolResult(let id, let tool, let output, let isError, _) = event else { return }
             XCTAssertEqual(id, "tool-1")
             XCTAssertEqual(tool, "Bash")
             XCTAssertEqual(output, "done")
@@ -919,7 +919,7 @@ final class CLIBridgeManagerTests: XCTestCase {
         let (manager, _, _) = makeManager()
         let expectation = expectation(description: "onToolStart")
         manager.onEvent = { event in
-            guard case .toolStart(let id, let tool, _, let input) = event else { return }
+            guard case .toolStart(let id, let tool, _, let input, _) = event else { return }
             XCTAssertEqual(id, "tool-1")
             XCTAssertEqual(tool, "Bash")
             XCTAssertEqual(input["command"]?.stringValue, "ls")
@@ -941,7 +941,7 @@ final class CLIBridgeManagerTests: XCTestCase {
         let (manager, _, _) = makeManager()
         let expectation = expectation(description: "onToolResult")
         manager.onEvent = { event in
-            guard case .toolResult(let id, let tool, let output, let isError) = event else { return }
+            guard case .toolResult(let id, let tool, let output, let isError, _) = event else { return }
             XCTAssertEqual(id, "tool-1")
             XCTAssertEqual(tool, "Bash")
             XCTAssertEqual(output, "done")

@@ -54,7 +54,11 @@ struct UnifiedStatusBar: View {
                         .font(settings.scaledFont(.body))
                         .fontWeight(.medium)
                         .foregroundColor(CLITheme.primaryText(for: colorScheme))
+                        .padding(.vertical, 2)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
                 }
+                .buttonStyle(.plain)
             }
 
             // Mode toggles (icon-only to prevent word wrap when tokens visible)
@@ -187,10 +191,14 @@ private struct StatusIndicatorDot: View {
     @Environment(\.colorScheme) var colorScheme
 
     var body: some View {
-        Circle()
-            .fill(statusColor)
-            .frame(width: 8, height: 8)
-            .modifier(ConditionalPulse(isActive: shouldPulse))
+        ZStack {
+            Circle()
+                .fill(statusColor)
+                .frame(width: 8, height: 8)
+                .modifier(ConditionalPulse(isActive: shouldPulse))
+        }
+        // Match the 20pt icon column width from CLIMessageView for alignment
+        .frame(width: 20, height: 20, alignment: .center)
     }
 
     /// Status color based on server health and processing state

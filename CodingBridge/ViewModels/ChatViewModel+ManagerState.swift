@@ -129,6 +129,26 @@ extension ChatViewModel {
 
     // MARK: - Message Sending Helpers
 
+    private func resolvedResumeSessionId(_ explicit: String?, projectPath: String) -> String? {
+        let isEphemeralSelection = selectedSession?.id.hasPrefix("new-session-") ?? false
+        var candidates: [String?] = [
+            explicit,
+            manager.sessionId,
+            selectedSession?.id,
+            sessionStore.activeSessionId(for: projectPath)
+        ]
+        if !isEphemeralSelection {
+            candidates.append(MessageStore.loadSessionId(for: projectPath))
+        }
+
+        for candidate in candidates {
+            if let value = candidate, UUID(uuidString: value) != nil {
+                return value
+            }
+        }
+        return nil
+    }
+
     /// Send a message to the manager, handling connection if needed
     func sendToManager(
         _ message: String,
@@ -140,10 +160,15 @@ extension ChatViewModel {
     ) {
         Task {
             do {
+                if !manager.agentState.isProcessing {
+                    manager.clearCurrentText()
+                }
+
                 // Ensure connected to the right project/session
+                let sessionId = resolvedResumeSessionId(resumeSessionId, projectPath: projectPath)
                 await manager.connect(
                     projectPath: projectPath,
-                    sessionId: resumeSessionId,
+                    sessionId: sessionId,
                     model: model
                 )
 

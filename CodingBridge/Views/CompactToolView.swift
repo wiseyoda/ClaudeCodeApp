@@ -470,21 +470,16 @@ struct ExploredFilesView: View {
             // File exploration row (Read/Glob)
             if !fileItems.isEmpty {
                 HStack(alignment: .top, spacing: 6) {
-                    Text("📁")
+                    // Icon in fixed 20pt column for alignment
+                    Image(systemName: "folder")
                         .font(.system(size: 12))
+                        .foregroundColor(mutedColor)
+                        .frame(width: 20, alignment: .center)
 
                     VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 4) {
-                            Text("Explored:")
-                                .font(settings.scaledFont(.small))
-                                .foregroundColor(mutedColor)
-
-                            Spacer()
-
-                            Text("✓")
-                                .font(.system(size: 11))
-                                .foregroundColor(successColor)
-                        }
+                        Text("Explored:")
+                            .font(settings.scaledFont(.small))
+                            .foregroundColor(mutedColor)
 
                         Text(fileNames(for: fileItems))
                             .font(settings.scaledFont(.small))
@@ -498,8 +493,11 @@ struct ExploredFilesView: View {
             // Search patterns row (Grep)
             if !searchPatterns.isEmpty {
                 HStack(alignment: .top, spacing: 6) {
-                    Text("🔍")
+                    // Icon in fixed 20pt column for alignment
+                    Image(systemName: "magnifyingglass")
                         .font(.system(size: 12))
+                        .foregroundColor(CLITheme.cyan(for: colorScheme))
+                        .frame(width: 20, alignment: .center)
 
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 4) {
@@ -507,11 +505,11 @@ struct ExploredFilesView: View {
                                 .font(settings.scaledFont(.small))
                                 .foregroundColor(mutedColor)
 
-                            Spacer()
-
-                            Text(hasSearchErrors ? "✗" : "✓")
-                                .font(.system(size: 11))
-                                .foregroundColor(hasSearchErrors ? errorColor : successColor)
+                            if hasSearchErrors {
+                                Text("✗")
+                                    .font(.system(size: 11))
+                                    .foregroundColor(errorColor)
+                            }
                         }
 
                         Text(patternList)
@@ -523,7 +521,6 @@ struct ExploredFilesView: View {
                 }
             }
         }
-        .padding(.vertical, 2)
     }
 
     private func fileNames(for items: [ExploredGroup.ExploredFile]) -> String {
@@ -569,14 +566,21 @@ struct TerminalCommandView: View {
     @EnvironmentObject var settings: AppSettings
     @Environment(\.colorScheme) var colorScheme
 
+    /// Whether there's actual content to expand
+    private var hasExpandableContent: Bool {
+        !group.result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        resultSummary != group.result.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             // Command line with expand toggle
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                // $ prefix - use same font as command for alignment
+                // $ prefix in fixed 20pt column for alignment
                 Text("$")
                     .font(settings.scaledFont(.small).monospaced())
                     .foregroundColor(mutedColor)
+                    .frame(width: 20, alignment: .center)
 
                 // Command text - word wrap
                 Text(group.command)
@@ -587,29 +591,40 @@ struct TerminalCommandView: View {
 
                 Spacer(minLength: 4)
 
-                // Expand/collapse toggle
-                Button {
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        isExpanded.toggle()
+                // Expand/collapse toggle (only show if there's content to expand)
+                if hasExpandableContent {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            isExpanded.toggle()
+                        }
+                    } label: {
+                        Text(isExpanded ? "[▾]" : "[▸]")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundColor(mutedColor.opacity(0.7))
                     }
-                } label: {
-                    Text(isExpanded ? "[▾]" : "[▸]")
-                        .font(.system(size: 11, design: .monospaced))
-                        .foregroundColor(mutedColor.opacity(0.7))
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
 
-            // Result summary line
+            // Result summary line - indented under command text (after 20pt icon column + 6pt spacing)
             HStack(spacing: 4) {
+                // └ character as text, smaller than command
                 Text("└")
-                    .font(.system(size: 11, design: .monospaced))
+                    .font(.system(size: 10, design: .monospaced))
                     .foregroundColor(mutedColor.opacity(0.5))
 
-                Text(resultSummary)
-                    .font(settings.scaledFont(.small))
-                    .foregroundColor(resultColor)
-                    .lineLimit(1)
+                // Result summary - italic and muted for "Completed", colored for errors
+                if isGenericCompletion {
+                    Text(resultSummary)
+                        .font(.system(size: 11).italic())  // 2pt smaller than command
+                        .foregroundColor(mutedColor.opacity(0.7))
+                        .lineLimit(1)
+                } else {
+                    Text(resultSummary)
+                        .font(.system(size: 11))  // 2pt smaller than command
+                        .foregroundColor(resultColor)
+                        .lineLimit(1)
+                }
 
                 Spacer()
 
@@ -620,18 +635,25 @@ struct TerminalCommandView: View {
                         .foregroundColor(mutedColor.opacity(0.6))
                 }
             }
-            .padding(.leading, 12)
+            .padding(.leading, 26)  // Indent under command text (20pt icon + 6pt spacing)
 
-            // Expanded result
-            if isExpanded {
+            // Expanded result (only if there's content)
+            if isExpanded && hasExpandableContent {
                 expandedResultView
             }
         }
-        .padding(.vertical, 2)
     }
 
     private var resultSummary: String {
         extractTerminalSummary(group.result)
+    }
+
+    /// Check if this is a generic completion message (should be italic/muted)
+    private var isGenericCompletion: Bool {
+        let summary = resultSummary
+        return summary == "Completed" ||
+               summary == "Working tree clean" ||
+               summary.isEmpty
     }
 
     @ViewBuilder
@@ -656,20 +678,19 @@ struct TerminalCommandView: View {
             RoundedRectangle(cornerRadius: 6)
                 .stroke(mutedColor.opacity(0.2), lineWidth: 0.5)
         )
-        .padding(.leading, 12)
+        .padding(.leading, 26)  // Match 20pt icon + 6pt spacing
         .padding(.top, 4)
     }
 
     private var resultColor: Color {
-        if group.isSuccess {
-            return colorScheme == .dark
-                ? Color(red: 0.4, green: 0.75, blue: 0.45)
-                : Color(red: 0.15, green: 0.5, blue: 0.2)
-        } else {
+        // Errors get red color
+        if !group.isSuccess {
             return colorScheme == .dark
                 ? Color(red: 0.9, green: 0.45, blue: 0.45)
                 : Color(red: 0.7, green: 0.2, blue: 0.2)
         }
+        // Success with actual content (not generic) gets muted color
+        return mutedColor.opacity(0.85)
     }
 
     private var mutedColor: Color {
@@ -700,10 +721,11 @@ struct WebSearchView: View {
         VStack(alignment: .leading, spacing: 4) {
             // Header: Search query with expand toggle
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                // Search icon
+                // Search icon in fixed 20pt column for alignment
                 Image(systemName: "magnifyingglass")
                     .font(.system(size: 12))
                     .foregroundColor(CLITheme.cyan(for: colorScheme))
+                    .frame(width: 20, alignment: .center)
 
                 // Query text
                 Text("Search: \"\(shortenedQuery)\"")
@@ -740,7 +762,6 @@ struct WebSearchView: View {
                 expandedResultsView
             }
         }
-        .padding(.vertical, 2)
     }
 
     private var shortenedQuery: String {

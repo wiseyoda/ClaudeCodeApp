@@ -380,6 +380,7 @@ extension View {
             case .toolUse, .toolResult, .resultSuccess: return .info
             case .thinking: return .accent
             case .system: return .neutral
+            case .localCommand, .localCommandStdout: return .info
             }
         }()
 

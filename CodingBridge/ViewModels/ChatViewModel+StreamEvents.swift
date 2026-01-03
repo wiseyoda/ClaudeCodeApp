@@ -34,24 +34,25 @@ extension ChatViewModel {
             )
             messages.append(thinkingMsg)
 
-        case .toolStart(_, let name, let inputDescription, let input):
+        case .toolStart(_, let name, _, let input, let timestamp):
             // Filter tools from subagent execution (except Task itself which we show)
             if manager.activeSubagent != nil && name != "Task" {
                 log.debug("[ChatViewModel] Filtering subagent tool: \(name)")
                 return
             }
 
-            // Use typed inputDescription if available, otherwise fall back to JSON serialization
-            let inputString = inputDescription ?? Self.toJSONString(input)
+            // Always include JSON input for proper parsing by ToolParser
+            // inputDescription is human-readable but ToolParser.extractParam needs JSON format
+            let jsonInput = Self.toJSONString(input)
             let toolMsg = ChatMessage(
                 role: .toolUse,
-                content: "\(name)(\(inputString))",
-                timestamp: Date()
+                content: "\(name)(\(jsonInput))",
+                timestamp: timestamp
             )
             messages.append(toolMsg)
 
             if name == "TodoWrite" {
-                let content = "\(name)(\(inputString))"
+                let content = "\(name)(\(jsonInput))"
                 if let todos = TodoListView.parseTodoContent(content), !todos.isEmpty {
                     var transaction = Transaction()
                     transaction.disablesAnimations = true
@@ -62,7 +63,7 @@ extension ChatViewModel {
                 }
             }
 
-        case .toolResult(_, let tool, let output, _):
+        case .toolResult(_, let tool, let output, _, let timestamp):
             let toolName = tool
             // Filter tool results from subagent execution and Task tool itself
             if manager.activeSubagent != nil && toolName != "Task" {
@@ -78,27 +79,12 @@ extension ChatViewModel {
             let resultMsg = ChatMessage(
                 role: .toolResult,
                 content: output,
-                timestamp: Date()
+                timestamp: timestamp
             )
             messages.append(resultMsg)
 
         case .system(let content):
-            // System messages with subtype "result" are final response messages from Claude
-            // Skip if content matches the last assistant message (cli-bridge sends both)
-            if let lastAssistant = messages.last(where: { $0.role == .assistant }) {
-                if lastAssistant.content == content {
-                    log.debug("[ChatViewModel] Skipping duplicate system/result message")
-                    return
-                }
-            }
-            // Display as assistant message if it differs
-            let systemMsg = ChatMessage(
-                role: .assistant,
-                content: content,
-                timestamp: Date()
-            )
-            messages.append(systemMsg)
-            refreshDisplayMessagesCache()
+            handleSystemResultMessage(content)
 
         case .user:
             // User message echo - ignore (we already have it locally)
@@ -223,34 +209,91 @@ extension ChatViewModel {
         guard !hasFinalizedCurrentResponse else { return }
 
         let finalText = committedText ?? manager.currentText
-        if !finalText.isEmpty {
-            var shouldAppend = true
-            if let lastAssistant = messages.last(where: { $0.role == .assistant }),
-               lastAssistant.content == finalText,
-               let start = processingStartTime,
-               lastAssistant.timestamp >= start {
-                shouldAppend = false
-            }
-            if shouldAppend {
-                let executionTime: TimeInterval? = processingStartTime.map { Date().timeIntervalSince($0) }
-                let tokenCount = manager.tokenUsage?.totalTokens
-                let assistantMessage = ChatMessage(
-                    role: .assistant,
-                    content: finalText,
-                    timestamp: Date(),
-                    executionTime: executionTime,
-                    tokenCount: tokenCount
-                )
-                messages.append(assistantMessage)
-            }
+        guard !finalText.isEmpty else { return }
+
+        let executionTime: TimeInterval? = processingStartTime.map { Date().timeIntervalSince($0) }
+        let tokenCount = manager.tokenUsage?.totalTokens
+
+        if let index = lastAssistantMessageIndexForCurrentResponse() {
+            let existing = messages[index]
+            let updated = updatedMessage(
+                existing,
+                content: finalText,
+                executionTime: executionTime ?? existing.executionTime,
+                tokenCount: tokenCount ?? existing.tokenCount
+            )
+            messages[index] = updated
+        } else {
+            let assistantMessage = ChatMessage(
+                role: .assistant,
+                content: finalText,
+                timestamp: Date(),
+                executionTime: executionTime,
+                tokenCount: tokenCount
+            )
+            messages.append(assistantMessage)
         }
 
         committedText = nil
         processingStartTime = nil
         hasFinalizedCurrentResponse = true
 
+        refreshDisplayMessagesCache()
         refreshGitStatus()
         cleanupAfterProcessingComplete()
+    }
+
+    private func handleSystemResultMessage(_ content: String) {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        if let index = lastAssistantMessageIndexForCurrentResponse() {
+            if messages[index].content == content {
+                log.debug("[ChatViewModel] Skipping duplicate system/result message")
+            } else {
+                let existing = messages[index]
+                messages[index] = updatedMessage(existing, content: content)
+            }
+        } else if let lastAssistant = messages.last(where: { $0.role == .assistant }),
+                  lastAssistant.content == content {
+            log.debug("[ChatViewModel] Skipping duplicate system/result message")
+        } else {
+            let systemMsg = ChatMessage(
+                role: .assistant,
+                content: content,
+                timestamp: Date()
+            )
+            messages.append(systemMsg)
+        }
+
+        committedText = content
+        refreshDisplayMessagesCache()
+    }
+
+    private func lastAssistantMessageIndexForCurrentResponse() -> Int? {
+        guard let start = processingStartTime else { return nil }
+        return messages.lastIndex { message in
+            message.role == .assistant && message.timestamp >= start
+        }
+    }
+
+    private func updatedMessage(
+        _ message: ChatMessage,
+        content: String? = nil,
+        executionTime: TimeInterval? = nil,
+        tokenCount: Int? = nil
+    ) -> ChatMessage {
+        ChatMessage(
+            id: message.id,
+            role: message.role,
+            content: content ?? message.content,
+            timestamp: message.timestamp,
+            isStreaming: message.isStreaming,
+            imageData: message.imageData,
+            imagePath: message.imagePath,
+            executionTime: executionTime ?? message.executionTime,
+            tokenCount: tokenCount ?? message.tokenCount
+        )
     }
 
     func handleSessionConnected(sessionId: String) {

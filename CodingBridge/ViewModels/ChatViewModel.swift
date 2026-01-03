@@ -217,6 +217,12 @@ class ChatViewModel: ObservableObject {
         disconnectTask?.cancel()
         disconnectTask = nil
 
+        if manager.sessionId == nil,
+           let savedSessionId = MessageStore.loadSessionId(for: project.path),
+           UUID(uuidString: savedSessionId) != nil {
+            manager.sessionId = savedSessionId
+        }
+
         // Configure SessionStore with settings (idempotent)
         sessionStore.configure(with: settings)
 
@@ -334,7 +340,7 @@ class ChatViewModel: ObservableObject {
         disconnectTask = Task {
             try? await Task.sleep(nanoseconds: 500_000_000)
             guard !Task.isCancelled else { return }
-            manager.disconnect()
+            manager.disconnect(preserveSession: true)
         }
     }
 
@@ -481,7 +487,7 @@ class ChatViewModel: ObservableObject {
         var hasher = Hasher()
         hasher.combine(messages.count)
         hasher.combine(messages.last?.id)
-        hasher.combine(messages.last?.content.count)
+        hasher.combine(messages.last?.content)
         hasher.combine(searchText)
         hasher.combine(messageFilter)
         hasher.combine(settings.showThinkingBlocks)

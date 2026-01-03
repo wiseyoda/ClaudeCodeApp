@@ -190,7 +190,10 @@ final class MockSessionRepository: SessionRepository {
     var archiveSessionCalled = false
     var unarchiveSessionCalled = false
     var bulkOperationCalled = false
+    var bulkOperationCallCount = 0
     var lastBulkAction: String?
+    var lastBulkSessionIds: [String] = []
+    var bulkOperationSessionIds: [String] = []
 
     func fetchSessions(projectName: String, limit: Int, offset: Int) async throws -> SessionsResponse {
         fetchSessionsCalled = true
@@ -251,9 +254,17 @@ final class MockSessionRepository: SessionRepository {
 
     func bulkOperation(projectName: String, sessionIds: [String], action: String, customTitle: String?) async throws -> CLIBulkOperationResponse {
         bulkOperationCalled = true
+        bulkOperationCallCount += 1
         lastBulkAction = action
+        lastBulkSessionIds = sessionIds
+        bulkOperationSessionIds.append(contentsOf: sessionIds)
         if shouldThrowError {
             throw CLIBridgeAPIError.serverError(500)
+        }
+        if action == "delete" {
+            let deleteSet = Set(sessionIds)
+            mockSessions.removeAll { deleteSet.contains($0.id) }
+            mockTotal = mockSessions.count
         }
         return CLIBulkOperationResponse(success: sessionIds, failed: [])
     }

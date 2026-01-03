@@ -899,8 +899,10 @@ extension StreamServerMessage {
 
 extension SystemStreamMessage {
     private static let sessionInitializedPrefix = "Session initialized"
+    private static let conversationCompactedPrefix = "Conversation compacted"
 
     var isDisplayable: Bool {
+        // Skip init/progress subtypes from generated enum
         if let subtype = subtype, subtype != .result { return false }
         return Self.isDisplayableContent(content)
     }
@@ -908,7 +910,27 @@ extension SystemStreamMessage {
     static func isDisplayableContent(_ content: String) -> Bool {
         let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
-        return !trimmed.hasPrefix(sessionInitializedPrefix)
+
+        // Filter out internal system messages
+        if trimmed.hasPrefix(sessionInitializedPrefix) { return false }
+
+        // Local commands are handled separately by LocalCommandParser
+        if LocalCommandParser.isLocalCommand(trimmed) { return false }
+
+        return true
+    }
+
+    /// Format system message content for display
+    /// Enhances certain message types with better formatting
+    static func formatContent(_ content: String) -> String {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Format compact boundary messages
+        if trimmed.hasPrefix(conversationCompactedPrefix) || trimmed == "Conversation compacted" {
+            return "── Context compacted ──"
+        }
+
+        return trimmed
     }
 }
 
@@ -928,12 +950,34 @@ extension StoredMessage {
       return ChatMessage(role: .assistant, content: content.content, timestamp: timestamp)
 
     case .typeUserStreamMessage(let content):
+      // Check if this is a local command (has XML command tags)
+      if LocalCommandParser.isLocalCommand(content.content),
+         let command = LocalCommandParser.parse(content.content) {
+        if command.isStdout {
+          guard command.shouldDisplay else { return nil }
+          return ChatMessage(role: .localCommandStdout, content: command.stdout ?? "", timestamp: timestamp)
+        } else {
+          return ChatMessage(role: .localCommand, content: command.displayName, timestamp: timestamp)
+        }
+      }
       return ChatMessage(role: .user, content: content.content, timestamp: timestamp)
 
     case .typeSystemStreamMessage(let content):
+      // Check if this is a local command system message (has XML command tags)
+      if LocalCommandParser.isLocalCommand(content.content),
+         let command = LocalCommandParser.parse(content.content) {
+        if command.isStdout {
+          guard command.shouldDisplay else { return nil }
+          return ChatMessage(role: .localCommandStdout, content: command.stdout ?? "", timestamp: timestamp)
+        } else {
+          return ChatMessage(role: .localCommand, content: command.displayName, timestamp: timestamp)
+        }
+      }
       // Skip non-displayable system messages (init/progress/metadata)
       guard content.isDisplayable else { return nil }
-      return ChatMessage(role: .system, content: content.content, timestamp: timestamp)
+      // Format system message content for display
+      let formattedContent = SystemStreamMessage.formatContent(content.content)
+      return ChatMessage(role: .system, content: formattedContent, timestamp: timestamp)
 
     case .typeToolUseStreamMessage(let content):
       let inputString: String
@@ -1394,6 +1438,17 @@ extension PaginatedMessage {
     switch message {
     case .typeUserStreamMessage(let user):
       guard !user.content.isEmpty else { return nil }
+      // Check if this is a local command (has XML command tags)
+      if LocalCommandParser.isLocalCommand(user.content),
+         let command = LocalCommandParser.parse(user.content) {
+        if command.isStdout {
+          // Skip empty stdout messages
+          guard command.shouldDisplay else { return nil }
+          return ChatMessage(id: UUID(), role: .localCommandStdout, content: command.stdout ?? "", timestamp: date)
+        } else {
+          return ChatMessage(id: UUID(), role: .localCommand, content: command.displayName, timestamp: date)
+        }
+      }
       return ChatMessage(id: UUID(), role: .user, content: user.content, timestamp: date)
 
     case .typeAssistantStreamMessage(let assistant):
@@ -1403,9 +1458,21 @@ extension PaginatedMessage {
       return ChatMessage(id: UUID(), role: .assistant, content: assistant.content, timestamp: date)
 
     case .typeSystemStreamMessage(let system):
+      // Check if this is a local command system message (has XML command tags)
+      if LocalCommandParser.isLocalCommand(system.content),
+         let command = LocalCommandParser.parse(system.content) {
+        if command.isStdout {
+          guard command.shouldDisplay else { return nil }
+          return ChatMessage(id: UUID(), role: .localCommandStdout, content: command.stdout ?? "", timestamp: date)
+        } else {
+          return ChatMessage(id: UUID(), role: .localCommand, content: command.displayName, timestamp: date)
+        }
+      }
       // Skip non-displayable system messages (init/progress/metadata)
       guard system.isDisplayable else { return nil }
-      return ChatMessage(id: UUID(), role: .system, content: system.content, timestamp: date)
+      // Format system message content for display
+      let formattedContent = SystemStreamMessage.formatContent(system.content)
+      return ChatMessage(id: UUID(), role: .system, content: formattedContent, timestamp: date)
 
     case .typeToolUseStreamMessage(let toolUse):
       let inputString = formatJSONValue(.dictionary(toolUse.input))

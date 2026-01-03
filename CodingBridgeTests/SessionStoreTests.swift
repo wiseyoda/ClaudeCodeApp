@@ -258,4 +258,39 @@ final class SessionStoreTests: XCTestCase {
         XCTAssertEqual(all, 2)
         XCTAssertTrue(activeProtected)
     }
+
+    func testCountSessionsToDeleteUsesTotalCount() async {
+        let path = makeProjectPath()
+        let sessions = (0..<75).map { index in
+            makeSession(id: "s\(index)")
+        }
+
+        mockRepo.mockSessions = sessions
+        mockRepo.mockTotal = sessions.count
+
+        await store.loadSessions(for: path, forceRefresh: true)
+
+        let (all, _) = store.countSessionsToDelete(for: path)
+        XCTAssertEqual(all, 75)
+    }
+
+    func testDeleteAllSessionsDeletesAcrossPages() async {
+        let path = makeProjectPath()
+        let sessions = (0..<120).map { index in
+            makeSession(id: "s\(index)")
+        }
+
+        mockRepo.mockSessions = sessions
+        mockRepo.mockTotal = sessions.count
+
+        await store.loadSessions(for: path, forceRefresh: true)
+        store.setActiveSession("s0", for: path)
+
+        let deleted = await store.deleteAllSessions(for: path, keepActiveSession: true)
+
+        XCTAssertEqual(deleted, sessions.count - 1)
+        XCTAssertEqual(mockRepo.bulkOperationCallCount, 2)
+        XCTAssertFalse(mockRepo.bulkOperationSessionIds.contains("s0"))
+        XCTAssertEqual(store.sessions(for: path).map(\.id), ["s0"])
+    }
 }

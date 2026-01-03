@@ -311,7 +311,7 @@ final class ChatViewModelTests: XCTestCase {
         let (viewModel, manager, _, _) = makeFixture()
         viewModel.setupStreamEventHandler()
 
-        manager.simulateEvent(.toolStart(id: "tool-1", name: "Shell", inputDescription: nil, input: ["command": "ls"]))
+        manager.simulateEvent(.toolStart(id: "tool-1", name: "Shell", inputDescription: nil, input: ["command": "ls"], timestamp: Date()))
 
         XCTAssertEqual(viewModel.messages.count, 1)
         XCTAssertEqual(viewModel.messages.first?.role, .toolUse)
@@ -323,7 +323,7 @@ final class ChatViewModelTests: XCTestCase {
         viewModel.setupStreamEventHandler()
         manager.activeSubagent = CLISubagentStartContent(id: "subagent-1", description: "Task")
 
-        manager.simulateEvent(.toolStart(id: "tool-2", name: "Shell", inputDescription: nil, input: ["command": "ls"]))
+        manager.simulateEvent(.toolStart(id: "tool-2", name: "Shell", inputDescription: nil, input: ["command": "ls"], timestamp: Date()))
 
         // Subagent tool_use should be filtered (not added to messages)
         XCTAssertTrue(viewModel.messages.isEmpty)
@@ -334,8 +334,8 @@ final class ChatViewModelTests: XCTestCase {
         viewModel.setupStreamEventHandler()
         manager.activeSubagent = CLISubagentStartContent(id: "subagent-2", description: "Task")
 
-        manager.simulateEvent(.toolStart(id: "tool-3", name: "Shell", inputDescription: nil, input: ["command": "ls"]))
-        manager.simulateEvent(.toolResult(id: "tool-3", name: "Shell", output: "done", isError: false))
+        manager.simulateEvent(.toolStart(id: "tool-3", name: "Shell", inputDescription: nil, input: ["command": "ls"], timestamp: Date()))
+        manager.simulateEvent(.toolResult(id: "tool-3", name: "Shell", output: "done", isError: false, timestamp: Date()))
 
         // Both subagent tool_use and tool_result should be filtered
         XCTAssertTrue(viewModel.messages.isEmpty)
@@ -345,7 +345,7 @@ final class ChatViewModelTests: XCTestCase {
         let (viewModel, manager, _, _) = makeFixture()
         viewModel.setupStreamEventHandler()
 
-        manager.simulateEvent(.toolResult(id: "tool-4", name: "Task", output: "done", isError: false))
+        manager.simulateEvent(.toolResult(id: "tool-4", name: "Task", output: "done", isError: false, timestamp: Date()))
 
         XCTAssertTrue(viewModel.messages.isEmpty)
     }
@@ -354,7 +354,7 @@ final class ChatViewModelTests: XCTestCase {
         let (viewModel, manager, _, _) = makeFixture()
         viewModel.setupStreamEventHandler()
 
-        manager.simulateEvent(.toolResult(id: "tool-5", name: "Shell", output: "done", isError: false))
+        manager.simulateEvent(.toolResult(id: "tool-5", name: "Shell", output: "done", isError: false, timestamp: Date()))
 
         XCTAssertEqual(viewModel.messages.count, 1)
         XCTAssertEqual(viewModel.messages.first?.role, .toolResult)

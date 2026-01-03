@@ -88,6 +88,7 @@ struct BookmarkRow: View {
         case .toolUse, .toolResult, .resultSuccess: return "wrench.fill"
         case .thinking: return "brain"
         case .system, .error: return "exclamationmark.circle"
+        case .localCommand, .localCommandStdout: return "terminal"
         }
     }
 
@@ -98,6 +99,7 @@ struct BookmarkRow: View {
         case .toolUse, .toolResult, .resultSuccess: return CLITheme.cyan(for: colorScheme)
         case .thinking: return CLITheme.purple(for: colorScheme)
         case .system, .error: return CLITheme.yellow(for: colorScheme)
+        case .localCommand, .localCommandStdout: return CLITheme.cyan(for: colorScheme)
         }
     }
 

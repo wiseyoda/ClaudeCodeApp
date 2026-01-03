@@ -245,22 +245,89 @@ final class SessionStore: ObservableObject {
 
     /// Delete all sessions for a project (optionally keeping active session)
     func deleteAllSessions(for projectPath: String, keepActiveSession: Bool = true) async -> Int {
-        let sessions = sessionsByProject[projectPath] ?? []
         let activeId = activeSessionIds[projectPath]
+        let sessions = await sessionsForBulkOperation(for: projectPath)
 
-        var toDelete = sessions
+        var sessionIds = sessions.map { $0.id }
         if keepActiveSession, let activeId = activeId {
-            toDelete = sessions.filter { $0.id != activeId }
+            sessionIds.removeAll { $0 == activeId }
         }
 
+        guard !sessionIds.isEmpty else { return 0 }
+
         var deleted = 0
-        for session in toDelete {
-            if await deleteSession(session, for: projectPath) {
-                deleted += 1
-            }
+        let batchSize = 100
+        for start in stride(from: 0, to: sessionIds.count, by: batchSize) {
+            let end = min(start + batchSize, sessionIds.count)
+            let batch = Array(sessionIds[start..<end])
+            let result = await bulkDelete(sessionIds: batch, for: projectPath, reloadCounts: false)
+            deleted += result.success
+        }
+
+        if deleted > 0 {
+            await loadSessionCounts(for: projectPath)
+            await loadSessions(for: projectPath, forceRefresh: true)
         }
 
         return deleted
+    }
+
+    private func sessionsForBulkOperation(for projectPath: String) async -> [ProjectSession] {
+        let cachedSessions = sessionsByProject[projectPath] ?? []
+        if let meta = metaByProject[projectPath],
+           !meta.hasMore,
+           meta.total == cachedSessions.count {
+            return cachedSessions
+        }
+
+        let result = await fetchAllSessionsFromAPI(for: projectPath)
+        if result.hadError {
+            return cachedSessions
+        }
+        return result.sessions
+    }
+
+    private func fetchAllSessionsFromAPI(for projectPath: String) async -> (sessions: [ProjectSession], hadError: Bool) {
+        guard let repository = repository else {
+            log.error("[SessionStore] Repository not configured")
+            return ([], true)
+        }
+
+        let projectName = ProjectPathEncoder.encode(projectPath)
+        var allSessions: [ProjectSession] = []
+        var offset = 0
+        let pageSize = 200
+        var hasMore = true
+        var hadError = false
+
+        while hasMore {
+            do {
+                let response = try await repository.fetchSessions(
+                    projectName: projectName,
+                    limit: pageSize,
+                    offset: offset
+                )
+
+                if response.sessions.isEmpty {
+                    hasMore = false
+                    break
+                }
+
+                allSessions.append(contentsOf: response.sessions)
+                offset += response.sessions.count
+                hasMore = response.hasMore || offset < response.total
+            } catch let error as URLError where error.code == .cancelled {
+                log.debug("[SessionStore] Fetch all sessions cancelled for \(projectPath)")
+                hadError = true
+                break
+            } catch {
+                log.error("[SessionStore] Failed to fetch all sessions: \(error)")
+                hadError = true
+                break
+            }
+        }
+
+        return (allSessions, hadError)
     }
 
     // MARK: - Session Addition
@@ -447,15 +514,14 @@ final class SessionStore: ObservableObject {
 extension SessionStore {
     /// Count sessions that would be deleted by deleteAll (for confirmation dialogs)
     func countSessionsToDelete(for projectPath: String) -> (all: Int, activeProtected: Bool) {
-        let sessions = sessionsByProject[projectPath] ?? []
         let activeId = activeSessionIds[projectPath]
-        let hasActive = activeId != nil && sessions.contains { $0.id == activeId }
-        return (sessions.count, hasActive)
+        let hasActive = activeId != nil
+        return (totalSessionCount(for: projectPath), hasActive)
     }
 
     /// Keep only the N most recent sessions
     func keepOnlyLastN(_ count: Int, for projectPath: String) async -> Int {
-        let sessions = sessionsByProject[projectPath] ?? []
+        let sessions = await sessionsForBulkOperation(for: projectPath)
         let activeId = activeSessionIds[projectPath]
 
         // Sort by lastActivity descending
@@ -513,7 +579,7 @@ extension SessionStore {
 
     /// Delete sessions older than a specified date
     func deleteSessionsOlderThan(_ date: Date, for projectPath: String) async -> Int {
-        let sessions = sessionsByProject[projectPath] ?? []
+        let sessions = await sessionsForBulkOperation(for: projectPath)
         let activeId = activeSessionIds[projectPath]
 
         let toDelete = sessions.filter { session in
@@ -769,7 +835,12 @@ extension SessionStore {
     ///   - sessionIds: Session IDs to delete
     ///   - projectPath: Project path
     /// - Returns: Tuple of (successful count, failed count)
-    func bulkDelete(sessionIds: [String], for projectPath: String) async -> (success: Int, failed: Int) {
+    func bulkDelete(
+        sessionIds: [String],
+        for projectPath: String,
+        reloadCounts: Bool = true
+    ) async -> (success: Int, failed: Int) {
+        guard !sessionIds.isEmpty else { return (0, 0) }
         guard let repository = repository else {
             log.error("[SessionStore] Repository not configured")
             return (0, sessionIds.count)
@@ -799,8 +870,9 @@ extension SessionStore {
 
             log.info("[SessionStore] Bulk deleted \(result.successCount) sessions, \(result.failedCount) failed")
 
-            // Reload counts
-            await loadSessionCounts(for: projectPath)
+            if reloadCounts {
+                await loadSessionCounts(for: projectPath)
+            }
 
             return (result.successCount, result.failedCount)
         } catch {

@@ -42,7 +42,8 @@ class AppDelegate: NSObject, UIApplicationDelegate {
     }
 
     // MARK: - Background Push Handling
-    nonisolated func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any]) async -> UIBackgroundFetchResult {
+    @MainActor
+    func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any]) async -> UIBackgroundFetchResult {
         let payload = RemoteNotificationPayload(userInfo: userInfo)
         return await handleRemoteNotification(payload)
     }

@@ -59,13 +59,16 @@ struct CLIMessageView: View {
         // NOTE: Cached timestamps won't update dynamically (e.g., "2m ago" won't become "3m ago").
         // This is an intentional trade-off for performance - eliminates formatter allocation during scrolling.
         // Timestamps become accurate again when the view is recreated (e.g., navigation, search filter change).
-        let age = Date().timeIntervalSince(message.timestamp)
-        if age > Self.relativeTimeThreshold {
+        let now = Date()
+        let age = now.timeIntervalSince(message.timestamp)
+        if abs(age) < 1 {
+            self.cachedTimestamp = now.formatted(.relative(presentation: .named))
+        } else if age > Self.relativeTimeThreshold {
             // Old message: use static format (doesn't need updating)
             self.cachedTimestamp = Self.staticFormatter.string(from: message.timestamp)
         } else {
             // Recent message: use relative format (won't update, but acceptable UX trade-off)
-            self.cachedTimestamp = Self.relativeFormatter.localizedString(for: message.timestamp, relativeTo: Date())
+            self.cachedTimestamp = Self.relativeFormatter.localizedString(for: message.timestamp, relativeTo: now)
         }
 
         // Check if assistant message exceeds line limit (50 lines per MESSAGE-TYPES.md)
@@ -98,20 +101,24 @@ struct CLIMessageView: View {
             // Header line with bullet/icon (skip for assistant - icon is inline with content)
             if message.role != .assistant {
                 HStack(spacing: 6) {
-                    // Use SF Symbol icons for tools, text bullets for others
-                    if message.role == .toolUse {
-                        Image(systemName: toolType.icon)
-                            .foregroundColor(bulletColor)
-                            .font(.system(size: 12))
-                    } else {
-                        Text(bulletChar)
-                            .foregroundColor(bulletColor)
-                            .font(settings.scaledFont(.body))
+                    // Fixed-width icon column for pixel-perfect alignment
+                    // All icons centered in 20pt column, matching status bar grid
+                    Group {
+                        if let iconName = messageIcon {
+                            Image(systemName: iconName)
+                                .font(.system(size: iconSize))
+                                .foregroundColor(bulletColor)
+                        } else {
+                            Text(bulletChar)
+                                .font(.system(size: 12, weight: .medium, design: .monospaced))
+                                .foregroundColor(bulletColor)
+                        }
                     }
+                    .frame(width: 20, alignment: .center)
 
                     Text(headerText)
                         .foregroundColor(headerColor)
-                        .font(settings.scaledFont(.body))
+                        .font(headerFont)
 
                 if isCollapsible {
                     Text(isExpanded ? "[-]" : "[+]")
@@ -156,7 +163,8 @@ struct CLIMessageView: View {
                             }
                         } label: {
                             Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
-                                .font(.system(size: 9))
+                                .font(.system(size: 10))
+                                .frame(width: 16, height: 16, alignment: .center)
                                 .foregroundColor(
                                     showCopied
                                         ? CLITheme.green(for: colorScheme)
@@ -185,17 +193,19 @@ struct CLIMessageView: View {
             } // end if message.role != .assistant
 
             // Content (assistant messages include inline sparkle icon)
+            // Content indentation: 20pt icon column + 6pt spacing = 26pt
             if isExpanded || !isCollapsible {
                 if message.role == .assistant {
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
                         Image(systemName: "sparkles")
                             .foregroundColor(CLITheme.purple(for: colorScheme))
-                            .font(.system(size: 14))
+                            .font(.system(size: 12))
+                            .frame(width: 20, alignment: .center)
                         contentView
                     }
                 } else {
                     contentView
-                        .padding(.leading, 16)
+                        .padding(.leading, 26)
                 }
             }
 
@@ -219,7 +229,8 @@ struct CLIMessageView: View {
                         }
                     } label: {
                         Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
-                            .font(.system(size: 9))
+                            .font(.system(size: 10))
+                            .frame(width: 16, height: 16, alignment: .center)
                             .foregroundColor(
                                 showCopied
                                     ? CLITheme.green(for: colorScheme)
@@ -238,13 +249,14 @@ struct CLIMessageView: View {
                         }
                     } label: {
                         Image(systemName: "ellipsis")
-                            .font(.system(size: 12))
+                            .font(.system(size: 10))
+                            .frame(width: 20, height: 16, alignment: .center)
                             .foregroundColor(CLITheme.mutedText(for: colorScheme))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("More actions")
                 }
-                .padding(.leading, 16)
+                .padding(.leading, 26)
                 .padding(.top, 4)
             }
 
@@ -273,7 +285,8 @@ struct CLIMessageView: View {
                         }
                     } label: {
                         Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
-                            .font(.system(size: 9))
+                            .font(.system(size: 10))
+                            .frame(width: 16, height: 16, alignment: .center)
                             .foregroundColor(
                                 showCopied
                                     ? CLITheme.green(for: colorScheme)
@@ -292,13 +305,14 @@ struct CLIMessageView: View {
                         }
                     } label: {
                         Image(systemName: "ellipsis")
-                            .font(.system(size: 12))
+                            .font(.system(size: 10))
+                            .frame(width: 20, height: 16, alignment: .center)
                             .foregroundColor(CLITheme.mutedText(for: colorScheme))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("More actions")
                 }
-                .padding(.leading, 16)
+                .padding(.leading, 26)
                 .padding(.top, 4)
             }
 
@@ -327,7 +341,8 @@ struct CLIMessageView: View {
                         }
                     } label: {
                         Image(systemName: showCopied ? "checkmark" : "doc.on.doc")
-                            .font(.system(size: 9))
+                            .font(.system(size: 10))
+                            .frame(width: 16, height: 16, alignment: .center)
                             .foregroundColor(
                                 showCopied
                                     ? CLITheme.green(for: colorScheme)
@@ -346,13 +361,14 @@ struct CLIMessageView: View {
                         }
                     } label: {
                         Image(systemName: "ellipsis")
-                            .font(.system(size: 12))
+                            .font(.system(size: 10))
+                            .frame(width: 20, height: 16, alignment: .center)
                             .foregroundColor(CLITheme.mutedText(for: colorScheme))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("More actions")
                 }
-                .padding(.leading, 16)
+                .padding(.leading, 26)
                 .padding(.top, 4)
             }
 
@@ -367,7 +383,7 @@ struct CLIMessageView: View {
                 )
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 2)
         .contextMenu {
             // Copy button
             Button {
@@ -432,6 +448,8 @@ struct CLIMessageView: View {
         case .toolResult: return "└"
         case .resultSuccess: return "*"
         case .thinking: return "💭"
+        case .localCommand: return "/"
+        case .localCommandStdout: return "└"
         }
     }
 
@@ -450,6 +468,45 @@ struct CLIMessageView: View {
         case .toolResult: return CLITheme.mutedText(for: colorScheme)
         case .resultSuccess: return CLITheme.green(for: colorScheme)
         case .thinking: return CLITheme.purple(for: colorScheme)
+        case .localCommand: return CLITheme.cyan(for: colorScheme)
+        case .localCommandStdout: return CLITheme.mutedText(for: colorScheme)
+        }
+    }
+
+    /// SF Symbol icon for message type (nil uses text bullet instead)
+    private var messageIcon: String? {
+        switch message.role {
+        case .toolUse: return toolType.icon
+        case .toolResult: return "arrow.turn.down.right"  // Consistent icon instead of └
+        case .thinking: return "brain.head.profile"
+        case .resultSuccess: return "checkmark.circle"
+        case .system: return "gear"
+        case .error: return "exclamationmark.triangle"
+        case .localCommand: return "terminal"
+        case .localCommandStdout: return "arrow.turn.down.right"
+        default: return nil  // user, assistant use text bullets
+        }
+    }
+
+    /// Icon size - smaller for result/secondary items, standard for primary
+    private var iconSize: CGFloat {
+        switch message.role {
+        case .toolUse: return 12
+        case .toolResult, .localCommandStdout: return 10  // Smaller for results
+        case .thinking, .system, .resultSuccess: return 11
+        case .error: return 11
+        case .localCommand: return 11
+        default: return 12
+        }
+    }
+
+    /// Font for header text - smaller for results
+    private var headerFont: Font {
+        switch message.role {
+        case .toolResult, .localCommandStdout:
+            return .system(size: 12)  // Smaller than tool text
+        default:
+            return settings.scaledFont(.body)
         }
     }
 
@@ -457,13 +514,15 @@ struct CLIMessageView: View {
         switch message.role {
         case .user: return message.content
         case .assistant: return ""
-        case .system: return "System (init)"
+        case .system: return "System"
         case .error: return "Error"
         case .toolUse:
             return cachedToolHeaderText  // Use cached value
         case .toolResult: return "Result"
         case .resultSuccess: return "Done"
         case .thinking: return "Thinking"
+        case .localCommand: return message.content  // Display the command (e.g., "/exit")
+        case .localCommandStdout: return message.content  // Display the output
         }
     }
 
@@ -476,7 +535,7 @@ struct CLIMessageView: View {
                 UIPasteboard.general.string = message.content
             }
         )
-        .padding(.leading, 16)
+        .padding(.leading, 26)
         .transition(AnyTransition.opacity.combined(with: .move(edge: .top)))
     }
 
@@ -584,6 +643,8 @@ struct CLIMessageView: View {
         case .toolResult: return CLITheme.mutedText(for: colorScheme)
         case .resultSuccess: return CLITheme.green(for: colorScheme)
         case .thinking: return CLITheme.purple(for: colorScheme)
+        case .localCommand: return CLITheme.cyan(for: colorScheme)
+        case .localCommandStdout: return CLITheme.secondaryText(for: colorScheme)
         }
     }
 
@@ -591,6 +652,7 @@ struct CLIMessageView: View {
         switch message.role {
         case .system, .toolUse, .toolResult, .resultSuccess, .thinking: return true
         case .assistant: return isLongMessage  // Long assistant messages are collapsible
+        case .localCommand, .localCommandStdout: return false  // Commands are always visible
         default: return false
         }
     }
@@ -605,6 +667,8 @@ struct CLIMessageView: View {
         case .toolResult: return "Tool result, \(isExpanded ? "expanded" : "collapsed")"
         case .resultSuccess: return "Task completed"
         case .thinking: return "Thinking block, \(isExpanded ? "expanded" : "collapsed")"
+        case .localCommand: return "Command: \(message.content)"
+        case .localCommandStdout: return "Command output: \(message.content)"
         }
     }
 
@@ -648,6 +712,9 @@ struct CLIMessageView: View {
                 content: message.content,
                 isExpanded: $isExpanded
             )
+        case .localCommand, .localCommandStdout:
+            // Content is displayed in the header line, no additional content needed
+            EmptyView()
         }
     }
 }

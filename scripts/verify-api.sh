@@ -16,6 +16,8 @@ WARNINGS=0
 TMP_DIR="/tmp/cli-bridge-verify"
 mkdir -p "$TMP_DIR"
 trap 'rm -rf "$TMP_DIR"' EXIT
+WARNINGS_LIST=()
+FAILURES_LIST=()
 
 VERIFY_API_TOKEN="${VERIFY_API_TOKEN:-}"
 VERIFY_API_PROJECT_PATH="${VERIFY_API_PROJECT_PATH:-}"
@@ -39,8 +41,8 @@ GRAY='\033[0;90m'
 NC='\033[0m'
 
 log_pass() { echo -e "${GREEN}✓${NC} $1"; ((PASSED++)); }
-log_fail() { echo -e "${RED}✗${NC} $1"; ((FAILED++)); }
-log_warn() { echo -e "${YELLOW}⚠${NC} $1"; ((WARNINGS++)); }
+log_fail() { echo -e "${RED}✗${NC} $1"; ((FAILED++)); FAILURES_LIST+=("$1"); }
+log_warn() { echo -e "${YELLOW}⚠${NC} $1"; ((WARNINGS++)); WARNINGS_LIST+=("$1"); }
 log_info() { echo -e "${CYAN}→${NC} $1"; }
 log_skip() { echo -e "${GRAY}↷${NC} $1"; }
 log_detail() { echo -e "  ${GRAY}$1${NC}"; }
@@ -695,7 +697,7 @@ if [ -n "$TEST_PROJECT_ENCODED" ]; then
             if check_field "$(cat "$TMP_DIR/session-search.json")" "hasMore"; then
                 check_type "$(cat "$TMP_DIR/session-search.json")" "hasMore" "boolean" && log_pass "search.hasMore" || log_fail "search.hasMore INVALID"
             else
-                log_warn "search.hasMore missing"
+                log_warn "search.hasMore missing (/projects/{path}/sessions/search)"
             fi
 
             SEARCH_COUNT=$(jq '.results | length' "$TMP_DIR/session-search.json")
@@ -937,7 +939,7 @@ if is_http_ok "$GLOBAL_SEARCH_STATUS"; then
         if check_field "$(cat "$TMP_DIR/search.json")" "hasMore"; then
             check_type "$(cat "$TMP_DIR/search.json")" "hasMore" "boolean" && log_pass "search.hasMore" || log_fail "search.hasMore INVALID"
         else
-            log_warn "search.hasMore missing"
+            log_warn "search.hasMore missing (/search)"
         fi
         SEARCH_RESULT_COUNT=$(jq '.results | length' "$TMP_DIR/search.json")
         log_info "Search results: $SEARCH_RESULT_COUNT"
@@ -1141,6 +1143,22 @@ log_section "Summary"
 echo ""
 echo -e "Results: ${GREEN}$PASSED passed${NC}, ${RED}$FAILED failed${NC}, ${YELLOW}$WARNINGS warnings${NC}"
 echo ""
+
+if [ ${#FAILURES_LIST[@]} -gt 0 ]; then
+    echo -e "${RED}Failures:${NC}"
+    for item in "${FAILURES_LIST[@]}"; do
+        echo "  - $item"
+    done
+    echo ""
+fi
+
+if [ ${#WARNINGS_LIST[@]} -gt 0 ]; then
+    echo -e "${YELLOW}Warnings:${NC}"
+    for item in "${WARNINGS_LIST[@]}"; do
+        echo "  - $item"
+    done
+    echo ""
+fi
 
 if [ $FAILED -gt 0 ]; then
     echo -e "${RED}━━━ API VERIFICATION FAILED ━━━${NC}"

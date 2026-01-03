@@ -162,6 +162,11 @@ struct ContentView: View {
                     }
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .gitStatusRefreshNeeded)) { _ in
+            Task { @MainActor in
+                await refreshGitStatusesOnForeground()
+            }
+        }
         .task {
             await loadProjectsWithCache()
         }
@@ -411,6 +416,9 @@ struct ContentView: View {
 
         // Sub-repo discovery (session counts already populated from loadProjects)
         let start = CFAbsoluteTimeGetCurrent()
+        if hasCheckingGitStatuses {
+            await refreshGitStatusesOnForeground()
+        }
         await self.gitStatusCoordinator.discoverAllSubRepos(serverURL: self.settings.serverURL, projects: self.projects)
         log.info("[Background] Sub-repo discovery took \(String(format: "%.1f", (CFAbsoluteTimeGetCurrent() - start) * 1000))ms")
 
@@ -558,6 +566,27 @@ struct ContentView: View {
             }
             isLoading = false
         }
+    }
+
+    private var hasCheckingGitStatuses: Bool {
+        projectCache.cachedGitStatuses.values.contains { status in
+            if case .checking = status { return true }
+            return false
+        }
+    }
+
+    private func refreshGitStatusesOnForeground() async {
+        guard !gitStatusCoordinator.isCheckingGitStatus else { return }
+
+        if projects.isEmpty {
+            await loadProjects()
+            return
+        }
+
+        await gitStatusCoordinator.checkAllGitStatuses(
+            serverURL: settings.serverURL,
+            projects: projects
+        )
     }
 
     private func deleteProject(_ project: Project) async {

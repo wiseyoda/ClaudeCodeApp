@@ -399,7 +399,8 @@ public enum StreamEvent: Sendable {
   ///   - name: Tool name (e.g., "Read", "Bash", "Edit")
   ///   - inputDescription: Human-readable description of input (e.g., "Run command: ls -la")
   ///   - input: Tool input parameters (fallback if inputDescription not available)
-  case toolStart(id: String, name: String, inputDescription: String?, input: [String: JSONValue])
+  ///   - timestamp: Server timestamp for the event
+  case toolStart(id: String, name: String, inputDescription: String?, input: [String: JSONValue], timestamp: Date)
 
   /// Tool execution completed
   /// - Parameters:
@@ -407,7 +408,8 @@ public enum StreamEvent: Sendable {
   ///   - name: Tool name
   ///   - output: Tool output/result
   ///   - isError: True if the tool failed
-  case toolResult(id: String, name: String, output: String, isError: Bool)
+  ///   - timestamp: Server timestamp for the event
+  case toolResult(id: String, name: String, output: String, isError: Bool, timestamp: Date)
 
   /// System message from Claude
   case system(String)

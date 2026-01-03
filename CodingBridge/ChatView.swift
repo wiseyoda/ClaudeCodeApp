@@ -21,6 +21,10 @@ struct ChatView: View {
 
     // MARK: - Focus State (must stay in View for @FocusState)
     @FocusState private var isInputFocused: Bool
+    @State private var autoScrollWorkItem: DispatchWorkItem?
+    @State private var lastStreamingAutoScrollTime: Date = .distantPast
+
+    private let streamingAutoScrollThrottle: TimeInterval = 0.12
 
     // MARK: - Computed Properties
 
@@ -136,6 +140,8 @@ struct ChatView: View {
         }
         .onDisappear {
             viewModel.onDisappear()
+            autoScrollWorkItem?.cancel()
+            autoScrollWorkItem = nil
         }
         .onChange(of: viewModel.messages.count) { _, _ in
             // Only trigger on count changes (not content changes during streaming)
@@ -419,30 +425,34 @@ struct ChatView: View {
                 if settings.autoScrollEnabled && !viewModel.showScrollToBottom {
                     // Longer delay when loading many messages (history load)
                     let delay = (newCount - oldCount) > 5 ? 0.3 : 0.1
-                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                        withAnimation(.easeOut(duration: 0.15)) {
-                            proxy.scrollTo("bottomAnchor")
-                        }
-                    }
+                    scheduleScrollToBottom(
+                        proxy,
+                        delay: delay,
+                        animated: !viewModel.isProcessing
+                    )
+                }
+            }
+            .onChange(of: viewModel.currentStreamingText) { _, newText in
+                guard settings.autoScrollEnabled,
+                      !viewModel.showScrollToBottom,
+                      !newText.isEmpty else { return }
+                let now = Date()
+                if now.timeIntervalSince(lastStreamingAutoScrollTime) >= streamingAutoScrollThrottle {
+                    lastStreamingAutoScrollTime = now
+                    scheduleScrollToBottom(proxy, delay: 0.05, animated: false)
                 }
             }
             // Explicit scroll trigger (used when sending messages - always scrolls)
             .onChange(of: viewModel.scrollToBottomTrigger) { _, shouldScroll in
                 if shouldScroll {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                        withAnimation(.easeOut(duration: 0.15)) {
-                            proxy.scrollTo("bottomAnchor")
-                        }
-                    }
+                    scheduleScrollToBottom(proxy, delay: 0.15, animated: true)
                     viewModel.scrollToBottomTrigger = false
                     viewModel.showScrollToBottom = false
                 }
             }
             .onAppear {
                 guard !viewModel.isLoadingHistory else { return }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    proxy.scrollTo("bottomAnchor")
-                }
+                scheduleScrollToBottom(proxy, delay: 0.5, animated: false)
             }
             .onReceive(NotificationCenter.default.publisher(for: .backgroundRecoveryNeeded)) { notification in
                 guard let userInfo = notification.userInfo,
@@ -595,6 +605,25 @@ struct ChatView: View {
             )
             .id("input-view")
         }
+    }
+
+    private func scheduleScrollToBottom(
+        _ proxy: ScrollViewProxy,
+        delay: TimeInterval,
+        animated: Bool
+    ) {
+        autoScrollWorkItem?.cancel()
+        let workItem = DispatchWorkItem {
+            if animated {
+                withAnimation(.easeOut(duration: 0.15)) {
+                    proxy.scrollTo("bottomAnchor")
+                }
+            } else {
+                proxy.scrollTo("bottomAnchor")
+            }
+        }
+        autoScrollWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
     }
 
     // MARK: - Sheet Content

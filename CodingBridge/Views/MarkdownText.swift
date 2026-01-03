@@ -8,17 +8,23 @@ struct MarkdownText: View {
     @Environment(\.colorScheme) var colorScheme
 
     // MARK: - Block Cache (prevents expensive reparsing on every render during streaming)
-    @State private var cachedBlocks: [Block] = []
-    @State private var contentHash: Int = 0
+    @State private var cachedBlocks: [Block]
+    @State private var contentHash: Int
     @State private var parseTask: Task<Void, Never>?
-    @State private var lastParseTime: Date = .distantPast
+    @State private var lastParseTime: Date
 
     /// Minimum interval between block parsing during streaming (prevents UI freeze)
     private static let parseThrottleInterval: TimeInterval = 0.15  // 150ms
 
     init(_ content: String) {
         // Apply HTML entity decoding on initialization
-        self.content = content.processedForDisplay
+        let processed = content.processedForDisplay
+        self.content = processed
+        let initialBlocks = Self.parseBlocks(from: processed)
+        _cachedBlocks = State(initialValue: initialBlocks)
+        _contentHash = State(initialValue: processed.hashValue)
+        _parseTask = State(initialValue: nil)
+        _lastParseTime = State(initialValue: Date())
     }
 
     var body: some View {
@@ -98,6 +104,10 @@ struct MarkdownText: View {
     }
 
     private func parseBlocks() -> [Block] {
+        Self.parseBlocks(from: content)
+    }
+
+    private static func parseBlocks(from content: String) -> [Block] {
         var blocks: [Block] = []
         let lines = content.components(separatedBy: "\n")
         var i = 0
@@ -522,19 +532,22 @@ struct MarkdownText: View {
     }
 
     private func tableView(rows: [[String]]) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
+        // Calculate column weights based on content length
+        let columnWeights = calculateColumnWeights(rows: rows)
+
+        return VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(rows.enumerated()), id: \.offset) { rowIndex, row in
                 HStack(spacing: 0) {
-                    ForEach(Array(row.enumerated()), id: \.offset) { _, cell in
+                    ForEach(Array(row.enumerated()), id: \.offset) { colIndex, cell in
                         // Parse inline markdown (bold, code, etc.) within table cells
                         Text(parseInlineFormatting(cell))
                             .font(settings.scaledFont(.small))
                             .foregroundColor(rowIndex == 0 ? CLITheme.cyan(for: colorScheme) : CLITheme.primaryText(for: colorScheme))
                             .fontWeight(rowIndex == 0 ? .semibold : .regular)
-                            .fixedSize(horizontal: false, vertical: true)  // Force word wrap
+                            .fixedSize(horizontal: false, vertical: true)
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .frame(maxWidth: columnMaxWidth(colIndex: colIndex, weights: columnWeights), alignment: .leading)
                             .background(rowIndex == 0 ? CLITheme.secondaryBackground(for: colorScheme) : Color.clear)
                     }
                 }
@@ -551,6 +564,44 @@ struct MarkdownText: View {
             RoundedRectangle(cornerRadius: 6)
                 .stroke(CLITheme.mutedText(for: colorScheme).opacity(0.3), lineWidth: 1)
         )
+    }
+
+    /// Calculate relative weights for each column based on content length
+    private func calculateColumnWeights(rows: [[String]]) -> [CGFloat] {
+        guard let firstRow = rows.first else { return [] }
+        let columnCount = firstRow.count
+
+        // Calculate average character count for each column
+        var columnLengths = Array(repeating: 0, count: columnCount)
+        for row in rows {
+            for (colIndex, cell) in row.enumerated() where colIndex < columnCount {
+                columnLengths[colIndex] = max(columnLengths[colIndex], cell.count)
+            }
+        }
+
+        // Convert to weights (min 1, max content-based)
+        let totalLength = max(columnLengths.reduce(0, +), 1)
+        return columnLengths.map { length in
+            // Minimum weight of 0.08 (8%) for very short columns like "#"
+            // Maximum based on content proportion
+            let proportion = CGFloat(length) / CGFloat(totalLength)
+            return max(0.08, proportion)
+        }
+    }
+
+    /// Calculate max width for a column based on its weight
+    private func columnMaxWidth(colIndex: Int, weights: [CGFloat]) -> CGFloat {
+        guard colIndex < weights.count else { return .infinity }
+        let weight = weights[colIndex]
+
+        // For very light columns (< 15% of content), use a fixed small width
+        // This prevents tiny columns from expanding too much
+        if weight < 0.15 {
+            return 60  // Fixed width for short columns like "#"
+        }
+
+        // For other columns, use infinity to share remaining space
+        return .infinity
     }
 
     @ViewBuilder

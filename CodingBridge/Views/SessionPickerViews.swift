@@ -685,8 +685,10 @@ struct SessionPickerSheet: View {
             // MARK: - Bulk Actions
             .confirmationDialog("Manage Sessions", isPresented: $showBulkActions, titleVisibility: .visible) {
                 Button("Delete All Sessions", role: .destructive) {
-                    let (count, hasActive) = sessionStore.countSessionsToDelete(for: project.path)
-                    let deleteCount = hasActive ? count - 1 : count
+                    let (count, _) = sessionStore.countSessionsToDelete(for: project.path)
+                    let hasActive = activeSessionId != nil
+                    let baseCount = sessionStore.hasLoaded(for: project.path) ? count : max(count, displaySessions.count)
+                    let deleteCount = hasActive ? max(0, baseCount - 1) : baseCount
                     if deleteCount > 0 {
                         bulkDeleteConfirmation = .all(count: deleteCount, protectActive: hasActive)
                     }
