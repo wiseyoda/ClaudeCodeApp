@@ -47,9 +47,8 @@ final class ModelsExtendedTests: XCTestCase {
     }
 
     private func safeKey(for projectPath: String) -> String {
-        projectPath
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: " ", with: "_")
+        // Match ProjectPathEncoder.encode() which uses - for /
+        projectPath.replacingOccurrences(of: "/", with: "-")
     }
 
     private func projectDirectory(for projectPath: String) -> URL {
@@ -67,7 +66,11 @@ final class ModelsExtendedTests: XCTestCase {
     }
 
     private func oldUserDefaultsKey(for projectPath: String) -> String {
-        "chat_messages_" + safeKey(for: projectPath)
+        // Match the OLD encoding used by MessageStore.migrateFromUserDefaults (uses _ not -)
+        let legacySafeKey = projectPath
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+        return "chat_messages_" + legacySafeKey
     }
 
     private func writeMessagesJSON(_ dtos: [ChatMessageDTOStub], for projectPath: String) throws {

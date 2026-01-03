@@ -32,6 +32,9 @@ struct ChatView: View {
         return project.title
     }
 
+    /// Stable bottom padding to avoid list jumps when agent state changes.
+    private let bottomSpacerHeight: CGFloat = 65
+
     /// Binding for ExitPlanMode approval sheet - extracted to avoid type-checking complexity
     private var exitPlanModeBinding: Binding<ApprovalRequest?> {
         Binding<ApprovalRequest?>(
@@ -355,13 +358,18 @@ struct ChatView: View {
                     // Bottom anchor for scrollTo target
                     // Extra space ensures last message appears above status bar
                     Spacer()
-                        .frame(height: viewModel.manager.agentState.isWorking ? 65 : 25)
+                        .frame(height: bottomSpacerHeight)
                         .id("bottomAnchor")
                         .listRowSeparator(.hidden)
                         .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
                 }
                 .listStyle(.plain)
+                .transaction { transaction in
+                    if viewModel.showScrollToBottom {
+                        transaction.disablesAnimations = true
+                    }
+                }
                 .scrollContentBackground(.hidden)
                 .background(CLITheme.background(for: colorScheme))
                 .scrollDismissesKeyboard(.interactively)

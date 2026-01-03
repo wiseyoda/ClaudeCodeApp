@@ -44,6 +44,10 @@ final class HealthMonitorService: ObservableObject {
     private var serverURL: String = ""
     private var pollTimer: Timer?
     private var isPolling = false
+    private var isPausedForBackground = false
+    private var isChecking = false
+    private var pendingCheck = false
+    private var pendingCheckIsForced = false
 
     /// When true, polling is suspended because WebSocket ping/pong handles keepalive
     private var webSocketActive = false
@@ -106,6 +110,10 @@ final class HealthMonitorService: ObservableObject {
     func startPolling() {
         guard !isPolling else { return }
         isPolling = true
+        isPausedForBackground = false
+        isChecking = false
+        pendingCheck = false
+        pendingCheckIsForced = false
         currentBackoffInterval = 5
         consecutiveFailures = 0
 
@@ -126,23 +134,33 @@ final class HealthMonitorService: ObservableObject {
         pollTimer?.invalidate()
         pollTimer = nil
         isPolling = false
+        isPausedForBackground = false
+        isChecking = false
+        pendingCheck = false
+        pendingCheckIsForced = false
         log.info("[Health] Stopped polling")
     }
 
     /// Pause polling (for background transitions) - can be resumed without full restart
-    func pausePolling() {
+    func pausePolling(forBackground: Bool = false) {
         guard isPolling else { return }
+        if forBackground {
+            isPausedForBackground = true
+        }
         pollTimer?.invalidate()
         pollTimer = nil
         log.debug("[Health] Paused polling")
     }
 
     /// Resume polling after pause
-    func resumePolling() {
+    func resumePolling(fromBackground: Bool = false) {
         guard isPolling else { return }
         guard !webSocketActive else {
             log.debug("[Health] Not resuming - WebSocket is active")
             return
+        }
+        if fromBackground {
+            isPausedForBackground = false
         }
         // Do immediate check and schedule next
         Task {
@@ -162,7 +180,7 @@ final class HealthMonitorService: ObservableObject {
             pausePolling()
             serverStatus = .connected  // Trust WebSocket connection
             log.info("[Health] WebSocket active - pausing HTTP polling")
-        } else if !active && wasActive && isPolling {
+        } else if !active && wasActive && isPolling && !isPausedForBackground {
             // WebSocket disconnected - resume polling
             resumePolling()
             log.info("[Health] WebSocket inactive - resuming HTTP polling")
@@ -171,7 +189,7 @@ final class HealthMonitorService: ObservableObject {
 
     /// Force an immediate health check
     func forceCheck() async {
-        await checkHealth()
+        await checkHealth(force: true)
     }
 
     // MARK: - Network Observer
@@ -201,7 +219,21 @@ final class HealthMonitorService: ObservableObject {
 
     // MARK: - Health Check Implementation
 
-    private func checkHealth() async {
+    private func checkHealth(force: Bool = false) async {
+        if isChecking {
+            pendingCheck = true
+            pendingCheckIsForced = pendingCheckIsForced || force
+            return
+        }
+
+        if webSocketActive && !force {
+            return
+        }
+
+        if isPausedForBackground && !force {
+            return
+        }
+
         // Don't poll if offline
         guard networkMonitor.isConnected else {
             serverStatus = .disconnected
@@ -214,6 +246,19 @@ final class HealthMonitorService: ObservableObject {
             serverStatus = .disconnected
             lastError = "No server configured"
             return
+        }
+
+        isChecking = true
+        defer {
+            isChecking = false
+            if pendingCheck {
+                let shouldForce = pendingCheckIsForced
+                pendingCheck = false
+                pendingCheckIsForced = false
+                Task { @MainActor in
+                    await self.checkHealth(force: shouldForce)
+                }
+            }
         }
 
         serverStatus = .checking
@@ -259,7 +304,7 @@ final class HealthMonitorService: ObservableObject {
             log.warning("[Health] Check failed (\(consecutiveFailures)x): \(error.localizedDescription)")
 
             // Schedule faster retry with backoff
-            if isPolling {
+            if isPolling && !webSocketActive && !isPausedForBackground {
                 scheduleNextPoll(interval: currentBackoffInterval)
             }
         }
@@ -273,7 +318,7 @@ final class HealthMonitorService: ObservableObject {
                 await self.checkHealth()
 
                 // Schedule next poll (success uses base interval, failure uses backoff)
-                if self.serverStatus == .connected {
+                if self.serverStatus == .connected && !self.webSocketActive && !self.isPausedForBackground {
                     self.scheduleNextPoll(interval: self.basePollInterval)
                 }
             }
@@ -357,6 +402,10 @@ extension HealthMonitorService {
         consecutiveFailures = 0
         testSession = nil
         webSocketActive = false
+        isPausedForBackground = false
+        isChecking = false
+        pendingCheck = false
+        pendingCheckIsForced = false
     }
 
     /// Re-enable network observer after testing

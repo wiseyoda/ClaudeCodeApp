@@ -829,12 +829,6 @@ final class HealthMonitorServiceTests: XCTestCase {
             isConstrained: false
         )
 
-        URLProtocol.registerClass(MockURLProtocol.self)
-        defer {
-            URLProtocol.unregisterClass(MockURLProtocol.self)
-            MockURLProtocol.requestHandler = nil
-        }
-
         MockURLProtocol.requestHandler = { request in
             guard let url = request.url, url.path == "/health" else {
                 throw URLError(.badURL)
@@ -853,7 +847,17 @@ final class HealthMonitorServiceTests: XCTestCase {
             return (response, data)
         }
 
+        // Create ephemeral session with mock protocol
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [MockURLProtocol.self]
+        let mockSession = URLSession(configuration: config)
+
         let service = HealthMonitorService.shared
+        service.setTestSession(mockSession)
+        defer {
+            service.setTestSession(nil)
+            MockURLProtocol.requestHandler = nil
+        }
         service.configure(serverURL: "http://mock.server")
         await service.forceCheck()
 
@@ -892,12 +896,6 @@ final class HealthMonitorServiceTests: XCTestCase {
             isConstrained: false
         )
 
-        URLProtocol.registerClass(MockURLProtocol.self)
-        defer {
-            URLProtocol.unregisterClass(MockURLProtocol.self)
-            MockURLProtocol.requestHandler = nil
-        }
-
         MockURLProtocol.requestHandler = { request in
             guard let url = request.url, url.path == "/health" else {
                 throw URLError(.badURL)
@@ -916,7 +914,17 @@ final class HealthMonitorServiceTests: XCTestCase {
             return (response, data)
         }
 
+        // Create ephemeral session with mock protocol
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [MockURLProtocol.self]
+        let mockSession = URLSession(configuration: config)
+
         let service = HealthMonitorService.shared
+        service.setTestSession(mockSession)
+        defer {
+            service.setTestSession(nil)
+            MockURLProtocol.requestHandler = nil
+        }
         service.configure(serverURL: "http://mock.server")
         await service.forceCheck()
 

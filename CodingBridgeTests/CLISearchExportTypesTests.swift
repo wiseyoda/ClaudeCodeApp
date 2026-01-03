@@ -41,9 +41,10 @@ final class CLISearchExportTypesTests: XCTestCase {
     }
 
     func test_searchSnippet_idCombinesTypeAndMatchStart() {
-        let snippet = makeSnippet(type: "assistant", matchStart: 7)
+        let snippet = makeSnippet(type: "assistant", text: "Hello world", matchStart: 7, matchLength: 5)
 
-        XCTAssertEqual(snippet.id, "assistant-7")
+        // id includes all fields for uniqueness: type-matchStart-matchLength-text
+        XCTAssertEqual(snippet.id, "assistant-7-5-Hello world")
     }
 
     func test_searchSnippet_matchedTextExtractsSubstring() {

@@ -137,7 +137,7 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertEqual(MessageStore.loadSessionId(for: project.path), "session-1")
     }
 
-    func test_selectSession_setsSessionAndLoadsHistory() {
+    func test_selectSession_setsSessionAndLoadsHistory() async {
         let project = makeProject(path: "/tmp/project-select-session")
         let settings = makeSettings()
         let manager = TestCLIBridgeManager()
@@ -145,6 +145,9 @@ final class ChatViewModelTests: XCTestCase {
         let session = makeSession(id: "session-2")
 
         viewModel.selectSession(session)
+
+        // Wait for async attachToSession Task to complete
+        try? await Task.sleep(nanoseconds: 100_000_000)
 
         XCTAssertEqual(viewModel.selectedSession?.id, "session-2")
         XCTAssertEqual(manager.sessionId, "session-2")
@@ -286,6 +289,18 @@ final class ChatViewModelTests: XCTestCase {
 
         manager.simulateEvent(.text("Hello", isFinal: true))
         manager.simulateEvent(.stopped(reason: "complete"))
+
+        XCTAssertEqual(viewModel.messages.count, 1)
+        XCTAssertEqual(viewModel.messages.first?.role, .assistant)
+        XCTAssertEqual(viewModel.messages.first?.content, "Hello")
+    }
+
+    func test_streamEvent_stateIdle_finalizesWithoutStopped() {
+        let (viewModel, manager, _, _) = makeFixture()
+        viewModel.setupStreamEventHandler()
+
+        manager.simulateEvent(.text("Hello", isFinal: true))
+        manager.simulateEvent(.stateChanged(.idle))
 
         XCTAssertEqual(viewModel.messages.count, 1)
         XCTAssertEqual(viewModel.messages.first?.role, .assistant)
@@ -673,6 +688,10 @@ final class TestCLIBridgeManager: CLIBridgeManager {
 
     override func interrupt() async throws {
         interruptCalled = true
+    }
+
+    override func setPermissionMode(_ mode: CLIPermissionMode) async throws {
+        // No-op for testing
     }
 
     override func respondToPermission(id: String, choice: CLIPermissionChoice) async throws {

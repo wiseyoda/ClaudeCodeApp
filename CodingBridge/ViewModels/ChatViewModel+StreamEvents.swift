@@ -24,7 +24,6 @@ extension ChatViewModel {
             if isFinal {
                 // Capture committed text - message created in handleStopped with full metadata
                 committedText = content
-                manager.clearCurrentText()
             }
 
         case .thinking(let content):
@@ -105,9 +104,16 @@ extension ChatViewModel {
             // User message echo - ignore (we already have it locally)
             break
 
-        case .progress, .usage, .stateChanged:
+        case .progress, .usage:
             // These are handled via Combine observation on manager state
             break
+        case .stateChanged(let newState):
+            if newState.isProcessing {
+                hasFinalizedCurrentResponse = false
+            }
+            if newState == .idle {
+                finalizeStreamingMessageIfNeeded()
+            }
 
         // MARK: Agent State Events
         case .stopped:
@@ -210,25 +216,40 @@ extension ChatViewModel {
     // MARK: - Event Handlers
 
     func handleStopped() {
-        // Create assistant message from committed text
-        if let text = committedText, !text.isEmpty {
-            let executionTime: TimeInterval? = processingStartTime.map { Date().timeIntervalSince($0) }
-            let tokenCount = manager.tokenUsage?.totalTokens
+        finalizeStreamingMessageIfNeeded()
+    }
 
-            let assistantMessage = ChatMessage(
-                role: .assistant,
-                content: text,
-                timestamp: Date(),
-                executionTime: executionTime,
-                tokenCount: tokenCount
-            )
-            messages.append(assistantMessage)
+    private func finalizeStreamingMessageIfNeeded() {
+        guard !hasFinalizedCurrentResponse else { return }
+
+        let finalText = committedText ?? manager.currentText
+        if !finalText.isEmpty {
+            var shouldAppend = true
+            if let lastAssistant = messages.last(where: { $0.role == .assistant }),
+               lastAssistant.content == finalText,
+               let start = processingStartTime,
+               lastAssistant.timestamp >= start {
+                shouldAppend = false
+            }
+            if shouldAppend {
+                let executionTime: TimeInterval? = processingStartTime.map { Date().timeIntervalSince($0) }
+                let tokenCount = manager.tokenUsage?.totalTokens
+                let assistantMessage = ChatMessage(
+                    role: .assistant,
+                    content: finalText,
+                    timestamp: Date(),
+                    executionTime: executionTime,
+                    tokenCount: tokenCount
+                )
+                messages.append(assistantMessage)
+            }
         }
+
         committedText = nil
         processingStartTime = nil
+        hasFinalizedCurrentResponse = true
 
         refreshGitStatus()
-
         cleanupAfterProcessingComplete()
     }
 

@@ -72,3 +72,10 @@ struct ChatMessage: Identifiable, Equatable, Codable {
         lhs.id == rhs.id
     }
 }
+
+extension ChatMessage {
+    var isDisplayable: Bool {
+        guard role == .system else { return true }
+        return SystemStreamMessage.isDisplayableContent(content)
+    }
+}

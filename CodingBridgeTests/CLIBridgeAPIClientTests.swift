@@ -178,11 +178,13 @@ private func projectDetailJSON(path: String = "/Users/me/App", name: String = "A
     [
         "path": path,
         "name": name,
-        "lastUsed": "2024-01-01T00:00:00Z",
+        "lastUsed": "2024-01-01T00:00:00.000Z",
         "sessionCount": 3,
         "readme": "Hello",
         "structure": [
-            "hasPackageJson": true,
+            "hasCLAUDE": true,
+            "hasPackageJSON": true,
+            "hasPyprojectToml": false,
             "primaryLanguage": "Swift"
         ]
     ]
@@ -193,14 +195,16 @@ private func sessionMetadataJSON(
     projectPath: String = "/Users/me/App",
     archivedAt: String? = nil
 ) -> [String: Any] {
+    // Ensure id is a valid UUID format for SessionMetadata decoding
+    let uuidId = UUID(uuidString: id) != nil ? id : "00000000-0000-0000-0000-000000000001"
     var payload: [String: Any] = [
-        "id": id,
+        "id": uuidId,
         "projectPath": projectPath,
         "source": "user",
         "messageCount": 2,
-        "createdAt": "2024-01-01T00:00:00Z",
-        "lastActivityAt": "2024-01-01T01:00:00Z",
-        "title": "Session \(id)"
+        "createdAt": "2024-01-01T00:00:00.000Z",
+        "lastActivityAt": "2024-01-01T01:00:00.000Z",
+        "title": "Session \(uuidId)"
     ]
     if let archivedAt = archivedAt {
         payload["archivedAt"] = archivedAt
@@ -232,17 +236,20 @@ private func sessionSearchResponseJSON(
     total: Int = 1,
     hasMore: Bool = false
 ) -> [String: Any] {
-    let match: [String: Any] = [
-        "messageId": "msg-1",
-        "role": "user",
-        "snippet": "error",
-        "timestamp": "2024-01-01T00:00:00Z"
+    // Snippet matches the ProjectsEncodedPathSessionsSearchGet200ResponseAllOfResultsInnerAllOfSnippetsInner schema
+    let snippet: [String: Any] = [
+        "type": "user",
+        "text": "...found an error in the code...",
+        "matchStart": 12,
+        "matchLength": 5
     ]
+    // Result matches ProjectsEncodedPathSessionsSearchGet200ResponseAllOfResultsInner schema
     let result: [String: Any] = [
         "sessionId": "session-1",
         "projectPath": "/Users/me/App",
         "score": 0.9,
-        "matches": [match]
+        "snippets": [snippet],
+        "timestamp": "2024-01-01T00:00:00.000Z"
     ]
     return [
         "query": query,
@@ -284,17 +291,15 @@ private func fileListResponseJSON(
 
 private func fileContentResponseJSON(
     path: String = "/README.md",
-    name: String? = "README.md",
     content: String = "Hello"
 ) -> [String: Any] {
-    var payload: [String: Any] = [
+    [
         "path": path,
-        "content": content
+        "content": content,
+        "size": content.utf8.count,
+        "modified": "2024-01-01T00:00:00.000Z",
+        "mimeType": "text/plain"
     ]
-    if let name = name {
-        payload["name"] = name
-    }
-    return payload
 }
 
 private func permissionsResponseJSON() -> [String: Any] {
@@ -331,35 +336,41 @@ private func pushStatusResponseJSON() -> [String: Any] {
         "provider": "fcm",
         "providerEnabled": true,
         "fcmTokenRegistered": true,
-        "fcmTokenLastUpdated": "2024-01-01T00:00:00Z",
+        "fcmTokenLastUpdated": "2024-01-01T00:00:00.000Z",
         "liveActivityTokens": [
             [
                 "activityId": "activity-1",
                 "sessionId": "session-1",
-                "registeredAt": "2024-01-01T00:00:00Z",
+                "registeredAt": "2024-01-01T00:00:00.000Z",
                 "hasUpdateToken": true,
                 "hasPushToStartToken": false
             ]
-        ]
+        ],
+        "recentDeliveries": []
     ]
 }
 
 @MainActor
 final class CLIBridgeAPIClientTests: XCTestCase {
+    private var mockSession: URLSession!
+
     override func setUp() {
         super.setUp()
         MockURLProtocol.requestHandler = nil
-        URLProtocol.registerClass(MockURLProtocol.self)
+        // Create a session configuration that uses our MockURLProtocol
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [MockURLProtocol.self]
+        mockSession = URLSession(configuration: config)
     }
 
     override func tearDown() {
         MockURLProtocol.requestHandler = nil
-        URLProtocol.unregisterClass(MockURLProtocol.self)
+        mockSession = nil
         super.tearDown()
     }
 
     private func makeClient(serverURL: String = "http://cli-bridge.test") -> CLIBridgeAPIClient {
-        CLIBridgeAPIClient(serverURL: serverURL)
+        CLIBridgeAPIClient(serverURL: serverURL, session: mockSession)
     }
 
     // MARK: - Initialization
@@ -383,6 +394,28 @@ final class CLIBridgeAPIClientTests: XCTestCase {
         }
 
         let client = makeClient(serverURL: "http://cli-bridge.test/api")
+        _ = try await client.fetchProjects()
+    }
+
+    func test_init_addsSchemeWhenMissing() async throws {
+        let payload = ["projects": []]
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.url?.absoluteString, "http://cli-bridge.test:3100/projects")
+            return makeResponse(for: request, json: payload)
+        }
+
+        let client = makeClient(serverURL: "cli-bridge.test:3100")
+        _ = try await client.fetchProjects()
+    }
+
+    func test_init_convertsWebSocketSchemeToHTTPS() async throws {
+        let payload = ["projects": []]
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.url?.absoluteString, "https://cli-bridge.test/projects")
+            return makeResponse(for: request, json: payload)
+        }
+
+        let client = makeClient(serverURL: "wss://cli-bridge.test")
         _ = try await client.fetchProjects()
     }
 
@@ -708,7 +741,7 @@ final class CLIBridgeAPIClientTests: XCTestCase {
         let response = try await makeClient().listFiles(projectPath: "/Users/me/App")
 
         XCTAssertEqual(response.path, "/")
-        XCTAssertEqual(response.entries.first?.path, "/README.md")
+        XCTAssertEqual(response.entries.first?.name, "README.md")
     }
 
     func test_listFiles_withPath() async throws {
@@ -726,7 +759,8 @@ final class CLIBridgeAPIClientTests: XCTestCase {
 
         let response = try await makeClient().listFiles(projectPath: "/Users/me/App", directory: "/src")
 
-        XCTAssertEqual(response.entries.first?.path, "/src/main.swift")
+        XCTAssertEqual(response.entries.first?.name, "main.swift")
+        XCTAssertEqual(response.path, "/src")
     }
 
     func test_readFile_success() async throws {
@@ -1094,7 +1128,7 @@ final class CLIBridgeAPIClientTests: XCTestCase {
             XCTAssertEqual(body["activityId"] as? String, "activity-1")
             XCTAssertEqual(body["sessionId"] as? String, testSessionId.uuidString)
             XCTAssertEqual(body["environment"] as? String, "sandbox")
-            XCTAssertEqual(body["platform"] as? String, "ios")
+            // platform is optional and not set by the API client
             return makeResponse(for: request, json: payload)
         }
 

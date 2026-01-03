@@ -770,6 +770,13 @@ final class ProjectCacheTests: XCTestCase {
             .appendingPathComponent(projectCacheFileName)
     }
 
+    /// Encoder matching ProjectCache's ISO8601 date strategy
+    private let iso8601Encoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }()
+
     override func setUp() {
         super.setUp()
         try? FileManager.default.removeItem(at: cacheFileURL)
@@ -913,7 +920,7 @@ final class ProjectCacheTests: XCTestCase {
             timestamp: Date()
         )
 
-        let data = try JSONEncoder().encode(payload)
+        let data = try iso8601Encoder.encode(payload)
         try data.write(to: cacheFileURL, options: .atomic)
 
         let cache = ProjectCache()
@@ -935,7 +942,7 @@ final class ProjectCacheTests: XCTestCase {
             timestamp: oldDate
         )
 
-        let data = try JSONEncoder().encode(payload)
+        let data = try iso8601Encoder.encode(payload)
         try data.write(to: cacheFileURL, options: .atomic)
 
         let cache = ProjectCache()
@@ -954,7 +961,7 @@ final class ProjectCacheTests: XCTestCase {
             timestamp: oldDate
         )
 
-        let data = try JSONEncoder().encode(payload)
+        let data = try iso8601Encoder.encode(payload)
         try data.write(to: cacheFileURL, options: .atomic)
 
         let cache = ProjectCache()
@@ -1055,7 +1062,7 @@ final class ProjectCacheTests: XCTestCase {
             timestamp: Date()
         )
 
-        let data = try JSONEncoder().encode(payload)
+        let data = try iso8601Encoder.encode(payload)
         try data.write(to: cacheFileURL, options: .atomic)
 
         let cache = ProjectCache()

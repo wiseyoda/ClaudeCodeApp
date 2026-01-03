@@ -201,7 +201,7 @@ struct CodingBridgeApp: App {
         log.info("[Background] Entering background - saving state")
 
         // Pause health monitoring to avoid background network activity
-        HealthMonitorService.shared.pausePolling()
+        HealthMonitorService.shared.pausePolling(forBackground: true)
 
         // Check if we have an active processing task
         let taskState = BackgroundManager.shared.currentTaskState
@@ -234,7 +234,7 @@ struct CodingBridgeApp: App {
         log.info("[Background] Returning to foreground")
 
         // Resume health monitoring
-        HealthMonitorService.shared.resumePolling()
+        HealthMonitorService.shared.resumePolling(fromBackground: true)
 
         // End any legacy background tasks
         BackgroundManager.shared.endBackgroundTask()

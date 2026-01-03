@@ -43,10 +43,12 @@ final class PushNotificationTypesTests: XCTestCase {
         XCTAssertEqual(response.tokenId, "token-id-456")
     }
 
-    func test_pushRegisterResponse_decodesWithOptionalTokenId() throws {
+    func test_pushRegisterResponse_decodesWithTokenId() throws {
+        // tokenId is now required in the API schema
         let json = """
         {
-            "success": false
+            "success": false,
+            "tokenId": "failed-registration-id"
         }
         """
 
@@ -56,7 +58,7 @@ final class PushNotificationTypesTests: XCTestCase {
         )
 
         XCTAssertFalse(response.success)
-        XCTAssertNil(response.tokenId)
+        XCTAssertEqual(response.tokenId, "failed-registration-id")
     }
 
     // MARK: - CLILiveActivityRegisterRequest Tests
@@ -162,7 +164,8 @@ final class PushNotificationTypesTests: XCTestCase {
                     "hasUpdateToken": true,
                     "hasPushToStartToken": false
                 }
-            ]
+            ],
+            "recentDeliveries": []
         }
         """
 
@@ -191,7 +194,8 @@ final class PushNotificationTypesTests: XCTestCase {
             "provider": "fcm",
             "providerEnabled": false,
             "fcmTokenRegistered": false,
-            "liveActivityTokens": []
+            "liveActivityTokens": [],
+            "recentDeliveries": []
         }
         """
 
@@ -210,22 +214,24 @@ final class PushNotificationTypesTests: XCTestCase {
     // MARK: - Success Response Tests
 
     func test_successResponse_decodesSuccess() throws {
+        // CLIPushRegisterResponse now requires tokenId
         let json = """
-        {"success": true}
+        {"success": true, "tokenId": "success-token"}
         """
 
-        // Use the register response which has success field
         let response = try JSONDecoder().decode(
             CLIPushRegisterResponse.self,
             from: Data(json.utf8)
         )
 
         XCTAssertTrue(response.success)
+        XCTAssertEqual(response.tokenId, "success-token")
     }
 
     func test_successResponse_decodesFailure() throws {
+        // CLIPushRegisterResponse now requires tokenId
         let json = """
-        {"success": false}
+        {"success": false, "tokenId": "failure-token"}
         """
 
         let response = try JSONDecoder().decode(
@@ -234,5 +240,6 @@ final class PushNotificationTypesTests: XCTestCase {
         )
 
         XCTAssertFalse(response.success)
+        XCTAssertEqual(response.tokenId, "failure-token")
     }
 }

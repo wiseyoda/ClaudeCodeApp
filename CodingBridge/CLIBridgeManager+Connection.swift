@@ -18,6 +18,7 @@ extension CLIBridgeManager {
             return
         }
 
+        clearBackgroundDisconnecting()
         // Check network availability
         guard getIsNetworkAvailable() else {
             log.warning("[CLIBridge] No network available")
@@ -41,6 +42,7 @@ extension CLIBridgeManager {
             lastError = "Invalid server URL"
             connectionState = .disconnected
             agentState = .stopped
+            clearPendingConnection()
             emit(.connectionError(.invalidServerURL))
             return
         }
@@ -68,6 +70,9 @@ extension CLIBridgeManager {
             lastError = error.localizedDescription
             connectionState = .disconnected
             agentState = .stopped
+            clearPendingConnection()
+            closeWebSocket()
+            emit(.connectionError(.connectionFailed(error.localizedDescription)))
         }
     }
 
@@ -111,6 +116,8 @@ extension CLIBridgeManager {
     /// - Parameter preserveSession: If true, keeps sessionId for reconnection (default: false)
     func disconnectImpl(preserveSession: Bool = false) {
         setIsManualDisconnect(true)
+        clearBackgroundDisconnecting()
+        HealthMonitorService.shared.setWebSocketActive(false)
 
         cancelReconnectTask()
         closeWebSocket()
@@ -124,15 +131,12 @@ extension CLIBridgeManager {
             clearPendingSessionId()
         }
 
-        currentText = ""
+        resetStreamingText()
         pendingPermission = nil
         pendingQuestion = nil
         isInputQueued = false
         activeSubagent = nil
         toolProgress = nil
-
-        // Clear callbacks to break potential retain cycles
-        clearCallbacks()
 
         log.debug("[CLIBridge] Disconnected (preserveSession: \(preserveSession))")
     }
@@ -143,6 +147,8 @@ extension CLIBridgeManager {
         log.debug("[CLIBridge] Disconnecting for background, preserving session")
 
         setIsManualDisconnect(false)  // Allow auto-reconnect
+        markBackgroundDisconnecting()
+        HealthMonitorService.shared.setWebSocketActive(false)
 
         cancelReconnectTask()
         closeWebSocket()
@@ -175,6 +181,8 @@ extension CLIBridgeManager {
             return
         }
 
+        HealthMonitorService.shared.setWebSocketActive(false)
+        clearBackgroundDisconnecting()
         log.warning("[CLIBridge] Disconnected unexpectedly: \(error.localizedDescription)")
         connectionState = .disconnected
 

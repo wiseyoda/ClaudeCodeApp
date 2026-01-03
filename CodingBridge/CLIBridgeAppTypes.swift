@@ -73,18 +73,31 @@ typealias ConnectionState = CLIConnectionState
 // ============================================================================
 
 /// Shared ISO8601 date formatter for cli-bridge API dates
-/// cli-bridge always emits dates with fractional seconds (e.g., "2024-01-15T10:30:00.123Z")
+/// cli-bridge typically emits dates with fractional seconds (e.g., "2024-01-15T10:30:00.123Z")
+/// but some sources may omit fractional seconds (e.g., "2024-01-15T10:30:00Z")
 public enum CLIDateFormatter {
-  /// Formatter with fractional seconds - the only format cli-bridge uses
+  /// Formatter with fractional seconds - primary format
   public static let formatter: ISO8601DateFormatter = {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return formatter
   }()
 
-  /// Parse an ISO8601 date string with fractional seconds
+  /// Formatter without fractional seconds - fallback format
+  public static let fallbackFormatter: ISO8601DateFormatter = {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime]
+    return formatter
+  }()
+
+  /// Parse an ISO8601 date string (with or without fractional seconds)
   public static func parseDate(_ dateString: String) -> Date? {
-    formatter.date(from: dateString)
+    // Try fractional seconds first (primary format from cli-bridge)
+    if let date = formatter.date(from: dateString) {
+      return date
+    }
+    // Fallback to non-fractional seconds
+    return fallbackFormatter.date(from: dateString)
   }
 
   /// Format a date to ISO8601 string with fractional seconds

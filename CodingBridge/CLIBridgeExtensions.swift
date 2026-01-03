@@ -897,6 +897,21 @@ extension StreamServerMessage {
 // MARK: - StoredMessage Extensions
 // ============================================================================
 
+extension SystemStreamMessage {
+    private static let sessionInitializedPrefix = "Session initialized"
+
+    var isDisplayable: Bool {
+        if let subtype = subtype, subtype != .result { return false }
+        return Self.isDisplayableContent(content)
+    }
+
+    static func isDisplayableContent(_ content: String) -> Bool {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        return !trimmed.hasPrefix(sessionInitializedPrefix)
+    }
+}
+
 extension StoredMessage {
   /// Convert to CLIStoredMessage format for unified message handling
   public func toCLIStoredMessage() -> CLIStoredMessage {
@@ -916,8 +931,8 @@ extension StoredMessage {
       return ChatMessage(role: .user, content: content.content, timestamp: timestamp)
 
     case .typeSystemStreamMessage(let content):
-      // Skip system messages with subtype (duplicates or metadata)
-      if content.subtype != nil { return nil }
+      // Skip non-displayable system messages (init/progress/metadata)
+      guard content.isDisplayable else { return nil }
       return ChatMessage(role: .system, content: content.content, timestamp: timestamp)
 
     case .typeToolUseStreamMessage(let content):
@@ -979,7 +994,7 @@ extension SessionMetadata {
     ProjectSession(
       id: id.uuidString,
       projectPath: projectPath,
-      summary: customTitle ?? title,
+      summary: displayTitle,
       lastActivity: CLIDateFormatter.string(from: lastActivityAt),
       messageCount: messageCount,
       lastUserMessage: lastUserMessage,
@@ -993,7 +1008,13 @@ extension SessionMetadata {
     if let custom = customTitle, !custom.isEmpty {
       return custom
     }
-    return title
+    if let title = title, !title.isEmpty {
+      return title
+    }
+    if let lastUser = lastUserMessage, !lastUser.isEmpty {
+      return lastUser
+    }
+    return nil
   }
 
   /// Whether this is a helper session (should be hidden from user)
@@ -1093,7 +1114,7 @@ extension SearchResult {
 }
 
 extension SearchSnippet: Identifiable {
-  public var id: String { "\(text.hashValue)-\(matchStart)-\(matchLength)" }
+  public var id: String { "\(type)-\(matchStart)-\(matchLength)-\(text)" }
 }
 
 extension SearchSnippet {
@@ -1382,9 +1403,8 @@ extension PaginatedMessage {
       return ChatMessage(id: UUID(), role: .assistant, content: assistant.content, timestamp: date)
 
     case .typeSystemStreamMessage(let system):
-      // Skip system messages with subtype (duplicates or metadata)
-      if system.subtype != nil { return nil }
-      guard !system.content.isEmpty else { return nil }
+      // Skip non-displayable system messages (init/progress/metadata)
+      guard system.isDisplayable else { return nil }
       return ChatMessage(id: UUID(), role: .system, content: system.content, timestamp: date)
 
     case .typeToolUseStreamMessage(let toolUse):

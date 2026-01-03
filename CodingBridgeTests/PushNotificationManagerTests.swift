@@ -112,6 +112,7 @@ private func decodeJSONBody(_ request: URLRequest) -> [String: Any]? {
 final class PushNotificationManagerTests: XCTestCase {
     private var manager: PushNotificationManager!
     private var recorder: RequestRecorder!
+    private var mockSession: URLSession!
 
     override func setUp() {
         super.setUp()
@@ -121,7 +122,9 @@ final class PushNotificationManagerTests: XCTestCase {
             recorder?.record(request)
         }
         PushNotificationMockURLProtocol.requestHandler = nil
-        URLProtocol.registerClass(PushNotificationMockURLProtocol.self)
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [PushNotificationMockURLProtocol.self]
+        mockSession = URLSession(configuration: config)
         manager = PushNotificationManager.makeForTesting()
     }
 
@@ -129,14 +132,14 @@ final class PushNotificationManagerTests: XCTestCase {
         manager.resetForTesting()
         PushNotificationMockURLProtocol.requestHandler = nil
         PushNotificationMockURLProtocol.requestObserver = nil
-        URLProtocol.unregisterClass(PushNotificationMockURLProtocol.self)
+        mockSession = nil
         recorder = nil
         manager = nil
         super.tearDown()
     }
 
     private func configure(serverURL: String = "https://mock.server") {
-        manager.configure(serverURL: serverURL)
+        manager.configure(serverURL: serverURL, session: mockSession)
     }
 
     private func setDeviceToken(_ bytes: [UInt8]) {
@@ -211,7 +214,7 @@ final class PushNotificationManagerTests: XCTestCase {
         setDeviceToken([0xaa, 0xbb, 0xcc])
 
         PushNotificationMockURLProtocol.requestHandler = { request in
-            makeJSONResponse(for: request, json: "{\"success\":true}")
+            makeJSONResponse(for: request, json: "{\"success\":true,\"tokenId\":\"token-1\"}")
         }
 
         await manager.invalidateToken()
@@ -227,11 +230,11 @@ final class PushNotificationManagerTests: XCTestCase {
         PushNotificationMockURLProtocol.requestHandler = { request in
             switch request.url?.path {
             case "/api/push/register":
-                return makeJSONResponse(for: request, json: "{\"success\":true}")
+                return makeJSONResponse(for: request, json: "{\"success\":true,\"tokenId\":\"token-1\"}")
             case "/api/push/invalidate":
-                return makeJSONResponse(for: request, json: "{\"success\":true}")
+                return makeJSONResponse(for: request, json: "{\"success\":true,\"tokenId\":\"token-1\"}")
             default:
-                return makeJSONResponse(for: request, json: "{\"success\":true}")
+                return makeJSONResponse(for: request, json: "{\"success\":true,\"tokenId\":\"token-1\"}")
             }
         }
 
@@ -280,7 +283,7 @@ final class PushNotificationManagerTests: XCTestCase {
         let sequencer = ResponseSequencer()
         PushNotificationMockURLProtocol.requestHandler = { request in
             let index = sequencer.nextIndex()
-            let json = index == 0 ? "{\"success\":true}" : "{\"success\":false}"
+            let json = index == 0 ? "{\"success\":true,\"tokenId\":\"token-1\"}" : "{\"success\":false,\"tokenId\":\"token-2\"}"
             return makeJSONResponse(for: request, json: json)
         }
 
@@ -294,7 +297,7 @@ final class PushNotificationManagerTests: XCTestCase {
     func test_registerToken_noTokenDoesNothing() async {
         configure()
         PushNotificationMockURLProtocol.requestHandler = { request in
-            makeJSONResponse(for: request, json: "{\"success\":true}")
+            makeJSONResponse(for: request, json: "{\"success\":true,\"tokenId\":\"token-1\"}")
         }
 
         await manager.registerWithBackend()
@@ -327,7 +330,7 @@ final class PushNotificationManagerTests: XCTestCase {
             if index == 0 {
                 return makeJSONResponse(for: request, statusCode: 404, json: "{}")
             }
-            return makeJSONResponse(for: request, json: "{\"success\":true}")
+            return makeJSONResponse(for: request, json: "{\"success\":true,\"tokenId\":\"token-1\"}")
         }
 
         await manager.registerWithBackend()
@@ -345,7 +348,7 @@ final class PushNotificationManagerTests: XCTestCase {
         setDeviceToken([0xca, 0xfe])
 
         PushNotificationMockURLProtocol.requestHandler = { request in
-            makeJSONResponse(for: request, json: "{\"success\":true}")
+            makeJSONResponse(for: request, json: "{\"success\":true,\"tokenId\":\"token-1\"}")
         }
 
         await manager.invalidateToken()
@@ -370,11 +373,11 @@ final class PushNotificationManagerTests: XCTestCase {
         PushNotificationMockURLProtocol.requestHandler = { request in
             switch request.url?.path {
             case "/api/push/register":
-                return makeJSONResponse(for: request, json: "{\"success\":true}")
+                return makeJSONResponse(for: request, json: "{\"success\":true,\"tokenId\":\"token-1\"}")
             case "/api/push/invalidate":
-                return makeJSONResponse(for: request, json: "{\"success\":true}")
+                return makeJSONResponse(for: request, json: "{\"success\":true,\"tokenId\":\"token-1\"}")
             default:
-                return makeJSONResponse(for: request, json: "{\"success\":true}")
+                return makeJSONResponse(for: request, json: "{\"success\":true,\"tokenId\":\"token-1\"}")
             }
         }
 
@@ -388,7 +391,7 @@ final class PushNotificationManagerTests: XCTestCase {
     func test_invalidateToken_noTokenDoesNothing() async {
         configure()
         PushNotificationMockURLProtocol.requestHandler = { request in
-            makeJSONResponse(for: request, json: "{\"success\":true}")
+            makeJSONResponse(for: request, json: "{\"success\":true,\"tokenId\":\"token-1\"}")
         }
 
         await manager.invalidateToken()
@@ -416,7 +419,7 @@ final class PushNotificationManagerTests: XCTestCase {
 
         PushNotificationMockURLProtocol.requestHandler = { request in
             let json = """
-            {"provider":"fcm","providerEnabled":true,"fcmTokenRegistered":true,"fcmTokenLastUpdated":"2025-01-01T00:00:00Z","liveActivityTokens":[{"activityId":"act-1","sessionId":"sess-1","registeredAt":"2025-01-01T00:00:00Z","hasUpdateToken":true,"hasPushToStartToken":false}]}
+            {"provider":"fcm","providerEnabled":true,"fcmTokenRegistered":true,"fcmTokenLastUpdated":"2025-01-01T00:00:00Z","liveActivityTokens":[{"activityId":"act-1","sessionId":"sess-1","registeredAt":"2025-01-01T00:00:00Z","hasUpdateToken":true,"hasPushToStartToken":false}],"recentDeliveries":[]}
             """
             return makeJSONResponse(for: request, json: json)
         }
@@ -434,7 +437,7 @@ final class PushNotificationManagerTests: XCTestCase {
 
         PushNotificationMockURLProtocol.requestHandler = { request in
             let json = """
-            {"provider":"fcm","providerEnabled":true,"fcmTokenRegistered":false,"fcmTokenLastUpdated":null,"liveActivityTokens":[]}
+            {"provider":"fcm","providerEnabled":true,"fcmTokenRegistered":false,"fcmTokenLastUpdated":null,"liveActivityTokens":[],"recentDeliveries":[]}
             """
             return makeJSONResponse(for: request, json: json)
         }
@@ -463,7 +466,7 @@ final class PushNotificationManagerTests: XCTestCase {
         setDeviceToken([0xab, 0xcd])
 
         PushNotificationMockURLProtocol.requestHandler = { request in
-            makeJSONResponse(for: request, json: "{\"success\":true}")
+            makeJSONResponse(for: request, json: "{\"success\":true,\"tokenId\":\"token-1\"}")
         }
 
         await manager.registerWithBackend()
@@ -480,7 +483,7 @@ final class PushNotificationManagerTests: XCTestCase {
 
         PushNotificationMockURLProtocol.requestHandler = { request in
             let json = """
-            {"provider":"fcm","providerEnabled":true,"fcmTokenRegistered":false,"fcmTokenLastUpdated":null,"liveActivityTokens":[]}
+            {"provider":"fcm","providerEnabled":true,"fcmTokenRegistered":false,"fcmTokenLastUpdated":null,"liveActivityTokens":[],"recentDeliveries":[]}
             """
             return makeJSONResponse(for: request, json: json)
         }
@@ -494,7 +497,7 @@ final class PushNotificationManagerTests: XCTestCase {
         setDeviceToken([0x01, 0x02])
 
         PushNotificationMockURLProtocol.requestHandler = { request in
-            makeJSONResponse(for: request, json: "{\"success\":true}")
+            makeJSONResponse(for: request, json: "{\"success\":true,\"tokenId\":\"token-1\"}")
         }
 
         await manager.registerWithBackend()
@@ -504,7 +507,7 @@ final class PushNotificationManagerTests: XCTestCase {
     func test_isConfigured_falseBeforeConfigure() async {
         setDeviceToken([0x01, 0x02])
         PushNotificationMockURLProtocol.requestHandler = { request in
-            makeJSONResponse(for: request, json: "{\"success\":true}")
+            makeJSONResponse(for: request, json: "{\"success\":true,\"tokenId\":\"token-1\"}")
         }
 
         await manager.registerWithBackend()

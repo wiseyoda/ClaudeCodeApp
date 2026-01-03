@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [0.7.1] - 2026-01-02
+
+### Changed
+
+- **CLIBridgeAPIClient**: Move JSON encoding/decoding to background queue for improved performance
+- **HealthMonitorService**: Pause health checks when app enters background, resume on foreground; prevent concurrent health checks
+
+### Fixed
+
+- Fix REST requests failing when the server URL omits a scheme by normalizing to http(s):// (#5)
+- Fix failed WebSocket start attempts leaving stale connections or pending state (#9)
+- Fix ProjectCacheTests date encoding mismatch (tests used epoch, cache uses ISO8601)
+- Fix ManagersTests push token race conditions and invalid UUID session IDs
+- Fix CLISearchExportTypesTests snippet ID assertion to match updated extension
+
+---
+
 ## [0.7.0] - 2026-01-02
 
 **Codebase Simplification Release** - Major refactoring to reduce debugging friction and improve maintainability.
@@ -705,6 +722,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 | Version | Highlights                                             |
 | ------- | ------------------------------------------------------ |
+| 0.7.1   | Background queue JSON encoding, health check improvements, bug fixes |
 | 0.7.0   | **Codebase Simplification** - 45 issues, ~4K lines removed |
 | 0.6.10  | Generated API types (90+), Firebase docs, type renames |
 | 0.6.9   | Firebase gitignore, CLIIntegrity types update          |

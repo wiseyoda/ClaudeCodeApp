@@ -26,7 +26,10 @@ extension CLIBridgeManager {
 
                     // Only log errors for unexpected disconnects
                     // Manual disconnects will naturally throw "Socket is not connected"
-                    if !self.getIsManualDisconnect() {
+                    if self.isDisconnectingForBackground() {
+                        self.clearBackgroundDisconnecting()
+                        log.debug("[CLIBridge] WebSocket closed for background")
+                    } else if !self.getIsManualDisconnect() {
                         log.error("WebSocket receive error: \(error)")
                         await self.handleDisconnect(error: error)
                     }
@@ -192,8 +195,7 @@ extension CLIBridgeManager {
 
         case .typeSystemStreamMessage(let systemContent):
             log.debug("[CLIBridge] System message: subtype=\(String(describing: systemContent.subtype))")
-            // System messages with subtype "result" are displayable (e.g., greeting messages)
-            if systemContent.subtype == SystemStreamMessage.Subtype.result {
+            if systemContent.isDisplayable {
                 emit(.system(systemContent.content))
             }
             // "init" and "progress" subtypes are internal status updates - ignore
@@ -263,6 +265,8 @@ extension CLIBridgeManager {
         protocolVersion = payload.protocolVersion.rawValue
         connectionState = .connected(agentId: payload.agentId)
         agentState = .idle
+        clearBackgroundDisconnecting()
+        HealthMonitorService.shared.setWebSocketActive(true)
 
         // History hardening: Load persisted lastMessageId for this session
         let loadedMessageId = loadLastMessageId(for: sessionIdStr)
@@ -366,7 +370,7 @@ extension CLIBridgeManager {
     /// Note: cli-bridge server filters deltas, so we only receive complete messages (delta=false)
     func appendText(_ text: String, isFinal: Bool) {
         // Server sends complete text (delta=false), just set it directly
-        currentText = text
+        updateStreamingText(text, isFinal: isFinal)
         emit(.text(text, isFinal: isFinal))
     }
 }

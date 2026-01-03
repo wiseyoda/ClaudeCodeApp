@@ -165,11 +165,11 @@ extension ChatViewModel {
 
         var paginatedMessages = response.messages
         let total = response.total
-        var hasMore = response.hasMore
-        offset += response.messages.count
+        offset = paginatedMessages.count
+        var hasMore = response.hasMore || offset < total
 
-        if limit > maxLimit {
-            log.debug("[ChatViewModel] History limit \(limit) exceeds API max \(maxLimit); loading multiple pages")
+        if limit > maxLimit && hasMore {
+            log.debug("[ChatViewModel] History limit \(limit) exceeds per-page max \(maxLimit); paging history")
         }
 
         while paginatedMessages.count < limit, hasMore {
@@ -185,12 +185,41 @@ extension ChatViewModel {
             )
             if response.messages.isEmpty { break }
             paginatedMessages.append(contentsOf: response.messages)
-            hasMore = response.hasMore
             offset += response.messages.count
+            hasMore = response.hasMore || offset < total
         }
 
         let historyMessages = paginatedMessages.compactMap { $0.toChatMessage() }
-        return (Array(historyMessages.reversed()), total, hasMore)
+        let chronologicalMessages = Array(historyMessages.reversed())
+        let dedupedMessages = dedupeConsecutiveHistoryMessages(chronologicalMessages)
+        return (dedupedMessages, total, hasMore)
+    }
+
+    private func dedupeConsecutiveHistoryMessages(_ messages: [ChatMessage]) -> [ChatMessage] {
+        guard !messages.isEmpty else { return [] }
+        var deduped: [ChatMessage] = []
+        deduped.reserveCapacity(messages.count)
+
+        var lastMessage: ChatMessage?
+
+        for message in messages {
+            if let last = lastMessage,
+               shouldDeduplicateHistoryMessage(message),
+               shouldDeduplicateHistoryMessage(last),
+               message.role == last.role,
+               message.content == last.content,
+               abs(message.timestamp.timeIntervalSince(last.timestamp)) <= 1.0 {
+                continue
+            }
+            deduped.append(message)
+            lastMessage = message
+        }
+
+        return deduped
+    }
+
+    private func shouldDeduplicateHistoryMessage(_ message: ChatMessage) -> Bool {
+        message.role != .user
     }
 
     func loadSessionHistoryImpl(_ session: ProjectSession) {

@@ -56,6 +56,8 @@ class ChatViewModel: ObservableObject {
     // MARK: - Tool Use Tracking (internal state, no UI updates needed)
     /// Stores committed text for message creation in onComplete (adapter clears currentText on commit)
     var committedText: String?
+    /// Tracks whether the current response has been committed to messages
+    var hasFinalizedCurrentResponse = false
 
     // MARK: - Search State
     @Published var isSearching = false
@@ -68,8 +70,6 @@ class ChatViewModel: ObservableObject {
     @Published var showGitBanner = true
     /// Tracks if cleanup prompt was shown - not @Published as it's one-time flag
     var hasPromptedCleanup = false
-    /// Background task for periodic git refresh - not @Published, managed internally
-    var gitRefreshTask: Task<Void, Never>?
 
     // MARK: - Model State
     @Published var currentModel: ClaudeModel?
@@ -311,14 +311,6 @@ class ChatViewModel: ObservableObject {
         // Initialize model state
         customModelId = settings.customModelId
 
-        // Start periodic git status refresh task (every 30 seconds)
-        gitRefreshTask = Task {
-            while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: 30_000_000_000)
-                guard !Task.isCancelled else { break }
-                refreshGitStatus()
-            }
-        }
         // Note: Session loading is already handled in the Task above (lines 140-168)
         // with forceRefresh: true, so no additional loading is needed here.
     }
@@ -335,10 +327,6 @@ class ChatViewModel: ObservableObject {
         // Cancel any pending history load
         historyLoadTask?.cancel()
         historyLoadTask = nil
-
-        // Cancel git refresh task
-        gitRefreshTask?.cancel()
-        gitRefreshTask = nil
 
         // Note: HealthMonitor is now managed at app level - no need to stop here
 
@@ -401,6 +389,7 @@ class ChatViewModel: ObservableObject {
 
         let defaultPrompt = imagesToSend.count == 1 ? "What is this image?" : "What are these images?"
         committedText = nil  // Clear before new message cycle
+        hasFinalizedCurrentResponse = false
         sendToManager(
             text.isEmpty ? defaultPrompt : messageToSend,
             projectPath: project.path,
@@ -445,6 +434,7 @@ class ChatViewModel: ObservableObject {
         // Scroll to bottom
         scrollToBottomTrigger = true
         processingStartTime = Date()
+        hasFinalizedCurrentResponse = false
 
         // Resend the user message
         sendToManager(
@@ -512,6 +502,8 @@ class ChatViewModel: ObservableObject {
         if !settings.showThinkingBlocks {
             filtered = filtered.filter { $0.role != .thinking }
         }
+
+        filtered = filtered.filter { $0.isDisplayable }
 
         if messageFilter != .all {
             filtered = filtered.filter { messageFilter.matches($0.role) }

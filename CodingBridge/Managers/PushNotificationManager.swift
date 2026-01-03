@@ -337,5 +337,11 @@ extension PushNotificationManager {
         isFirebaseConfigured = false
         KeychainHelper.shared.deleteFCMToken()
     }
+
+    /// Configure with a custom session for testing
+    func configure(serverURL: String, session: URLSession) {
+        currentServerURL = serverURL
+        apiClient = CLIBridgeAPIClient(serverURL: serverURL, session: session)
+    }
 }
 #endif

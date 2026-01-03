@@ -19,6 +19,7 @@ final class CLIBridgeManagerTests: XCTestCase {
         private(set) var closeCode: URLSessionWebSocketTask.CloseCode?
         private(set) var closeReason: Data?
         var onSend: ((URLSessionWebSocketTask.Message) -> Void)?
+        var sendError: Error?
 
         init() {
             var continuation: AsyncThrowingStream<URLSessionWebSocketTask.Message, Error>.Continuation!
@@ -42,6 +43,9 @@ final class CLIBridgeManagerTests: XCTestCase {
         }
 
         func send(_ message: URLSessionWebSocketTask.Message) async throws {
+            if let sendError = sendError {
+                throw sendError
+            }
             lock.lock()
             sentMessages.append(message)
             lock.unlock()
@@ -280,6 +284,22 @@ final class CLIBridgeManagerTests: XCTestCase {
         XCTAssertEqual(json["type"] as? String, "start")
         XCTAssertEqual(json["model"] as? String, "claude-3")
         manager.disconnect()
+    }
+
+    func test_connect_startFailureClosesWebSocketAndClearsPendingState() async {
+        let (manager, _, task) = makeManager()
+        manager.test_setNetworkAvailable(true)
+        task.sendError = URLError(.cannotConnectToHost)
+
+        await manager.connect(projectPath: "/tmp/project", sessionId: Self.validSessionId, model: "claude-3")
+
+        XCTAssertEqual(manager.connectionState, .disconnected)
+        XCTAssertEqual(manager.agentState, .stopped)
+        XCTAssertNil(manager.getPendingProjectPath())
+        XCTAssertNil(manager.getPendingSessionId())
+        XCTAssertNil(manager.getPendingModel())
+        XCTAssertFalse(manager.getPendingHelper())
+        XCTAssertEqual(task.cancelCount, 1)
     }
 
     func test_disconnect_setsDisconnectedState() {

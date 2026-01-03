@@ -1003,7 +1003,11 @@ final class ManagersTests: XCTestCase {
         apiClient.onRegister = { expectation.fulfill() }
         let (manager, provider) = makeLiveActivityManager(apiClient: apiClient)
 
-        try await manager.startActivity(projectName: "Project", sessionId: "session-1")
+        // Use valid UUID format - handlePushTokenUpdate requires UUID(uuidString:) to succeed
+        let sessionId = "00000000-0000-0000-0000-000000000001"
+        try await manager.startActivity(projectName: "Project", sessionId: sessionId)
+        // Give the background push token listener task time to start
+        try await Task.sleep(nanoseconds: 50_000_000)
         provider.sendPushToken(bytes: [0x01, 0x02])
 
         await fulfillment(of: [expectation], timeout: 1.0)
@@ -1017,7 +1021,11 @@ final class ManagersTests: XCTestCase {
         apiClient.onRegister = { expectation.fulfill() }
         let (manager, provider) = makeLiveActivityManager(apiClient: apiClient)
 
-        try await manager.startActivity(projectName: "Project", sessionId: "session-1")
+        // Use valid UUID format - handlePushTokenUpdate requires UUID(uuidString:) to succeed
+        let sessionId = "00000000-0000-0000-0000-000000000002"
+        try await manager.startActivity(projectName: "Project", sessionId: sessionId)
+        // Give the background push token listener task time to start
+        try await Task.sleep(nanoseconds: 50_000_000)
         provider.sendPushToken(bytes: [0x0a, 0x0b])
 
         await fulfillment(of: [expectation], timeout: 1.0)
@@ -1036,7 +1044,11 @@ final class ManagersTests: XCTestCase {
         apiClient.onRegister = { registerExpectation.fulfill() }
         let (manager, provider) = makeLiveActivityManager(apiClient: apiClient)
 
-        try await manager.startActivity(projectName: "Project", sessionId: "session-1")
+        // Use valid UUID format - handlePushTokenUpdate requires UUID(uuidString:) to succeed
+        let sessionId = "00000000-0000-0000-0000-000000000003"
+        try await manager.startActivity(projectName: "Project", sessionId: sessionId)
+        // Give the background push token listener task time to start
+        try await Task.sleep(nanoseconds: 50_000_000)
         provider.sendPushToken(bytes: [0x01, 0x02])
 
         await fulfillment(of: [registerExpectation], timeout: 1.0)
@@ -1061,7 +1073,11 @@ final class ManagersTests: XCTestCase {
         apiClient.onRegister = { expectation.fulfill() }
         let (manager, provider) = makeLiveActivityManager(apiClient: apiClient)
 
-        try await manager.startActivity(projectName: "Project", sessionId: "session-1")
+        // Use valid UUID format - handlePushTokenUpdate requires UUID(uuidString:) to succeed
+        let sessionId = "00000000-0000-0000-0000-000000000004"
+        try await manager.startActivity(projectName: "Project", sessionId: sessionId)
+        // Give the background push token listener task time to start
+        try await Task.sleep(nanoseconds: 50_000_000)
         provider.sendPushToken(bytes: [0x01, 0x02])
         provider.sendPushToken(bytes: [0x0a, 0x0b])
 

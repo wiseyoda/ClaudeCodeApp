@@ -12,19 +12,60 @@ class CLIBridgeAPIClient: ObservableObject {
 
     // MARK: - JSON Coding Configuration
 
+    /// JSON coding work queue to keep decoding off the main thread.
+    private nonisolated static let codingQueue = DispatchQueue(
+        label: "com.codingbridge.apiclient.coding",
+        qos: .userInitiated,
+        attributes: .concurrent
+    )
+
     /// JSON decoder configured for API date format (ISO8601)
-    private static let jsonDecoder: JSONDecoder = {
+    private nonisolated static func makeJSONDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return decoder
-    }()
+    }
 
     /// JSON encoder configured for API date format (ISO8601)
-    private static let jsonEncoder: JSONEncoder = {
+    private nonisolated static func makeJSONEncoder() -> JSONEncoder {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         return encoder
-    }()
+    }
+
+    private nonisolated static func decode<T: Decodable>(_ type: T.Type, from data: Data) async throws -> T {
+        try await withCheckedThrowingContinuation { continuation in
+            codingQueue.async {
+                do {
+                    let decoder = makeJSONDecoder()
+                    let decoded = try decoder.decode(T.self, from: data)
+                    continuation.resume(returning: decoded)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    private nonisolated static func encode<T: Encodable>(_ value: T) async throws -> Data {
+        try await withCheckedThrowingContinuation { continuation in
+            codingQueue.async {
+                do {
+                    let encoder = makeJSONEncoder()
+                    let encoded = try encoder.encode(value)
+                    continuation.resume(returning: encoded)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    private nonisolated static func decodeError<T: Decodable>(_ type: T.Type, from data: Data?) -> T? {
+        guard let data = data else { return nil }
+        let decoder = makeJSONDecoder()
+        return try? decoder.decode(T.self, from: data)
+    }
 
     // MARK: - Timeout Configuration
 
@@ -45,8 +86,27 @@ class CLIBridgeAPIClient: ObservableObject {
         return URLSession(configuration: config)
     }()
 
+    private static func normalizeServerURL(_ rawURL: String) -> String {
+        let trimmed = rawURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+
+        let stripped = trimmed.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+
+        if stripped.hasPrefix("http://") || stripped.hasPrefix("https://") {
+            return stripped
+        }
+        if stripped.hasPrefix("ws://") {
+            return "http://" + String(stripped.dropFirst("ws://".count))
+        }
+        if stripped.hasPrefix("wss://") {
+            return "https://" + String(stripped.dropFirst("wss://".count))
+        }
+
+        return "http://" + stripped
+    }
+
     init(serverURL: String, session: URLSession? = nil) {
-        self.serverURL = serverURL.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        self.serverURL = Self.normalizeServerURL(serverURL)
         self.session = session ?? Self.configuredSession
     }
 
@@ -499,7 +559,7 @@ class CLIBridgeAPIClient: ObservableObject {
 
         let (data, response) = try await session.data(for: request)
         try validateResponse(response, data: data)
-        return try Self.jsonDecoder.decode(CLIImageUploadResponse.self, from: data)
+        return try await Self.decode(CLIImageUploadResponse.self, from: data)
     }
 
     // MARK: - Agents
@@ -670,7 +730,7 @@ class CLIBridgeAPIClient: ObservableObject {
         let (data, response) = try await session.data(for: request)
         log.debug("[API] GET \(endpoint) completed in \(String(format: "%.0f", (CFAbsoluteTimeGetCurrent() - start) * 1000))ms")
         try validateResponse(response, data: data)
-        return try Self.jsonDecoder.decode(T.self, from: data)
+        return try await Self.decode(T.self, from: data)
     }
 
     private func post<T: Decodable>(_ endpoint: String, queryItems: [URLQueryItem]? = nil) async throws -> T {
@@ -684,7 +744,7 @@ class CLIBridgeAPIClient: ObservableObject {
 
         let (data, response) = try await session.data(for: request)
         try validateResponse(response, data: data)
-        return try Self.jsonDecoder.decode(T.self, from: data)
+        return try await Self.decode(T.self, from: data)
     }
 
     private func postWithBody<T: Decodable, B: Encodable>(_ endpoint: String, body: B) async throws -> T {
@@ -701,11 +761,11 @@ class CLIBridgeAPIClient: ObservableObject {
         let userId = KeychainHelper.shared.getOrCreateUserId()
         request.setValue("Bearer \(userId)", forHTTPHeaderField: "Authorization")
 
-        request.httpBody = try Self.jsonEncoder.encode(body)
+        request.httpBody = try await Self.encode(body)
 
         let (data, response) = try await session.data(for: request)
         try validateResponse(response, data: data)
-        return try Self.jsonDecoder.decode(T.self, from: data)
+        return try await Self.decode(T.self, from: data)
     }
 
     private func put<T: Decodable, B: Encodable>(_ endpoint: String, body: B) async throws -> T {
@@ -717,11 +777,11 @@ class CLIBridgeAPIClient: ObservableObject {
         request.httpMethod = "PUT"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.httpBody = try Self.jsonEncoder.encode(body)
+        request.httpBody = try await Self.encode(body)
 
         let (data, response) = try await session.data(for: request)
         try validateResponse(response, data: data)
-        return try Self.jsonDecoder.decode(T.self, from: data)
+        return try await Self.decode(T.self, from: data)
     }
 
     private func delete(_ endpoint: String, queryItems: [URLQueryItem]? = nil) async throws {
@@ -747,7 +807,7 @@ class CLIBridgeAPIClient: ObservableObject {
 
         let (data, response) = try await session.data(for: request)
         try validateResponse(response, data: data)
-        return try Self.jsonDecoder.decode(T.self, from: data)
+        return try await Self.decode(T.self, from: data)
     }
 
     private func deleteWithBody<T: Decodable, B: Encodable>(_ endpoint: String, body: B) async throws -> T {
@@ -764,11 +824,11 @@ class CLIBridgeAPIClient: ObservableObject {
         let userId = KeychainHelper.shared.getOrCreateUserId()
         request.setValue("Bearer \(userId)", forHTTPHeaderField: "Authorization")
 
-        request.httpBody = try Self.jsonEncoder.encode(body)
+        request.httpBody = try await Self.encode(body)
 
         let (data, response) = try await session.data(for: request)
         try validateResponse(response, data: data)
-        return try Self.jsonDecoder.decode(T.self, from: data)
+        return try await Self.decode(T.self, from: data)
     }
 
     private func validateResponse(_ response: URLResponse, data: Data? = nil) throws {
@@ -781,8 +841,7 @@ class CLIBridgeAPIClient: ObservableObject {
             return
         case 400:
             // Try to parse as validation error from OpenAPI schema
-            if let data = data,
-               let validationError = try? Self.jsonDecoder.decode(CLIValidationError.self, from: data) {
+            if let validationError = Self.decodeError(CLIValidationError.self, from: data) {
                 throw CLIBridgeAPIError.validationError(validationError)
             }
             throw CLIBridgeAPIError.badRequest
@@ -792,15 +851,13 @@ class CLIBridgeAPIClient: ObservableObject {
             throw CLIBridgeAPIError.forbidden
         case 404:
             // Try to parse as NotFoundError from OpenAPI schema
-            if let data = data,
-               let notFoundError = try? Self.jsonDecoder.decode(NotFoundError.self, from: data) {
+            if let notFoundError = Self.decodeError(NotFoundError.self, from: data) {
                 throw CLIBridgeAPIError.notFoundError(notFoundError)
             }
             throw CLIBridgeAPIError.notFound
         case 429:
             // Try to parse as RateLimitError from OpenAPI schema
-            if let data = data,
-               let rateLimitError = try? Self.jsonDecoder.decode(RateLimitError.self, from: data) {
+            if let rateLimitError = Self.decodeError(RateLimitError.self, from: data) {
                 throw CLIBridgeAPIError.rateLimitError(rateLimitError)
             }
             // Fallback to extracting rate limit info from headers
@@ -808,15 +865,13 @@ class CLIBridgeAPIClient: ObservableObject {
             throw CLIBridgeAPIError.rateLimitedWithRetry(rateLimitInfo)
         case 500...599:
             // Try to parse as ServerError from OpenAPI schema
-            if let data = data,
-               let serverError = try? Self.jsonDecoder.decode(ServerError.self, from: data) {
+            if let serverError = Self.decodeError(ServerError.self, from: data) {
                 throw CLIBridgeAPIError.internalServerError(serverError)
             }
             throw CLIBridgeAPIError.serverError(httpResponse.statusCode)
         default:
             // Try to parse as generic CLIError
-            if let data = data,
-               let genericError = try? Self.jsonDecoder.decode(CLIError.self, from: data) {
+            if let genericError = Self.decodeError(CLIError.self, from: data) {
                 throw CLIBridgeAPIError.genericError(genericError)
             }
             throw CLIBridgeAPIError.unexpectedStatus(httpResponse.statusCode)

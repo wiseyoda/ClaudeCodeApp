@@ -53,9 +53,8 @@ extension CLIBridgeManager {
         try await send(.setModel(SetModelMessage(model: model)))
     }
 
-    /// Set permission mode for the agent
-    /// - Parameter mode: "default", "acceptEdits", or "bypassPermissions"
-    func setPermissionMode(_ mode: CLIPermissionMode) async throws {
+    /// Set permission mode implementation - called from main class
+    func setPermissionModeImpl(_ mode: CLIPermissionMode) async throws {
         let mappedMode = SetPermissionModeMessage.Mode(rawValue: mode.rawValue) ?? ._default
         try await send(.setPermissionMode(SetPermissionModeMessage(mode: mappedMode)))
     }
@@ -80,6 +79,6 @@ extension CLIBridgeManager {
 
     /// Clear current text (call when starting new message)
     func clearCurrentText() {
-        currentText = ""
+        resetStreamingText()
     }
 }

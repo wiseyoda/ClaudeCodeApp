@@ -15,9 +15,8 @@ final class MessageStoreTests: XCTestCase {
     }
 
     private func imagesDirectory(for projectPath: String) -> URL {
-        let safeKey = projectPath
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: " ", with: "_")
+        // Match ProjectPathEncoder.encode() which uses - for /
+        let safeKey = projectPath.replacingOccurrences(of: "/", with: "-")
         return documentsDir
             .appendingPathComponent("Messages", isDirectory: true)
             .appendingPathComponent(safeKey, isDirectory: true)

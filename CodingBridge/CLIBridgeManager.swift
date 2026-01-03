@@ -120,6 +120,13 @@ class CLIBridgeManager: ObservableObject {
     private let maxReconnectAttempts = 5
     private var lastMessageId: String?
     private var currentAgentId: String?
+    private var isBackgroundDisconnecting = false
+
+    // Streaming throttling (reduces UI churn during fast token updates)
+    private var pendingStreamingText = ""
+    private var streamingUpdateTask: Task<Void, Never>?
+    private var lastStreamingUpdate: Date = .distantPast
+    private let streamingUpdateInterval: TimeInterval = 0.08
 
     /// Track receive loop to detect stale callbacks
     private var connectionId = UUID()
@@ -253,12 +260,62 @@ class CLIBridgeManager: ObservableObject {
     func getPendingModel() -> String? { pendingModel }
     func getPendingHelper() -> Bool { pendingHelper }
     func clearPendingSessionId() { pendingSessionId = nil }
+    func clearPendingConnection() {
+        pendingProjectPath = nil
+        pendingSessionId = nil
+        pendingModel = nil
+        pendingHelper = false
+    }
 
     func storePendingConnection(projectPath: String, sessionId: String?, model: String?, helper: Bool) {
         pendingProjectPath = projectPath
         pendingSessionId = sessionId
         pendingModel = model
         pendingHelper = helper
+    }
+
+    // Background disconnect flag
+    func markBackgroundDisconnecting() { isBackgroundDisconnecting = true }
+    func clearBackgroundDisconnecting() { isBackgroundDisconnecting = false }
+    func isDisconnectingForBackground() -> Bool { isBackgroundDisconnecting }
+
+    // Streaming throttling helpers
+    func updateStreamingText(_ text: String, isFinal: Bool) {
+        pendingStreamingText = text
+
+        if isFinal {
+            streamingUpdateTask?.cancel()
+            streamingUpdateTask = nil
+            lastStreamingUpdate = Date()
+            currentText = text
+            return
+        }
+
+        let now = Date()
+        let elapsed = now.timeIntervalSince(lastStreamingUpdate)
+        if elapsed >= streamingUpdateInterval {
+            lastStreamingUpdate = now
+            currentText = text
+            return
+        }
+
+        guard streamingUpdateTask == nil else { return }
+        let delay = max(0, streamingUpdateInterval - elapsed)
+        streamingUpdateTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            lastStreamingUpdate = Date()
+            currentText = pendingStreamingText
+            streamingUpdateTask = nil
+        }
+    }
+
+    func resetStreamingText() {
+        streamingUpdateTask?.cancel()
+        streamingUpdateTask = nil
+        pendingStreamingText = ""
+        lastStreamingUpdate = .distantPast
+        currentText = ""
     }
 
     // Agent ID
@@ -408,6 +465,11 @@ class CLIBridgeManager: ObservableObject {
     /// Set model - implementation in CLIBridgeManager+Messages.swift
     func setModel(_ model: String) async throws {
         try await setModelImpl(model)
+    }
+
+    /// Set permission mode - implementation in CLIBridgeManager+Messages.swift
+    func setPermissionMode(_ mode: CLIPermissionMode) async throws {
+        try await setPermissionModeImpl(mode)
     }
 
     /// Interrupt current operation - implementation in CLIBridgeManager+Messages.swift

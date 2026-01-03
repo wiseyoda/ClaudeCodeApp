@@ -25,18 +25,27 @@ extension ChatViewModel {
             gitStatus = .checking
 
             let newStatus: GitStatus
-            do {
-                let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
-                let projectDetail = try await apiClient.getProjectDetail(projectPath: project.path)
-                if let git = projectDetail.git {
-                    newStatus = git.toGitStatus
-                } else {
-                    newStatus = .notGitRepo
-                }
-            } catch {
-                log.debug("[ChatViewModel] Failed to fetch git status from API: \(error)")
-                newStatus = .error(error.localizedDescription)
+        do {
+            let apiClient = CLIBridgeAPIClient(serverURL: settings.serverURL)
+            let projectDetail = try await apiClient.getProjectDetail(projectPath: project.path)
+            if let git = projectDetail.git {
+                newStatus = git.toGitStatus
+            } else {
+                newStatus = .notGitRepo
             }
+        } catch let apiError as CLIBridgeAPIError {
+            switch apiError {
+            case .notFound, .notFoundError:
+                log.debug("[ChatViewModel] Git status unavailable for project; marking as not a git repo")
+                newStatus = .notGitRepo
+            default:
+                log.debug("[ChatViewModel] Failed to fetch git status from API: \(apiError)")
+                newStatus = .error(apiError.localizedDescription)
+            }
+        } catch {
+            log.debug("[ChatViewModel] Failed to fetch git status from API: \(error)")
+            newStatus = .error(error.localizedDescription)
+        }
 
             gitStatus = newStatus
             ProjectCache.shared.updateGitStatus(for: project.path, status: newStatus)

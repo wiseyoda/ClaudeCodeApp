@@ -409,6 +409,18 @@ struct ProjectDetailView: View {
                 projectDetail = detail
                 isLoading = false
             }
+        } catch let apiError as CLIBridgeAPIError {
+            await MainActor.run {
+                switch apiError {
+                case .notFound, .notFoundError:
+                    // Detail endpoint not available - show base project info without error
+                    projectDetail = nil
+                    error = nil
+                default:
+                    self.error = apiError.localizedDescription
+                }
+                isLoading = false
+            }
         } catch {
             await MainActor.run {
                 self.error = error.localizedDescription

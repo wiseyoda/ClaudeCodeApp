@@ -109,6 +109,7 @@ extension ChatViewModel {
                 log.error("[ChatViewModel] Failed to respond to question: \(error)")
             }
         }
+        hasFinalizedCurrentResponse = false
         processingStartTime = Date()
     }
 
