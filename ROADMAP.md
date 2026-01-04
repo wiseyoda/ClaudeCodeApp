@@ -30,6 +30,24 @@ No new feature work scheduled. Focus areas:
 
 ---
 
+## UI Redesign (iOS 26) - Planning
+
+Specs live under `requirements/projects/ui-redesign/`.
+
+Core must-ship scope (tracking issue numbers):
+- #23 Navigation Architecture (TabView on iPhone, SplitView on iPad)
+- #26 Chat View Redesign (streaming status banner above input)
+- #13 Smart Tool Grouping (now core)
+- #70 Status Message Collection System
+- #71 Todo Progress Drawer
+- #72 Background Continuity (short task switching)
+
+Notable constraints:
+- cli-bridge status only (no local git integration)
+- Diagnostics consolidates error analytics/insights (Firebase later)
+
+---
+
 ## Future Considerations
 
 Items for potential future development (not prioritized):

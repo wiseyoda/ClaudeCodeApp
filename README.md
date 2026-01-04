@@ -159,7 +159,7 @@ System Frameworks (used by iOS 26 features):
 - UniformTypeIdentifiers
 - WidgetKit
 
-Build configuration details: `requirements/projects/ui-redesign/BUILD-CONFIG.md`
+Build configuration details: `requirements/projects/ui-redesign/docs/build/README.md`
 
 ## Project Docs
 
