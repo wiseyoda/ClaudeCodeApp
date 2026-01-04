@@ -1,9 +1,45 @@
+---
+number: 40
+title: Testing Strategy
+phase: phase-0-foundation
+priority: High
+depends_on: null
+acceptance_criteria: 6
+files_to_touch: 1
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 40: Testing Strategy
 
 **Phase:** 0 (Foundation)
 **Priority:** High
 **Status:** Not Started
 **Depends On:** None
+
+## Required Documentation
+
+Before starting work on this issue, review these architecture and design documents:
+
+### Core Architecture
+- **[System Overview](../../docs/architecture/data/01-system-overview.md)** - Overall architecture to test
+- **[Data Flow (Messages)](../../docs/architecture/data/03-data-flow-messages.md)** - Message normalization to test
+- **[State Management](../../docs/architecture/ui/07-state-management.md)** - State patterns to test
+- **[Navigation Pattern](../../docs/architecture/ui/01-navigation-pattern.md)** - Navigation to test
+- **[Testing Navigation](../../docs/architecture/ui/13-testing-navigation.md)** - Navigation testing patterns
+
+### Foundation
+- **[Design Decisions](../../docs/overview/design-decisions.md)** - Key decisions that need test coverage
+- **[Swift 6 Concurrency Model](../../docs/architecture/data/02-swift-6-concurrency-model.md)** - Concurrency patterns to test
+
+### Workflows
+- **[Execution Guardrails](../../docs/workflows/guardrails.md)** - Development rules and constraints
 
 ## Goal
 
@@ -16,14 +52,52 @@ Define a production-ready testing strategy before implementation begins.
 - See **Depends On** header; add runtime or tooling dependencies here.
 
 ## Touch Set
-- Files to create: TBD.
-- Files to modify: TBD.
+- Files to create:
+  - `CodingBridgeTests/TestSupport/MockFactory.swift`
+  - `CodingBridgeTests/TestSupport/FixtureCatalog.swift`
+  - `CodingBridgeUITests/TestSupport/WebSocketReplay.swift`
+  - `TEST-PERF.md` (if performance metrics are tracked separately)
+- Files to modify:
+  - `CodingBridgeTests/*.swift`
+  - `CodingBridgeUITests/*.swift`
+  - `TEST-COVERAGE.md`
+  - `CodingBridgeTests/IntegrationTestConfig.swift`
+  - `CodingBridge/SessionRepository.swift` (extend `MockSessionRepository` as needed)
 
 ## Interface Definitions
-- List new or changed models, protocols, and API payloads.
+- No API payload changes.
+
+```swift
+struct MockFactory {
+    static func chatMessage(role: ChatMessage.Role) -> ChatMessage
+    static func project() -> Project
+    static func session() -> ProjectSession
+    static func streamEvents() -> [StreamEvent]
+}
+```
+
+```swift
+enum FixtureCatalog {
+    static let longSessionMessages: [ChatMessage]
+    static let toolHeavySession: [ChatMessage]
+    static let errorBurstSession: [ChatMessage]
+}
+```
+
+```swift
+final class WebSocketReplay {
+    init(events: [StreamEvent])
+    func play(to handler: @escaping (StreamEvent) -> Void)
+    func cancel()
+}
+```
 
 ## Edge Cases
-- TBD.
+- UI tests running without a backend (must use harness or skip).
+- Flaky timing from streaming updates and long-running tools.
+- Large sessions causing slow UI test interactions or timeouts.
+- Permission prompts or OS alerts blocking UI test flows.
+- Deterministic time and random seeds for reproducible tests.
 
 ## Tests
 - [ ] Unit tests updated or added.

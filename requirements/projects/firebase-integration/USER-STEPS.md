@@ -58,7 +58,7 @@ These are actions **you must perform personally** that cannot be automated. Comp
 ### Where to Put It
 
 ```
-/Users/ppatterson/dev/ClaudeCodeApp/CodingBridge/GoogleService-Info.plist
+/Users/ppatterson/dev/CodingBridge/CodingBridge/GoogleService-Info.plist
 ```
 
 Place at the same level as `Info.plist` in the CodingBridge folder.

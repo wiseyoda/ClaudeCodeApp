@@ -1,3 +1,17 @@
+---
+number: 32
+title: Session Picker Redesign
+phase: phase-5-secondary-views
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 32: Session Picker Redesign
 
 **Phase:** 5 (Secondary Views)

@@ -66,7 +66,7 @@
 - JSON persistence for later processing
 - Sync when connectivity returns
 
-**Decision:** Favor cli-bridge replay/timeout behavior; keep client-side handling lightweight. If offline, replay to last state and prompt only when user input is needed. If too long, show cli-bridge timeout message. Note: Firebase integration is planned next; do not build Firebase-specific logic now.
+**Decision:** Favor cli-bridge replay/timeout behavior; keep client-side handling lightweight. If offline, replay to last state and prompt only when user input is needed. If too long, show cli-bridge timeout message. Note: Firebase integration is planned after redesign; do not build Firebase-specific logic now.
 
 ---
 

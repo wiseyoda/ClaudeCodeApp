@@ -87,7 +87,7 @@ if isLinterConflict {
 {
   "name": "Read",
   "input": {
-    "file_path": "/home/dev/workspace/ClaudeCodeApp/ROADMAP.md"
+    "file_path": "/home/dev/workspace/CodingBridge/ROADMAP.md"
   }
 }
 // Result: 104 lines of content with line numbers
@@ -155,7 +155,7 @@ private func fileExtensionName(_ ext: String) -> String {
 
 | Project | Log Lines | % of Total |
 |---------|-----------|------------|
-| ClaudeCodeApp | 2,299 | 75.7% |
+| CodingBridge | 2,299 | 75.7% |
 | level-agency-tools | 301 | 9.9% |
 | sight-words-game | 287 | 9.4% |
 | level-agency-summit-2026 | 88 | 2.9% |
@@ -230,13 +230,13 @@ All previously recommended features confirmed working:
 ## Previous Analysis: 2025-12-27 (First Pass)
 
 **Analyzed By**: Claude Opus 4.5
-**Session Logs Location**: `~/.claude/projects/-home-dev-workspace-ClaudeCodeApp/`
+**Session Logs Location**: `~/.claude/projects/-home-dev-workspace-CodingBridge/`
 
 ---
 
 ## Executive Summary
 
-Analysis of Claude Code session logs from the iOS ClaudeCodeApp project reveals:
+Analysis of Claude Code session logs from the iOS CodingBridge project reveals:
 
 1. **Tool coverage is complete** - All 13 tools found in logs are implemented in the ToolType enum
 2. **Bash dominates usage** (52% of tool calls) - Opportunity for enhanced terminal output rendering
@@ -357,7 +357,7 @@ private func extractBashExitCode(from content: String?) -> Int? {
 {
   "name": "Read",
   "input": {
-    "file_path": "/home/dev/workspace/ClaudeCodeApp/ISSUES.md"
+    "file_path": "/home/dev/workspace/CodingBridge/ISSUES.md"
   }
 }
 ```

@@ -22,5 +22,6 @@ Start here:
 - Design: [docs/design/README.md](design/README.md)
 - Contracts: [docs/contracts/README.md](contracts/README.md)
 - Inventory: [docs/inventory/README.md](inventory/README.md)
-- Assessment: [docs/assessment/README.md](assessment/README.md)
+- Phase 0 Implementation Plan: [issues/phase-0-foundation/PHASE-0-IMPLEMENTATION-PLAN.md](../issues/phase-0-foundation/PHASE-0-IMPLEMENTATION-PLAN.md)
+- Undocumented Features Review: [UNDOCUMENTED-FEATURES-REVIEW.md](../UNDOCUMENTED-FEATURES-REVIEW.md)
 - Orphaned features: [docs/orphaned-features/README.md](orphaned-features/README.md)

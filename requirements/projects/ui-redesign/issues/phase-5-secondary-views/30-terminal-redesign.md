@@ -1,3 +1,17 @@
+---
+number: 30
+title: Terminal Redesign
+phase: phase-5-secondary-views
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 30: Terminal Redesign
 
 **Phase:** 5 (Secondary Views)

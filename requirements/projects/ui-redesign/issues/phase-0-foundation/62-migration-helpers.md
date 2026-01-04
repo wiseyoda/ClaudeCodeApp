@@ -1,3 +1,21 @@
+---
+number: 62
+title: Migration Helpers
+phase: phase-0-foundation
+priority: Low
+depends_on: "10"
+acceptance_criteria: 8
+files_to_touch: 0
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 62: Migration Helpers
 
 **Phase:** 0 (Foundation)
@@ -5,6 +23,24 @@
 **Status:** Not Started
 **Depends On:** 10 (@Observable Migration)
 **Target:** iOS 26.2, Xcode 26.2, Swift 6.2.1
+
+## Required Documentation
+
+Before starting work on this issue, review these architecture and design documents:
+
+### Core Architecture
+- **[Swift 6 Concurrency Model](../../docs/architecture/data/02-swift-6-concurrency-model.md)** - CRITICAL: @Observable migration patterns
+- **[State Management](../../docs/architecture/ui/07-state-management.md)** - State migration patterns
+- **[Environment Injection](../../docs/architecture/ui/08-environment-injection.md)** - @Environment migration patterns
+- **[Navigation Pattern](../../docs/architecture/ui/01-navigation-pattern.md)** - NavigationSplitView migration patterns
+- **[Dependency Injection](../../docs/architecture/data/10-dependency-injection.md)** - Dependency injection migration
+
+### Foundation
+- **[Design Decisions](../../docs/overview/design-decisions.md)** - Migration target decisions
+- **[Migration from iOS 17](../../docs/design/14-migration-from-ios-17.md)** - iOS 17 to iOS 26 migration patterns
+
+### Workflows
+- **[Execution Guardrails](../../docs/workflows/guardrails.md)** - Development rules and constraints
 
 ## Goal
 

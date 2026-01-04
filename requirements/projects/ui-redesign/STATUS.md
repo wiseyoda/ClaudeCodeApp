@@ -1,52 +1,118 @@
-# UI Redesign Status Dashboard
+---
+title: Phase 0 Foundation Implementation Status
+created: 2026-01-03
+last_updated: 2026-01-03
+---
 
-- Status: Phase 1 Refinement Complete
-- Now: Phase 0 foundation planning + doc alignment (Issues 00, 01, 10, 17, 40, 44, 45, 46, 59)
-- Next: Phase 1 navigation + layout (Issues 23, 24, 25) - **READY FOR IMPLEMENTATION**
-- Core Must-Haves: Issues 13, 70, 71, 72 (tracked separately)
-- Blocked: None
-- Last Updated: 2026-01-03
-- Phase Progress: P0 0% | P1 0% (ready) | P2 0% | P3 0% | P4 0% | P5 1% (Issue 58 created) | P6 0% | P7 0% | P8 0% | P9 0%
-- Key Risks: Issue #10 (@Observable) must complete before Phase 1, iOS 26.2 platform stability
-- Issue Status: Phase 1 specs refined; all issues Not Started
+# Phase 0 Foundation: Implementation Status
 
-## Phase 1 Refinements (2026-01-03)
+**Agent Ecosystem:** Orchestrator + Implementer + Verifier + Git Manager + Docs Syncer
+**Workflow:** Semi-automatic (you approve each completion before next issue)
+**Git Strategy:** Single branch per issue (ui-redesign/phase-0/{number})
+**Documentation:** Synced via STATUS.md + issue frontmatter
 
-**Scope decisions finalized:**
+## Summary
 
-### Issue 23: Navigation Architecture
-- ✅ TabView on iPhone, NavigationSplitView on iPad
-- ✅ New AppState (@Observable) for unified navigation state
-- ✅ Welcome card with "Create Project" and "Clone" quick actions (no empty state)
-- ✅ Dark mode theming deferred to Phase 3
-- ✅ Acceptance criteria: 10 checkpoints defined
+| Metric | Count |
+|--------|-------|
+| Total Issues | 13 |
+| Completed | 0 |
+| In Progress | 0 |
+| Pending | 13 |
+| Blocked | 0 |
 
-### Issue 24: Sidebar & Project List
-- ✅ Searchable project list with session count + last activity metadata
-- ✅ Metadata caching strategy: Fast initial load, 5-min cache with background refresh
-- ✅ Swipe-to-delete: Deleting selected project → shows EmptyProjectView with welcome card
-- ✅ No client-side git status; cli-bridge status only (Issue #70)
-- ✅ Utility section: Settings, Terminal, Global Search
-- ✅ New menu: Create Project, Clone Project
-- ✅ Edge cases: 7 defined (search, metadata failures, cache invalidation, etc.)
+**Phase Status:** Ready to begin
+**Next Step:** `/ui-redesign-orchestrator` to start issue #00
 
-### Issue 25: iPad Layouts (Rescoped)
-- ✅ Core split view + adaptive column visibility
-- ✅ Removed: Stage Manager window tracking, external display support (→ Phase 5, Issue 58)
-- ✅ Responsive chat view: Status bar inline on regular width, above input on compact
-- ✅ Pointer hover effects on interactive elements
-- ✅ Device rotation support: TabView ↔ NavigationSplitView smooth transition
-- ✅ Acceptance criteria: 10 checkpoints defined
+---
 
-### New Phase 5 Issue 58: Advanced iPad Multitasking
-- ✅ Deferred features captured in dedicated Phase 5 issue
-- ✅ Includes: Stage Manager window tracking, external display, 33% Split View edge cases
-- ✅ Dependency chain clear: Phase 1 (Issues 23, 25) → Phase 5 (Issue 58)
+## Issues
 
-## Next Steps
+| # | Title | Status | Completed By | Verified By | Updated |
+|---|-------|--------|-------------|------------|---------|
+| 00 | Data Normalization | pending | — | — | — |
+| 01 | Design Tokens | pending | — | — | — |
+| 10 | Observable Migration | pending | — | — | — |
+| 17 | Liquid Glass | pending | — | — | — |
+| 40 | Testing Strategy | pending | — | — | — |
+| 44 | Debug Tooling | pending | — | — | — |
+| 45 | Feature Flags | pending | — | — | — |
+| 46 | Localization | pending | — | — | — |
+| 59 | Dependency Graph | pending | — | — | — |
+| 60 | Code Review Checklist | pending | — | — | — |
+| 61 | Swift Style & DoCC | pending | — | — | — |
+| 62 | Migration Helpers | pending | — | — | — |
+| 63 | Error Types | pending | — | — | — |
 
-1. **Phase 0 completion check**: Confirm Issue #10 (@Observable migration) is complete before starting Phase 1
-2. **Implementation kickoff**: Phase 1 ready for development (Issues 23 → 24 → 25)
-3. **Parallel work**: Prepare Phase 2 (Core Views) and Phase 3 (Interactions & Status) specs while Phase 1 in flight
+---
 
-Update only this file for status changes. Issue specs stay static unless scope changes or a task closes.
+## Workflow
+
+To start work on the next pending issue:
+```
+/ui-redesign-orchestrator
+```
+
+This will:
+1. Find the first pending issue
+2. Mark it as in_progress
+3. Ask for your approval
+4. Spawn the implementation agent
+
+### Status Lifecycle
+
+Each issue progresses through:
+- **pending** → **in_progress** (orchestrator claims)
+- **in_progress** → **implemented** (implementer completes)
+- **implemented** → **verified** (verifier approves)
+- **verified** → **completed** (orchestrator finalizes + git-manager commits)
+
+If verification fails, issue returns to **in_progress** for revision.
+
+---
+
+## Blocked Issues
+
+(None currently)
+
+---
+
+## Agents
+
+| Agent | Model | Role | Status |
+|-------|-------|------|--------|
+| ui-redesign-orchestrator | Opus | Workflow conductor | Active |
+| ui-redesign-implementer | Opus | Issue execution | Active |
+| ui-redesign-verifier | Opus | Quality gatekeeper | Active |
+| ui-redesign-git-manager | Sonnet | Safe git operations | Active |
+| ui-redesign-docs-syncer | Haiku | Documentation consistency | Active |
+
+---
+
+## Key Points
+
+**Status Tracking:**
+- Issue frontmatter: `status`, `completed_by`, `completed_at`, `verified_by`, `spot_checked`
+- STATUS.md: Single source of truth for progress summary
+- Auto-sync after each completion
+
+**Verification:**
+- Auto-verification by verifier after implementation
+- Your periodic spot-checks (mark `spot_checked: true`)
+- Revisions loop if issues found
+
+**Git Safety:**
+- Git manager refuses all destructive ops without explicit confirmation
+- One branch per issue: `ui-redesign/phase-0/{number}`
+- Commit hash recorded in issue frontmatter
+
+**Documentation:**
+- Design docs must exist before implementation
+- Implementer asks clarifying questions if docs are unclear
+- Docs syncer alerts on misalignment or gaps
+
+---
+
+## Last Updated
+
+2026-01-03 - Phase 0 agent ecosystem initialized

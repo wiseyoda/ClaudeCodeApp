@@ -1,3 +1,17 @@
+---
+number: 51
+title: App Store Assets and Metadata
+phase: phase-9-polish-integration
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 51: App Store Assets and Metadata
 
 **Phase:** 9 (Polish & Integration)

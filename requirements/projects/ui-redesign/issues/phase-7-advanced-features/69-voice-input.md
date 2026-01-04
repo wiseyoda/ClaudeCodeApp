@@ -1,3 +1,17 @@
+---
+number: 69
+title: Voice Input
+phase: phase-7-advanced-features
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 69: Voice Input
 
 **Phase:** 7 (Advanced Features)

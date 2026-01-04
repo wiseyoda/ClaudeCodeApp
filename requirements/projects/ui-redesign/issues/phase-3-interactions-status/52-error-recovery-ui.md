@@ -1,3 +1,17 @@
+---
+number: 52
+title: Error Recovery UI
+phase: phase-3-interactions-status
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 52: Error Recovery UI
 
 **Phase:** 3 (Interactions & Status)

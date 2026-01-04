@@ -59,7 +59,7 @@ extension View {
 
 ### Liquid Glass Intensity (iOS 26.2)
 
-iOS 26.2 introduces a user-controllable intensity slider for Liquid Glass. Respect user preference:
+iOS 26.2 introduces a user-controllable intensity slider for Liquid Glass. Respect user preference; do not add an in-app override.
 
 ```swift
 struct AdaptiveGlassModifier: ViewModifier {

@@ -1,3 +1,21 @@
+---
+number: 01
+title: Design Tokens
+phase: phase-0-foundation
+priority: High
+depends_on: null
+acceptance_criteria: 9
+files_to_touch: 4
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 01: Design System Foundation
 
 **Phase:** 0 (Foundation)
@@ -5,30 +23,113 @@
 **Status:** Not Started
 **Depends On:** None (can be done in parallel with Phase 0)
 
+## Required Documentation
+
+Before starting work on this issue, review these architecture and design documents:
+
+### Design System
+- **[Design System Overview](../../docs/design/README.md)** - Complete design system structure
+- **[Liquid Glass Foundation](../../docs/design/01-liquid-glass-foundation.md)** - Glass effects and styling
+- **[Color System](../../docs/design/02-color-system.md)** - Semantic colors, role colors, tool colors
+- **[Typography](../../docs/design/03-typography.md)** - Font system and text styles
+- **[Spacing & Layout](../../docs/design/04-spacing-layout.md)** - Spacing tokens and layout grid
+- **[Corner Radius](../../docs/design/05-corner-radius.md)** - Corner radius tokens
+- **[Shadows](../../docs/design/06-shadows.md)** - Shadow system
+- **[Animation](../../docs/design/07-animation.md)** - Animation patterns and timing
+
+### Architecture
+- **[Protocol Design](../../docs/architecture/data/09-protocol-design.md)** - MessageCardProtocol, MessageCardCapability
+- **[Component Hierarchy](../../docs/architecture/data/08-component-hierarchy.md)** - Message card component structure
+- **[Component Patterns](../../docs/design/10-component-patterns.md)** - Reusable component patterns
+
+### Foundation
+- **[Design Decisions](../../docs/overview/design-decisions.md)** - High-level design choices
+- **[Vision](../../docs/overview/vision.md)** - Overall design vision
+
+### Workflows
+- **[Execution Guardrails](../../docs/workflows/guardrails.md)** - Development rules and constraints
+
 ## Goal
 
 Create MessageDesignSystem.swift with centralized design tokens for all message card components.
 
 ## Scope
-- In scope: TBD.
-- Out of scope: TBD.
+- In scope:
+  - Define message-card tokens for spacing, typography, color, corner radius, and animation.
+  - Provide role-to-style mapping and capabilities via `MessageDesignSystem`.
+  - Expose token APIs for message cards, action bars, and status banners.
+- Out of scope:
+  - App-wide theming overhaul or asset catalog rework.
+  - Final redesign for non-message surfaces (settings, terminal, project list).
+  - Pre-iOS 26 compatibility shims.
 
 ## Non-goals
-- TBD.
+- Achieve final visual polish for all screens in this issue.
+- Replace `Theme.swift` wholesale; only bridge where needed.
+- Introduce new message roles beyond current `ChatMessage.Role`.
 
 ## Dependencies
 - Depends On: None (can be done in parallel with Phase 0).
 - Add runtime or tooling dependencies here.
 
 ## Touch Set
-- Files to create: TBD.
-- Files to modify: TBD.
+- Files to create:
+  - `CodingBridge/Design/MessageDesignSystem.swift`
+- Files to modify:
+  - `CodingBridge/Theme.swift` (bridge or forward existing glass/color helpers)
+  - `CodingBridge/Views/CLIMessageView.swift` (adopt tokens for spacing/typography)
+  - `CodingBridge/Views/MessageActionBar.swift` (adopt tokens for layout)
 
 ## Interface Definitions
-- List new or changed models, protocols, and API payloads.
+- No API payload changes.
+
+```swift
+enum MessageDesignSystem {
+    enum Spacing {
+        static let xxs: CGFloat
+        static let xs: CGFloat
+        static let sm: CGFloat
+        static let md: CGFloat
+        static let lg: CGFloat
+        static let xl: CGFloat
+        static let xxl: CGFloat
+        static let cardPadding: CGFloat
+        static let cardGap: CGFloat
+        static let contentIndent: CGFloat
+    }
+
+    enum CornerRadius {
+        static let sm: CGFloat
+        static let md: CGFloat
+        static let lg: CGFloat
+        static let xl: CGFloat
+        static let pill: CGFloat
+    }
+
+    enum Animation {
+        static let quick: SwiftUI.Animation
+        static let smooth: SwiftUI.Animation
+        static let gentle: SwiftUI.Animation
+    }
+
+    struct RoleStyle {
+        let icon: String
+        let tint: (ColorScheme) -> Color
+        let isCollapsible: Bool
+        let defaultExpanded: Bool
+        let showHeader: Bool
+        let capabilities: MessageCardCapability
+    }
+
+    static func style(for role: ChatMessage.Role) -> RoleStyle
+}
+```
 
 ## Edge Cases
-- TBD.
+- Dynamic Type scaling for large accessibility sizes.
+- Dark mode contrast for semantic tints.
+- Fallback styling for unknown or legacy roles.
+- Token reuse across iPhone and iPad density differences.
 
 ## Tests
 - [ ] Unit tests updated or added.

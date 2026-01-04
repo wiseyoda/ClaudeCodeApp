@@ -1,3 +1,17 @@
+---
+number: 24
+title: Sidebar & Project List
+phase: phase-1-navigation-layout
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 24: Sidebar & Project List
 
 **Phase:** 1 (Navigation & Layout)
@@ -5,6 +19,28 @@
 **Status:** Not Started
 **Depends On:** Issue #23 (Navigation Architecture)
 **Target:** iOS 26.2, Xcode 26.2, Swift 6.2.1
+
+## Required Documentation
+
+Before starting work on this issue, review these architecture and design documents:
+
+### Core Architecture
+- **[Navigation Pattern](../../docs/architecture/ui/01-navigation-pattern.md)** - SidebarView structure, NavigationSplitView integration
+- **[Device Adaptations](../../docs/architecture/ui/06-device-adaptations.md)** - Sidebar behavior on iPhone vs iPad
+- **[State Management](../../docs/architecture/ui/07-state-management.md)** - AppState integration, selection binding
+
+### Design System
+- **[Liquid Glass Foundation](../../docs/design/01-liquid-glass-foundation.md)** - Glass effects for sidebar styling
+- **[Color System](../../docs/design/02-color-system.md)** - Semantic colors for project rows
+- **[Typography](../../docs/design/03-typography.md)** - Text styles for project list
+- **[Spacing & Layout](../../docs/design/04-spacing-layout.md)** - Spacing tokens for list layout
+
+### Foundation
+- **[Swift 6 Concurrency Model](../../docs/architecture/data/02-swift-6-concurrency-model.md)** - @Observable patterns for state
+- **[Design Decisions](../../docs/overview/design-decisions.md)** - High-level design choices
+
+### Workflows
+- **[Execution Guardrails](../../docs/workflows/guardrails.md)** - Development rules and constraints
 
 ## Goal
 

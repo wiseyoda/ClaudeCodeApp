@@ -1,3 +1,17 @@
+---
+number: 25
+title: iPad Layouts
+phase: phase-1-navigation-layout
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 25: iPad Layouts
 
 **Phase:** 1 (Navigation & Layout)
@@ -5,13 +19,35 @@
 **Status:** Not Started
 **Depends On:** Issue #23 (Navigation Architecture), Issue #24 (Sidebar)
 
+## Required Documentation
+
+Before starting work on this issue, review these architecture and design documents:
+
+### Core Architecture
+- **[Device Adaptations](../../docs/architecture/ui/06-device-adaptations.md)** - CRITICAL: iPhone vs iPad layout patterns, size class handling
+- **[Navigation Pattern](../../docs/architecture/ui/01-navigation-pattern.md)** - NavigationSplitView column visibility, adaptive behavior
+- **[Responsive Layout Helpers](../../docs/architecture/ui/12-responsive-layout-helpers.md)** - AdaptiveStack, ResponsiveGrid patterns
+- **[Sheet Presentations](../../docs/architecture/ui/05-sheet-presentations.md)** - Popover vs sheet adaptation for iPad
+
+### Design System
+- **[Liquid Glass Foundation](../../docs/design/01-liquid-glass-foundation.md)** - Glass effects, adaptive glass intensity
+- **[iOS 26 Navigation APIs](../../docs/design/13-ios-26-navigation-apis.md)** - NavigationSplitView APIs, column configuration
+- **[iOS 26.x Known Issues & Workarounds](../../docs/design/15-ios-26-x-known-issues-workarounds.md)** - Platform-specific workarounds
+
+### Foundation
+- **[State Management](../../docs/architecture/ui/07-state-management.md)** - AppState for column visibility
+- **[Design Decisions](../../docs/overview/design-decisions.md)** - High-level iPad support decisions
+
+### Workflows
+- **[Execution Guardrails](../../docs/workflows/guardrails.md)** - Development rules and constraints
+
 ## Goal
 
 Core iPad layout support: NavigationSplitView with adaptive sidebars, responsive chat view layout, and pointer interactions.
 
 ## Scope
 - In scope: NavigationSplitView adaptive column visibility, responsive chat view (status bar positioning), pointer hover effects, context menus with keyboard hints, popover vs sheet adaptation.
-- Out of scope: Stage Manager window tracking (Phase 5, Issue TBD), external display support (Phase 5, Issue TBD), iPad-specific gesture interactions beyond standard SwiftUI.
+- Out of scope: Stage Manager window tracking and external display support (deferred beyond redesign), iPad-specific gesture interactions beyond standard SwiftUI.
 
 ## Non-goals
 - Advanced multitasking (Stage Manager, Split View edge cases like 33% width)
@@ -267,7 +303,7 @@ struct ChatView: View {
 }
 ```
 
-**Note:** Stage Manager window tracking and external display support moved to Phase 5 (Issue TBD). See Section: "Deferred to Phase 5" below.
+**Note:** Stage Manager window tracking and external display support are deferred beyond the redesign scope. See Section: "Deferred" below.
 
 ### Pointer Interactions
 
@@ -302,14 +338,12 @@ struct ProjectRowView: View {
 }
 ```
 
-## Deferred to Phase 5
+## Deferred Beyond Redesign
 
-The following features are removed from Phase 1 scope and have been tracked separately:
+The following features are out of scope for the redesign and intentionally deferred:
 - Stage Manager window size tracking and column visibility adaptation
 - External display/second window support
 - Advanced Split View edge cases (33% width, Stage Manager panel resizing)
-
-**Status**: A new Phase 5 issue has been created to track these features. See Phase 5 roadmap.
 
 ## Files to Create
 
@@ -324,7 +358,7 @@ CodingBridge/Layout/
 | File | Changes |
 |------|---------|
 | `MainNavigationView.swift` | Column visibility state, size class change handling |
-| `ChatView.swift` | Adaptive status bar positioning (inline vs above input) |
+| `ChatView.swift` | Adaptive status banner placement + toolbar/subtitle info |
 | `SidebarView.swift` | Hover effects for project rows |
 
 ## Acceptance Criteria
@@ -332,7 +366,8 @@ CodingBridge/Layout/
 - [ ] NavigationSplitView column visibility adapts to size class
 - [ ] Sidebar visible on iPad landscape, collapsed on portrait
 - [ ] Sidebar collapses when width < 500pt
-- [ ] Chat view status bar positioned inline on regular width, above input on compact
+- [ ] Status banner appears above input while streaming (all sizes)
+- [ ] Session info appears in toolbar/subtitle chips (no persistent full-width bar)
 - [ ] Popovers show on iPad (regular+), sheets on iPhone (compact)
 - [ ] Hover effects on project rows and interactive elements
 - [ ] Context menus display keyboard shortcuts as hints
@@ -351,8 +386,8 @@ CodingBridge/Layout/
 | iPad Portrait | Sidebar may collapse depending on orientation | Column visibility: .automatic |
 | iPad Rotate iPhone→iPad | TabView → NavigationSplitView transition smooth | Selection persists |
 | iPad Rotate iPad→iPhone | NavigationSplitView → TabView transition smooth | Selection persists |
-| Chat View - iPhone | Status bar above input | Compact layout |
-| Chat View - iPad | Status bar inline with message list | Regular layout |
+| Chat View - iPhone | Streaming banner above input | Compact layout |
+| Chat View - iPad | Streaming banner above input | Regular layout |
 | Hover - iPad | Project rows highlight on hover | iPhone: no effect |
 | Context Menu - iPad | Long-press shows menu with keyboard hints | Desktop trackpad supported |
 | Narrow Split (>500pt width) | Sidebar visible but compressed | Min width: 280pt |

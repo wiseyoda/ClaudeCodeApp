@@ -1,3 +1,17 @@
+---
+number: 13
+title: Smart Tool Result Grouping
+phase: phase-7-advanced-features
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 13: Smart Tool Result Grouping
 
 **Phase:** 7 (Advanced Features)

@@ -1,3 +1,17 @@
+---
+number: 35
+title: Command Picker Redesign
+phase: phase-6-sheets-modals
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 35: Command Picker Redesign
 
 **Phase:** 6 (Sheets & Modals)

@@ -1,3 +1,17 @@
+---
+number: 16
+title: Card Swipe Actions
+phase: phase-7-advanced-features
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 16: Card Swipe Actions
 
 **Phase:** 7 (Advanced Features)

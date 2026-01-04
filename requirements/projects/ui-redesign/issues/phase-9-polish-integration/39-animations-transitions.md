@@ -1,3 +1,17 @@
+---
+number: 39
+title: Animations & Transitions
+phase: phase-9-polish-integration
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 39: Animations & Transitions
 
 **Phase:** 9 (Polish & Integration)

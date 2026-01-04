@@ -1,3 +1,17 @@
+---
+number: 36
+title: Ideas Drawer Redesign
+phase: phase-6-sheets-modals
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 36: Ideas Drawer Redesign
 
 **Phase:** 6 (Sheets & Modals)

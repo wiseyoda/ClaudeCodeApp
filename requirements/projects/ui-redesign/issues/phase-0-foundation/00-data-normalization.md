@@ -1,31 +1,136 @@
+---
+number: 00
+title: Data Normalization
+phase: phase-0-foundation
+priority: Critical
+depends_on: null
+acceptance_criteria: 7
+files_to_touch: 9
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 00: Data Normalization Layer
 
 **Phase:** 0 (Foundation)
 **Priority:** Critical
 **Status:** Not Started
 
+## Required Documentation
+
+Before starting work on this issue, review these architecture and design documents:
+
+### Core Architecture
+- **[Data Flow (Messages)](../../docs/architecture/data/03-data-flow-messages.md)** - CRITICAL: MessageNormalizer pattern, Result-based error handling
+- **[ValidatedMessage](../../docs/architecture/data/12-validatedmessage.md)** - CRITICAL: ValidatedMessage structure and validation
+- **[Backend Contracts](../../docs/architecture/data/04-backend-contracts.md)** - StreamEvent and PaginatedMessage structures
+- **[Error Handling & Recovery](../../docs/architecture/data/05-error-handling-recovery.md)** - Error type hierarchy, user-facing errors
+
+### Contracts
+- **[API Contracts Overview](../../docs/contracts/api/README.md)** - API contract structure
+- **[StreamEvent Mapping](../../docs/contracts/api/02-streamevent-mapping.md)** - CRITICAL: StreamEvent wire format mapping
+- **[Sources of Truth](../../docs/contracts/models/01-sources-of-truth.md)** - Model definitions and data sources
+- **[Core UI Models](../../docs/contracts/models/02-core-ui-models.md)** - ChatMessage, Project, Session models
+- **[Stream Event Models](../../docs/contracts/models/03-stream-event-models-backend-payloads.md)** - Backend payload structures
+- **[Mapping Notes](../../docs/contracts/models/04-mapping-notes.md)** - Model mapping patterns
+
+### Foundation
+- **[System Overview](../../docs/architecture/data/01-system-overview.md)** - Overall data architecture
+- **[Swift 6 Concurrency Model](../../docs/architecture/data/02-swift-6-concurrency-model.md)** - Actor patterns if needed
+
+### Workflows
+- **[Execution Guardrails](../../docs/workflows/guardrails.md)** - Development rules and constraints
+
 ## Goal
 Define and implement Data Normalization Layer as described in this spec.
 
 ## Scope
-- In scope: TBD.
-- Out of scope: TBD.
+- In scope:
+  - Normalize history and stream payloads through a shared validation pipeline.
+  - Emit warnings for invalid role, timestamp, and content JSON without crashing.
+  - Preserve existing UI output by mapping to current `ChatMessage` fields.
+  - Add unit coverage for validators and normalizer conversions.
+- Out of scope:
+  - Backend contract changes or new StreamEvent types.
+  - UI redesign of message cards or chat layout.
+  - Persisted storage migrations unrelated to message validation.
 
 ## Non-goals
-- TBD.
+- Introduce new message roles or rewrite the `ChatMessage` schema.
+- Change message ordering or streaming behavior beyond validation.
+- Add user-facing error UI for validation warnings.
 
 ## Dependencies
 - See **Depends On** header; add runtime or tooling dependencies here.
 
 ## Touch Set
-- Files to create: TBD.
-- Files to modify: TBD.
+- Files to create:
+  - `CodingBridge/Normalization/MessageNormalizer.swift`
+  - `CodingBridge/Normalization/ValidatedMessage.swift`
+  - `CodingBridge/Normalization/RoleValidator.swift`
+  - `CodingBridge/Normalization/ContentSanitizer.swift`
+  - `CodingBridge/Normalization/TimestampParser.swift`
+- Files to modify:
+  - `CodingBridge/CLIBridgeExtensions.swift`
+  - `CodingBridge/ViewModels/ChatViewModel+StreamEvents.swift`
+  - `CodingBridge/Persistence/MessageStore.swift`
+  - `CodingBridge/SessionStore.swift`
 
 ## Interface Definitions
-- List new or changed models, protocols, and API payloads.
+- No API payload changes; consumes existing `PaginatedMessage` and `StreamEvent`.
+
+```swift
+enum MessageValidationError: Error, Sendable, Equatable {
+    case invalidRole(String)
+    case invalidTimestamp(String)
+    case invalidContent(String)
+    case invalidJSON(String)
+    case missingField(String)
+    case unknownEvent(String)
+}
+```
+
+```swift
+struct ValidatedMessage: Sendable, Equatable {
+    let id: String
+    let role: ChatMessage.Role
+    let content: String
+    let timestamp: Date
+    let isStreaming: Bool
+    let toolName: String?
+    let toolUseId: String?
+    let toolResultId: String?
+    let toolInputDescription: String?
+    let toolOutput: String?
+    let tokenCount: Int?
+    let executionTime: TimeInterval?
+    let imagePath: String?
+    let imageData: Data?
+    let warnings: [MessageValidationError]
+}
+```
+
+```swift
+@MainActor
+final class MessageNormalizer {
+    func normalize(_ paginated: PaginatedMessage) -> ValidatedMessage
+    func normalize(_ streamEvent: StreamEvent) -> ValidatedMessage?
+}
+```
 
 ## Edge Cases
-- TBD.
+- Stream events missing toolUseId or partial fields.
+- Invalid JSON in tool inputs/outputs or non-string content payloads.
+- Timestamps without timezone or fractional seconds.
+- Duplicate message IDs across history and live stream.
+- Tool result arrives before tool use; normalize with warnings.
+- Empty content for system or heartbeat events (skip message).
 
 ## Tests
 - [ ] Unit tests updated or added.

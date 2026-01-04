@@ -1,3 +1,17 @@
+---
+number: 31
+title: File Browser Redesign
+phase: phase-5-secondary-views
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 31: File Browser Redesign
 
 **Phase:** 5 (Secondary Views)

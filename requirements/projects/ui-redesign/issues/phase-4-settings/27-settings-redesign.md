@@ -1,3 +1,17 @@
+---
+number: 27
+title: Settings Redesign
+phase: phase-4-settings
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 27: Settings Redesign
 
 **Phase:** 4 (Settings & Configuration)

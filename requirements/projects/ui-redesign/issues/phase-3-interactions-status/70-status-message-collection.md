@@ -1,3 +1,17 @@
+---
+number: 70
+title: Status Message Collection System
+phase: phase-3-interactions-status
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 70: Status Message Collection System
 
 **Phase:** 3 (Interactions & Status)

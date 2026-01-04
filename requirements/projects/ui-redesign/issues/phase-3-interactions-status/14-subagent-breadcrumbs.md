@@ -1,3 +1,17 @@
+---
+number: 14
+title: Subagent Breadcrumb Trail
+phase: phase-3-interactions-status
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 14: Subagent Breadcrumb Trail
 
 **Phase:** 3 (Interactions & Status)

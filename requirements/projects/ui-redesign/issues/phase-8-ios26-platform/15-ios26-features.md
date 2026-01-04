@@ -1,3 +1,17 @@
+---
+number: 15
+title: iOS 26.2 Feature Adoption
+phase: phase-8-ios26-platform
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 15: iOS 26.2 Feature Adoption
 
 **Phase:** 8 (iOS 26 Platform)

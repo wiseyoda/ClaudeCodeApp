@@ -2,6 +2,8 @@
 
 - iOS 26.2+ / iPadOS 26.2+ / Xcode 26.2+ (see build config for exact settings)
 - No backwards compatibility; full adoption of latest platform APIs
+- Primary device focus: iPhone (compact-first polish)
+- iPad support is secondary; Stage Manager/external display deferred beyond redesign
 
 Build configuration is the source of truth: [docs/build/README.md](../build/README.md).
 

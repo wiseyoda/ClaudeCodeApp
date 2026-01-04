@@ -1,3 +1,21 @@
+---
+number: 44
+title: Debug Tooling
+phase: phase-0-foundation
+priority: Medium
+depends_on: null
+acceptance_criteria: 5
+files_to_touch: 0
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 44: Debug Tooling
 
 **Phase:** 0 (Foundation)
@@ -5,12 +23,30 @@
 **Status:** Not Started
 **Depends On:** None
 
+## Required Documentation
+
+Before starting work on this issue, review these architecture and design documents:
+
+### Core Architecture
+- **[Contracts (Models + API)](../../docs/contracts/README.md)** - Model structures for mock factories
+- **[Core UI Models](../../docs/contracts/models/02-core-ui-models.md)** - ChatMessage, Project, Session for mocks
+- **[StreamEvent Mapping](../../docs/contracts/api/02-streamevent-mapping.md)** - StreamEvent structures for mock factories
+- **[System Overview](../../docs/architecture/data/01-system-overview.md)** - Architecture context for debug tools
+
+### Foundation
+- **[Design Decisions](../../docs/overview/design-decisions.md)** - Key patterns to support in debug tools
+
+### Workflows
+- **[Execution Guardrails](../../docs/workflows/guardrails.md)** - Development rules and constraints
+
 ## Goal
 
 Provide a consistent development and preview toolkit for the redesign.
 
 ## Non-goals
-- TBD.
+- Ship debug menus in Release builds.
+- Build a full analytics or telemetry dashboard.
+- Replace backend integration tests with debug-only tooling.
 
 ## Dependencies
 - See **Depends On** header; add runtime or tooling dependencies here.

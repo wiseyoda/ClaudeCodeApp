@@ -1,3 +1,17 @@
+---
+number: 65
+title: DeclaredAgeRange
+phase: phase-9-polish-integration
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 65: DeclaredAgeRange
 
 **Phase:** 9 (Polish & Integration)

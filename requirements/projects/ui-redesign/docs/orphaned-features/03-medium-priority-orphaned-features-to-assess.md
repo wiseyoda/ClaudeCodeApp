@@ -4,9 +4,9 @@
 | File                                      | Bytes  | Purpose                                                                       | Decision                               |
 | ----------------------------------------- | ------ | ----------------------------------------------------------------------------- | -------------------------------------- |
 | `Utilities/NetworkMonitor.swift`          | 4,451  | Connection type detection (WiFi/cellular/wired), expensive/constrained status | Keep; drive offline banner + expensive network behavior |
-| `Managers/BackgroundManager.swift`        | 7,848  | BGContinuedProcessingTask for long operations                                 | Keep; support short background task switching (target ~30 min if iOS allows) and keep work lightweight; lean on cli-bridge/Firebase |
+| `Managers/BackgroundManager.swift`        | 7,848  | BGContinuedProcessingTask for long operations                                 | Keep; support short background task switching (target ~30 min if iOS allows) and keep work lightweight; lean on cli-bridge now, stay Firebase-ready |
 | `Utilities/SearchHistoryStore.swift`      | 2,004  | Recent search query storage (max 10)                                          | Keep                                  |
-| `ErrorAnalyticsStore.swift`               | 9,277  | Error analytics collection                                                    | Merge into Diagnostics now; Firebase later (no Firebase now) |
+| `ErrorAnalyticsStore.swift`               | 9,277  | Error analytics collection                                                    | Merge into Diagnostics now; provider-agnostic hooks, Firebase later |
 | `Views/ErrorInsightsView.swift`           | 10,860 | Error insights dashboard                                                      | Merge into Diagnostics                 |
 | `ToolErrorClassification.swift`           | 14,148 | Classify tool errors by type                                                  | Keep                                  |
 | `ProjectNamesStore.swift`                 | 1,082  | Custom project display names                                                  | Keep                                  |

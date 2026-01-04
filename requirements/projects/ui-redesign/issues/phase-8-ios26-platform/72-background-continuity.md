@@ -1,3 +1,17 @@
+---
+number: 72
+title: Background Continuity
+phase: phase-8-ios26-platform
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 72: Background Continuity
 
 **Phase:** 8 (iOS 26 Platform)

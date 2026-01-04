@@ -1,3 +1,17 @@
+---
+number: 48
+title: Telemetry and Performance Monitoring
+phase: phase-9-polish-integration
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 48: Telemetry and Performance Monitoring
 
 **Phase:** 9 (Polish & Integration)
@@ -7,12 +21,17 @@
 
 ## Goal
 
-Establish privacy-respecting telemetry and performance monitoring for production readiness.
+Establish privacy-respecting telemetry and performance monitoring plumbing for production readiness, with provider-agnostic interfaces (Firebase integration after redesign).
 
 ## Scope
 
-- In scope: app launch timing, message render/scroll performance, WebSocket stability metrics, and high-level feature usage events.
-- Out of scope: advertising analytics, cohort profiling, or third-party data enrichment.
+- In scope:
+  - Provider-agnostic telemetry protocol and schema.
+  - Local batching/backoff logic and Diagnostics previews.
+  - App launch timing, message render/scroll performance, WebSocket stability metrics, and high-level feature usage events.
+- Out of scope:
+  - Advertising analytics, cohort profiling, or third-party data enrichment.
+  - Any provider SDK integration (Firebase deferred to the Firebase project).
 
 ## Non-goals
 
@@ -34,6 +53,7 @@ Establish privacy-respecting telemetry and performance monitoring for production
 - `TelemetryEvent` schema with strict field allowlist.
 - `TelemetryManager` protocol with batching and backoff.
 - Redaction rules for file paths and user content.
+- `TelemetryProvider` enum or strategy holder (local only; Firebase later).
 
 ## Edge Cases
 
@@ -47,6 +67,7 @@ Establish privacy-respecting telemetry and performance monitoring for production
 - [ ] Event payloads exclude message content and file contents.
 - [ ] Opt-out supported and persisted.
 - [ ] Debug logging available to validate payloads.
+- [ ] Provider integration explicitly deferred (no Firebase SDK in redesign).
 
 ## Tests
 

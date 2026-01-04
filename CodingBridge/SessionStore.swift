@@ -132,7 +132,7 @@ final class SessionStore: ObservableObject {
 
     /// Load sessions for a project from API
     /// - Parameters:
-    ///   - projectPath: The project's path (e.g., /home/dev/workspace/ClaudeCodeApp)
+    ///   - projectPath: The project's path (e.g., /home/dev/workspace/CodingBridge)
     ///   - forceRefresh: If true, clears existing sessions before loading
     func loadSessions(for projectPath: String, forceRefresh: Bool = false) async {
         guard let repository = repository else {

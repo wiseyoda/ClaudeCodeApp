@@ -21,7 +21,7 @@ Execute the 7-phase migration plan in [PLAN.md](./PLAN.md).
 ### Phase 1: Regenerate Types
 
 ```bash
-cd /Users/ppatterson/dev/ClaudeCodeApp
+cd /Users/ppatterson/dev/CodingBridge
 
 # Regenerate all types from updated OpenAPI spec
 ./scripts/regenerate-api-types.sh

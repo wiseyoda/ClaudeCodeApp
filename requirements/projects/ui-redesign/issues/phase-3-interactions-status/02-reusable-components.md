@@ -1,3 +1,17 @@
+---
+number: 02
+title: Reusable Components
+phase: phase-3-interactions-status
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 02: Reusable Components
 
 **Phase:** 3 (Interactions & Status)

@@ -1,3 +1,21 @@
+---
+number: 45
+title: Feature Flags
+phase: phase-0-foundation
+priority: High
+depends_on: null
+acceptance_criteria: 7
+files_to_touch: 3
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 45: Feature Flags
 
 **Phase:** 0 (Foundation)
@@ -5,6 +23,20 @@
 **Status:** Not Started
 **Depends On:** None
 **Target:** iOS 26.2, Xcode 26.2, Swift 6.2.1
+
+## Required Documentation
+
+Before starting work on this issue, review these architecture and design documents:
+
+### Core Architecture
+- **[State Management](../../docs/architecture/ui/07-state-management.md)** - AppState for feature flag storage
+- **[System Overview](../../docs/architecture/data/01-system-overview.md)** - Architecture context
+
+### Foundation
+- **[Design Decisions](../../docs/overview/design-decisions.md)** - Feature decisions that may need flags
+
+### Workflows
+- **[Execution Guardrails](../../docs/workflows/guardrails.md)** - Development rules and constraints
 
 ## Goal
 
@@ -18,6 +50,7 @@ Implement a feature flag system that enables incremental rollout of iOS 26 redes
   - Per-flag metadata (owner, phase, removal date)
   - Flag gating utilities
   - Build configuration integration
+  - Firebase-ready provider abstraction (no SDK integration yet)
 - Out of scope:
   - Remote configuration service (Firebase, LaunchDarkly)
   - Server-driven flag updates
@@ -134,7 +167,7 @@ struct FeatureFlagInfo: Sendable {
         .navigationSplitView: FeatureFlagInfo(
             flag: .navigationSplitView,
             displayName: "Navigation Split View",
-            description: "Use NavigationSplitView for iPad-first layout",
+            description: "Use NavigationSplitView for iPad layout",
             phase: 1,
             owner: "navigation",
             defaultEnabled: false,
@@ -233,6 +266,24 @@ final class FeatureFlagManager {
         guard let info = FeatureFlagInfo.registry[flag] else { return false }
         return info.defaultEnabled
     }
+}
+```
+
+---
+
+### FeatureFlagProvider (Firebase-ready)
+
+```swift
+/// Provider abstraction for future remote config (Firebase after redesign).
+protocol FeatureFlagProvider: Sendable {
+    func loadFlags() async throws -> [FeatureFlag: Bool]
+    func refresh() async
+}
+
+/// Local-only provider used in redesign (no remote config).
+struct LocalFeatureFlagProvider: FeatureFlagProvider {
+    func loadFlags() async throws -> [FeatureFlag: Bool] { [:] }
+    func refresh() async { }
 }
 ```
 

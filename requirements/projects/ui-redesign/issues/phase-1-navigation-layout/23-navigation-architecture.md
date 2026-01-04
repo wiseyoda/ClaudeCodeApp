@@ -1,9 +1,42 @@
+---
+number: 23
+title: Navigation Architecture
+phase: phase-1-navigation-layout
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 23: Navigation Architecture
 
 **Phase:** 1 (Navigation & Layout)
 **Priority:** High
 **Status:** Not Started
 **Depends On:** Issue #10 (@Observable Migration)
+
+## Required Documentation
+
+Before starting work on this issue, review these architecture and design documents:
+
+### Core Architecture
+- **[Navigation Pattern](../../docs/architecture/ui/01-navigation-pattern.md)** - NavigationSplitView root pattern, AppState structure
+- **[State Management](../../docs/architecture/ui/07-state-management.md)** - AppState @Observable pattern, state organization
+- **[Navigation Destinations](../../docs/architecture/ui/09-navigation-destinations.md)** - NavigationDestination enum and routing
+- **[Sheet Presentations](../../docs/architecture/ui/05-sheet-presentations.md)** - ActiveSheet enum, sheet configuration
+- **[Device Adaptations](../../docs/architecture/ui/06-device-adaptations.md)** - TabView vs NavigationSplitView adaptation
+
+### Foundation
+- **[Swift 6 Concurrency Model](../../docs/architecture/data/02-swift-6-concurrency-model.md)** - @Observable, @MainActor patterns
+- **[Design Decisions](../../docs/overview/design-decisions.md)** - High-level navigation and state decisions
+- **[Liquid Glass Foundation](../../docs/design/01-liquid-glass-foundation.md)** - Glass effects for UI elements
+
+### Workflows
+- **[Execution Guardrails](../../docs/workflows/guardrails.md)** - Development rules and constraints
 
 ## Goal
 

@@ -2,7 +2,7 @@
 
 Transform CodingBridge into a polished, cohesive iOS 26 app with:
 - Liquid Glass design language throughout
-- NavigationSplitView for iPad-first, iPhone-adaptive layout
+- iPhone-first layout with iPad NavigationSplitView support
 - Swift 6 concurrency with actors and @Observable
-- Full iPad support including Stage Manager, Split View, Slide Over
+- iPad support for Split View and Slide Over (Stage Manager/external display deferred)
 - System integration via Widgets, Control Center, Live Activities, Siri

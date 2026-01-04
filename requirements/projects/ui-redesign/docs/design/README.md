@@ -1,7 +1,7 @@
 # CodingBridge Design System
 
 Comprehensive design tokens and component patterns for the iOS 26 app redesign, built on Liquid Glass.
-Design source of truth: TBD (add Figma link or design file location here).
+Design source of truth: `docs/design/` + `assets/`. Add a Figma link here if/when available.
 
 ## Sections
 

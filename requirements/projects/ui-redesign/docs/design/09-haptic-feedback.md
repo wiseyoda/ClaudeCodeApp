@@ -1,7 +1,7 @@
 # Haptic Feedback
 
 
-Use `.sensoryFeedback` modifier for haptics:
+Route all haptics through `HapticManager` (respects global toggle). Internally use `.sensoryFeedback` where appropriate:
 
 | Feedback | Use | Example |
 |----------|-----|---------|
@@ -18,12 +18,14 @@ Use `.sensoryFeedback` modifier for haptics:
 
 ```swift
 Button("Send") {
+    HapticManager.shared.impact(.medium)
     sendMessage()
 }
-.sensoryFeedback(.impact(weight: .medium), trigger: sendCount)
 
 Toggle("Enable", isOn: $isEnabled)
-    .sensoryFeedback(.selection, trigger: isEnabled)
+    .onChange(of: isEnabled) { _, _ in
+        HapticManager.shared.selection()
+    }
 ```
 
 ---

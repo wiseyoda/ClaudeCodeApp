@@ -1,3 +1,17 @@
+---
+number: 71
+title: Todo Progress Drawer
+phase: phase-6-sheets-modals
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 71: Todo Progress Drawer
 
 **Phase:** 6 (Sheets & Modals)

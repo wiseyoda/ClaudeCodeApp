@@ -1,3 +1,17 @@
+---
+number: 54
+title: Push Notifications
+phase: phase-8-ios26-platform
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 54: Push Notifications
 
 **Phase:** 8 (iOS 26 Platform)

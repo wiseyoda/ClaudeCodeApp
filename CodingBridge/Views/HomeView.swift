@@ -394,7 +394,7 @@ struct RecentActivitySection: View {
     NavigationStack {
         HomeView(
             projects: [
-                Project(name: "ClaudeCodeApp", path: "/dev/ClaudeCodeApp", displayName: nil, fullPath: nil, sessions: nil, sessionMeta: ProjectSessionMeta(hasMore: false, total: 3)),
+                Project(name: "CodingBridge", path: "/dev/CodingBridge", displayName: nil, fullPath: nil, sessions: nil, sessionMeta: ProjectSessionMeta(hasMore: false, total: 3)),
                 Project(name: "agent-ui-kit", path: "/dev/agent-ui-kit", displayName: nil, fullPath: nil, sessions: nil, sessionMeta: nil),
                 Project(name: "backend-service-v2", path: "/dev/backend", displayName: nil, fullPath: nil, sessions: nil, sessionMeta: ProjectSessionMeta(hasMore: false, total: 5)),
                 Project(name: "new-ml-pipeline", path: "/dev/ml", displayName: nil, fullPath: nil, sessions: nil, sessionMeta: nil)

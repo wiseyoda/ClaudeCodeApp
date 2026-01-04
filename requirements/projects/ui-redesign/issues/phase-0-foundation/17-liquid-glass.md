@@ -1,3 +1,21 @@
+---
+number: 17
+title: Liquid Glass
+phase: phase-0-foundation
+priority: High
+depends_on: "01"
+acceptance_criteria: 11
+files_to_touch: 9
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 17: Liquid Glass Design System
 
 **Phase:** 0 (Foundation)
@@ -6,27 +24,92 @@
 **Depends On:** Issue #01 (Design Tokens)
 **Target:** iOS 26.2, Xcode 26.2, Swift 6.2.1
 
+## Required Documentation
+
+Before starting work on this issue, review these architecture and design documents:
+
+### Design System
+- **[Liquid Glass Foundation](../../docs/design/01-liquid-glass-foundation.md)** - CRITICAL: Glass effects, tints, adaptive intensity
+- **[Design System Overview](../../docs/design/README.md)** - Complete design system structure
+- **[Color System](../../docs/design/02-color-system.md)** - Semantic colors for glass tints
+- **[Shadows](../../docs/design/06-shadows.md)** - Shadow system for glass depth
+- **[Animation](../../docs/design/07-animation.md)** - Animation patterns for glass transitions
+- **[Symbol Effects](../../docs/design/08-symbol-effects.md)** - Symbol effects within glass contexts
+
+### Architecture
+- **[Component Patterns](../../docs/design/10-component-patterns.md)** - Glass component usage patterns
+- **[Integration with Theme.swift](../../docs/design/17-integration-with-theme-swift.md)** - Integration with existing theme
+
+### Foundation
+- **[Design Decisions](../../docs/overview/design-decisions.md)** - Liquid Glass design decision
+- **[iOS 26.x Known Issues & Workarounds](../../docs/design/15-ios-26-x-known-issues-workarounds.md)** - Platform-specific workarounds
+
+### Workflows
+- **[Execution Guardrails](../../docs/workflows/guardrails.md)** - Development rules and constraints
+
 ## Goal
 
 Implement iOS 26.2's Liquid Glass design language throughout the app, replacing all legacy material effects.
 
 ## Scope
-- In scope: TBD.
-- Out of scope: TBD.
+- In scope:
+  - Define Liquid Glass modifiers/styles and semantic tints for cards and sheets.
+  - Replace legacy material usage on message cards, tool cards, and sheets.
+  - Respect the system Liquid Glass intensity slider (no in-app override).
+  - Verify glass usage in light/dark mode on iOS 26.2.
+- Out of scope:
+  - Full layout redesign of views and navigation.
+  - Pre-iOS 26 compatibility or fallback materials.
+  - New asset creation beyond existing color/tint usage.
 
 ## Non-goals
-- TBD.
+- Achieve final polish for every surface in this issue.
+- Build custom glass rendering beyond system APIs.
+- Introduce new animation systems unrelated to glass transitions.
 
 ## Dependencies
 - Depends On: Issue #01 (Design Tokens).
 - Add runtime or tooling dependencies here.
 
 ## Touch Set
-- Files to create: TBD.
-- Files to modify: TBD.
+- Files to create:
+  - `CodingBridge/Design/LiquidGlassStyles.swift`
+- Files to modify:
+  - `CodingBridge/Theme.swift`
+  - `CodingBridge/AppSettings.swift`
+  - `CodingBridge/Views/CLIMessageView.swift`
+  - `CodingBridge/Views/ToolContentView.swift`
+  - `CodingBridge/Views/CommandPickerSheet.swift`
+  - `CodingBridge/Views/QuickSettingsSheet.swift`
+  - `CodingBridge/Views/IdeasDrawerSheet.swift`
+  - `CodingBridge/Views/SettingsView.swift`
 
 ## Interface Definitions
-- List new or changed models, protocols, and API payloads.
+- No API payload changes.
+
+```swift
+enum LiquidGlassStyle: Sendable {
+    case card
+    case cardUnpadded
+    case sheet
+    case tinted(Color)
+}
+
+extension View {
+    func liquidGlass(_ style: LiquidGlassStyle = .card) -> some View
+    func messageCardStyle(_ style: LiquidGlassStyle = .card) -> some View
+}
+```
+
+```swift
+struct AdaptiveGlassModifier: ViewModifier {
+    @Environment(\.liquidGlassIntensity) var intensity
+
+    func body(content: Content) -> some View {
+        content.glassEffect(intensity: intensity)
+    }
+}
+```
 
 ## Tests
 - [ ] Unit tests updated or added.
@@ -377,6 +460,7 @@ Test your UI at all three intensity levels:
 - [ ] Dark mode renders correctly
 - [ ] Build passes on iOS 26.2+ (Xcode 26.2)
 - [ ] AdaptiveGlassModifier respects user intensity preference
+- [ ] No in-app glass intensity override; system slider only
 - [ ] UI tested at min/med/max intensity settings
 - [ ] Toggles and sliders render correctly in glass contexts (iOS 26.1+ fix)
 

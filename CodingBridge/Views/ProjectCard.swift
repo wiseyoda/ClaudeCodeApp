@@ -292,10 +292,10 @@ struct ProjectCardSkeleton: View {
 #Preview("Project Card - Clean") {
     ProjectCard(
         project: Project(
-            name: "ClaudeCodeApp",
-            path: "/Users/dev/ClaudeCodeApp",
+            name: "CodingBridge",
+            path: "/Users/dev/CodingBridge",
             displayName: nil,
-            fullPath: "/Users/dev/ClaudeCodeApp",
+            fullPath: "/Users/dev/CodingBridge",
             sessions: [],
             sessionMeta: ProjectSessionMeta(hasMore: false, total: 3)
         ),

@@ -1,3 +1,21 @@
+---
+number: 60
+title: Code Review Checklist
+phase: phase-0-foundation
+priority: Medium
+depends_on: null
+acceptance_criteria: 5
+files_to_touch: 0
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 60: Code Review Checklist
 
 **Phase:** 0 (Foundation)
@@ -5,6 +23,29 @@
 **Status:** Not Started
 **Depends On:** None
 **Target:** iOS 26.2, Xcode 26.2, Swift 6.2.1
+
+## Required Documentation
+
+Before starting work on this issue, review these architecture and design documents:
+
+### Core Architecture
+- **[Swift 6 Concurrency Model](../../docs/architecture/data/02-swift-6-concurrency-model.md)** - Concurrency review criteria
+- **[State Management](../../docs/architecture/ui/07-state-management.md)** - State management patterns to review
+- **[Environment Injection](../../docs/architecture/ui/08-environment-injection.md)** - Environment injection patterns to review
+- **[Dependency Injection](../../docs/architecture/data/10-dependency-injection.md)** - Dependency injection patterns to review
+- **[Protocol Design](../../docs/architecture/data/09-protocol-design.md)** - Protocol patterns to review
+- **[Component Hierarchy](../../docs/architecture/data/08-component-hierarchy.md)** - Component structure to review
+
+### Design System
+- **[Design System Overview](../../docs/design/README.md)** - Design consistency review
+- **[Accessibility](../../docs/design/11-accessibility.md)** - Accessibility review criteria
+
+### Foundation
+- **[Design Decisions](../../docs/overview/design-decisions.md)** - Key decisions to verify in reviews
+- **[Swift Style Guide](../../docs/workflows/swift-style.md)** - Coding standards reference
+
+### Workflows
+- **[Execution Guardrails](../../docs/workflows/guardrails.md)** - Development rules and constraints
 
 ## Goal
 

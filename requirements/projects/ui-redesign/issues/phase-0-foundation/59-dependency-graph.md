@@ -1,3 +1,21 @@
+---
+number: 59
+title: Dependency Graph
+phase: phase-0-foundation
+priority: Medium
+depends_on: null
+acceptance_criteria: 6
+files_to_touch: 0
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 59: Dependency Graph
 
 **Phase:** 0 (Foundation)
@@ -5,6 +23,18 @@
 **Status:** Not Started
 **Depends On:** None
 **Target:** iOS 26.2, Xcode 26.2, Swift 6.2.1
+
+## Required Documentation
+
+Before starting work on this issue, review these architecture and design documents:
+
+### Foundation
+- **[Issue Index](../../issues/README.md)** - All issues to map dependencies
+- **[Design Decisions](../../docs/overview/design-decisions.md)** - Key architectural decisions
+- **[System Overview](../../docs/architecture/data/01-system-overview.md)** - Architecture context
+
+### Workflows
+- **[Execution Guardrails](../../docs/workflows/guardrails.md)** - Development rules and constraints
 
 ## Goal
 

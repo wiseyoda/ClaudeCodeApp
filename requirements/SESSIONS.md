@@ -16,7 +16,7 @@ Sessions are persistent conversation threads stored as JSONL files on the server
 $HOME/.claude/projects/{encoded-path}/{session-id}.jsonl
 ```
 
-**Path Encoding:** `/home/dev/workspace/ClaudeCodeApp` -> `-home-dev-workspace-ClaudeCodeApp`
+**Path Encoding:** `/home/dev/workspace/CodingBridge` -> `-home-dev-workspace-CodingBridge`
 
 > Use `$HOME` instead of `~` in SSH commands. See `.claude/rules/ssh-security.md`.
 
@@ -231,7 +231,7 @@ extension Array where Element == ProjectSession {
 ```bash
 # SSH to server
 ssh claude-dev
-cd $HOME/.claude/projects/-home-dev-workspace-ClaudeCodeApp
+cd $HOME/.claude/projects/-home-dev-workspace-CodingBridge
 
 # Count all sessions
 ls -1 *.jsonl | wc -l

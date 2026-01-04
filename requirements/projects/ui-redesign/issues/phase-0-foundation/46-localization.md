@@ -1,3 +1,21 @@
+---
+number: 46
+title: Localization
+phase: phase-0-foundation
+priority: Medium
+depends_on: null
+acceptance_criteria: 3
+files_to_touch: 0
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 46: Localization Strategy
 
 **Phase:** 0 (Foundation)
@@ -5,16 +23,39 @@
 **Status:** Not Started
 **Depends On:** None
 
+## Required Documentation
+
+Before starting work on this issue, review these architecture and design documents:
+
+### Design System
+- **[Localization](../../docs/design/12-localization.md)** - CRITICAL: String Catalogs, LocalizedStringResource patterns
+
+### Foundation
+- **[Design Decisions](../../docs/overview/design-decisions.md)** - Localization decisions
+
+### Workflows
+- **[Execution Guardrails](../../docs/workflows/guardrails.md)** - Development rules and constraints
+
 ## Goal
 
 Ensure all user-visible strings are localizable using String Catalogs.
 
 ## Scope
-- In scope: TBD.
-- Out of scope: TBD.
+- In scope:
+  - Create a String Catalog for redesign strings and define key conventions.
+  - Migrate user-visible strings in redesigned views to `LocalizedStringResource`.
+  - Add pluralization entries for counts and token usage.
+  - Document non-localizable strings (tool names, backend-controlled text).
+  - English-only strings for redesign scope; catalog ready for future translations.
+- Out of scope:
+  - Full translation for all languages in this phase.
+  - Retrofitting untouched legacy screens.
+  - Localization of backend-sourced content.
 
 ## Non-goals
-- TBD.
+- Introduce RTL layout or locale-specific layout changes.
+- Replace typography or layout purely for localization.
+- Add runtime language switching UI.
 
 ## Dependencies
 - See **Depends On** header; add runtime or tooling dependencies here.

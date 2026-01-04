@@ -7,7 +7,7 @@ import Foundation
 protocol SessionRepository {
     /// Fetch sessions for a project with pagination
     /// - Parameters:
-    ///   - projectName: The encoded project name (e.g., "-Users-me-ClaudeCodeApp")
+    ///   - projectName: The encoded project name (e.g., "-Users-me-CodingBridge")
     ///   - limit: Maximum sessions to return
     ///   - offset: Pagination offset
     /// - Returns: SessionsResponse containing sessions, hasMore flag, and total count

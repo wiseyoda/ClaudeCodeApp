@@ -1,3 +1,21 @@
+---
+number: 63
+title: Error Types
+phase: phase-0-foundation
+priority: High
+depends_on: null
+acceptance_criteria: 7
+files_to_touch: 6
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 63: Error Types
 
 **Phase:** 0 (Foundation)
@@ -5,6 +23,22 @@
 **Status:** Not Started
 **Depends On:** None
 **Target:** iOS 26.2, Xcode 26.2, Swift 6.2.1
+
+## Required Documentation
+
+Before starting work on this issue, review these architecture and design documents:
+
+### Core Architecture
+- **[Error Handling & Recovery](../../docs/architecture/data/05-error-handling-recovery.md)** - CRITICAL: Error type hierarchy, UserFacingError, recovery patterns
+- **[Data Flow (Messages)](../../docs/architecture/data/03-data-flow-messages.md)** - MessageValidationError patterns
+- **[Backend Contracts](../../docs/architecture/data/04-backend-contracts.md)** - Error mapping from backend
+
+### Foundation
+- **[System Overview](../../docs/architecture/data/01-system-overview.md)** - Architecture context for error handling
+- **[Design Decisions](../../docs/overview/design-decisions.md)** - Error handling decisions
+
+### Workflows
+- **[Execution Guardrails](../../docs/workflows/guardrails.md)** - Development rules and constraints
 
 ## Goal
 

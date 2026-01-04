@@ -1,3 +1,17 @@
+---
+number: 04
+title: ChatCardView
+phase: phase-2-core-views
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 04: ChatCardView
 
 **Phase:** 2 (Core Views)

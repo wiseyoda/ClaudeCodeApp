@@ -1,3 +1,21 @@
+---
+number: 10
+title: Observable Migration
+phase: phase-0-foundation
+priority: High
+depends_on: null
+acceptance_criteria: 10
+files_to_touch: 16
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 10: @Observable + Actor Migration
 
 **Phase:** 0 (Foundation)
@@ -5,33 +23,114 @@
 **Status:** Not Started
 **Depends On:** None
 
+## Required Documentation
+
+Before starting work on this issue, review these architecture and design documents:
+
+### Core Architecture
+- **[Swift 6 Concurrency Model](../../docs/architecture/data/02-swift-6-concurrency-model.md)** - CRITICAL: @Observable, @MainActor, actor patterns
+- **[State Management](../../docs/architecture/ui/07-state-management.md)** - AppState and feature-level state patterns
+- **[Environment Injection](../../docs/architecture/ui/08-environment-injection.md)** - @Environment patterns for @Observable
+- **[Dependency Injection](../../docs/architecture/data/10-dependency-injection.md)** - Actor protocols, dependency injection patterns
+- **[Memory Management](../../docs/architecture/data/11-memory-management.md)** - Weak references, actor cleanup
+
+### Foundation
+- **[System Overview](../../docs/architecture/data/01-system-overview.md)** - Overall architecture context
+- **[Design Decisions](../../docs/overview/design-decisions.md)** - State management decisions
+
+### Workflows
+- **[Execution Guardrails](../../docs/workflows/guardrails.md)** - Development rules and constraints
+
 ## Goal
 
 Migrate all state management to Swift 6 concurrency patterns:
 - `@Observable` macro for all observable state
 - Swift actors for thread-safe shared state
 - `@Bindable` for two-way bindings
-- Full actor isolation (no `@MainActor` classes with mutable state)
+- Full actor isolation; use `@MainActor @Observable` only for UI-bound state
 
 ## Scope
-- In scope: TBD.
-- Out of scope: TBD.
+- In scope:
+  - Migrate ObservableObject-based state to `@Observable` or actors.
+  - Update SwiftUI bindings to use `@State`, `@Bindable`, and `@Environment`.
+  - Remove Combine usage where observation handles updates.
+  - Migrate persistence off `@AppStorage` with versioned upgrades.
+  - Validate with strict concurrency checks and Thread Sanitizer.
+- Out of scope:
+  - Feature redesigns or new UI flows.
+  - Networking layer rewrites or backend contract changes.
+  - New persistence formats beyond required migrations.
 
 ## Non-goals
-- TBD.
+- Eliminate every concurrency warning in untouched legacy files.
+- Replace singletons or store ownership patterns used by the app.
+- Change data models or protocol shapes unrelated to observation.
 
 ## Dependencies
 - See **Depends On** header; add runtime or tooling dependencies here.
 
 ## Touch Set
-- Files to create: TBD.
-- Files to modify: TBD.
+- Files to create:
+  - `CodingBridge/Utilities/ObservationHelpers.swift` (optional shared helpers)
+- Files to modify:
+  - `CodingBridge/ViewModels/ChatViewModel.swift`
+  - `CodingBridge/ViewModels/ChatViewModel+*.swift`
+  - `CodingBridge/SessionStore.swift`
+  - `CodingBridge/SessionRepository.swift`
+  - `CodingBridge/AppSettings.swift`
+  - `CodingBridge/CommandStore.swift`
+  - `CodingBridge/IdeasStore.swift`
+  - `CodingBridge/Persistence/BookmarkStore.swift`
+  - `CodingBridge/ProjectSettingsStore.swift`
+  - `CodingBridge/Utilities/SearchHistoryStore.swift`
+  - `CodingBridge/DebugLogStore.swift`
+  - `CodingBridge/Persistence/MessageStore.swift`
+  - `CodingBridge/Managers/StatusMessageStore.swift`
+  - `CodingBridge/Views/*.swift`
+  - `CodingBridge/CodingBridgeApp.swift`
+  - `CodingBridgeTests/`
 
 ## Interface Definitions
-- List new or changed models, protocols, and API payloads.
+- No API payload changes.
+
+```swift
+@MainActor @Observable
+final class AppState {
+    var selectedProject: Project?
+    var navigationPath: NavigationPath
+    var activeSheet: ActiveSheet?
+}
+
+@Observable
+final class MessageScrollState {
+    var position: ScrollPosition
+}
+
+@MainActor @Observable
+final class StreamInteractionHandler {
+    private(set) var pendingInteractions: [InteractionType]
+}
+```
+
+```swift
+protocol StatusTracking: Actor {
+    func status(for toolUseId: String) async -> StatusBannerState
+    func updateProgress(toolUseId: String, info: ProgressInfo) async
+    func startSubagent(toolUseId: String, info: SubagentInfo) async
+    func complete(toolUseId: String) async
+    func clearAll() async
+}
+
+actor CardStatusTracker: StatusTracking { }
+actor SubagentContextTracker { }
+```
 
 ## Edge Cases
-- TBD.
+- Actors accessed from SwiftUI without `await` (stale reads).
+- `@Bindable` missing for two-way bindings (edits not persisted).
+- Non-Sendable types captured in async tasks or actors.
+- Migration of `@AppStorage` keys without versioning (data loss).
+- Preview and UI test harness environment injection gaps.
 
 ## Tests
 - [ ] Unit tests updated or added.

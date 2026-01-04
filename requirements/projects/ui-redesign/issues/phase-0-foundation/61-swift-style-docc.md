@@ -1,3 +1,21 @@
+---
+number: 61
+title: Swift Style + DocC Standards
+phase: phase-0-foundation
+priority: Medium
+depends_on: null
+acceptance_criteria: 6
+files_to_touch: 0
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 61: Swift Style + DocC Standards
 
 **Phase:** 0 (Foundation)
@@ -5,6 +23,23 @@
 **Status:** Not Started
 **Depends On:** None
 **Target:** iOS 26.2, Xcode 26.2, Swift 6.2.1
+
+## Required Documentation
+
+Before starting work on this issue, review these architecture and design documents:
+
+### Core Architecture
+- **[Swift 6 Concurrency Model](../../docs/architecture/data/02-swift-6-concurrency-model.md)** - Concurrency naming and patterns
+- **[Protocol Design](../../docs/architecture/data/09-protocol-design.md)** - Protocol documentation patterns
+
+### Foundation
+- **[Swift Style Guide](../../docs/workflows/swift-style.md)** - Coding standards reference
+- **[Naming Conventions](../../docs/workflows/naming-conventions.md)** - Naming conventions context
+- **[DocC Standards](../../docs/workflows/docc-standards.md)** - DocC documentation patterns
+- **[Design Decisions](../../docs/overview/design-decisions.md)** - Naming conventions context
+
+### Workflows
+- **[Execution Guardrails](../../docs/workflows/guardrails.md)** - Development rules and constraints
 
 ## Goal
 
@@ -35,6 +70,8 @@ Define Swift formatting and documentation standards for the CodingBridge codebas
 
 - Files to create:
   - `requirements/projects/ui-redesign/docs/workflows/swift-style.md`
+  - `requirements/projects/ui-redesign/docs/workflows/naming-conventions.md`
+  - `requirements/projects/ui-redesign/docs/workflows/docc-standards.md`
 - Files to modify:
   - None (documentation only)
 

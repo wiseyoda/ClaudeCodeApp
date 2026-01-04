@@ -1,3 +1,17 @@
+---
+number: 08
+title: Stream Interaction Handler
+phase: phase-3-interactions-status
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 08: Stream Interaction Handler
 
 **Phase:** 3 (Interactions & Status)

@@ -1,3 +1,17 @@
+---
+number: 05
+title: ToolCardView
+phase: phase-2-core-views
+status: pending
+completed_by: null
+completed_at: null
+verified_by: null
+verified_at: null
+commit: null
+spot_checked: false
+blocked_reason: null
+---
+
 # Issue 05: ToolCardView
 
 **Phase:** 2 (Core Views)
