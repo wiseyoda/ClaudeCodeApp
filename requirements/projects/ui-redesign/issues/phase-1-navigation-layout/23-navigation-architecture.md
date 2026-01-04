@@ -10,22 +10,56 @@
 Implement adaptive navigation: TabView on iPhone (compact width) and NavigationSplitView on iPad, replacing the current mixed navigation pattern.
 
 ## Scope
-- In scope: TBD.
-- Out of scope: TBD.
+- In scope: Navigation architecture (TabView/NavigationSplitView), AppState observable, sheet system integration, welcome card with quick actions.
+- Out of scope: Dark mode theming (Phase 3), platform-specific iPad features like Stage Manager (Phase 5).
 
 ## Non-goals
-- TBD.
+- Replace existing persistence stores (MessageStore, SessionStore, etc.)
+- Implement advanced iPad multitasking (Stage Manager, external display)
+- Add new sheet types beyond those referenced in Issue #34
 
 ## Dependencies
 - Depends On: Issue #10 (@Observable Migration).
 - Add runtime or tooling dependencies here.
 
 ## Touch Set
-- Files to create: TBD.
-- Files to modify: TBD.
+- Files to create: AppState.swift, NavigationDestination.swift, MainNavigationView.swift, DetailContainerView.swift, EmptyProjectView.swift
+- Files to modify: CodingBridgeApp.swift, ContentView.swift (refactored to SidebarView)
 
 ## Interface Definitions
-- List new or changed models, protocols, and API payloads.
+
+### New Models
+
+**AppState** - Main app-level observable state
+```swift
+@MainActor @Observable
+final class AppState {
+    var selectedProject: Project?
+    var navigationPath = NavigationPath()
+    var columnVisibility: NavigationSplitViewVisibility = .automatic
+    var selectedTab: Tab = .projects
+    var activeSheet: ActiveSheet?
+    var isConnected = false
+
+    enum Tab: Hashable {
+        case projects, terminal, commands, settings
+    }
+}
+```
+
+**NavigationDestination** - Deep linking enum
+```swift
+enum NavigationDestination: Hashable {
+    case projectDetail(Project)
+    case terminal
+    case globalSearch
+    case sessionHistory(Session)
+}
+```
+
+### Modified Models
+- **ActiveSheet** enum - Already exists, no changes (referenced in Issue #34)
+- **Project** model - No new fields required
 
 ## Tests
 - [ ] Unit tests updated or added.
@@ -237,12 +271,47 @@ struct DetailContainerView: View {
 }
 
 struct EmptyProjectView: View {
+    let onShowSheet: (ActiveSheet) -> Void
+
     var body: some View {
-        ContentUnavailableView {
-            Label("No Project Selected", systemImage: "folder")
-        } description: {
-            Text("Select a project from the sidebar to start chatting with Claude.")
+        VStack(spacing: 24) {
+            VStack(spacing: 12) {
+                Image(systemName: "folder.badge.questionmark")
+                    .font(.system(size: 48))
+                    .foregroundStyle(.secondary)
+
+                Text("No Project Selected")
+                    .font(.headline)
+
+                Text("Select a project from the sidebar or create a new one to start.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.vertical, 24)
+
+            VStack(spacing: 12) {
+                Button {
+                    onShowSheet(.newProject)
+                } label: {
+                    Label("Create Project", systemImage: "folder.badge.plus")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.primary)
+
+                Button {
+                    onShowSheet(.cloneProject)
+                } label: {
+                    Label("Clone from GitHub", systemImage: "arrow.down.circle")
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.secondary)
+            }
+            .padding(.horizontal, 24)
+
+            Spacer()
         }
+        .padding(.top, 48)
         .glassEffect()
     }
 }
@@ -250,9 +319,12 @@ struct EmptyProjectView: View {
 
 ## Edge Cases
 
-- Selected project deleted: reset selection and show EmptyProjectView.
-- Session expires while on detail: show a banner and route to Session Picker.
-- Deep link without project: show EmptyProjectView with helpful action.
+- **Selected project deleted**: Reset `selectedProject = nil`, show EmptyProjectView with welcome card; user can create/clone new project from card.
+- **Session expires while on detail**: Show error banner and offer "Resume" button; optionally route to Session Picker sheet.
+- **Deep link without project**: Show EmptyProjectView with helpful action (New Project, Clone).
+- **App backgrounded and resumed**: Restore navigation state and sheet visibility; reconnect to cli-bridge if disconnected.
+- **Tab switched mid-operation**: Current tab operation (like file picker) should dismiss or persist in its own state.
+- **Size class change (e.g., device rotate)**: TabView → NavigationSplitView transition should be smooth; AppState persists selection across the transition.
 
 ## CodingBridgeApp Entry Point
 

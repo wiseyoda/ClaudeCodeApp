@@ -16,25 +16,90 @@ Create a Liquid Glass sidebar with project list, utility actions, and new projec
 - Do not compute git status client-side. Display cli-bridge status (branch/dirty/ahead-behind/conflicts) only when reported; otherwise show an "unknown" state or omit.
 
 ## Scope
-- In scope: TBD.
-- Out of scope: TBD.
+- In scope: SidebarView with searchable project list, project row metadata (session count, last activity), swipe-to-delete, context menu, utility actions section, new project menu.
+- Out of scope: Dark mode theming (Phase 3), git status display (cli-bridge only, Issue #70), sorting/filtering beyond search (Phase 3).
 
 ## Non-goals
-- TBD.
+- Client-side git status computation; show cli-bridge status only when available.
+- Advanced project organization (tagging, grouping) - defer to Phase 5.
+- Batch operations beyond delete (rename handled in Issue #22).
 
 ## Dependencies
 - Depends On: Issue #23 (Navigation Architecture).
 - Add runtime or tooling dependencies here.
 
 ## Touch Set
-- Files to create: TBD.
-- Files to modify: TBD.
+- Files to create: SidebarView.swift, ProjectRowView.swift, ProjectListView.swift
+- Files to modify: Project.swift (add displayName, sessionCount, lastActivity computed properties), CLIBridgeManager.swift (add projectMetadataCache)
 
 ## Interface Definitions
-- List new or changed models, protocols, and API payloads.
+
+### Modified Models
+
+**Project** - Add computed properties
+```swift
+extension Project {
+    var displayName: String {
+        name.isEmpty ? path.components(separatedBy: "/").last ?? path : name
+    }
+
+    var sessionCount: Int {
+        // Fetched from API and cached locally
+        metadata.sessionCount ?? 0
+    }
+
+    var lastActivity: Date? {
+        // From most recent session metadata
+        metadata.lastModified
+    }
+
+    var cliBridgeStatus: StatusBadge? {
+        // Fetched from cli-bridge, optional
+        metadata.status
+    }
+}
+```
+
+### New/Modified Managers
+
+**ProjectMetadataCache** - Lightweight cache for project metadata
+```swift
+@MainActor
+class ProjectMetadataCache {
+    private var cache: [String: ProjectMetadata] = [:]
+    private var lastRefresh: Date?
+
+    func get(forPath path: String) -> ProjectMetadata? {
+        cache[path]
+    }
+
+    func set(_ metadata: ProjectMetadata, forPath path: String) {
+        cache[path] = metadata
+        lastRefresh = Date()
+    }
+
+    func shouldRefresh() -> Bool {
+        guard let lastRefresh else { return true }
+        return Date().timeIntervalSince(lastRefresh) > 300 // 5 min
+    }
+}
+
+struct ProjectMetadata: Codable {
+    let sessionCount: Int?
+    let lastModified: Date?
+    let status: StatusBadge?
+}
+```
 
 ## Edge Cases
-- TBD.
+
+- **Swipe-delete selected project**: If user deletes the currently selected project, navigation resets (`selectedProject = nil`) and app shows EmptyProjectView (per Issue #23 decision).
+- **Empty project list**: Show a "No projects" state with Create/Clone options in the sidebar.
+- **Search with no results**: Show inline message "No projects match your search"; clear button to reset search.
+- **Metadata fetch fails**: Use cached metadata if available; show "unknown" or omit session count/last activity until next successful refresh.
+- **Project added externally**: Next time SidebarView refreshes (pull-to-refresh or periodic update), new project appears automatically.
+- **Very long project names**: Truncate with ellipsis; full name available in context menu or project detail view.
+- **Cache invalidation**: When user returns to SidebarView after other tabs/sheets, check if cache is stale (>5 min) and refresh if needed.
 
 ## Tests
 - [ ] Unit tests updated or added.

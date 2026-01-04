@@ -7,28 +7,79 @@
 
 ## Goal
 
-Full iPad multitasking support: Split View, Slide Over, Stage Manager, and adaptive layouts.
+Core iPad layout support: NavigationSplitView with adaptive sidebars, responsive chat view layout, and pointer interactions.
 
 ## Scope
-- In scope: TBD.
-- Out of scope: TBD.
+- In scope: NavigationSplitView adaptive column visibility, responsive chat view (status bar positioning), pointer hover effects, context menus with keyboard hints, popover vs sheet adaptation.
+- Out of scope: Stage Manager window tracking (Phase 5, Issue TBD), external display support (Phase 5, Issue TBD), iPad-specific gesture interactions beyond standard SwiftUI.
 
 ## Non-goals
-- TBD.
+- Advanced multitasking (Stage Manager, Split View edge cases like 33% width)
+- External display/window management
+- Keyboard shortcut customization
 
 ## Dependencies
 - Depends On: Issue #23 (Navigation Architecture), Issue #24 (Sidebar).
 - Add runtime or tooling dependencies here.
 
 ## Touch Set
-- Files to create: TBD.
-- Files to modify: TBD.
+- Files to create: AdaptiveStack.swift, ResponsiveGrid.swift (optional, if needed), LayoutGuide.swift (helpers)
+- Files to modify: MainNavigationView.swift (column visibility management), ChatView.swift (adaptive status bar positioning), SidebarView.swift (hover effects)
 
 ## Interface Definitions
-- List new or changed models, protocols, and API payloads.
+
+### New Helpers
+
+**LayoutGuide** - Device context detection
+```swift
+struct LayoutGuide {
+    @Environment(\.horizontalSizeClass) var horizontalSizeClass
+    @State private var windowSize: CGSize = .zero
+
+    var isCompact: Bool {
+        horizontalSizeClass == .compact || windowSize.width < 500
+    }
+
+    var isRegular: Bool {
+        horizontalSizeClass == .regular && windowSize.width >= 500
+    }
+
+    var isWide: Bool {
+        windowSize.width >= 1000
+    }
+
+    var deviceContext: DeviceContext {
+        if isCompact {
+            return windowSize.width < 320 ? .slideOver : .compact
+        } else if isWide {
+            return .wide
+        } else {
+            return .regular
+        }
+    }
+
+    enum DeviceContext {
+        case compact       // iPhone, narrow iPad
+        case slideOver     // 320pt slide-over panel
+        case regular       // iPad portrait
+        case wide          // iPad landscape, 1000pt+
+    }
+}
+```
+
+### Modified Views
+- **MainNavigationView**: Track column visibility state, respond to size class changes
+- **ChatView**: Conditional status bar positioning (inline on regular, above input on compact)
+- **SidebarView**: Add onHover hover effects for project rows
 
 ## Edge Cases
-- TBD.
+
+- **Device rotation**: Size class may change (compact → regular or vice versa); NavigationSplitView should smoothly transition between TabView and split layout; AppState persists selection.
+- **Sidebar collapse on narrow**: When width < 500pt in split view, sidebar should collapse or become detail-only; column visibility should update automatically.
+- **Popover vs Sheet transition**: When moving from iPhone to iPad (or rotating), active sheet should convert to popover; existing sheet dismisses gracefully.
+- **Keyboard focus on iPad**: When hardware keyboard connected, input field auto-focuses; when disconnected, focus resets.
+- **Status bar positioning conflict**: On narrow iPad (regular width but not enough room), status bar should move above input to prevent layout overflow.
+- **Hover states on iPhone**: iPhone doesn't support hover; onHover effects should be no-op on compact devices.
 
 ## Tests
 - [ ] Unit tests updated or added.
@@ -216,50 +267,7 @@ struct ChatView: View {
 }
 ```
 
-### Stage Manager Window
-
-```swift
-struct MainNavigationView: View {
-    @State private var windowSize: CGSize = .zero
-
-    var body: some View {
-        NavigationSplitView(columnVisibility: $appState.columnVisibility) {
-            SidebarView(...)
-        } detail: {
-            DetailContainerView(...)
-        }
-        .trackWindowSize($windowSize)
-        .onChange(of: windowSize) { _, newSize in
-            // Adapt to window size changes (Stage Manager)
-            if newSize.width < 500 {
-                appState.columnVisibility = .detailOnly
-            } else if newSize.width < 800 {
-                appState.columnVisibility = .automatic
-            } else {
-                appState.columnVisibility = .all
-            }
-        }
-    }
-}
-```
-
-### External Display Support
-
-```swift
-@main
-struct CodingBridgeApp: App {
-    var body: some Scene {
-        WindowGroup {
-            MainNavigationView(appState: AppState())
-        }
-        .handlesExternalEvents(matching: ["*"])
-    }
-}
-```
-
-Guidelines:
-- Allow a second window on external display (independent navigation state).
-- Keep sidebar/detail adaptive to window size.
+**Note:** Stage Manager window tracking and external display support moved to Phase 5 (Issue TBD). See Section: "Deferred to Phase 5" below.
 
 ### Pointer Interactions
 
@@ -294,50 +302,60 @@ struct ProjectRowView: View {
 }
 ```
 
+## Deferred to Phase 5
+
+The following features are removed from Phase 1 scope and have been tracked separately:
+- Stage Manager window size tracking and column visibility adaptation
+- External display/second window support
+- Advanced Split View edge cases (33% width, Stage Manager panel resizing)
+
+**Status**: A new Phase 5 issue has been created to track these features. See Phase 5 roadmap.
+
 ## Files to Create
 
 ```
 CodingBridge/Layout/
 ├── AdaptiveStack.swift            # ~40 lines
-├── ResponsiveGrid.swift           # ~50 lines
-└── WindowSizeReader.swift         # ~30 lines
+└── LayoutGuide.swift              # ~50 lines (device context detection)
 ```
 
 ## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `MainNavigationView.swift` | Window size tracking, column visibility |
-| `ChatView.swift` | Adaptive status bar, popover vs sheet |
-| `SidebarView.swift` | Hover effects |
+| `MainNavigationView.swift` | Column visibility state, size class change handling |
+| `ChatView.swift` | Adaptive status bar positioning (inline vs above input) |
+| `SidebarView.swift` | Hover effects for project rows |
 
 ## Acceptance Criteria
 
-- [ ] Split View works at all widths
-- [ ] Slide Over works in compact mode
-- [ ] Stage Manager window resizing works
-- [ ] External display supports a second window
-- [ ] Sidebar auto-hides when narrow
-- [ ] Popovers on iPad, sheets on iPhone
-- [ ] Hover effects on interactive elements
-- [ ] Keyboard shortcuts work
-- [ ] Context menus have keyboard hints
-- [ ] Build passes
+- [ ] NavigationSplitView column visibility adapts to size class
+- [ ] Sidebar visible on iPad landscape, collapsed on portrait
+- [ ] Sidebar collapses when width < 500pt
+- [ ] Chat view status bar positioned inline on regular width, above input on compact
+- [ ] Popovers show on iPad (regular+), sheets on iPhone (compact)
+- [ ] Hover effects on project rows and interactive elements
+- [ ] Context menus display keyboard shortcuts as hints
+- [ ] Keyboard focus auto-set on iPad with hardware keyboard
+- [ ] Device rotation transitions smoothly between TabView and NavigationSplitView
+- [ ] Build passes on iOS 26.2+ (Xcode 26.2)
 
 ## Testing
 
 ### Manual Testing Matrix
 
-| Scenario | Test |
-|----------|------|
-| iPad Landscape | Sidebar visible, detail fills remaining space |
-| iPad Portrait | Sidebar collapsed, swipe to reveal |
-| Split View 50% | Both apps visible, sidebar may collapse |
-| Split View 33% | Compact mode, sidebar hidden |
-| Slide Over | Compact mode |
-| Stage Manager small | Compact mode |
-| Stage Manager large | Full layout |
-| Rotate device | Layout adapts smoothly |
+| Scenario | Test | Notes |
+|----------|------|-------|
+| iPhone | TabView active, no sidebar | Test all four tabs |
+| iPad Landscape | Sidebar visible, detail fills remaining space | Sidebar width 280-400pt |
+| iPad Portrait | Sidebar may collapse depending on orientation | Column visibility: .automatic |
+| iPad Rotate iPhone→iPad | TabView → NavigationSplitView transition smooth | Selection persists |
+| iPad Rotate iPad→iPhone | NavigationSplitView → TabView transition smooth | Selection persists |
+| Chat View - iPhone | Status bar above input | Compact layout |
+| Chat View - iPad | Status bar inline with message list | Regular layout |
+| Hover - iPad | Project rows highlight on hover | iPhone: no effect |
+| Context Menu - iPad | Long-press shows menu with keyboard hints | Desktop trackpad supported |
+| Narrow Split (>500pt width) | Sidebar visible but compressed | Min width: 280pt |
 
 ```swift
 struct LayoutTests: XCTestCase {
